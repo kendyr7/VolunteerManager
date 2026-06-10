@@ -3,20 +3,18 @@
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { loginWithPin } from "@/app/actions/auth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Phone, KeyRound } from "lucide-react";
 
 export function LoginForm() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  // Valores de prueba añadidos por solicitud
-  const [phone, setPhone] = useState("8888 8888");
-  const [pin, setPin] = useState("1234");
+
+  // Unified Login Fields
+  const [phone, setPhone] = useState("");
+  const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Cargar teléfono de localStorage al montar, si existe
   useEffect(() => {
     const savedPhone = localStorage.getItem("volunteer_phone");
     if (savedPhone) {
@@ -28,8 +26,8 @@ export function LoginForm() {
     e.preventDefault();
     setError(null);
 
-    if (pin.length !== 4) {
-      setError("El PIN debe tener exactamente 4 dígitos.");
+    if (pin.length < 4) {
+      setError("El PIN debe tener al menos 4 dígitos.");
       return;
     }
 
@@ -42,24 +40,28 @@ export function LoginForm() {
 
       if (result.error) {
         setError(result.error);
-        setPin(""); // Limpiar el PIN si hay error
+        setPin("");
       } else if (result.success) {
-        // Guardar teléfono para visitas futuras
         localStorage.setItem("volunteer_phone", phone);
-        // Redirigir al calendario
-        router.push("/calendar");
+        if (result.role) {
+          localStorage.setItem("mock_role", result.role);
+        }
+        if (result.committee) {
+          localStorage.setItem("mock_committee", result.committee);
+        }
+        router.push(result.redirectTo || "/calendar");
       }
     });
   };
 
   return (
     <div className="card-premium overflow-hidden">
-      <div className="space-y-1 pb-6 pt-8 px-8">
-        <h2 className="text-display-sm text-center text-text">
-          Bienvenido
+      <div className="space-y-1 pb-4 pt-6 px-8">
+        <h2 className="text-display-sm text-center text-text font-bold">
+          Iniciar Sesión
         </h2>
         <p className="text-center text-body-sm text-muted">
-          Ingresa con tu teléfono y el PIN de 4 dígitos (Valores de prueba precargados)
+          Ingresa con tu número de teléfono y PIN de acceso
         </p>
       </div>
       
@@ -91,7 +93,7 @@ export function LoginForm() {
                 type="password"
                 inputMode="numeric"
                 pattern="[0-9]*"
-                maxLength={4}
+                maxLength={6}
                 placeholder="••••"
                 required
                 value={pin}
@@ -116,10 +118,10 @@ export function LoginForm() {
             {isPending ? (
               <>
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Verificando...
+                Ingresando...
               </>
             ) : (
-              "Ingresar a mi cuenta"
+              "Ingresar a la plataforma"
             )}
           </button>
         </form>

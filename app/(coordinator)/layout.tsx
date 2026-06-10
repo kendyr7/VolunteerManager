@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, ShieldCheck, User } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, ShieldCheck, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { logout } from "@/app/actions/auth";
 
 export default function CoordinatorLayout({
   children,
@@ -14,7 +14,6 @@ export default function CoordinatorLayout({
 }) {
   const pathname = usePathname();
 
-  // --- MOCK AUTH SYSTEM ---
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [currentCommittee, setCurrentCommittee] = useState<string>('Historia');
 
@@ -25,20 +24,15 @@ export default function CoordinatorLayout({
     if (committee) setCurrentCommittee(committee);
   }, []);
 
-  const changeRole = (role: 'Admin' | 'Editor' | 'Lector') => {
-    setCurrentRole(role);
-    localStorage.setItem('mock_role', role);
-    window.location.reload();
-  };
-
-  const changeCommittee = (c: string) => {
-    setCurrentCommittee(c);
-    localStorage.setItem('mock_committee', c);
-    window.location.reload();
+  const handleLogout = async () => {
+    localStorage.removeItem('mock_role');
+    localStorage.removeItem('mock_committee');
+    await logout();
+    window.location.href = '/login';
   };
 
   const NAV_ITEMS = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ['Admin', 'Editor'] },
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ['Admin'] },
     { name: "Voluntarios", href: "/volunteers", icon: Users, roles: ['Admin', 'Editor'] },
     { name: currentRole === 'Lector' ? "Mi Perfil" : "Turnos", href: "/shifts", icon: currentRole === 'Lector' ? User : CalendarDays, roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Avisos", href: "/reminders", icon: MessageSquare, roles: ['Admin', 'Editor'] },
@@ -76,34 +70,6 @@ export default function CoordinatorLayout({
           </div>
         </div>
         
-        {/* Mock Auth Switcher */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50 space-y-3">
-          <p className="text-[9px] uppercase font-black tracking-widest text-slate-500 flex items-center gap-1.5"><User className="w-3 h-3"/> Simular Sesión</p>
-          <Select value={currentRole} onValueChange={(v) => v && changeRole(v as any)}>
-            <SelectTrigger className="w-full h-8 text-xs bg-white border-slate-200 text-slate-700">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-white border-slate-200 text-slate-700">
-              <SelectItem value="Admin">Rol: Admin</SelectItem>
-              <SelectItem value="Editor">Rol: Editor</SelectItem>
-              <SelectItem value="Lector">Rol: Lector</SelectItem>
-            </SelectContent>
-          </Select>
-          
-          {currentRole === 'Editor' && (
-            <Select value={currentCommittee} onValueChange={(v) => v && changeCommittee(v)}>
-              <SelectTrigger className="w-full h-8 text-xs bg-white border-slate-200 text-slate-700">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-white border-slate-200 text-slate-700">
-                <SelectItem value="Historia">Historia</SelectItem>
-                <SelectItem value="Seguridad">Seguridad</SelectItem>
-                <SelectItem value="Guía">Guía</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
         <nav className="flex-1 p-4 space-y-1">
           {visibleNavItems.map((item) => {
             const isActive = pathname === item.href;
@@ -124,6 +90,17 @@ export default function CoordinatorLayout({
             );
           })}
         </nav>
+
+        {/* Logout Button */}
+        <div className="p-4 border-t border-slate-100 bg-white">
+          <button
+            onClick={handleLogout}
+            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-semibold text-red-600 hover:bg-red-50 hover:text-red-700"
+          >
+            <LogOut className="h-4 w-4" />
+            Cerrar Sesión
+          </button>
+        </div>
       </aside>
 
       {/* Main Content Area */}
@@ -138,17 +115,14 @@ export default function CoordinatorLayout({
               {currentRole === 'Admin' ? 'Administración Global' : currentRole}
             </p>
           </div>
-          <div className="flex gap-2">
-            <Select value={currentRole} onValueChange={(v) => v && changeRole(v as any)}>
-              <SelectTrigger className="w-24 h-8 text-xs bg-slate-50 border-slate-200 text-slate-700">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-white border-slate-200 text-slate-700">
-                <SelectItem value="Admin">Admin</SelectItem>
-                <SelectItem value="Editor">Editor</SelectItem>
-                <SelectItem value="Lector">Lector</SelectItem>
-              </SelectContent>
-            </Select>
+          <div>
+            <button
+              onClick={handleLogout}
+              className="p-2 text-slate-500 hover:text-red-600 transition-colors"
+              title="Cerrar Sesión"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
           </div>
         </header>
 

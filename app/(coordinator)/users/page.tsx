@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { generateWaMeLink } from "@/lib/whatsapp";
+import { createClient } from "@/lib/supabase/client";
 
 const COMMITTEES = ['Historia', 'Seguridad', 'Guía', 'Traducción', 'Transporte', 'Primeros Auxilios'];
 const ROLES = ['Admin', 'Editor', 'Lector'] as const;
@@ -19,18 +20,13 @@ interface PlatformUser {
   committee?: string;
   status: 'pending' | 'active';
   inviteLink?: string;
+  pin?: string;
 }
-
-// Initial mock data
-const INITIAL_USERS: PlatformUser[] = [
-  { id: '1', name: 'Jasser Silva', phone: '88881111', role: 'Admin', status: 'active' },
-  { id: '2', name: 'Samantha Doe', phone: '88882222', role: 'Editor', committee: 'Historia', status: 'active' },
-  { id: '3', name: 'Carlos Coordinador', phone: '88883333', role: 'Editor', committee: 'Seguridad', status: 'pending', inviteLink: 'app.templomanagua.org/invite/x8j9' },
-];
 
 export default function UsersPage() {
   const [users, setUsers] = useState<PlatformUser[]>([]);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Invite Form State
   const [newName, setNewName] = useState('');
@@ -39,41 +35,90 @@ export default function UsersPage() {
   const [newCommittee, setNewCommittee] = useState<string>(COMMITTEES[0]);
   const [generatedInvite, setGeneratedInvite] = useState<PlatformUser | null>(null);
   const [copied, setCopied] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const loadUsers = async () => {
+    setLoading(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*, committees(name)')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("Error loading users:", error);
+    } else if (data) {
+      setUsers(data.map(p => ({
+        id: p.id,
+        name: p.full_name,
+        phone: p.phone || '',
+        role: p.role as Role,
+        committee: p.committees?.name,
+        status: p.pin ? 'active' : 'pending',
+        pin: p.pin || ''
+      })));
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    // Load from local storage or use initial
-    const stored = localStorage.getItem("platform_users");
-    if (stored) {
-      try {
-        setUsers(JSON.parse(stored));
-      } catch (e) {
-        setUsers(INITIAL_USERS);
-      }
-    } else {
-      setUsers(INITIAL_USERS);
-      localStorage.setItem("platform_users", JSON.stringify(INITIAL_USERS));
-    }
+    loadUsers();
   }, []);
 
-  const handleInvite = (e: React.FormEvent) => {
+  const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
+    const supabase = createClient();
+
+    let committeeId: string | null = null;
+    if (newRole === 'Editor') {
+      const { data: comm } = await supabase
+        .from('committees')
+        .select('id')
+        .eq('name', newCommittee)
+        .maybeSingle();
+      if (comm) {
+        committeeId = comm.id;
+      }
+    }
+
+    const pin = '1234'; // Default PIN assigned
     const shortCode = Math.random().toString(36).substring(2, 6);
     const link = `https://app.templomanagua.org/invite/${shortCode}`;
-    
-    const newUser: PlatformUser = {
-      id: Date.now().toString(),
-      name: newName,
-      phone: newPhone,
-      role: newRole,
-      committee: newRole === 'Editor' ? newCommittee : undefined,
-      status: 'pending',
-      inviteLink: link
-    };
 
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    localStorage.setItem("platform_users", JSON.stringify(updatedUsers));
-    setGeneratedInvite(newUser);
+    const { data: inserted, error: insertErr } = await supabase
+      .from('profiles')
+      .insert({
+        full_name: newName,
+        phone: newPhone,
+        role: newRole,
+        committee_id: committeeId,
+        pin: pin
+      })
+      .select('*, committees(name)')
+      .maybeSingle();
+
+    if (insertErr) {
+      console.error("Error inserting user:", insertErr);
+      setErrorMsg("Error al crear el usuario. Posiblemente el teléfono ya esté registrado.");
+      return;
+    }
+
+    if (inserted) {
+      const newUser: PlatformUser = {
+        id: inserted.id,
+        name: inserted.full_name,
+        phone: inserted.phone || '',
+        role: inserted.role as Role,
+        committee: inserted.committees?.name,
+        status: 'active',
+        pin: pin,
+        inviteLink: link
+      };
+
+      setGeneratedInvite(newUser);
+      loadUsers();
+    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -83,7 +128,7 @@ export default function UsersPage() {
   };
 
   const getWaLink = (user: PlatformUser) => {
-    const text = `¡Hola ${user.name}! Has sido invitado a ser ${user.role} en Volunteer Manager.\n\nIngresa a este enlace único para validar tu número y crear tu PIN de acceso:\n${user.inviteLink}`;
+    const text = `¡Hola ${user.name}! Has sido invitado a ser ${user.role} en Volunteer Manager.\n\nIngresa con tu número y tu PIN temporal (${user.pin}) para acceder:\nhttp://localhost:3000/login`;
     return generateWaMeLink(user.phone, text);
   };
 
@@ -94,6 +139,7 @@ export default function UsersPage() {
     setNewCommittee(COMMITTEES[0]);
     setGeneratedInvite(null);
     setIsInviteOpen(false);
+    setErrorMsg(null);
   };
 
   return (
@@ -179,6 +225,12 @@ export default function UsersPage() {
                 )}
               </div>
 
+              {errorMsg && (
+                <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                  {errorMsg}
+                </div>
+              )}
+
               <div className="pt-5 flex justify-end gap-3">
                 <Button type="button" variant="ghost" onClick={resetInviteForm} className="text-slate-500 hover:text-slate-800">
                   Cancelar
@@ -254,9 +306,22 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {users.map(user => (
-                <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
-                  <td className="px-5 py-3.5">
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-8 text-center text-slate-500">
+                    Cargando usuarios...
+                  </td>
+                </tr>
+              ) : users.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-8 text-center text-slate-500">
+                    No se encontraron usuarios.
+                  </td>
+                </tr>
+              ) : (
+                users.map(user => (
+                  <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
+                    <td className="px-5 py-3.5">
                     <p className="font-semibold text-slate-800">{user.name}</p>
                   </td>
                   <td className="px-5 py-3.5 font-mono text-xs text-slate-500">
@@ -294,7 +359,7 @@ export default function UsersPage() {
                     </button>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>
