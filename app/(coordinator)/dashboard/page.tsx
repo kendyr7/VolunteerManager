@@ -31,13 +31,13 @@ export default function CoordinatorDashboard() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-display-md text-ink tracking-tight">Comité de Historia</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-ink tracking-tight">Comité de Historia</h1>
             <span className="bg-surface-strong text-ink px-2 py-0.5 rounded-full text-caption-uppercase">Templo de Managua</span>
           </div>
-          <p className="text-body-md text-muted">Gestión y estado de tus voluntarios.</p>
+          <p className="text-sm font-medium text-slate-500">Gestión y estado de tus voluntarios.</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button render={<Link href="/volunteers" />} className="bg-primary-cta hover:bg-primary-active text-canvas text-btn rounded-lg h-10 px-5 shadow-sm transition-all active:scale-95">
+          <Button render={<Link href="/volunteers" />} nativeButton={false} className="bg-[#0084d1] hover:bg-[#006eb3] text-white text-btn rounded-lg h-10 px-5 shadow-sm transition-all active:scale-95">
             Ver Mis Voluntarios
             <ArrowUpRight className="w-4 h-4 ml-1.5 opacity-70" />
           </Button>
@@ -48,9 +48,9 @@ export default function CoordinatorDashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-2xl overflow-hidden">
           <CardContent className="p-5">
-            <p className="text-caption-uppercase text-muted mb-3 flex items-center justify-between">
+            <p className="text-caption-uppercase text-slate-500 mb-3 flex items-center justify-between">
               Mi Equipo
-              <Users className="w-3.5 h-3.5 text-muted-soft" />
+              <Users className="w-3.5 h-3.5 text-slate-500-soft" />
             </p>
             <div className="text-display-lg text-ink font-semibold tracking-tighter">
               {stats.totalVolunteers}
@@ -60,7 +60,7 @@ export default function CoordinatorDashboard() {
 
         <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-2xl overflow-hidden">
           <CardContent className="p-5">
-            <p className="text-caption-uppercase text-muted mb-3">Cobertura del Comité</p>
+            <p className="text-caption-uppercase text-slate-500 mb-3">Cobertura del Comité</p>
             <div className="text-display-lg text-ink font-semibold tracking-tighter">
               {stats.coveragePercentage}%
             </div>
@@ -83,9 +83,9 @@ export default function CoordinatorDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border border-hairline-strong bg-surface-dark text-canvas shadow-sm rounded-2xl overflow-hidden">
+        <Card className="border border-hairline-strong bg-surface-dark text-white shadow-sm rounded-2xl overflow-hidden">
           <CardContent className="p-5">
-            <p className="text-caption-uppercase text-muted-soft mb-3 flex items-center gap-1.5">
+            <p className="text-caption-uppercase text-slate-500-soft mb-3 flex items-center gap-1.5">
               <UserCheck className="w-3.5 h-3.5" />
               Asistencia Hoy
             </p>
@@ -102,15 +102,15 @@ export default function CoordinatorDashboard() {
       {/* Próximos Turnos (Hoy) */}
       <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-2xl">
         <div className="px-6 py-5 border-b border-hairline">
-          <h3 className="text-title-md text-ink">Turnos de Hoy (Lunes 14 Sep)</h3>
-          <p className="text-body-sm text-muted">Asegura la asistencia de tu equipo para los próximos bloques.</p>
+          <h3 className="text-lg font-bold tracking-tight text-ink">Turnos de Hoy (Lunes 14 Sep)</h3>
+          <p className="text-xs font-medium text-slate-500">Asegura la asistencia de tu equipo para los próximos bloques.</p>
         </div>
         <CardContent className="p-0">
           <div className="divide-y divide-hairline">
             {nextShifts.map((shift) => (
               <div key={shift.id} className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-canvas-soft transition-colors">
                 <div>
-                  <h4 className="text-body-md font-medium text-ink">{shift.name}</h4>
+                  <h4 className="text-sm font-medium font-medium text-ink">{shift.name}</h4>
                   <div className="flex items-center gap-2 mt-1.5">
                     {shift.risk === 'high' ? (
                       <span className="text-[10px] bg-error/10 text-error px-2 py-0.5 rounded font-medium uppercase tracking-wider border border-error/20">Crítico</span>
@@ -122,7 +122,7 @@ export default function CoordinatorDashboard() {
                   </div>
                 </div>
                 <div className="flex flex-col md:items-end gap-2">
-                  <span className="text-code text-muted">
+                  <span className="text-code text-slate-500">
                     <strong className="text-ink">{shift.enrolled}</strong> de {shift.required} voluntarios
                   </span>
                   <div className="w-32 h-1.5 bg-surface-strong rounded-full overflow-hidden">

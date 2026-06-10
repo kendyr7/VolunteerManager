@@ -1,18 +1,11 @@
 'use client'
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, CalendarDays, MessageSquare, Upload, Settings } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, ShieldCheck, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const NAV_ITEMS = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Voluntarios", href: "/volunteers", icon: Users },
-  { name: "Turnos", href: "/shifts", icon: CalendarDays },
-  { name: "Avisos", href: "/reminders", icon: MessageSquare },
-  { name: "Importar", href: "/import", icon: Upload },
-  { name: "Ajustes", href: "/settings", icon: Settings },
-];
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function CoordinatorLayout({
   children,
@@ -21,31 +14,96 @@ export default function CoordinatorLayout({
 }) {
   const pathname = usePathname();
 
+  // --- MOCK AUTH SYSTEM ---
+  const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
+  const [currentCommittee, setCurrentCommittee] = useState<string>('Historia');
+
+  useEffect(() => {
+    const role = localStorage.getItem('mock_role') as any;
+    const committee = localStorage.getItem('mock_committee');
+    if (role) setCurrentRole(role);
+    if (committee) setCurrentCommittee(committee);
+  }, []);
+
+  const changeRole = (role: 'Admin' | 'Editor' | 'Lector') => {
+    setCurrentRole(role);
+    localStorage.setItem('mock_role', role);
+    window.location.reload();
+  };
+
+  const changeCommittee = (c: string) => {
+    setCurrentCommittee(c);
+    localStorage.setItem('mock_committee', c);
+    window.location.reload();
+  };
+
+  const NAV_ITEMS = [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ['Admin', 'Editor', 'Lector'] },
+    { name: "Voluntarios", href: "/volunteers", icon: Users, roles: ['Admin', 'Editor'] },
+    { name: "Turnos", href: "/shifts", icon: CalendarDays, roles: ['Admin', 'Editor', 'Lector'] },
+    { name: "Avisos", href: "/reminders", icon: MessageSquare, roles: ['Admin', 'Editor'] },
+    { name: "Ajustes", href: "/settings", icon: Settings, roles: ['Admin', 'Editor'] },
+    { name: "Usuarios", href: "/users", icon: ShieldCheck, roles: ['Admin'] },
+  ];
+
+  const visibleNavItems = NAV_ITEMS.filter(item => item.roles.includes(currentRole));
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row pb-20 md:pb-0">
+    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row pb-20 md:pb-0 font-sans">
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-slate-200 bg-white sticky top-0 h-screen overflow-y-auto shrink-0">
         <div className="p-6 border-b border-slate-100">
           <h1 className="text-xl font-bold text-slate-800 tracking-tight">
-            Comité <span className="text-blue-600">Historia</span>
+            Templo <span className="text-blue-600">Managua</span>
           </h1>
-          <p className="text-xs text-slate-500 uppercase tracking-wider mt-1 font-medium">Panel de Coordinación</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1 font-black">
+            {currentRole === 'Admin' ? 'Administración Global' : `Comité de ${currentCommittee}`}
+          </p>
         </div>
+        
+        {/* Mock Auth Switcher */}
+        <div className="p-4 border-b border-slate-100 bg-slate-50 space-y-3">
+          <p className="text-[9px] uppercase font-black tracking-widest text-slate-500 flex items-center gap-1.5"><User className="w-3 h-3"/> Simular Sesión</p>
+          <Select value={currentRole} onValueChange={(v) => v && changeRole(v as any)}>
+            <SelectTrigger className="w-full h-8 text-xs bg-white border-slate-200 text-slate-700">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-white border-slate-200 text-slate-700">
+              <SelectItem value="Admin">Rol: Admin</SelectItem>
+              <SelectItem value="Editor">Rol: Editor</SelectItem>
+              <SelectItem value="Lector">Rol: Lector</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          {currentRole === 'Editor' && (
+            <Select value={currentCommittee} onValueChange={(v) => v && changeCommittee(v)}>
+              <SelectTrigger className="w-full h-8 text-xs bg-white border-slate-200 text-slate-700">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-white border-slate-200 text-slate-700">
+                <SelectItem value="Historia">Historia</SelectItem>
+                <SelectItem value="Seguridad">Seguridad</SelectItem>
+                <SelectItem value="Guía">Guía</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
         <nav className="flex-1 p-4 space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-semibold",
                   isActive 
                     ? "bg-blue-50 text-blue-700 shadow-sm border border-blue-100" 
                     : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 )}
               >
-                <item.icon className={cn("h-5 w-5", isActive ? "text-blue-600" : "text-slate-400")} />
+                <item.icon className={cn("h-4 w-4", isActive ? "text-blue-600" : "text-slate-400")} />
                 {item.name}
               </Link>
             );
@@ -57,11 +115,25 @@ export default function CoordinatorLayout({
       <main className="flex-1 overflow-x-hidden min-w-0">
         {/* Mobile Header */}
         <header className="md:hidden bg-white border-b border-slate-200 p-4 sticky top-0 z-40 shadow-sm flex items-center justify-between">
-          <h1 className="text-lg font-bold text-slate-800">
-            Comité <span className="text-blue-600">Historia</span>
-          </h1>
-          <div className="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-sm">
-            C
+          <div>
+            <h1 className="text-lg font-bold text-slate-800">
+              Templo <span className="text-blue-600">Managua</span>
+            </h1>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-black">
+              {currentRole === 'Admin' ? 'Administración Global' : currentRole}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Select value={currentRole} onValueChange={(v) => v && changeRole(v as any)}>
+              <SelectTrigger className="w-24 h-8 text-xs bg-slate-50 border-slate-200 text-slate-700">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-white border-slate-200 text-slate-700">
+                <SelectItem value="Admin">Admin</SelectItem>
+                <SelectItem value="Editor">Editor</SelectItem>
+                <SelectItem value="Lector">Lector</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </header>
 
@@ -72,7 +144,7 @@ export default function CoordinatorLayout({
 
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-2 z-50 pb-[env(safe-area-inset-bottom,0.5rem)] shadow-[0_-4px_10px_-4px_rgba(0,0,0,0.05)]">
-        {NAV_ITEMS.slice(0, 5).map((item) => {
+        {visibleNavItems.slice(0, 5).map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link
@@ -83,8 +155,8 @@ export default function CoordinatorLayout({
                 isActive ? "text-blue-600" : "text-slate-400 hover:text-slate-600"
               )}
             >
-              <item.icon className={cn("h-5 w-5 mb-1", isActive && "fill-blue-100")} />
-              <span className="text-[10px] font-medium">{item.name}</span>
+              <item.icon className={cn("h-5 w-5 mb-1", isActive && "text-blue-600 fill-blue-50")} />
+              <span className="text-[10px] font-bold">{item.name}</span>
             </Link>
           );
         })}

@@ -110,7 +110,7 @@ export function LoginForm() {
 
           <button 
             type="submit" 
-            className="btn-base btn-primary w-full h-12 text-base mt-2"
+            className="btn-base bg-[#0084d1] hover:bg-[#006eb3] text-white w-full h-12 text-base mt-2"
             disabled={isPending}
           >
             {isPending ? (

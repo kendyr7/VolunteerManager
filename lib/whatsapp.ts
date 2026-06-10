@@ -31,5 +31,5 @@ export function generateReminderMessage(
 ): string {
   const holidayNote = isHoliday ? " *(Día feriado — horario extendido)*" : "";
   
-  return `Hola ${name}, te recordamos que tienes turno de voluntaria/o:\n\n📅 ${dateStr}${holidayNote}\n⏰ ${shiftName}: ${timeStr}\n🏛️ Comité: ${committeeName} — Templo de Managua\n\n¡Gracias por tu servicio!`;
+  return `Hola ${name}, te recordamos que tienes turno de voluntaria/o:\n\nFecha: ${dateStr}${holidayNote}\nTurno: ${shiftName} (${timeStr})\nComité: ${committeeName} — Templo de Managua\n\n¡Gracias por tu servicio!`;
 }

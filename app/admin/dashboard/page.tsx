@@ -41,7 +41,7 @@ export default function AdminDashboard() {
           <p className="text-body-md text-muted">Métricas generales de la Jornada de Puertas Abiertas.</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button render={<Link href="/admin/replacements" />} className="bg-primary-cta hover:bg-primary-active text-canvas text-btn rounded-lg h-10 px-5 shadow-sm transition-all active:scale-95">
+          <Button render={<Link href="/admin/replacements" />} nativeButton={false} className="bg-[#0084d1] hover:bg-[#006eb3] text-white text-btn rounded-lg h-10 px-5 shadow-sm transition-all active:scale-95">
             Resolver Crisis
             <ArrowUpRight className="w-4 h-4 ml-1.5 opacity-70" />
           </Button>
@@ -144,14 +144,14 @@ export default function AdminDashboard() {
         <div className="space-y-6">
           
           {/* Confiabilidad Global */}
-          <Card className="border border-hairline-strong bg-surface-dark text-canvas shadow-sm rounded-2xl">
+          <Card className="border border-hairline-strong bg-surface-dark text-white shadow-sm rounded-2xl">
             <CardContent className="p-6">
               <div className="flex items-center gap-3 text-muted-soft mb-2">
                 <ShieldCheck className="w-4 h-4" />
                 <h3 className="text-caption-uppercase">Confiabilidad Global</h3>
               </div>
               <div className="flex items-baseline gap-2 mb-2">
-                <span className="text-display-xl font-bold tracking-tighter text-canvas">{kpis.globalReliability}%</span>
+                <span className="text-display-xl font-bold tracking-tighter text-white">{kpis.globalReliability}%</span>
                 <span className="text-body-sm text-success flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +2%</span>
               </div>
               <p className="text-body-sm text-muted-soft">Porcentaje histórico de asistencia de los voluntarios asignados.</p>

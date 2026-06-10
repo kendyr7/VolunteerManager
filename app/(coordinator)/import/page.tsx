@@ -85,7 +85,7 @@ export default function ImportPage() {
             />
           </CardContent>
           <CardFooter className="justify-end">
-            <Button onClick={handleParse} disabled={!csvText.trim()} className="bg-blue-600 hover:bg-blue-700">
+            <Button onClick={handleParse} disabled={!csvText.trim()} className="bg-[#0084d1] hover:bg-[#006eb3]">
               <FileText className="w-4 h-4 mr-2" />
               Procesar Datos
             </Button>
@@ -126,7 +126,7 @@ export default function ImportPage() {
           </CardContent>
           <CardFooter className="justify-between border-t border-slate-100 pt-6">
             <Button variant="ghost" onClick={() => setStep(1)}>Volver y editar</Button>
-            <Button onClick={handleImport} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button onClick={handleImport} className="bg-[#0084d1] hover:bg-[#006eb3] text-white">
               <UploadCloud className="w-4 h-4 mr-2" />
               Generar PINs e Importar
             </Button>

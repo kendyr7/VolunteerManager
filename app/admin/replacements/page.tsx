@@ -84,7 +84,7 @@ export default function ReplacementsPage() {
                       <Button size="sm" variant="outline" className="text-blue-600 hover:bg-blue-50">
                         <Send className="w-3.5 h-3.5 mr-2" /> Contactar
                       </Button>
-                      <Button size="sm" onClick={() => handleSelectToReplace(vol.id)} className="bg-slate-800 hover:bg-slate-900 text-white shadow-sm">
+                      <Button size="sm" onClick={() => handleSelectToReplace(vol.id)} className="bg-[#0084d1] hover:bg-[#006eb3] text-white shadow-sm">
                         <RefreshCw className="w-3.5 h-3.5 mr-2" /> Reemplazar
                       </Button>
                     </div>

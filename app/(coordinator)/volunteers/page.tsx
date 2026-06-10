@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,16 @@ export default function VolunteersPage() {
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [isEditingShifts, setIsEditingShifts] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
+  const [currentCommittee, setCurrentCommittee] = useState<string>('');
+
+  useEffect(() => {
+    const role = localStorage.getItem('mock_role') as any;
+    const committee = localStorage.getItem('mock_committee');
+    if (role) setCurrentRole(role);
+    if (committee) setCurrentCommittee(committee);
+  }, []);
 
   // Días reales del evento (Sep 10-26, sin domingos)
   const EVENT_DAYS = getActiveEventDays().map(date => ({
@@ -85,7 +95,14 @@ export default function VolunteersPage() {
     committee: committees[i % committees.length]
   }));
 
-  const filteredVolunteers = volunteers.filter(v => {
+  const roleFilteredVolunteers = volunteers.filter(v => {
+    if (currentRole === 'Admin') return true;
+    if (currentRole === 'Editor') return v.committee === currentCommittee;
+    if (currentRole === 'Lector') return false; // Lector doesn't see directory
+    return false;
+  });
+
+  const filteredVolunteers = roleFilteredVolunteers.filter(v => {
     const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           v.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           v.ward.toLowerCase().includes(searchTerm.toLowerCase());
@@ -117,41 +134,43 @@ export default function VolunteersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h2 className="text-display-md text-text tracking-tight">Directorio de Voluntarios</h2>
-            <Badge variant="secondary" className="bg-dark3 text-text font-medium text-sm rounded-full px-2.5">
+            <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 tracking-tight">Directorio de Voluntarios</h2>
+            <Badge variant="secondary" className="bg-slate-100 text-slate-800 font-medium text-sm rounded-full px-2.5">
               {filteredVolunteers.length} {filteredVolunteers.length === 1 ? 'voluntario' : 'voluntarios'}
             </Badge>
           </div>
-          <p className="text-body-md text-muted">Gestiona los miembros de tu comité y visualiza su información clave.</p>
+          <p className="text-sm font-medium text-slate-500">Gestiona los miembros de tu comité y visualiza su información clave.</p>
         </div>
         <Button 
           onClick={() => setIsAddSheetOpen(true)}
-          className="btn-base bg-primary-cta hover:bg-primary-active text-canvas rounded-xl shadow-sm h-10 px-4"
+          className="btn-base bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-xl shadow-sm h-10 px-4"
         >
           <UserPlus className="mr-2 h-4 w-4" />
           Añadir Voluntario
         </Button>
       </div>
 
-      <div className="card-premium overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden overflow-hidden">
         {/* Barra de Filtros */}
-        <div className="p-5 border-b border-border bg-dark2 flex items-center gap-4 flex-wrap">
+        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center gap-4 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted pointer-events-none" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
             <Input 
               placeholder="Buscar por nombre, estaca o barrio..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 h-10 bg-dark input-base text-text border-border focus:ring-2 focus:ring-gold-faint"
+              className="pl-9 h-10 bg-white input-base text-slate-800 border-slate-200 focus:ring-2 focus:ring-gold-faint"
             />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <DataTableFilter
-              title="Comité"
-              options={committees}
-              value={selectedCommittees}
-              onChange={setSelectedCommittees}
-            />
+            {currentRole === 'Admin' && (
+              <DataTableFilter
+                title="Comité"
+                options={committees}
+                value={selectedCommittees}
+                onChange={setSelectedCommittees}
+              />
+            )}
             <DataTableFilter
               title="Estaca"
               options={stakes}
@@ -172,7 +191,7 @@ export default function VolunteersPage() {
                   setSelectedStakes([]);
                   setSelectedWards([]);
                 }}
-                className="h-10 px-3 text-muted hover:text-text hover:bg-dark3 rounded-xl"
+                className="h-10 px-3 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl"
               >
                 Limpiar todo
               </Button>
@@ -181,53 +200,53 @@ export default function VolunteersPage() {
         </div>
 
         {/* Tabla */}
-        <div className="overflow-x-auto bg-dark">
+        <div className="overflow-x-auto bg-white">
           <Table>
-            <TableHeader className="bg-dark2 border-b border-border">
+            <TableHeader className="bg-slate-50 border-b border-slate-200">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="font-medium text-muted pl-8">Nombre y Apellido</TableHead>
-                <TableHead className="font-medium text-muted text-center">Barrio</TableHead>
-                <TableHead className="font-medium text-muted text-center">Estaca</TableHead>
-                <TableHead className="font-medium text-muted text-center">Comité</TableHead>
-                <TableHead className="font-medium text-muted text-center">Turnos</TableHead>
-                <TableHead className="font-medium text-muted text-center">Confiabilidad</TableHead>
-                <TableHead className="font-medium text-muted text-center">Contacto</TableHead>
-                <TableHead className="font-medium text-muted text-center w-12 pr-8">Acciones</TableHead>
+                <TableHead className="font-medium text-slate-500 pl-8">Nombre y Apellido</TableHead>
+                <TableHead className="font-medium text-slate-500 text-center">Barrio</TableHead>
+                <TableHead className="font-medium text-slate-500 text-center">Estaca</TableHead>
+                <TableHead className="font-medium text-slate-500 text-center">Comité</TableHead>
+                <TableHead className="font-medium text-slate-500 text-center">Turnos</TableHead>
+                <TableHead className="font-medium text-slate-500 text-center">Confiabilidad</TableHead>
+                <TableHead className="font-medium text-slate-500 text-center">Contacto</TableHead>
+                <TableHead className="font-medium text-slate-500 text-center w-12 pr-8">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredVolunteers.length > 0 ? (
                 filteredVolunteers.map((vol) => (
-                  <TableRow key={vol.id} className="border-border hover:bg-dark3 transition-colors">
-                    <TableCell className="font-medium text-text pl-8">{vol.name}</TableCell>
-                    <TableCell className="text-text text-center">{vol.ward}</TableCell>
-                    <TableCell className="text-muted text-center">{vol.stake}</TableCell>
+                  <TableRow key={vol.id} className="border-slate-200 hover:bg-slate-100 transition-colors">
+                    <TableCell className="font-medium text-slate-800 pl-8">{vol.name}</TableCell>
+                    <TableCell className="text-slate-800 text-center">{vol.ward}</TableCell>
+                    <TableCell className="text-slate-500 text-center">{vol.stake}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="outline" className="bg-dark text-muted border-border font-medium">
+                      <Badge variant="outline" className="bg-white text-slate-500 border-slate-200 font-medium">
                         {vol.committee}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="secondary" className="bg-dark3 text-text border-border font-medium">
+                      <Badge variant="secondary" className="bg-slate-100 text-slate-800 border-slate-200 font-medium">
                         {vol.shifts} {vol.shifts === 1 ? 'turno' : 'turnos'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
                       {vol.shifts === 0 ? (
-                        <span className="text-sm text-muted">N/A</span>
+                        <span className="text-sm text-slate-500">N/A</span>
                       ) : (
                         <div className="flex items-center justify-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${vol.reliability >= 80 ? 'bg-success' : 'bg-warning'}`} />
-                          <span className="text-sm font-medium text-text">{vol.reliability}%</span>
+                          <span className="text-sm font-medium text-slate-800">{vol.reliability}%</span>
                         </div>
                       )}
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-gold hover:bg-dark3 hover:text-gold" title="WhatsApp">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-slate-100 hover:text-blue-600" title="WhatsApp">
                           <MessageCircle className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-gold hover:bg-dark3 hover:text-gold" title="Llamar">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-slate-100 hover:text-blue-600" title="Llamar">
                           <Phone className="h-4 w-4" />
                         </Button>
                       </div>
@@ -236,13 +255,13 @@ export default function VolunteersPage() {
                       <DropdownMenu>
                         <DropdownMenuTrigger 
                           render={
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted hover:bg-dark3 hover:text-text focus-visible:ring-0">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-0">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           }
                         />
-                        <DropdownMenuContent align="end" className="bg-dark border-border text-text min-w-[140px] p-1 rounded-xl shadow-md">
-                          <DropdownMenuItem className="cursor-pointer hover:bg-dark3 rounded-lg focus:bg-dark3 focus:text-text" onClick={() => handleEditClick(vol)}>
+                        <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[140px] p-1 rounded-xl shadow-md">
+                          <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-lg focus:bg-slate-100 focus:text-slate-800" onClick={() => handleEditClick(vol)}>
                             Editar Perfil
                           </DropdownMenuItem>
                           <DropdownMenuItem className="cursor-pointer text-error hover:bg-error/10 hover:text-error rounded-lg focus:bg-error/10 focus:text-error">
@@ -255,7 +274,7 @@ export default function VolunteersPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center text-muted">
+                  <TableCell colSpan={8} className="h-32 text-center text-slate-500">
                     No se encontraron voluntarios con esos términos.
                   </TableCell>
                 </TableRow>
@@ -270,20 +289,20 @@ export default function VolunteersPage() {
         <SheetContent
           side="right"
           style={{ width: '620px', maxWidth: '95vw' }}
-          className="bg-dark text-text border-l border-border p-0 overflow-y-auto"
+          className="bg-white text-slate-800 border-l border-slate-200 p-0 overflow-y-auto"
         >
           {editingVolunteer && (
             <div className="p-7 space-y-7">
               {/* Profile Header */}
-              <div className="flex flex-col justify-center bg-dark2 p-5 rounded-2xl border border-border">
-                <h3 className="text-2xl font-bold text-text tracking-tight leading-tight mb-3">
+              <div className="flex flex-col justify-center bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                <h3 className="text-2xl font-bold text-slate-800 tracking-tight leading-tight mb-3">
                   {editingVolunteer.name}
                 </h3>
                 <div className="flex items-center gap-2">
-                  <Badge className="bg-primary-cta text-canvas border-none text-[10px] px-2 uppercase font-bold tracking-wide">
+                  <Badge className="bg-blue-600 text-white border-none text-[10px] px-2 uppercase font-bold tracking-wide">
                     Voluntario
                   </Badge>
-                  <Badge variant="outline" className="text-muted border-border text-[10px] px-2 font-medium bg-dark">
+                  <Badge variant="outline" className="text-slate-500 border-slate-200 text-[10px] px-2 font-medium bg-white">
                     Comité: {editingVolunteer.committee}
                   </Badge>
                 </div>
@@ -291,38 +310,38 @@ export default function VolunteersPage() {
 
               {/* Datos de Perfil — 4 columnas aprovechando el ancho */}
               <div>
-                <h4 className="text-xs font-bold text-primary-cta uppercase tracking-widest mb-4">Datos de Perfil</h4>
+                <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-4">Datos de Perfil</h4>
                 <div className="grid grid-cols-4 gap-4">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 text-muted">
+                    <div className="flex items-center gap-1.5 text-slate-500">
                       <Phone className="h-3 w-3" />
                       <span className="text-[10px] font-medium uppercase tracking-wide">Celular</span>
                     </div>
-                    <p className="text-sm font-semibold text-text">{editingVolunteer.phone}</p>
+                    <p className="text-sm font-semibold text-slate-800">{editingVolunteer.phone}</p>
                   </div>
 
                   <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 text-muted">
+                    <div className="flex items-center gap-1.5 text-slate-500">
                       <Calendar className="h-3 w-3" />
                       <span className="text-[10px] font-medium uppercase tracking-wide">Edad</span>
                     </div>
-                    <p className="text-sm font-semibold text-text">27</p>
+                    <p className="text-sm font-semibold text-slate-800">27</p>
                   </div>
 
                   <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 text-muted">
+                    <div className="flex items-center gap-1.5 text-slate-500">
                       <MapPin className="h-3 w-3" />
                       <span className="text-[10px] font-medium uppercase tracking-wide">Barrio</span>
                     </div>
-                    <p className="text-sm font-semibold text-text">{editingVolunteer.ward}</p>
+                    <p className="text-sm font-semibold text-slate-800">{editingVolunteer.ward}</p>
                   </div>
 
                   <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 text-muted">
+                    <div className="flex items-center gap-1.5 text-slate-500">
                       <MapPin className="h-3 w-3" />
                       <span className="text-[10px] font-medium uppercase tracking-wide">Estaca</span>
                     </div>
-                    <p className="text-sm font-semibold text-text">{editingVolunteer.stake}</p>
+                    <p className="text-sm font-semibold text-slate-800">{editingVolunteer.stake}</p>
                   </div>
                 </div>
               </div>
@@ -333,15 +352,15 @@ export default function VolunteersPage() {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-4 flex-wrap">
-                    <h4 className="text-xs font-bold text-primary-cta uppercase tracking-widest">Resumen de Turnos</h4>
+                    <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest">Resumen de Turnos</h4>
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-1.5">
                         <span className="inline-block w-3 h-3 rounded bg-sky-600 border border-sky-500" />
-                        <span className="text-[10px] text-muted">Seleccionado</span>
+                        <span className="text-[10px] text-slate-500">Seleccionado</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="inline-block w-3 h-3 rounded bg-dark border border-border" />
-                        <span className="text-[10px] text-muted">Sin asignar</span>
+                        <span className="inline-block w-3 h-3 rounded bg-white border border-slate-200" />
+                        <span className="text-[10px] text-slate-500">Sin asignar</span>
                       </div>
                     </div>
                   </div>
@@ -350,18 +369,18 @@ export default function VolunteersPage() {
                       <span className="text-[10px] text-success font-semibold animate-pulse">✓ Guardado</span>
                     )}
                     {isEditingShifts ? (
-                      <Button onClick={handleSaveShifts} className="h-8 bg-success hover:bg-success/80 text-canvas text-xs px-3 rounded-lg shrink-0">
+                      <Button onClick={handleSaveShifts} className="h-8 bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-3 rounded-lg shrink-0">
                         Guardar
                       </Button>
                     ) : (
-                      <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-8 bg-primary-cta hover:bg-primary-active text-canvas text-xs px-3 rounded-lg shrink-0">
+                      <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-8 bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-3 rounded-lg shrink-0">
                         Editar Turnos
                       </Button>
                     )}
                   </div>
                 </div>
                 {isEditingShifts && (
-                  <p className="text-[11px] text-muted mb-4">Toca un turno para activarlo o desactivarlo.</p>
+                  <p className="text-[11px] text-slate-500 mb-4">Toca un turno para activarlo o desactivarlo.</p>
                 )}
 
                 {/* Stats rápidas */}
@@ -370,19 +389,19 @@ export default function VolunteersPage() {
                   const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
                   return (
                     <div className="grid grid-cols-3 gap-3 mb-5">
-                      <div className="bg-dark2 border border-border rounded-xl p-3 text-center">
-                        <p className="text-2xl font-bold text-text">{totalTurnos}</p>
-                        <p className="text-[10px] text-muted uppercase tracking-wide mt-0.5">Turnos</p>
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                        <p className="text-2xl font-bold text-slate-800">{totalTurnos}</p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5">Turnos</p>
                       </div>
-                      <div className="bg-dark2 border border-border rounded-xl p-3 text-center">
-                        <p className="text-2xl font-bold text-text">{diasCubiertos}</p>
-                        <p className="text-[10px] text-muted uppercase tracking-wide mt-0.5">Días</p>
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                        <p className="text-2xl font-bold text-slate-800">{diasCubiertos}</p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5">Días</p>
                       </div>
-                      <div className="bg-dark2 border border-border rounded-xl p-3 text-center">
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
                         <p className={`text-2xl font-bold ${editingVolunteer.reliability >= 80 ? 'text-success' : 'text-warning'}`}>
                           {editingVolunteer.reliability}%
                         </p>
-                        <p className="text-[10px] text-muted uppercase tracking-wide mt-0.5">Confiab.</p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5">Confiab.</p>
                       </div>
                     </div>
                   );
@@ -391,15 +410,25 @@ export default function VolunteersPage() {
                 {/* Timeline por día */}
                 <div className="space-y-2.5">
                   {(isEditingShifts ? EVENT_DAYS : EVENT_DAYS.filter(d => (shiftsByDay[d.key]?.length ?? 0) > 0)).map((d) => (
-                    <div key={d.key} className={`flex items-center gap-4 border rounded-xl px-5 py-3 transition-colors ${
-                      isEditingShifts ? 'bg-dark3 border-primary-cta/20' : 'bg-dark2 border-border'
+                    <div key={d.key} className={`flex items-stretch border rounded-xl overflow-hidden transition-colors ${
+                      isEditingShifts ? 'border-blue-600/20' : 'border-slate-200'
                     }`}>
-                      <div className="shrink-0 w-16 text-center">
-                        <p className="text-xs font-bold text-text capitalize">{d.label}</p>
-                        <p className="text-[10px] text-muted">{d.dateNum} Sep</p>
+                      {/* Left: white date panel */}
+                      <div className="shrink-0 w-16 flex flex-col items-center justify-center bg-white py-3 px-2">
+                        <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest leading-none">
+                          {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
+                        </p>
+                        <p className="text-lg font-bold text-slate-800 leading-tight mt-0.5">{d.dateNum}</p>
+                        <p className="text-[8px] text-slate-500 font-semibold uppercase tracking-wider leading-none">Sept</p>
                       </div>
-                      <div className="w-px h-8 bg-border shrink-0" />
-                      <div className="flex items-center justify-between gap-2 flex-1">
+
+                      {/* Vertical divider */}
+                      <div className="w-px bg-border/60 shrink-0" />
+
+                      {/* Right: shift buttons */}
+                      <div className={`flex items-center justify-between gap-2 flex-1 px-4 py-3 ${
+                        isEditingShifts ? 'bg-slate-100' : 'bg-slate-50'
+                      }`}>
                         {['T1', 'T2', 'T3', 'T4'].map((t) => {
                           const active = (shiftsByDay[d.key] ?? []).includes(t);
                           return (
@@ -409,7 +438,7 @@ export default function VolunteersPage() {
                               className={`flex-1 inline-flex items-center justify-center rounded-lg text-xs font-bold py-2 border transition-all ${
                                 active
                                   ? 'bg-sky-600 border-sky-500 text-white shadow-sm'
-                                  : 'bg-dark border-border text-muted'
+                                  : 'bg-white border-slate-200 text-slate-500'
                               } ${
                                 isEditingShifts
                                   ? 'cursor-pointer hover:scale-105 hover:border-sky-400'
@@ -420,10 +449,10 @@ export default function VolunteersPage() {
                             </button>
                           );
                         })}
+                        <div className={`shrink-0 w-2 h-2 rounded-full ml-1 ${
+                          (shiftsByDay[d.key]?.length ?? 0) > 0 ? 'bg-teal-400' : 'bg-border'
+                        }`} />
                       </div>
-                      <div className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                        (shiftsByDay[d.key]?.length ?? 0) > 0 ? 'bg-success' : 'bg-border'
-                      }`} />
                     </div>
                   ))}
                 </div>
@@ -438,10 +467,10 @@ export default function VolunteersPage() {
         <SheetContent
           side="right"
           style={{ width: '500px', maxWidth: '95vw' }}
-          className="bg-dark text-text border-l border-border overflow-hidden"
+          className="bg-white text-slate-800 border-l border-slate-200 overflow-hidden"
         >
           <SheetHeader>
-            <SheetTitle className="text-xl font-bold text-text">Añadir Voluntario</SheetTitle>
+            <SheetTitle className="text-xl font-bold text-slate-800">Añadir Voluntario</SheetTitle>
           </SheetHeader>
           <form 
             id="add-volunteer-form"
@@ -452,12 +481,12 @@ export default function VolunteersPage() {
             className="flex-1 overflow-y-auto px-6 space-y-6 pb-24"
           >
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-text">Nombre y Apellido</label>
-              <Input required minLength={3} className="h-10 bg-dark2 border-border focus:ring-gold-faint" placeholder="Ej. Juan Pérez" />
-              <p className="text-[11px] text-muted">Asegúrate de incluir ambos apellidos si es posible.</p>
+              <label className="text-sm font-medium text-slate-800">Nombre y Apellido</label>
+              <Input required minLength={3} className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" placeholder="Ej. Juan Pérez" />
+              <p className="text-[11px] text-slate-500">Asegúrate de incluir ambos apellidos si es posible.</p>
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-text">Celular</label>
+              <label className="text-sm font-medium text-slate-800">Celular</label>
               <Input 
                 required 
                 type="tel" 
@@ -466,26 +495,26 @@ export default function VolunteersPage() {
                 onKeyPress={(e) => {
                   if (!/[0-9]/.test(e.key)) e.preventDefault();
                 }}
-                className="h-10 bg-dark2 border-border focus:ring-gold-faint" 
+                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" 
                 placeholder="Ej. 88888888" 
               />
-              <p className="text-[11px] text-muted">Solo 8 dígitos, sin código de país o espacios.</p>
+              <p className="text-[11px] text-slate-500">Solo 8 dígitos, sin código de país o espacios.</p>
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-text">Estaca</label>
-              <Input required className="h-10 bg-dark2 border-border focus:ring-gold-faint" placeholder="Ej. Managua Sur" />
+              <label className="text-sm font-medium text-slate-800">Estaca</label>
+              <Input required className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" placeholder="Ej. Managua Sur" />
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-text">Barrio</label>
-              <Input required className="h-10 bg-dark2 border-border focus:ring-gold-faint" placeholder="Ej. Barrio 1" />
+              <label className="text-sm font-medium text-slate-800">Barrio</label>
+              <Input required className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" placeholder="Ej. Barrio 1" />
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-text">Comité</label>
+              <label className="text-sm font-medium text-slate-800">Comité</label>
               <Select required>
-                <SelectTrigger className="h-10 bg-dark2 border-border focus:ring-gold-faint">
+                <SelectTrigger className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint">
                   <SelectValue placeholder="Selecciona un comité" />
                 </SelectTrigger>
-                <SelectContent className="bg-dark border-border text-text">
+                <SelectContent className="bg-white border-slate-200 text-slate-800">
                   {committees.map((com) => (
                     <SelectItem 
                       key={com} 
@@ -501,11 +530,11 @@ export default function VolunteersPage() {
           </form>
 
           {/* Footer fijo en la parte inferior */}
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }} className="bg-dark border-t border-border px-6 py-4 flex items-center justify-end gap-3">
-            <Button type="button" variant="outline" className="border-border text-muted hover:text-text hover:bg-dark3" onClick={() => setIsAddSheetOpen(false)}>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }} className="bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-end gap-3">
+            <Button type="button" variant="outline" className="border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100" onClick={() => setIsAddSheetOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit" form="add-volunteer-form" className="bg-primary-cta hover:bg-primary-active text-white">
+            <Button type="submit" form="add-volunteer-form" className="bg-[#0084d1] hover:bg-[#006eb3] text-white">
               Guardar Voluntario
             </Button>
           </div>
