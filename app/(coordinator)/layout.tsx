@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Voluntarios", href: "/volunteers", icon: Users },
-  { name: "Días", href: "/shifts", icon: CalendarDays },
+  { name: "Turnos", href: "/shifts", icon: CalendarDays },
   { name: "Avisos", href: "/reminders", icon: MessageSquare },
   { name: "Importar", href: "/import", icon: Upload },
   { name: "Ajustes", href: "/settings", icon: Settings },

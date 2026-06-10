@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search, MessageCircle, Phone, MoreHorizontal, UserPlus, Mail, Briefcase, MapPin, GraduationCap, Heart, Calendar } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
 import { DataTableFilter } from "@/components/DataTableFilter";
@@ -31,6 +32,7 @@ export default function VolunteersPage() {
   
   const [editingVolunteer, setEditingVolunteer] = useState<VolunteerType | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [isEditingShifts, setIsEditingShifts] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -114,10 +116,18 @@ export default function VolunteersPage() {
     <div className="space-y-6 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-display-md text-text tracking-tight mb-1">Directorio de Voluntarios</h2>
+          <div className="flex items-center gap-3 mb-1">
+            <h2 className="text-display-md text-text tracking-tight">Directorio de Voluntarios</h2>
+            <Badge variant="secondary" className="bg-dark3 text-text font-medium text-sm rounded-full px-2.5">
+              {filteredVolunteers.length} {filteredVolunteers.length === 1 ? 'voluntario' : 'voluntarios'}
+            </Badge>
+          </div>
           <p className="text-body-md text-muted">Gestiona los miembros de tu comité y visualiza su información clave.</p>
         </div>
-        <Button className="btn-base bg-primary-cta hover:bg-primary-active text-canvas rounded-xl shadow-sm h-10 px-4">
+        <Button 
+          onClick={() => setIsAddSheetOpen(true)}
+          className="btn-base bg-primary-cta hover:bg-primary-active text-canvas rounded-xl shadow-sm h-10 px-4"
+        >
           <UserPlus className="mr-2 h-4 w-4" />
           Añadir Voluntario
         </Button>
@@ -321,7 +331,6 @@ export default function VolunteersPage() {
 
               {/* Resumen de Turnos */}
               <div>
-                {/* Header con leyenda integrada y botón */}
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-4 flex-wrap">
                     <h4 className="text-xs font-bold text-primary-cta uppercase tracking-widest">Resumen de Turnos</h4>
@@ -341,17 +350,11 @@ export default function VolunteersPage() {
                       <span className="text-[10px] text-success font-semibold animate-pulse">✓ Guardado</span>
                     )}
                     {isEditingShifts ? (
-                      <Button
-                        onClick={handleSaveShifts}
-                        className="h-8 bg-success hover:bg-success/80 text-canvas text-xs px-3 rounded-lg shrink-0"
-                      >
+                      <Button onClick={handleSaveShifts} className="h-8 bg-success hover:bg-success/80 text-canvas text-xs px-3 rounded-lg shrink-0">
                         Guardar
                       </Button>
                     ) : (
-                      <Button
-                        onClick={() => { setIsEditingShifts(true); setSaved(false); }}
-                        className="h-8 bg-primary-cta hover:bg-primary-active text-canvas text-xs px-3 rounded-lg shrink-0"
-                      >
+                      <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-8 bg-primary-cta hover:bg-primary-active text-canvas text-xs px-3 rounded-lg shrink-0">
                         Editar Turnos
                       </Button>
                     )}
@@ -427,6 +430,85 @@ export default function VolunteersPage() {
               </div>
             </div>
           )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Editor Lateral (Añadir) */}
+      <Sheet open={isAddSheetOpen} onOpenChange={setIsAddSheetOpen}>
+        <SheetContent
+          side="right"
+          style={{ width: '500px', maxWidth: '95vw' }}
+          className="bg-dark text-text border-l border-border overflow-hidden"
+        >
+          <SheetHeader>
+            <SheetTitle className="text-xl font-bold text-text">Añadir Voluntario</SheetTitle>
+          </SheetHeader>
+          <form 
+            id="add-volunteer-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setIsAddSheetOpen(false);
+            }}
+            className="flex-1 overflow-y-auto px-6 space-y-6 pb-24"
+          >
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-text">Nombre y Apellido</label>
+              <Input required minLength={3} className="h-10 bg-dark2 border-border focus:ring-gold-faint" placeholder="Ej. Juan Pérez" />
+              <p className="text-[11px] text-muted">Asegúrate de incluir ambos apellidos si es posible.</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-text">Celular</label>
+              <Input 
+                required 
+                type="tel" 
+                pattern="[0-9]{8}" 
+                maxLength={8}
+                onKeyPress={(e) => {
+                  if (!/[0-9]/.test(e.key)) e.preventDefault();
+                }}
+                className="h-10 bg-dark2 border-border focus:ring-gold-faint" 
+                placeholder="Ej. 88888888" 
+              />
+              <p className="text-[11px] text-muted">Solo 8 dígitos, sin código de país o espacios.</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-text">Estaca</label>
+              <Input required className="h-10 bg-dark2 border-border focus:ring-gold-faint" placeholder="Ej. Managua Sur" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-text">Barrio</label>
+              <Input required className="h-10 bg-dark2 border-border focus:ring-gold-faint" placeholder="Ej. Barrio 1" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-text">Comité</label>
+              <Select required>
+                <SelectTrigger className="h-10 bg-dark2 border-border focus:ring-gold-faint">
+                  <SelectValue placeholder="Selecciona un comité" />
+                </SelectTrigger>
+                <SelectContent className="bg-dark border-border text-text">
+                  {committees.map((com) => (
+                    <SelectItem 
+                      key={com} 
+                      value={com} 
+                      className="cursor-pointer rounded-lg hover:bg-slate-50 focus:bg-slate-50 focus:text-blue-700 data-[state=checked]:bg-blue-50 data-[state=checked]:text-blue-700 transition-colors"
+                    >
+                      {com}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </form>
+
+          {/* Footer fijo en la parte inferior */}
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }} className="bg-dark border-t border-border px-6 py-4 flex items-center justify-end gap-3">
+            <Button type="button" variant="outline" className="border-border text-muted hover:text-text hover:bg-dark3" onClick={() => setIsAddSheetOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" form="add-volunteer-form" className="bg-primary-cta hover:bg-primary-active text-white">
+              Guardar Voluntario
+            </Button>
+          </div>
         </SheetContent>
       </Sheet>
     </div>
