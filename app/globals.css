@@ -1,0 +1,255 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--dark);
+  --color-foreground: var(--text);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-sans);
+  
+  /* Templo Design System Colors */
+  --color-dark: var(--dark);
+  --color-dark2: var(--dark2);
+  --color-dark3: var(--dark3);
+  
+  --color-gold: var(--gold);
+  --color-gold-light: var(--gold-light);
+  --color-gold-faint: var(--gold-faint);
+  
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-muted: var(--muted);
+  
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-mid: var(--mid);
+  
+  --color-accent: var(--accent);
+  --color-red: var(--red);
+  --color-red-faint: var(--red-faint);
+
+  /* Existing Shadcn Variables */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--gold);
+  --color-input: var(--border);
+  --color-destructive: var(--red);
+  --color-accent-foreground: var(--text);
+  --color-secondary-foreground: var(--text);
+  --color-secondary: var(--dark3);
+  --color-primary-foreground: #ffffff;
+  --color-primary: var(--gold);
+  --color-popover-foreground: var(--text);
+  --color-popover: var(--dark2);
+  --color-card-foreground: var(--text);
+  --color-card: var(--dark2);
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+}
+
+:root {
+  /* Templo Design System */
+  /* Backgrounds */
+  --dark: #fbfcfd;         /* Main app background (Neutral 50ish) */
+  --dark2: #ffffff;        /* Cards / Sidebar / Modals (White) */
+  --dark3: #f1f5f9;        /* Hover states / Secondary inputs (slate-100) */
+  
+  /* Brand Accents (Sky Blue) */
+  --gold: #0284c7;         /* Primary Action (sky-600) */
+  --gold-light: #38bdf8;   /* Light Accent (sky-400) */
+  --gold-faint: #e0f2fe;   /* Faint Background (sky-100) */
+  
+  /* Text */
+  --text: #0f172a;         /* Main text (slate-900) */
+  --text-dim: #334155;     /* Secondary text (slate-700) */
+  --muted: #64748b;        /* Muted / Ghost text (slate-500) */
+  
+  /* Borders */
+  --border: #e2e8f0;       /* Default border (slate-200) */
+  --border-strong: #cbd5e1;/* Hover border (slate-300) */
+  --mid: #cbd5e1;          /* Mid-level slate */
+  
+  /* States */
+  --accent: #10b981;       /* Success (emerald-500) */
+  --red: #ef4444;          /* Danger/Error (red-500) */
+  --red-faint: rgba(239,68,68,0.1);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.04), 0 4px 6px -4px rgb(0 0 0 / 0.04);
+  --shadow-premium: 0 20px 25px -5px rgba(0,0,0,0.03), 0 10px 10px -5px rgba(0,0,0,0.02);
+
+  /* Shadcn Overrides */
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  /* If dark mode needs to be strictly supported, the variables here would be inverted. 
+     Currently the design system prompt didn't specify dark mode values, so we keep them consistent or default. */
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-dark text-text;
+    background: var(--dark);
+    color: var(--text);
+  }
+  html {
+    @apply font-sans;
+  }
+  
+  h1 {
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  h2, h3 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  .card-premium {
+    background: var(--dark2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .card-premium:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--mid);
+  }
+
+  .btn-base {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 10px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .btn-base.btn-sm {
+    padding: 6px 12px;
+    border-radius: 8px;
+  }
+  .btn-primary {
+    background: var(--gold);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);
+  }
+  .btn-primary:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(2, 132, 199, 0.25);
+  }
+  .btn-secondary {
+    background: var(--dark3);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover {
+    background: var(--border);
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+
+  .modal-backdrop {
+    background: rgba(0, 0, 0, 0.8);
+  }
+  .modal-surface {
+    background: var(--dark);
+    border-radius: 24px;
+    padding: 24px 20px;
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+
+  .input-base {
+    background: var(--dark2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 9px 12px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .input-base:focus {
+    outline: none;
+    border-color: var(--gold);
+    box-shadow: 0 0 0 2px var(--gold-faint);
+  }
+  .input-large {
+    border-radius: 16px;
+    padding: 16px;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--mid);
+}
+
+@layer utilities {
+  .text-display-mega { font-size: 64px; font-weight: 600; line-height: 1.05; letter-spacing: -1.92px; }
+  .text-display-xl { font-size: 48px; font-weight: 600; line-height: 1.1; letter-spacing: -1.44px; }
+  .text-display-lg { font-size: 36px; font-weight: 600; line-height: 1.15; letter-spacing: -1.08px; }
+  .text-display-md { font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: -0.84px; }
+  .text-display-sm { font-size: 22px; font-weight: 600; line-height: 1.25; letter-spacing: -0.5px; }
+  .text-title-md { font-size: 18px; font-weight: 600; line-height: 1.4; }
+  .text-body-md { font-size: 16px; font-weight: 400; line-height: 1.5; }
+  .text-body-sm { font-size: 14px; font-weight: 400; line-height: 1.5; }
+  .text-caption-uppercase { font-size: 11px; font-weight: 600; line-height: 1.4; letter-spacing: 0.88px; text-transform: uppercase; }
+  .text-code { font-family: var(--font-mono); font-size: 13px; font-weight: 400; line-height: 1.5; }
+  .text-btn { font-size: 14px; font-weight: 500; line-height: 1.0; }
+  .text-nav-link { font-size: 14px; font-weight: 500; line-height: 1.4; }
+}
