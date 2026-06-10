@@ -38,9 +38,9 @@ export default function CoordinatorLayout({
   };
 
   const NAV_ITEMS = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ['Admin', 'Editor', 'Lector'] },
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ['Admin', 'Editor'] },
     { name: "Voluntarios", href: "/volunteers", icon: Users, roles: ['Admin', 'Editor'] },
-    { name: "Turnos", href: "/shifts", icon: CalendarDays, roles: ['Admin', 'Editor', 'Lector'] },
+    { name: currentRole === 'Lector' ? "Mi Perfil" : "Turnos", href: "/shifts", icon: currentRole === 'Lector' ? User : CalendarDays, roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Avisos", href: "/reminders", icon: MessageSquare, roles: ['Admin', 'Editor'] },
     { name: "Ajustes", href: "/settings", icon: Settings, roles: ['Admin', 'Editor'] },
     { name: "Usuarios", href: "/users", icon: ShieldCheck, roles: ['Admin'] },
@@ -59,6 +59,21 @@ export default function CoordinatorLayout({
           <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1 font-black">
             {currentRole === 'Admin' ? 'Administración Global' : `Comité de ${currentCommittee}`}
           </p>
+        </div>
+
+        {/* User Profile */}
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3 bg-white">
+          <div className="h-10 w-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold">
+            {currentRole === 'Admin' ? 'AD' : currentRole === 'Editor' ? 'ED' : 'VO'}
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-800">
+              {currentRole === 'Admin' ? 'Jasser Mendoza' : currentRole === 'Editor' ? 'Samantha Editora' : 'Voluntario'}
+            </p>
+            <p className="text-[10px] font-black text-[#0084d1] uppercase tracking-widest">
+              {currentRole}
+            </p>
+          </div>
         </div>
         
         {/* Mock Auth Switcher */}
