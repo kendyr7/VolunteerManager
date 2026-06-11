@@ -174,14 +174,6 @@ export default function UsersPage() {
     >
       <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
         <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <h1 className="tracking-tight text-slate-900 leading-none">
-              Usuarios
-            </h1>
-            <Badge className="bg-slate-900 text-white border-none text-[10px] px-2.5 py-0.5 uppercase font-bold tracking-widest h-5 shadow-sm">
-              Accesos
-            </Badge>
-          </div>
           <p className="text-base font-medium text-slate-500">Administra el equipo de gestión y sus niveles de privilegio.</p>
         </div>
         <Button 

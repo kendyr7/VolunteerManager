@@ -303,14 +303,6 @@ export default function VolunteersPage() {
     >
       <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
         <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <h1 className="tracking-tight text-slate-900 leading-none">
-              Voluntarios
-            </h1>
-            <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold border-none text-[10px] px-2.5 h-5 shadow-sm">
-              {filteredVolunteers.length} registrados
-            </Badge>
-          </div>
           <p className="text-base font-medium text-slate-400">Gestiona los miembros del equipo y visualiza su desempeño.</p>
         </div>
         <Button 

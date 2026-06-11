@@ -309,8 +309,7 @@ export default function RemindersPage() {
   return (
     <div className="max-w-7xl xl:max-w-[1440px] mx-auto px-4 lg:px-8 space-y-6">
       <div>
-        <h2 className="text-slate-800 tracking-tight mb-1">Recordatorios de Turnos</h2>
-        <p className="text-sm font-medium text-slate-500">Visualiza las asignaciones reales y envía mensajes de confirmación a los voluntarios.</p>
+        <p className="text-base font-medium text-slate-500">Visualiza las asignaciones reales y envía mensajes de confirmación a los voluntarios.</p>
       </div>
 
       {/* Barra de Filtros Globales (Prioritaria) */}

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -281,14 +281,6 @@ export default function CoordinatorDashboard() {
       {/* Header Administrativo - High-End Redesign */}
       <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 pb-8 border-b border-slate-200/60 relative overflow-hidden">
         <div className="space-y-2 relative z-10">
-          <div className="flex items-center gap-3">
-            <h1 className="tracking-tight text-slate-900 leading-none">
-              Visión General
-            </h1>
-            <Badge className="bg-slate-900 text-white border-none text-[10px] px-2.5 py-0.5 uppercase font-bold tracking-widest h-5 shadow-sm">
-              Administrador
-            </Badge>
-          </div>
           <p className="text-lg font-medium text-slate-400 max-w-xl leading-relaxed">
             Monitor central de operaciones para el programa de Puertas Abiertas.
           </p>
