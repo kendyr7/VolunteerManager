@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from "react";
-import { ChevronDown, ChevronRight, Pencil, Clock, Search, Phone, Calendar, MapPin, Info } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Clock, Search, Phone, Calendar, MapPin, Info, User } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
 import { format } from "date-fns";
@@ -10,10 +10,35 @@ import { DataTableFilter } from "@/components/DataTableFilter";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
+import { motion, AnimatePresence } from "framer-motion";
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.04
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 400,
+      damping: 30
+    }
+  }
+};
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
-  id: number;
+  id: string; // UUID de Supabase
   name: string;
   stake: string;
   ward: string;
@@ -21,29 +46,12 @@ type VolunteerType = {
   shifts: number;
   reliability: number;
   committee: string;
+  committee_id?: string;
 };
-
-// ─── datos mock ───────────────────────────────────────────────────────────────
-const names = ['Alejandro', 'Sofia', 'Mateo', 'Valentina', 'Diego', 'Isabella', 'Daniel', 'Camila', 'Santiago', 'Mariana', 'Gabriel', 'Lucia', 'Lucas', 'Valeria', 'Tomas', 'Elena', 'Emilio', 'Martina', 'Nicolas', 'Victoria'];
-const lastNames = ['García', 'Martínez', 'Rodríguez', 'López', 'Hernández', 'González', 'Pérez', 'Sánchez', 'Ramírez', 'Torres', 'Flores', 'Rivera', 'Gómez', 'Díaz', 'Reyes', 'Morales', 'Cruz', 'Ortiz', 'Silva', 'Rojas'];
-const stakes = ['Managua Sur', 'Managua Este', 'Managua Norte', 'Bello Horizonte', 'Las Colinas'];
-const wards = ['Barrio 1', 'Barrio 2', 'Barrio 3', 'Barrio 4', 'Barrio 5'];
-const committees = ['Historia', 'Seguridad', 'Guía', 'Traducción', 'Transporte', 'Primeros Auxilios'];
-
-const allVolunteers: VolunteerType[] = Array.from({ length: 82 }).map((_, i) => ({
-  id: i + 1,
-  name: `${names[i % names.length]} ${lastNames[(i * 7) % lastNames.length]}`,
-  stake: stakes[i % stakes.length],
-  ward: wards[(i * 3) % wards.length],
-  phone: `8888 ${1000 + i}`,
-  shifts: i % 5 === 0 ? 0 : (i % 3) + 1,
-  reliability: i % 7 === 0 ? 50 : 100,
-  committee: committees[i % committees.length]
-}));
 
 const getShiftColor = (shiftId: string, count: number, isSingleCommittee: boolean, minRequired: number) => {
   if (!isSingleCommittee) {
-    // Estilo neutro para vista global (blanco con bordes finos)
+    // Vista Global (Admin sin filtro de comité): Estilo neutro y limpio
     return { 
       card: 'bg-white',  
       border: 'border-slate-200/60 shadow-sm',  
@@ -52,13 +60,37 @@ const getShiftColor = (shiftId: string, count: number, isSingleCommittee: boolea
       dot: 'bg-border-strong' 
     };
   }
-  
-  const isUnderstaffed = count < minRequired;
 
-  if (isUnderstaffed) {
-    return { card: 'bg-rose-500/5',  border: 'border-rose-400/20 shadow-sm',  title: 'text-slate-800',  badge: 'bg-rose-400/15 text-rose-600 border border-rose-200/50',  dot: 'bg-rose-400' };
+  const isUnderstaffed = count < minRequired;
+  const isCritical = minRequired > 0 && count <= minRequired / 2;
+  
+  if (isCritical) {
+    // Rojo suave para alertas críticas
+    return { 
+      card: 'bg-red-50/50', 
+      border: 'border-red-200', 
+      title: 'text-red-900', 
+      badge: 'bg-red-100 text-red-700 border border-red-200/50', 
+      dot: 'bg-red-400' 
+    };
+  } else if (isUnderstaffed) {
+    // Rosa suave para déficit
+    return { 
+      card: 'bg-rose-50/30',  
+      border: 'border-rose-200',  
+      title: 'text-slate-800',  
+      badge: 'bg-rose-50 text-rose-600 border border-rose-100',  
+      dot: 'bg-rose-400' 
+    };
   } else {
-    return { card: 'bg-teal-500/5',  border: 'border-teal-400/20 shadow-sm',  title: 'text-slate-800',  badge: 'bg-teal-400/15 text-teal-600 border border-teal-200/50',  dot: 'bg-teal-400' };
+    // Verde suave para cubierto
+    return { 
+      card: 'bg-emerald-50/20',  
+      border: 'border-emerald-200',  
+      title: 'text-slate-800',  
+      badge: 'bg-emerald-50 text-emerald-700 border border-emerald-100',  
+      dot: 'bg-emerald-400' 
+    };
   }
 };
 
@@ -79,6 +111,80 @@ export default function ShiftsPage() {
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
 
+  const supabase = createClient();
+  const [volunteers, setVolunteers] = useState<VolunteerType[]>([]);
+  const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const committees = committeesList.map(c => c.name);
+  const stakes: string[] = [];
+  const wards: string[] = [];
+
+  const loadData = async () => {
+    // Fetch volunteers
+    const { data: volsData, error: volsError } = await supabase
+      .from('volunteers')
+      .select('*, committees(name)');
+    
+    if (volsError) {
+      console.error("Error loading volunteers:", volsError);
+    }
+
+    // Fetch committees
+    const { data: commsData, error: commsError } = await supabase
+      .from('committees')
+      .select('id, name');
+    
+    if (commsError) {
+      console.error("Error loading committees:", commsError);
+    } else if (commsData) {
+      setCommitteesList(commsData);
+    }
+
+    // Fetch shifts
+    const { data: shiftsData, error: shiftsError } = await supabase
+      .from('shifts')
+      .select('*');
+    
+    const sCounts: Record<string, number> = {};
+    const gShifts: Record<string, Record<string, string[]>> = {};
+
+    if (shiftsData) {
+      shiftsData.forEach(s => {
+        if (s.volunteer_id) {
+          sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
+          
+          if (!gShifts[s.volunteer_id]) {
+            gShifts[s.volunteer_id] = Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
+          }
+          if (!gShifts[s.volunteer_id][s.day_key]) {
+            gShifts[s.volunteer_id][s.day_key] = [];
+          }
+          if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
+            gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
+          }
+        }
+      });
+    }
+
+    setGlobalShifts(gShifts);
+
+    if (volsData) {
+      const mapped = volsData.map((v: any) => ({
+        id: v.id,
+        name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+        stake: '',
+        ward: '',
+        phone: v.phone || '',
+        shifts: sCounts[v.id] || 0,
+        reliability: 100,
+        committee: v.committees?.name || 'Sin comité',
+        committee_id: v.committee_id
+      }));
+      setVolunteers(mapped);
+    }
+  };
+
   useEffect(() => {
     const role = localStorage.getItem('mock_role') as any;
     const committee = localStorage.getItem('mock_committee');
@@ -86,6 +192,7 @@ export default function ShiftsPage() {
     if (committee && role !== 'Admin') {
       setSelectedCommittees([committee]);
     }
+    loadData().then(() => setLoading(false));
   }, []);
 
   // Estados del Sheet de Perfil
@@ -106,28 +213,7 @@ export default function ShiftsPage() {
     Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
 
   // Global state for mock assignments so they can be edited and persisted within the session
-  const [globalShifts, setGlobalShifts] = useState<Record<number, Record<string, string[]>>>(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("volunteer_assignments");
-      if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch (e) {
-          console.error("Error loading volunteer assignments", e);
-        }
-      }
-    }
-    const init: Record<number, Record<string, string[]>> = {};
-    const keys = EVENT_DAYS.map(d => d.key);
-    allVolunteers.forEach(vol => {
-      const volShifts = buildEmptyShifts();
-      if (vol.shifts > 0 && keys[0]) volShifts[keys[0]] = ['T4'];
-      if (vol.shifts > 1 && keys[1]) volShifts[keys[1]] = ['T2', 'T4'];
-      if (vol.shifts > 2 && keys[2]) volShifts[keys[2]] = ['T3'];
-      init[vol.id] = volShifts;
-    });
-    return init;
-  });
+  const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
 
   // Requerimientos por comité cargados de localStorage o por defecto
   const [committeeRequirements, setCommitteeRequirements] = useState<Record<string, Record<string, number>>>(() => {
@@ -184,6 +270,7 @@ export default function ShiftsPage() {
     let totalRequired = 0;
     let totalAssignedInRequired = 0;
     
+    const committees = committeesList.map(c => c.name);
     const committeeAlerts: Record<string, number> = {};
     committees.forEach(c => {
       committeeAlerts[c] = 0;
@@ -203,7 +290,7 @@ export default function ShiftsPage() {
           totalRequired += req;
 
           // Buscar cuántos voluntarios asignados pertenecen a este comité y turno hoy
-          const count = allVolunteers.filter(vol => {
+          const count = volunteers.filter(vol => {
             if (vol.committee !== comm) return false;
             const shifts = globalShifts[vol.id];
             return shifts && shifts[day.key] && shifts[day.key].includes(shiftId);
@@ -236,7 +323,7 @@ export default function ShiftsPage() {
       editorShiftsOk,
       editorShiftsUnderstaffed
     };
-  }, [globalShifts, committeeRequirements, EVENT_DAYS, currentRole, activeCommittee]);
+  }, [volunteers, committeesList, globalShifts, committeeRequirements, EVENT_DAYS, currentRole, activeCommittee]);
 
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>(buildEmptyShifts);
 
@@ -253,22 +340,47 @@ export default function ShiftsPage() {
     });
   };
 
-  const handleSaveShifts = () => {
+  const handleSaveShifts = async () => {
     setIsEditingShifts(false);
+    if (!editingVolunteer) return;
+
+    // Delete existing shifts for this volunteer
+    const { error: delErr } = await supabase
+      .from('shifts')
+      .delete()
+      .eq('volunteer_id', editingVolunteer.id);
+
+    if (delErr) {
+      console.error("Error deleting shifts:", delErr);
+      return;
+    }
+
+    // Insert new shift rows
+    const insertRows = [];
+    for (const [dayKey, shiftKeys] of Object.entries(shiftsByDay)) {
+      for (const shiftKey of shiftKeys) {
+        insertRows.push({
+          volunteer_id: editingVolunteer.id,
+          day_key: dayKey,
+          shift_key: shiftKey
+        });
+      }
+    }
+
+    if (insertRows.length > 0) {
+      const { error: insErr } = await supabase
+        .from('shifts')
+        .insert(insertRows);
+
+      if (insErr) {
+        console.error("Error inserting shifts:", insErr);
+        return;
+      }
+    }
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
-    if (editingVolunteer) {
-      setGlobalShifts(prev => {
-        const updated = {
-          ...prev,
-          [editingVolunteer.id]: shiftsByDay
-        };
-        if (typeof window !== "undefined") {
-          localStorage.setItem("volunteer_assignments", JSON.stringify(updated));
-        }
-        return updated;
-      });
-    }
+    await loadData();
   };
 
   const isVolunteerAssignedToShift = (vol: VolunteerType, dateKey: string, shiftId: string) => {
@@ -291,9 +403,8 @@ export default function ShiftsPage() {
   const toggleDay = (key: string) =>
     setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // Aplicar filtros
   const filteredVolunteers = useMemo(() => {
-    return allVolunteers.filter(v => {
+    return volunteers.filter(v => {
       const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             v.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             v.ward.toLowerCase().includes(searchTerm.toLowerCase());
@@ -304,7 +415,7 @@ export default function ShiftsPage() {
 
       return matchesSearch && matchesCommittee && matchesStake && matchesWard;
     });
-  }, [searchTerm, selectedCommittees, selectedStakes, selectedWards]);
+  }, [volunteers, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
 
   // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales
   const getAssignedVolunteers = (dateKey: string, shiftId: string) => {
@@ -335,7 +446,7 @@ export default function ShiftsPage() {
         >
           {/* Left: full-height white date section */}
           <div className="shrink-0 w-16 flex flex-col items-center justify-center bg-white py-4 px-2">
-            <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest leading-none">
+            <p className="text-[9px] font-bold text-[#0084d1] uppercase tracking-widest leading-none">
               {format(date, "EEE", { locale: es }).replace('.', '')}
             </p>
             <p className="text-lg font-bold text-slate-800 leading-tight mt-0.5">{dateNum}</p>
@@ -351,20 +462,31 @@ export default function ShiftsPage() {
               <div className="flex gap-1.5 flex-wrap">
                 {(['T1','T2','T3','T4'] as const).map(t => {
                   const count = shiftData[t].length;
-                  const minRequired = activeCommittee ? (committeeRequirements[activeCommittee]?.[t] ?? 0) : 0;
+                  
+                  // Calculate global requirement if no single committee is selected
+                  let minRequired = 0;
+                  if (activeCommittee) {
+                    minRequired = committeeRequirements[activeCommittee]?.[t] ?? 0;
+                  } else {
+                    // Global sum for Admin "Heat Map"
+                    committees.forEach(c => {
+                      minRequired += (committeeRequirements[c]?.[t] ?? 0);
+                    });
+                  }
+
                   const c = getShiftColor(t, count, isSingleCommittee, minRequired);
                   return (
                     <span key={t} className={`inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1 rounded-xl border transition-all ${c.badge} ${c.border}`}>
-                      <span className="font-extrabold">{t}</span>
+                      <span className="font-bold">{t}</span>
                       <span className="opacity-25 text-xs">|</span>
-                      <span className="font-bold tabular-nums">{isSingleCommittee ? `${count}/${minRequired}` : count}</span>
+                      <span className="font-bold tabular-nums">{count}/{minRequired}</span>
                     </span>
                   );
                 })}
               </div>
               <p className="text-[10px] text-slate-500 font-medium tracking-wide">
                 Total{' '}
-                <span className={`font-black ${totalVolsOnDay > 0 ? 'text-slate-800' : 'text-slate-500'}`}>
+                <span className={`font-bold ${totalVolsOnDay > 0 ? 'text-slate-800' : 'text-slate-500'}`}>
                   {totalVolsOnDay}
                 </span>
                 {' '}voluntarios
@@ -387,7 +509,16 @@ export default function ShiftsPage() {
               const info = SHIFT_TIMES[parseInt(t[1]) - 1];
               const vols = shiftData[t];
               const count = vols.length;
-              const minRequired = activeCommittee ? (committeeRequirements[activeCommittee]?.[t] ?? 0) : 0;
+              
+              let minRequired = 0;
+              if (activeCommittee) {
+                minRequired = committeeRequirements[activeCommittee]?.[t] ?? 0;
+              } else {
+                committees.forEach(c => {
+                  minRequired += (committeeRequirements[c]?.[t] ?? 0);
+                });
+              }
+
               const c = getShiftColor(t, count, isSingleCommittee, minRequired);
               const combinedKey = `${key}-${t}`;
               const isShiftExpanded = !!expandedShifts[combinedKey];
@@ -400,7 +531,7 @@ export default function ShiftsPage() {
                     <div>
                       <div className="flex items-center gap-1.5">
                         <Clock className={`h-3 w-3 ${c.title}`} />
-                        <p className={`text-[10px] font-black uppercase tracking-widest ${c.title}`}>
+                        <p className={`text-[10px] font-bold uppercase tracking-widest ${c.title}`}>
                           Turno {t[1]}
                         </p>
                       </div>
@@ -429,7 +560,7 @@ export default function ShiftsPage() {
                             >
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.dot}`} />
-                                <span className="text-sm font-medium text-slate-800 truncate group-hover:text-blue-600 transition-colors">
+                                <span className="text-sm font-medium text-slate-800 truncate group-hover:text-[#0084d1] transition-colors">
                                   {vol.name}
                                 </span>
                               </div>
@@ -477,6 +608,14 @@ export default function ShiftsPage() {
     );
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0084d1]"></div>
+      </div>
+    );
+  }
+
   if (currentRole === 'Lector') {
     const mockLector = {
       name: 'Voluntario de Prueba',
@@ -493,7 +632,7 @@ export default function ShiftsPage() {
     return (
       <div className="max-w-6xl mx-auto space-y-6">
         <div>
-          <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight mb-1">Mi Perfil</h2>
+          <h2 className="text-3xl font-bold text-slate-800 tracking-tight mb-1">Mi Perfil</h2>
           <p className="text-slate-500 text-sm font-medium">Gestiona tu información personal y selecciona tus turnos de servicio.</p>
         </div>
 
@@ -591,11 +730,11 @@ export default function ShiftsPage() {
 
             <div className="grid grid-cols-2 gap-3 mb-6">
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                <p className="text-3xl font-black text-slate-800">{totalTurnos}</p>
+                <p className="text-3xl font-bold text-slate-800">{totalTurnos}</p>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Turnos</p>
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                <p className="text-3xl font-black text-slate-800">{diasCubiertos}</p>
+                <p className="text-3xl font-bold text-slate-800">{diasCubiertos}</p>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Días</p>
               </div>
             </div>
@@ -607,10 +746,10 @@ export default function ShiftsPage() {
                   <div key={d.key} className="flex flex-col sm:flex-row sm:items-stretch border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors">
                     {/* Left: date panel */}
                     <div className="shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-3 px-4 gap-1 sm:gap-0">
-                      <p className="text-[10px] font-black text-[#0084d1] uppercase tracking-widest leading-none">
+                      <p className="text-[10px] font-bold text-[#0084d1] uppercase tracking-widest leading-none">
                         {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
                       </p>
-                      <p className="text-xl sm:text-2xl font-black text-slate-800 leading-tight sm:mt-0.5">{d.dateNum}</p>
+                      <p className="text-xl sm:text-2xl font-bold text-slate-800 leading-tight sm:mt-0.5">{d.dateNum}</p>
                       <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider leading-none hidden sm:block">Sept</p>
                     </div>
 
@@ -629,7 +768,7 @@ export default function ShiftsPage() {
                                 : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200/60 active:scale-95'
                             }`}
                           >
-                            <span className="text-sm font-black">{t}</span>
+                            <span className="text-sm font-bold">{t}</span>
                             <span className={`text-[8px] font-bold tracking-tight mt-0.5 whitespace-nowrap ${active ? 'text-white/90' : 'text-slate-400'}`}>
                               {shiftInfo?.time}
                             </span>
@@ -649,10 +788,10 @@ export default function ShiftsPage() {
                   <div key={d.key} className="flex flex-col sm:flex-row sm:items-stretch border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors">
                     {/* Left: date panel */}
                     <div className="shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-3 px-4 gap-1 sm:gap-0">
-                      <p className="text-[10px] font-black text-[#0084d1] uppercase tracking-widest leading-none">
+                      <p className="text-[10px] font-bold text-[#0084d1] uppercase tracking-widest leading-none">
                         {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
                       </p>
-                      <p className="text-xl sm:text-2xl font-black text-slate-800 leading-tight sm:mt-0.5">{d.dateNum}</p>
+                      <p className="text-xl sm:text-2xl font-bold text-slate-800 leading-tight sm:mt-0.5">{d.dateNum}</p>
                       <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider leading-none hidden sm:block">Sept</p>
                     </div>
 
@@ -671,7 +810,7 @@ export default function ShiftsPage() {
                                 : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200/60 active:scale-95'
                             }`}
                           >
-                            <span className="text-sm font-black">{t}</span>
+                            <span className="text-sm font-bold">{t}</span>
                             <span className={`text-[8px] font-bold tracking-tight mt-0.5 whitespace-nowrap ${active ? 'text-white/90' : 'text-slate-400'}`}>
                               {shiftInfo?.time}
                             </span>
@@ -692,26 +831,50 @@ export default function ShiftsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 tracking-tight mb-1">Turnos</h2>
-        <p className="text-sm font-medium text-slate-500">Vista de asistencia diaria por turno de voluntarios.</p>
-      </div>
+    <motion.div 
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="max-w-6xl mx-auto space-y-10 pb-12"
+    >
+      {/* Header Seccional Refinado */}
+      <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <h1 className="text-4xl tracking-tight text-slate-900 leading-none">
+              Gestión de Turnos
+            </h1>
+            <Badge className="bg-slate-900 text-white border-none text-[10px] px-2.5 py-0.5 uppercase font-bold tracking-widest h-5">
+              {currentRole}
+            </Badge>
+          </div>
+          <p className="text-base font-medium text-slate-500">
+            {activeCommittee ? `Monitoreo de asignaciones para ${activeCommittee}` : 'Visión global de la distribución de voluntarios en el evento.'}
+          </p>
+        </div>
+        
+        {currentRole === 'Admin' && (
+          <div className="flex items-center gap-3 shrink-0">
+            <Button variant="outline" size="lg" className="rounded-xl font-bold border-slate-200 hover:bg-slate-50 shadow-sm transition-all active:scale-[0.97] group">
+              Exportar Reporte
+              <Info className="w-4 h-4 ml-2 opacity-40 group-hover:opacity-100 transition-opacity" />
+            </Button>
+          </div>
+        )}
+      </motion.div>
 
-      {/* Panel de KPIs / Control de Admin */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* KPI Cobertura */}
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-5 flex flex-col justify-between bg-white shadow-sm border border-slate-200">
+      {/* KPI Section */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-6 flex flex-col justify-between">
           <div>
-            <h3 className="text-xs uppercase font-black text-slate-500 tracking-wider mb-1">Cobertura de Requerimientos</h3>
-            <p className="text-body-xs text-slate-500 mb-4">Porcentaje de slots cubiertos según el mínimo requerido por comité.</p>
+            <h3 className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-1.5">Cobertura Global</h3>
+            <p className="text-xs text-slate-500 font-medium mb-5">Slots cubiertos vs. requeridos.</p>
           </div>
           <div className="flex items-end justify-between gap-4">
-            <span className="text-3xl font-extrabold tracking-tight font-black text-slate-800 leading-none">{kpiData.coverage}%</span>
-            <div className="w-2/3 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
+            <span className="text-4xl font-bold tracking-tight text-slate-900 leading-none tabular-nums">{kpiData.coverage}%</span>
+            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/30">
               <div 
-                className={`h-full transition-all duration-500 ${kpiData.coverage < 60 ? 'bg-rose-500' : kpiData.coverage < 90 ? 'bg-amber-500' : 'bg-teal-500'}`}
+                className={`h-full transition-all duration-700 cubic-bezier(0.23, 1, 0.32, 1) ${kpiData.coverage < 60 ? 'bg-red-400' : kpiData.coverage < 90 ? 'bg-amber-400' : 'bg-teal-400'}`}
                 style={{ width: `${kpiData.coverage}%` }}
               />
             </div>
@@ -724,7 +887,7 @@ export default function ShiftsPage() {
             <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200/40 shrink-0">
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="text-xs uppercase font-black text-slate-500 tracking-wider">Turnos Incompletos por Comité</h3>
+                  <h3 className="text-xs uppercase font-bold text-slate-500 tracking-wider">Turnos Incompletos por Comité</h3>
                   <div className="relative group cursor-pointer inline-flex items-center">
                     <Info className="h-3.5 w-3.5 text-slate-500 hover:text-slate-800 transition-colors" />
                     <div className="absolute left-0 sm:left-1/2 sm:-translate-x-1/2 top-full mt-2 w-64 sm:w-72 p-3 bg-slate-900 border border-slate-800 text-[11.5px] text-slate-200 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
@@ -761,7 +924,7 @@ export default function ShiftsPage() {
                     }}
                     className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${
                       isSelected 
-                        ? 'bg-blue-600/10 border-blue-600 text-slate-800 shadow-sm' 
+                        ? 'bg-[#0084d1]/10 border-[#0084d1] text-slate-800 shadow-sm' 
                         : alertCount > 0 
                           ? 'bg-rose-500/5 border-rose-200/40 hover:bg-rose-500/10 text-slate-800' 
                           : 'bg-white hover:bg-slate-100 border-slate-200/40 text-slate-500'
@@ -769,8 +932,8 @@ export default function ShiftsPage() {
                   >
                     <span className="text-xs font-bold truncate pr-1">{comm}</span>
                     {alertCount > 0 ? (
-                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
-                        isSelected ? 'bg-blue-600 text-white' : 'bg-rose-500/10 text-rose-600'
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                        isSelected ? 'bg-[#0084d1] text-white' : 'bg-rose-500/10 text-rose-600'
                       }`}>
                         {alertCount}
                       </span>
@@ -788,7 +951,7 @@ export default function ShiftsPage() {
           <div className="md:col-span-2 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-5 flex flex-col justify-center">
              <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200/40 shrink-0">
                <div>
-                 <h3 className="text-xs uppercase font-black text-slate-500 tracking-wider">Estado de Reclutamiento</h3>
+                 <h3 className="text-xs uppercase font-bold text-slate-500 tracking-wider">Estado de Reclutamiento</h3>
                  <p className="text-body-xs text-slate-500 font-medium mt-0.5">Resumen de asignaciones para tu comité.</p>
                </div>
                <Badge variant="outline" className={kpiData.editorMissingVolunteers > 0 ? "bg-rose-500/10 text-rose-600 border-rose-200/50 font-bold" : "bg-teal-500/10 text-teal-600 border-teal-200/50 font-bold"}>
@@ -799,19 +962,19 @@ export default function ShiftsPage() {
              <div className="flex gap-4">
                <div className="flex-1 bg-teal-50/50 rounded-xl border border-teal-100/50 p-4">
                  <p className="text-[10px] uppercase font-bold text-teal-600 mb-1">Turnos Cubiertos</p>
-                 <p className="text-3xl font-black text-teal-700 leading-none">{kpiData.editorShiftsOk}</p>
+                 <p className="text-3xl font-bold text-teal-700 leading-none">{kpiData.editorShiftsOk}</p>
                </div>
                <div className="flex-1 bg-rose-50/50 rounded-xl border border-rose-100/50 p-4">
                  <p className="text-[10px] uppercase font-bold text-rose-600 mb-1">Turnos Incompletos</p>
-                 <p className="text-3xl font-black text-rose-700 leading-none">{kpiData.editorShiftsUnderstaffed}</p>
+                 <p className="text-3xl font-bold text-rose-700 leading-none">{kpiData.editorShiftsUnderstaffed}</p>
                </div>
              </div>
           </div>
         )}
-      </div>
+      </motion.div>
 
       {/* Barra de Filtros (Igual a Volunteers) */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden overflow-hidden">
+      <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden overflow-hidden">
         <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center gap-4 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
@@ -845,18 +1008,26 @@ export default function ShiftsPage() {
             />
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Grid de días (Flex Column Layout para no alinear alturas) */}
       <div className="flex flex-col xl:flex-row gap-4 items-start">
         {/* Columna Izquierda (Días impares: 1, 3, 5...) */}
         <div className="flex-1 flex flex-col gap-4 w-full">
-          {EVENT_DAYS.filter((_, i) => i % 2 === 0).map(renderDayCard)}
+          {EVENT_DAYS.filter((_, i) => i % 2 === 0).map(d => (
+            <motion.div key={d.key} variants={itemVariants}>
+              {renderDayCard(d)}
+            </motion.div>
+          ))}
         </div>
         
         {/* Columna Derecha (Días pares: 2, 4, 6...) */}
         <div className="flex-1 flex flex-col gap-4 w-full">
-          {EVENT_DAYS.filter((_, i) => i % 2 === 1).map(renderDayCard)}
+          {EVENT_DAYS.filter((_, i) => i % 2 === 1).map(d => (
+            <motion.div key={d.key} variants={itemVariants}>
+              {renderDayCard(d)}
+            </motion.div>
+          ))}
         </div>
       </div>
 
@@ -967,15 +1138,15 @@ export default function ShiftsPage() {
                   return (
                     <div className="grid grid-cols-3 gap-3 mb-6">
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                        <p className="text-3xl font-black text-slate-800">{totalTurnos}</p>
+                        <p className="text-3xl font-bold text-slate-800">{totalTurnos}</p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Turnos</p>
                       </div>
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                        <p className="text-3xl font-black text-slate-800">{diasCubiertos}</p>
+                        <p className="text-3xl font-bold text-slate-800">{diasCubiertos}</p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Días</p>
                       </div>
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                        <p className={`text-3xl font-black ${editingVolunteer.reliability >= 80 ? 'text-teal-600' : 'text-amber-500'}`}>
+                        <p className={`text-3xl font-bold ${editingVolunteer.reliability >= 80 ? 'text-teal-600' : 'text-amber-500'}`}>
                           {editingVolunteer.reliability}%
                         </p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Confiab.</p>
@@ -994,10 +1165,10 @@ export default function ShiftsPage() {
                     }`}>
                       {/* Left: date panel */}
                       <div className="shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-3 px-4 gap-1 sm:gap-0">
-                        <p className="text-[10px] font-black text-[#0084d1] uppercase tracking-widest leading-none">
+                        <p className="text-[10px] font-bold text-[#0084d1] uppercase tracking-widest leading-none">
                           {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
                         </p>
-                        <p className="text-xl sm:text-2xl font-black text-slate-800 leading-tight sm:mt-0.5">{d.dateNum}</p>
+                        <p className="text-xl sm:text-2xl font-bold text-slate-800 leading-tight sm:mt-0.5">{d.dateNum}</p>
                         <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider leading-none hidden sm:block">Sept</p>
                       </div>
 
@@ -1020,7 +1191,7 @@ export default function ShiftsPage() {
                                   : 'cursor-default'
                               }`}
                             >
-                              <span className="text-sm font-black">{t}</span>
+                              <span className="text-sm font-bold">{t}</span>
                               <span className={`text-[8px] font-bold tracking-tight mt-0.5 whitespace-nowrap ${active ? 'text-white/90' : 'text-slate-400'}`}>
                                 {shiftInfo?.time}
                               </span>
@@ -1039,6 +1210,6 @@ export default function ShiftsPage() {
           )}
         </SheetContent>
       </Sheet>
-    </div>
+    </motion.div>
   );
 }

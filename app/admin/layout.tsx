@@ -25,7 +25,7 @@ export default function AdminLayout({
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-slate-200 bg-slate-900 sticky top-0 h-screen overflow-y-auto shrink-0">
         <div className="p-6 border-b border-slate-800">
-          <h1 className="text-xl font-bold text-white tracking-tight">
+          <h1 className="text-xl text-white tracking-tight">
             Administración
           </h1>
           <p className="text-xs text-slate-400 uppercase tracking-wider mt-1 font-medium">Control Global</p>
@@ -41,7 +41,7 @@ export default function AdminLayout({
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium",
                   isActive 
-                    ? "bg-blue-600 text-white shadow-sm" 
+                    ? "bg-[#0084d1] text-white shadow-sm" 
                     : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 )}
               >
@@ -57,10 +57,10 @@ export default function AdminLayout({
       <main className="flex-1 overflow-x-hidden min-w-0">
         {/* Mobile Header */}
         <header className="md:hidden bg-slate-900 p-4 sticky top-0 z-40 shadow-sm flex items-center justify-between">
-          <h1 className="text-lg font-bold text-white">
+          <h1 className="text-lg text-white">
             Administración
           </h1>
-          <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+          <div className="w-8 h-8 bg-[#0084d1] text-white rounded-full flex items-center justify-center font-bold text-sm">
             A
           </div>
         </header>

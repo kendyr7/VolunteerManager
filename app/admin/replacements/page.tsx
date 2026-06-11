@@ -81,7 +81,7 @@ export default function ReplacementsPage() {
                     </div>
 
                     <div className="flex sm:flex-col gap-2 justify-end">
-                      <Button size="sm" variant="outline" className="text-blue-600 hover:bg-blue-50">
+                      <Button size="sm" variant="outline" className="text-[#0084d1] hover:bg-blue-50">
                         <Send className="w-3.5 h-3.5 mr-2" /> Contactar
                       </Button>
                       <Button size="sm" onClick={() => handleSelectToReplace(vol.id)} className="bg-[#0084d1] hover:bg-[#006eb3] text-white shadow-sm">

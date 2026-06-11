@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Outfit, JetBrains_Mono } from "next/font/google";
+import { Public_Sans, JetBrains_Mono } from "next/font/google";
+import "material-symbols/outlined.css";
 import "./globals.css";
 
-const outfit = Outfit({
+const publicSans = Public_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
 });
@@ -15,6 +16,23 @@ const jetBrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Volunteer Manager",
   description: "Gestión de voluntarios para Puertas Abiertas del Templo",
+  icons: {
+    icon: "/icon-192.png",
+    shortcut: "/icon-192.png",
+    apple: "/icon-192.png",
+  },
+  openGraph: {
+    title: "Volunteer Manager",
+    description: "Gestión de voluntarios para Puertas Abiertas del Templo",
+    images: [
+      {
+        url: "/icon-192.png",
+        width: 192,
+        height: 192,
+        alt: "Volunteer Manager Icon",
+      },
+    ],
+  },
 };
 
 export default function RootLayout({
@@ -25,7 +43,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${outfit.variable} ${jetBrainsMono.variable} h-full antialiased`}
+      className={`${publicSans.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans bg-dark text-text tracking-[-0.01em]">{children}</body>
     </html>

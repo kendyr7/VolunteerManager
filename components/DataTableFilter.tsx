@@ -41,11 +41,11 @@ export function DataTableFilter({
             className={cn(
               "h-10 rounded-xl transition-all duration-200 outline-none",
               selectedValues.size > 0 
-                ? "bg-blue-50 text-blue-700 border-blue-100 shadow-sm hover:bg-blue-100 aria-expanded:bg-blue-100" 
+                ? "bg-blue-50 text-[#0084d1] border-blue-100 shadow-sm hover:bg-blue-100 aria-expanded:bg-blue-100" 
                 : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900 aria-expanded:bg-slate-50 aria-expanded:text-slate-900 border-dashed"
             )}
           >
-            <Filter className={cn("mr-2 h-4 w-4", selectedValues.size > 0 ? "text-blue-600" : "text-slate-400")} />
+            <Filter className={cn("mr-2 h-4 w-4", selectedValues.size > 0 ? "text-[#0084d1]" : "text-slate-400")} />
             {title}
             {selectedValues.size > 0 && (
               <>
@@ -54,7 +54,7 @@ export function DataTableFilter({
                   variant="secondary"
                   className={cn(
                     "rounded-md px-1.5 py-0.5 text-xs font-bold border-none",
-                    selectedValues.size > 0 ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                    selectedValues.size > 0 ? "bg-[#0084d1] text-white" : "bg-slate-100 text-slate-600"
                   )}
                 >
                   {selectedValues.size}
@@ -84,7 +84,7 @@ export function DataTableFilter({
                     }
                     onChange(Array.from(newSelectedValues))
                   }}
-                  className="cursor-pointer rounded-lg hover:bg-slate-50 focus:bg-slate-50 data-[state=checked]:bg-blue-50 data-[state=checked]:text-blue-700 font-medium transition-colors"
+                  className="cursor-pointer rounded-lg hover:bg-slate-50 focus:bg-slate-50 data-[state=checked]:bg-blue-50 data-[state=checked]:text-[#0084d1] font-medium transition-colors"
                 >
                   {option}
                 </DropdownMenuCheckboxItem>

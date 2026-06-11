@@ -1,237 +1,572 @@
-'use client';
+﻿'use client';
 
 import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Users, AlertTriangle, UserCheck, ArrowUpRight, TrendingUp, Target, Activity, ShieldAlert } from "lucide-react";
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Users, AlertTriangle, UserCheck, ArrowUpRight, TrendingUp, Target, Activity, ShieldAlert, Sparkles, ChevronRight } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
+import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { motion, AnimatePresence } from "framer-motion";
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 15 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 24
+    }
+  }
+};
 
 export default function CoordinatorDashboard() {
   const router = useRouter();
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [volunteers, setVolunteers] = useState<any[]>([]);
+  const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
+  const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
+
+  const EVENT_DAYS_RAW = getActiveEventDays();
+  const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
+    date,
+    key: formatDateShort(date),
+    label: formatDateShort(date).split(' ')[0],
+    dateNum: formatDateShort(date).split(' ')[1],
+  }));
+
+  const buildEmptyShifts = () =>
+    Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
+
+  const [committeeRequirements, setCommitteeRequirements] = useState<Record<string, Record<string, number>>>(() => {
+    const defaults = {
+      'Historia': { T1: 3, T2: 2, T3: 3, T4: 2 },
+      'Seguridad': { T1: 4, T2: 4, T3: 4, T4: 4 },
+      'Guía': { T1: 5, T2: 5, T3: 5, T4: 5 },
+      'Traducción': { T1: 2, T2: 1, T3: 2, T4: 1 },
+      'Transporte': { T1: 3, T2: 2, T3: 3, T4: 2 },
+      'Primeros Auxilios': { T1: 2, T2: 2, T3: 2, T4: 2 }
+    };
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("committee_requirements");
+      if (stored) {
+        try {
+          return { ...defaults, ...JSON.parse(stored) };
+        } catch (e) {
+          console.error("Error loading committee requirements in dashboard", e);
+        }
+      }
+    }
+    return defaults;
+  });
+
+  const supabase = createClient();
+
+  const loadData = async () => {
+    const { data: volsData } = await supabase
+      .from('volunteers')
+      .select('*, committees(name)');
+
+    const { data: commsData } = await supabase
+      .from('committees')
+      .select('id, name');
+
+    if (commsData) {
+      setCommitteesList(commsData);
+    }
+
+    const { data: shiftsData } = await supabase
+      .from('shifts')
+      .select('*');
+
+    const gShifts: Record<string, Record<string, string[]>> = {};
+    if (shiftsData) {
+      shiftsData.forEach(s => {
+        if (s.volunteer_id) {
+          if (!gShifts[s.volunteer_id]) {
+            gShifts[s.volunteer_id] = buildEmptyShifts();
+          }
+          if (!gShifts[s.volunteer_id][s.day_key]) {
+            gShifts[s.volunteer_id][s.day_key] = [];
+          }
+          if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
+            gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
+          }
+        }
+      });
+    }
+
+    setGlobalShifts(gShifts);
+
+    if (volsData) {
+      const mapped = volsData.map((v: any) => ({
+        id: v.id,
+        name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+        committee: v.committees?.name || 'Sin comité',
+        reliability: 100
+      }));
+      setVolunteers(mapped);
+    }
+  };
 
   useEffect(() => {
-    const role = localStorage.getItem('mock_role');
+    const role = localStorage.getItem('mock_role') || 'Admin';
     if (role === 'Editor' || role === 'Lector') {
-      router.replace('/volunteers'); // Redirect to their main page
+      router.replace('/volunteers');
     } else {
       setIsAuthorized(true);
+      loadData().then(() => setLoading(false));
     }
   }, [router]);
 
+  const globalStats = useMemo(() => {
+    const totalRecruited = volunteers.length;
+    const targetVolunteers = 1500;
+    const recruitmentPercentage = targetVolunteers > 0 ? Math.round((totalRecruited / targetVolunteers) * 100) : 0;
+
+    let totalRequired = 0;
+    let totalAssignedInRequired = 0;
+    let criticalAlerts = 0;
+
+    const committees = committeesList.map(c => c.name);
+
+    EVENT_DAYS.forEach(day => {
+      committees.forEach(comm => {
+        ['T1', 'T2', 'T3', 'T4'].forEach(shiftId => {
+          const req = committeeRequirements[comm]?.[shiftId] ?? 0;
+          totalRequired += req;
+
+          const count = volunteers.filter(vol => {
+            if (vol.committee !== comm) return false;
+            const shifts = globalShifts[vol.id];
+            return shifts && shifts[day.key] && shifts[day.key].includes(shiftId);
+          }).length;
+
+          totalAssignedInRequired += Math.min(count, req);
+
+          if (count < req) {
+            criticalAlerts++;
+          }
+        });
+      });
+    });
+
+    const globalCoveragePercentage = totalRequired > 0 ? Math.round((totalAssignedInRequired / totalRequired) * 100) : 100;
+    const averageReliability = 98;
+
+    return {
+      totalRecruited,
+      targetVolunteers,
+      recruitmentPercentage,
+      globalCoveragePercentage,
+      criticalAlerts,
+      averageReliability
+    };
+  }, [volunteers, committeesList, globalShifts, committeeRequirements]);
+
+  const committeeStatus = useMemo(() => {
+    return committeesList.map((c, index) => {
+      let totalReq = 0;
+      let totalAssigned = 0;
+      let totalMissing = 0;
+
+      EVENT_DAYS.forEach(day => {
+        ['T1', 'T2', 'T3', 'T4'].forEach(shiftId => {
+          const req = committeeRequirements[c.name]?.[shiftId] ?? 0;
+          totalReq += req;
+
+          const count = volunteers.filter(vol => {
+            if (vol.committee !== c.name) return false;
+            const shifts = globalShifts[vol.id];
+            return shifts && shifts[day.key] && shifts[day.key].includes(shiftId);
+          }).length;
+
+          totalAssigned += Math.min(count, req);
+          if (count < req) {
+            totalMissing += (req - count);
+          }
+        });
+      });
+
+      const coverage = totalReq > 0 ? Math.round((totalAssigned / totalReq) * 100) : 100;
+      let status = "success";
+      if (coverage < 60) status = "high_risk";
+      else if (coverage < 85) status = "warning";
+
+      return {
+        id: index + 1,
+        name: c.name,
+        coverage,
+        missing: totalMissing,
+        status
+      };
+    }).sort((a, b) => a.coverage - b.coverage);
+  }, [volunteers, committeesList, globalShifts, committeeRequirements]);
+
+  const criticalShifts = useMemo(() => {
+    const list: any[] = [];
+    const committees = committeesList.map(c => c.name);
+
+    EVENT_DAYS.forEach(day => {
+      committees.forEach(comm => {
+        ['T1', 'T2', 'T3', 'T4'].forEach(shiftId => {
+          const req = committeeRequirements[comm]?.[shiftId] ?? 0;
+          if (req === 0) return;
+
+          const count = volunteers.filter(vol => {
+            if (vol.committee !== comm) return false;
+            const shifts = globalShifts[vol.id];
+            return shifts && shifts[day.key] && shifts[day.key].includes(shiftId);
+          }).length;
+
+          if (count < req) {
+            const shiftInfo = SHIFT_TIMES.find(s => `T${s.id}` === shiftId);
+            const dayLabel = format(day.date, "EEEE d 'de' MMMM", { locale: es });
+            list.push({
+              day: dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1),
+              shift: `${shiftId} (${shiftInfo?.time || ''})`,
+              committee: comm,
+              enrolled: count,
+              required: req,
+              missing: req - count
+            });
+          }
+        });
+      });
+    });
+
+    return list
+      .sort((a, b) => b.missing - a.missing)
+      .slice(0, 5)
+      .map((item, index) => ({ id: index + 1, ...item }));
+  }, [volunteers, committeesList, globalShifts, committeeRequirements]);
+
   if (!isAuthorized) return null;
 
-  // ... rest of the component state
-  const globalStats = {
-    totalRecruited: 1245,
-    targetVolunteers: 1500,
-    recruitmentPercentage: 83, // 1245/1500
-    globalCoveragePercentage: 78,
-    criticalAlerts: 18,
-    averageReliability: 94,
-  };
-
-  const committeeStatus = [
-    { id: 1, name: "Historia", coverage: 95, missing: 2, status: "success" },
-    { id: 2, name: "Acomodación", coverage: 88, missing: 10, status: "success" },
-    { id: 3, name: "Limpieza", coverage: 82, missing: 15, status: "warning" },
-    { id: 4, name: "Protocolo", coverage: 65, missing: 40, status: "high_risk" },
-    { id: 5, name: "Alimentación", coverage: 40, missing: 25, status: "high_risk" },
-  ];
-
-  const criticalShifts = [
-    { id: 1, day: "Sábado 19 Sep", shift: "T1 (8:00 - 12:00)", committee: "Alimentación", enrolled: 2, required: 10 },
-    { id: 2, day: "Viernes 18 Sep", shift: "T4 (17:00 - 21:00)", committee: "Protocolo", enrolled: 4, required: 15 },
-    { id: 3, day: "Miércoles 16 Sep", shift: "T2 (11:00 - 15:00)", committee: "Limpieza", enrolled: 1, required: 5 },
-    { id: 4, day: "Sábado 19 Sep", shift: "T3 (14:00 - 18:00)", committee: "Protocolo", enrolled: 5, required: 15 },
-    { id: 5, day: "Lunes 14 Sep", shift: "T1 (8:00 - 12:00)", committee: "Alimentación", enrolled: 0, required: 4 },
-  ];
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <motion.div 
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="rounded-full h-8 w-8 border-b-2 border-[#0084d1]"
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-12">
-      {/* Header Administrativo */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Visión General del Evento</h1>
-            <span className="bg-slate-100 text-[#0084d1] font-bold px-2.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider">Admin</span>
+    <motion.div 
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-12 max-w-6xl mx-auto pb-20"
+    >
+      {/* Header Administrativo - High-End Redesign */}
+      <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 pb-8 border-b border-slate-200/60 relative overflow-hidden">
+        <div className="space-y-2 relative z-10">
+          <div className="flex items-center gap-3">
+            <h1 className="text-4xl tracking-tight text-slate-900 leading-none">
+              Visión General
+            </h1>
+            <Badge className="bg-slate-900 text-white border-none text-[10px] px-2.5 py-0.5 uppercase font-bold tracking-widest h-5 shadow-sm">
+              Administrador
+            </Badge>
           </div>
-          <p className="text-sm font-medium text-slate-500">Monitoreo global de reclutamiento, comités y alertas críticas.</p>
+          <p className="text-lg font-medium text-slate-400 max-w-xl leading-relaxed">
+            Monitor central de operaciones para el programa de Puertas Abiertas.
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" className="border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl h-10 px-5 shadow-sm">
-            Gestionar Comités
-          </Button>
-          <Button className="bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-xl h-10 px-5 shadow-sm transition-all active:scale-95 font-semibold">
-            Ver Todas las Alertas
-            <ArrowUpRight className="w-4 h-4 ml-1.5 opacity-70" />
-          </Button>
+        
+        <div className="flex items-center gap-4 shrink-0 relative z-10">
+          <Link href="/settings">
+            <Button variant="outline" size="lg" className="rounded-xl font-bold border-slate-200 bg-white hover:bg-slate-50 shadow-sm transition-all active:scale-[0.96]">
+              Ajustes Globales
+            </Button>
+          </Link>
+          <Link href="/shifts">
+            <Button size="lg" className="bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-xl font-bold shadow-xl shadow-blue-500/20 transition-all active:scale-[0.96] group px-6">
+              Gestionar Turnos
+              <ArrowUpRight className="w-4 h-4 ml-2 opacity-70 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+            </Button>
+          </Link>
         </div>
-      </div>
+        
+        {/* Subtle Background Accent */}
+        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-blue-50/50 rounded-full blur-3xl pointer-events-none" />
+      </motion.div>
 
-      {/* Primary KPIs - Bento Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="border border-slate-200 bg-white shadow-sm rounded-2xl overflow-hidden hover:border-[#0084d1]/30 transition-colors">
-          <CardContent className="p-5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center justify-between">
-              Progreso Reclutamiento
-              <Target className="w-3.5 h-3.5 text-[#0084d1]" />
-            </p>
-            <div className="text-3xl text-slate-900 font-black tracking-tight flex items-baseline gap-1">
-              {globalStats.totalRecruited} <span className="text-sm font-medium text-slate-400">/ {globalStats.targetVolunteers}</span>
-            </div>
-            <div className="w-full h-1.5 bg-slate-100 mt-4 rounded-full overflow-hidden">
-              <div className="h-full bg-[#0084d1] rounded-full" style={{ width: `${globalStats.recruitmentPercentage}%` }} />
-            </div>
-          </CardContent>
-        </Card>
+      {/* Primary KPIs - Interactive Bento Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
+          <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 h-full">
+            <CardContent className="p-7">
+              <div className="flex items-start justify-between mb-6">
+                <div className="p-3 bg-blue-50 rounded-2xl group-hover:bg-[#0084d1] group-hover:text-white transition-colors duration-300">
+                  <Target className="w-5 h-5" />
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-1">Progreso</span>
+                  <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold border-none text-[10px] px-2 h-5">
+                    +{globalStats.recruitmentPercentage}%
+                  </Badge>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-3xl text-slate-900 font-bold tracking-tighter flex items-baseline gap-2">
+                  {globalStats.totalRecruited} <span className="text-sm font-bold text-slate-300 uppercase tracking-widest">/ {globalStats.targetVolunteers}</span>
+                </h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Voluntarios Reclutados</p>
+              </div>
+              <div className="w-full h-1.5 bg-slate-50 mt-6 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${globalStats.recruitmentPercentage}%` }}
+                  transition={{ duration: 1, ease: "circOut" }}
+                  className="h-full bg-[#0084d1] rounded-full" 
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        <Card className="border border-slate-200 bg-white shadow-sm rounded-2xl overflow-hidden hover:border-[#0084d1]/30 transition-colors">
-          <CardContent className="p-5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center justify-between">
-              Cobertura de Turnos
-              <Activity className="w-3.5 h-3.5 text-teal-500" />
-            </p>
-            <div className="text-3xl text-slate-900 font-black tracking-tight">
-              {globalStats.globalCoveragePercentage}%
-            </div>
-            <p className="text-[11px] text-slate-500 mt-2 font-medium">A nivel global de todo el evento</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-red-200 bg-red-50/50 shadow-sm rounded-2xl overflow-hidden">
-          <CardContent className="p-5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-red-600 mb-3 flex items-center gap-1.5">
-              <ShieldAlert className="w-3.5 h-3.5" />
-              Alertas Críticas
-            </p>
-            <div className="text-3xl text-red-600 font-black tracking-tight">
-              {globalStats.criticalAlerts}
-            </div>
-            <p className="text-[11px] text-red-600/70 mt-2 font-bold uppercase tracking-wider">Turnos en peligro</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-slate-200 bg-slate-900 text-white shadow-sm rounded-2xl overflow-hidden">
-          <CardContent className="p-5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
-              <UserCheck className="w-3.5 h-3.5" />
-              Confiabilidad Global
-            </p>
-            <div className="text-3xl font-black tracking-tight">
-              {globalStats.averageReliability}%
-            </div>
-            <p className="text-[11px] text-teal-400 mt-2 font-medium flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" /> Excelente compromiso
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Monitoreo Desglosado */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Columna Izquierda: Estado por Comité */}
-        <Card className="border border-slate-200 bg-white shadow-sm rounded-2xl flex flex-col">
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-extrabold tracking-tight text-slate-900">Estado por Comité</h3>
-              <p className="text-xs font-medium text-slate-500 mt-0.5">Ranking de cobertura y déficit de personal.</p>
-            </div>
-          </div>
-          <CardContent className="p-0 flex-1">
-            <div className="divide-y divide-slate-100">
-              {committeeStatus.map((committee) => (
-                <div key={committee.id} className="p-5 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h4 className="text-sm font-bold text-slate-800">{committee.name}</h4>
-                      {committee.status === 'high_risk' && (
-                        <span className="text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-black uppercase tracking-widest">Alerta</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full ${
-                            committee.status === 'success' ? 'bg-teal-400' :
-                            committee.status === 'warning' ? 'bg-amber-400' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${committee.coverage}%` }}
-                        />
-                      </div>
-                      <span className="text-xs font-bold text-slate-600 w-8">{committee.coverage}%</span>
-                    </div>
-                  </div>
-                  <div className="pl-6 text-right shrink-0">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Faltan</p>
-                    <p className={`text-lg font-black leading-none ${committee.missing > 15 ? 'text-red-500' : 'text-slate-700'}`}>
-                      {committee.missing}
-                    </p>
+        <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
+          <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-teal-500/10 h-full">
+            <CardContent className="p-7">
+              <div className="flex items-start justify-between mb-6">
+                <div className="p-3 bg-teal-50 rounded-2xl group-hover:bg-teal-600 group-hover:text-white transition-colors duration-300 text-teal-600">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-1">Estado</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                    <span className="text-[10px] font-bold text-teal-600 uppercase tracking-widest">Óptimo</span>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-          <div className="p-4 border-t border-slate-100 bg-slate-50 text-center rounded-b-2xl">
-            <button className="text-sm font-bold text-[#0084d1] hover:text-[#006eb3]">Ver todos los comités</button>
-          </div>
-        </Card>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-3xl text-slate-900 font-bold tracking-tighter">
+                  {globalStats.globalCoveragePercentage}%
+                </h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cobertura de Turnos</p>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-6 font-bold uppercase tracking-[0.1em]">Análisis Global del Evento</p>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        {/* Columna Derecha: Top Turnos en Riesgo */}
-        <Card className="border border-slate-200 bg-white shadow-sm rounded-2xl flex flex-col">
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-extrabold tracking-tight text-slate-900">Cuellos de Botella</h3>
-              <p className="text-xs font-medium text-slate-500 mt-0.5">Top turnos críticos que requieren tu atención.</p>
+        <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
+          <Card className={`border-none ${globalStats.criticalAlerts > 0 ? 'bg-red-50/50' : 'bg-white'} shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/10 h-full border border-transparent hover:border-red-100`}>
+            <CardContent className="p-7">
+              <div className="flex items-start justify-between mb-6">
+                <div className={`p-3 rounded-2xl transition-colors duration-300 ${globalStats.criticalAlerts > 0 ? 'bg-red-100 text-red-600 group-hover:bg-red-600 group-hover:text-white' : 'bg-slate-50 text-slate-400'}`}>
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-1">Prioridad</span>
+                  <Badge variant="outline" className={`font-bold text-[10px] border-none px-2 h-5 ${globalStats.criticalAlerts > 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {globalStats.criticalAlerts > 0 ? 'ACCIÓN REQ.' : 'NORMAL'}
+                  </Badge>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <h3 className={`text-3xl font-bold tracking-tighter ${globalStats.criticalAlerts > 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                  {globalStats.criticalAlerts}
+                </h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Alertas Críticas</p>
+              </div>
+              <p className={`text-[10px] mt-6 font-bold uppercase tracking-[0.1em] ${globalStats.criticalAlerts > 0 ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
+                {globalStats.criticalAlerts > 0 ? 'Turnos bajo el mínimo' : 'Estabilidad operativa'}
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
+          <Card className="border-none bg-slate-900 text-white shadow-2xl shadow-slate-900/20 rounded-3xl overflow-hidden h-full relative group">
+            <CardContent className="p-7 relative z-10">
+              <div className="flex items-start justify-between mb-6">
+                <div className="p-3 bg-white/10 rounded-2xl group-hover:bg-blue-500 transition-colors duration-300 text-white">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <TrendingUp className="w-5 h-5 text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-3xl font-bold tracking-tighter text-white">
+                  {globalStats.averageReliability}%
+                </h3>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Compromiso Real</p>
+              </div>
+              <div className="mt-6 flex items-center gap-2">
+                <div className="flex -space-x-2">
+                  {[1,2,3].map(i => (
+                    <div key={i} className="w-5 h-5 rounded-full border border-slate-900 bg-slate-700" />
+                  ))}
+                </div>
+                <p className="text-[10px] text-teal-400 font-bold uppercase tracking-widest">Altamente Confiable</p>
+              </div>
+            </CardContent>
+            {/* Visual Flare */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-[#0084d1]/20 rounded-full blur-[60px] group-hover:bg-[#0084d1]/40 transition-colors" />
+          </Card>
+        </motion.div>
+      </div>
+
+      {/* Detailed Monitoring Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        {/* Left: Committee Status Ranking */}
+        <motion.div variants={itemVariants} className="lg:col-span-3">
+          <Card className="border-none bg-white shadow-xl shadow-slate-200/50 rounded-3xl overflow-hidden border border-slate-100 h-full flex flex-col">
+            <div className="px-8 py-7 border-b border-slate-50 flex items-center justify-between">
+              <div className="space-y-1">
+                <h3 className="text-xl text-slate-800 tracking-tight leading-none">Estado por Comité</h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ranking de Cobertura</p>
+              </div>
+              <Link href="/volunteers" className="group flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#0084d1] hover:text-[#006eb3] transition-colors">
+                Ver Detalles <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
             </div>
-            <span className="bg-red-100 text-red-600 font-bold px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" /> Prioridad
-            </span>
-          </div>
-          <CardContent className="p-0 flex-1">
-            <div className="divide-y divide-slate-100">
-              {criticalShifts.map((shift) => (
-                <div key={shift.id} className="p-5 hover:bg-slate-50/50 transition-colors">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900">{shift.committee}</h4>
-                      <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5 mt-0.5">
-                        <span className="text-[#0084d1]">{shift.day}</span> &bull; {shift.shift}
-                      </p>
+            <CardContent className="p-0 flex-1">
+              <div className="divide-y divide-slate-50">
+                {committeeStatus.map((committee, idx) => (
+                  <motion.div 
+                    key={committee.id} 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.2 + idx * 0.05 }}
+                    className="px-8 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-colors group cursor-default"
+                  >
+                    <div className="flex-1 max-w-md">
+                      <div className="flex items-center gap-3 mb-2.5">
+                        <span className="text-[10px] font-bold text-slate-300 w-4">0{idx + 1}</span>
+                        <h4 className="text-sm font-bold text-slate-700 group-hover:text-slate-900 transition-colors">{committee.name}</h4>
+                        {committee.status === 'high_risk' && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex-1 h-1.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${committee.coverage}%` }}
+                            transition={{ duration: 1, delay: 0.5 + idx * 0.05 }}
+                            className={`h-full rounded-full ${
+                              committee.status === 'success' ? 'bg-emerald-500' :
+                              committee.status === 'warning' ? 'bg-amber-400' : 'bg-red-500'
+                            }`}
+                          />
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-500 w-10 tabular-nums">{committee.coverage}%</span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="inline-block bg-red-50 text-red-600 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest border border-red-100">
-                        Peligro
+                    <div className="pl-8 text-right shrink-0">
+                      <div className="flex flex-col items-end">
+                        <p className={`text-xl font-bold leading-none tracking-tighter ${committee.missing > 15 ? 'text-red-500' : 'text-slate-800'}`}>
+                          {committee.missing}
+                        </p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Faltan</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Right: Critical Bottlenecks */}
+        <motion.div variants={itemVariants} className="lg:col-span-2">
+          <Card className="border-none bg-slate-50/50 shadow-inner rounded-3xl overflow-hidden h-full flex flex-col border border-slate-200/60">
+            <div className="px-8 py-7 flex items-center justify-between">
+              <div className="space-y-1">
+                <h3 className="text-xl text-slate-800 tracking-tight leading-none">Cuellos de Botella</h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Top Turnos en Riesgo</p>
+              </div>
+              <div className="w-10 h-10 bg-red-100 rounded-2xl flex items-center justify-center shadow-sm">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+            </div>
+            <CardContent className="px-6 pb-8 space-y-4 flex-1">
+              <AnimatePresence>
+                {criticalShifts.map((shift, idx) => (
+                  <motion.div 
+                    key={shift.id} 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.3 + idx * 0.05 }}
+                    className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 group hover:shadow-md transition-all cursor-default"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide group-hover:text-[#0084d1] transition-colors">{shift.committee}</h4>
+                        <p className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                          <span className="text-slate-500">{shift.day}</span> &bull; {shift.shift}
+                        </p>
+                      </div>
+                      <Badge className="bg-red-50 text-red-600 text-[9px] font-bold px-2 py-0.5 border-none shadow-none uppercase tracking-widest">
+                        -{shift.missing}
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 flex gap-0.5">
+                        {Array.from({ length: 12 }).map((_, i) => (
+                          <div 
+                            key={i} 
+                            className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
+                              i < (shift.enrolled / shift.required) * 12 
+                                ? 'bg-slate-900' 
+                                : 'bg-red-100 group-hover:bg-red-200'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-700 w-10 text-right tabular-nums">
+                        {shift.enrolled}/{shift.required}
                       </span>
                     </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              
+              {criticalShifts.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center py-12 text-center space-y-4">
+                  <div className="w-16 h-16 bg-teal-50 rounded-full flex items-center justify-center">
+                    <Sparkles className="w-8 h-8 text-teal-500" />
                   </div>
-                  <div className="flex items-center gap-2 mt-3">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider w-12">Déficit</span>
-                    <div className="flex-1 flex gap-1">
-                      {/* Simulación visual de puestos llenos y vacíos */}
-                      {Array.from({ length: Math.min(shift.required, 15) }).map((_, i) => (
-                        <div 
-                          key={i} 
-                          className={`h-2 flex-1 rounded-sm ${i < shift.enrolled ? 'bg-slate-800' : 'bg-red-100'}`}
-                        />
-                      ))}
-                      {shift.required > 15 && <span className="text-[10px] text-slate-400 font-bold ml-1">+{shift.required - 15}</span>}
-                    </div>
-                    <span className="text-xs font-black text-slate-700 w-10 text-right">
-                      {shift.enrolled}/{shift.required}
-                    </span>
-                  </div>
+                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Todo bajo control</p>
                 </div>
-              ))}
+              )}
+            </CardContent>
+            <div className="p-4 bg-slate-100/50 text-center border-t border-slate-200/50">
+              <Link href="/shifts">
+                <Button variant="ghost" className="w-full text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 hover:text-slate-800 hover:bg-transparent transition-all">
+                  Ver Agenda Completa <ChevronRight className="w-3 h-3 ml-2" />
+                </Button>
+              </Link>
             </div>
-          </CardContent>
-          <div className="p-4 border-t border-slate-100 bg-slate-50 text-center rounded-b-2xl">
-            <button className="text-sm font-bold text-[#0084d1] hover:text-[#006eb3]">Ver agenda completa</button>
-          </div>
-        </Card>
+          </Card>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 }
+

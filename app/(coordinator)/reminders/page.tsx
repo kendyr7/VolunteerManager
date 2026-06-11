@@ -30,10 +30,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTableFilter } from "@/components/DataTableFilter";
+import { createClient } from "@/lib/supabase/client";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
-  id: number;
+  id: string; // UUID de Supabase
   name: string;
   stake: string;
   ward: string;
@@ -41,27 +42,11 @@ type VolunteerType = {
   shifts: number;
   reliability: number;
   committee: string;
+  committee_id?: string;
 };
 
-// ─── datos mock (Consistente con shifts/page.tsx) ─────────────────────────────
-const names = ['Alejandro', 'Sofia', 'Mateo', 'Valentina', 'Diego', 'Isabella', 'Daniel', 'Camila', 'Santiago', 'Mariana', 'Gabriel', 'Lucia', 'Lucas', 'Valeria', 'Tomas', 'Elena', 'Emilio', 'Martina', 'Nicolas', 'Victoria'];
-const lastNames = ['García', 'Martínez', 'Rodríguez', 'López', 'Hernández', 'González', 'Pérez', 'Sánchez', 'Ramírez', 'Torres', 'Flores', 'Rivera', 'Gómez', 'Díaz', 'Reyes', 'Morales', 'Cruz', 'Ortiz', 'Silva', 'Rojas'];
-const stakes = ['Managua Sur', 'Managua Este', 'Managua Norte', 'Bello Horizonte', 'Las Colinas'];
-const wards = ['Barrio 1', 'Barrio 2', 'Barrio 3', 'Barrio 4', 'Barrio 5'];
-const committees = ['Historia', 'Seguridad', 'Guía', 'Traducción', 'Transporte', 'Primeros Auxilios'];
-
-const allVolunteers: VolunteerType[] = Array.from({ length: 82 }).map((_, i) => ({
-  id: i + 1,
-  name: `${names[i % names.length]} ${lastNames[(i * 7) % lastNames.length]}`,
-  stake: stakes[i % stakes.length],
-  ward: wards[(i * 3) % wards.length],
-  phone: `8888 ${1000 + i}`,
-  shifts: i % 5 === 0 ? 0 : (i % 3) + 1,
-  reliability: i % 7 === 0 ? 50 : 100,
-  committee: committees[i % committees.length]
-}));
-
 export default function RemindersPage() {
+  const supabase = createClient();
   const EVENT_DAYS_RAW = getActiveEventDays();
   const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
     date,
@@ -73,30 +58,10 @@ export default function RemindersPage() {
   const buildEmptyShifts = () =>
     Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
 
-  // Cargar asignaciones de localStorage
-  const [globalShifts, setGlobalShifts] = useState<Record<number, Record<string, string[]>>>(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("volunteer_assignments");
-      if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch (e) {
-          console.error("Error loading volunteer assignments", e);
-        }
-      }
-    }
-    // Fallback inicial idéntico
-    const init: Record<number, Record<string, string[]>> = {};
-    const keys = EVENT_DAYS.map(d => d.key);
-    allVolunteers.forEach(vol => {
-      const volShifts = buildEmptyShifts();
-      if (vol.shifts > 0 && keys[0]) volShifts[keys[0]] = ['T4'];
-      if (vol.shifts > 1 && keys[1]) volShifts[keys[1]] = ['T2', 'T4'];
-      if (vol.shifts > 2 && keys[2]) volShifts[keys[2]] = ['T3'];
-      init[vol.id] = volShifts;
-    });
-    return init;
-  });
+  const [volunteers, setVolunteers] = useState<VolunteerType[]>([]);
+  const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
+  const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
+  const [loading, setLoading] = useState(true);
 
   // Cargar confirmaciones de localStorage
   const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>(() => {
@@ -136,6 +101,71 @@ export default function RemindersPage() {
     return defaults;
   });
 
+  const loadData = async () => {
+    // Fetch volunteers
+    const { data: volsData, error: volsError } = await supabase
+      .from('volunteers')
+      .select('*, committees(name)');
+    
+    if (volsError) {
+      console.error("Error loading volunteers:", volsError);
+    }
+
+    // Fetch committees
+    const { data: commsData, error: commsError } = await supabase
+      .from('committees')
+      .select('id, name');
+    
+    if (commsError) {
+      console.error("Error loading committees:", commsError);
+    } else if (commsData) {
+      setCommitteesList(commsData);
+    }
+
+    // Fetch shifts
+    const { data: shiftsData, error: shiftsError } = await supabase
+      .from('shifts')
+      .select('*');
+    
+    const sCounts: Record<string, number> = {};
+    const gShifts: Record<string, Record<string, string[]>> = {};
+
+    if (shiftsData) {
+      shiftsData.forEach(s => {
+        if (s.volunteer_id) {
+          sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
+          
+          if (!gShifts[s.volunteer_id]) {
+            gShifts[s.volunteer_id] = Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
+          }
+          if (!gShifts[s.volunteer_id][s.day_key]) {
+            gShifts[s.volunteer_id][s.day_key] = [];
+          }
+          if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
+            gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
+          }
+        }
+      });
+    }
+
+    setGlobalShifts(gShifts);
+
+    if (volsData) {
+      const mapped = volsData.map((v: any) => ({
+        id: v.id,
+        name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+        stake: '',
+        ward: '',
+        phone: v.phone || '',
+        shifts: sCounts[v.id] || 0,
+        reliability: 100,
+        committee: v.committees?.name || 'Sin comité',
+        committee_id: v.committee_id
+      }));
+      setVolunteers(mapped);
+    }
+  };
+
   // Estado del turno seleccionado (ninguno por defecto)
   const [selectedDayKey, setSelectedDayKey] = useState<string>("");
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
@@ -151,14 +181,6 @@ export default function RemindersPage() {
   useEffect(() => {
     const handleUpdate = () => {
       if (typeof window !== "undefined") {
-        const stored = localStorage.getItem("volunteer_assignments");
-        if (stored) {
-          try {
-            setGlobalShifts(JSON.parse(stored));
-          } catch (e) {
-            console.error("Error syncing assignments in reminders", e);
-          }
-        }
         const confirmedStored = localStorage.getItem("confirmed_reminders");
         if (confirmedStored) {
           try {
@@ -186,12 +208,16 @@ export default function RemindersPage() {
     };
   }, []);
 
+  useEffect(() => {
+    loadData().then(() => setLoading(false));
+  }, []);
+
   // Calcular cantidad de voluntarios asignados por turno/día (respetando filtros)
   const shiftCounts = useMemo(() => {
     const counts: Record<string, Record<string, number>> = {};
     EVENT_DAYS.forEach(day => {
       counts[day.key] = { T1: 0, T2: 0, T3: 0, T4: 0 };
-      allVolunteers.forEach(vol => {
+      volunteers.forEach(vol => {
         // Filtrado multicriterio
         const matchesSearch = !searchTerm || 
           vol.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -216,12 +242,12 @@ export default function RemindersPage() {
       });
     });
     return counts;
-  }, [globalShifts, EVENT_DAYS, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
+  }, [volunteers, globalShifts, EVENT_DAYS, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
 
   // Obtener voluntarios asignados al turno seleccionado
   const activeVolunteers = useMemo(() => {
     if (!selectedDayKey || !selectedShiftId) return [];
-    return allVolunteers.filter(vol => {
+    return volunteers.filter(vol => {
       const matchesSearch = !searchTerm || 
         vol.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         vol.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -237,7 +263,7 @@ export default function RemindersPage() {
       const shifts = globalShifts[vol.id];
       return shifts && shifts[selectedDayKey] && shifts[selectedDayKey].includes(selectedShiftId);
     }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [globalShifts, selectedDayKey, selectedShiftId, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
+  }, [volunteers, globalShifts, selectedDayKey, selectedShiftId, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
 
   // Detalles del turno seleccionado
   const selectedShiftDetails = SHIFT_TIMES.find(s => `T${s.id}` === selectedShiftId);
@@ -257,7 +283,7 @@ export default function RemindersPage() {
     isSelectedHoliday
   );
 
-  const toggleConfirmed = (volId: number) => {
+  const toggleConfirmed = (volId: string) => {
     const key = `${volId}-${selectedDayKey}-${selectedShiftId}`;
     setConfirmedReminders(prev => {
       const updated = {
@@ -281,10 +307,22 @@ export default function RemindersPage() {
     alert(`Se copiaron los números de ${activeVolunteers.length} voluntarios al portapapeles.`);
   };
 
+  const stakes: string[] = [];
+  const wards: string[] = [];
+  const committees = committeesList.map(c => c.name);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0084d1]"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl xl:max-w-[1440px] mx-auto px-4 lg:px-8 space-y-6">
       <div>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 tracking-tight mb-1">Recordatorios de Turnos</h2>
+        <h2 className="text-3xl text-slate-800 tracking-tight mb-1">Recordatorios de Turnos</h2>
         <p className="text-sm font-medium text-slate-500">Visualiza las asignaciones reales y envía mensajes de confirmación a los voluntarios.</p>
       </div>
 
@@ -342,7 +380,7 @@ export default function RemindersPage() {
         {/* FILA 1: FECHA */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black text-slate-500 tracking-widest uppercase">FECHA</span>
+            <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">FECHA</span>
             {selectedDayKey && (
               <Button
                 variant="outline"
@@ -379,11 +417,11 @@ export default function RemindersPage() {
                   }}
                   className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-xl border font-bold text-xs transition-all ${
                     isSelected
-                      ? 'bg-sky-600 border-sky-500 text-white shadow-sm scale-105'
+                      ? 'bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105'
                       : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
                   }`}
                 >
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
                     isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
                   }`}>
                     {dayInitial}
@@ -403,7 +441,7 @@ export default function RemindersPage() {
 
         {/* FILA 2: TURNOS */}
         <div className="space-y-2">
-          <span className="text-[10px] font-black text-slate-500 tracking-widest uppercase">TURNOS</span>
+          <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">TURNOS</span>
           <div className="flex items-center gap-2 flex-wrap">
             {['T1', 'T2', 'T3', 'T4'].map((t) => {
               // Obtener conteo de voluntarios para este turno (si hay día seleccionado, del día; si no, total acumulado de todos los días)
@@ -438,7 +476,7 @@ export default function RemindersPage() {
                   }
                 } else {
                   // Selección neutra global
-                  buttonClass = "bg-sky-600 border-sky-500 text-white shadow-sm scale-105 font-bold";
+                  buttonClass = "bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105 font-bold";
                   countTextClass = "text-sky-100/90";
                 }
               } else {
@@ -487,7 +525,7 @@ export default function RemindersPage() {
                   title={!selectedDayKey ? "Por favor selecciona una fecha primero" : `Seleccionar ${shiftTimeLabel}`}
                   className={`inline-flex items-center gap-2.5 px-4.5 py-2.5 rounded-xl border text-xs transition-all ${buttonClass}`}
                 >
-                  <span className="font-black">{t}</span>
+                  <span className="font-bold">{t}</span>
                   <span className="text-[10px] opacity-30">|</span>
                   <span className={`font-bold ${countTextClass}`}>
                     {count} {count === 1 ? 'voluntario' : 'voluntarios'}
@@ -515,7 +553,7 @@ export default function RemindersPage() {
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-5 bg-white shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-1.5">
-                  <Badge className="bg-blue-600 text-white text-[10px] py-0.5 px-2 uppercase font-bold tracking-wider rounded-md">
+                  <Badge className="bg-[#0084d1] text-white text-[10px] py-0.5 px-2 uppercase font-bold tracking-wider rounded-md">
                     {selectedShiftDetails?.name}
                   </Badge>
                   {isSelectedHoliday && (
@@ -571,8 +609,8 @@ export default function RemindersPage() {
               <div className={showTemplate ? "lg:col-span-8 space-y-4" : "lg:col-span-12 space-y-4"}>
                 <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col overflow-hidden bg-white border border-slate-200 shadow-sm">
                   <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                    <h3 className="text-xs uppercase font-black text-slate-500 tracking-wider flex items-center gap-1.5">
-                      <Users className="h-3.5 w-3.5 text-blue-600" />
+                    <h3 className="text-xs uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5 text-[#0084d1]" />
                       Asistencias
                     </h3>
                     <Button 
@@ -580,7 +618,7 @@ export default function RemindersPage() {
                       size="sm" 
                       onClick={handleCopyNumbers}
                       disabled={activeVolunteers.length === 0}
-                      className="h-7 text-[10.5px] font-bold text-blue-600 hover:bg-slate-100 px-2 rounded-md"
+                      className="h-7 text-[10.5px] font-bold text-[#0084d1] hover:bg-slate-100 px-2 rounded-md"
                     >
                       <Copy className="h-3 w-3 mr-1" />
                       Copiar Teléfonos
@@ -677,8 +715,8 @@ export default function RemindersPage() {
                 <div className="lg:col-span-4 space-y-4">
                   <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden overflow-hidden bg-white border border-slate-200 shadow-sm h-full flex flex-col">
                     <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
-                      <MessageCircle className="h-4 w-4 text-blue-600" />
-                      <h3 className="text-xs uppercase font-black text-slate-500 tracking-wider">Mensaje Plantilla</h3>
+                      <MessageCircle className="h-4 w-4 text-[#0084d1]" />
+                      <h3 className="text-xs uppercase font-bold text-slate-500 tracking-wider">Mensaje Plantilla</h3>
                     </div>
                     <div className="p-4 bg-slate-50/20 flex-1 flex flex-col justify-between gap-4">
                       <div className="bg-sky-50 p-3.5 rounded-2xl rounded-tl-none border border-sky-100 shadow-sm text-[11px] text-sky-950 leading-relaxed whitespace-pre-wrap font-sans relative">

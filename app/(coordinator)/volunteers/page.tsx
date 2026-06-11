@@ -11,10 +11,35 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
 import { DataTableFilter } from "@/components/DataTableFilter";
+import { createClient } from "@/lib/supabase/client";
+import { motion, AnimatePresence } from "framer-motion";
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.03
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 400,
+      damping: 28
+    }
+  }
+};
 
 // Interfaz para tipo
 type VolunteerType = {
-  id: number;
+  id: string; // UUID de Supabase
   name: string;
   stake: string;
   ward: string;
@@ -22,13 +47,27 @@ type VolunteerType = {
   shifts: number;
   reliability: number;
   committee: string;
+  committee_id?: string;
 };
 
 export default function VolunteersPage() {
+  const supabase = createClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
+  
+  const [volunteers, setVolunteers] = useState<VolunteerType[]>([]);
+  const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
+  const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
+  const [loading, setLoading] = useState(true);
+
+  // Form states
+  const [newName, setNewName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [newStake, setNewStake] = useState('');
+  const [newWard, setNewWard] = useState('');
+  const [newCommitteeId, setNewCommitteeId] = useState('');
   
   const [editingVolunteer, setEditingVolunteer] = useState<VolunteerType | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -39,13 +78,6 @@ export default function VolunteersPage() {
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [currentCommittee, setCurrentCommittee] = useState<string>('');
 
-  useEffect(() => {
-    const role = localStorage.getItem('mock_role') as any;
-    const committee = localStorage.getItem('mock_committee');
-    if (role) setCurrentRole(role);
-    if (committee) setCurrentCommittee(committee);
-  }, []);
-
   // Días reales del evento (Sep 10-26, sin domingos)
   const EVENT_DAYS = getActiveEventDays().map(date => ({
     key: formatDateShort(date),                   // clave única: 'jue 10'
@@ -53,11 +85,84 @@ export default function VolunteersPage() {
     dateNum: formatDateShort(date).split(' ')[1],  // solo el número: '10'
   }));
 
-  // Estado de turnos por día
   const buildEmptyShifts = () =>
     Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
 
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>(buildEmptyShifts);
+
+  const loadData = async () => {
+    // Fetch volunteers
+    const { data: volsData, error: volsError } = await supabase
+      .from('volunteers')
+      .select('*, committees(name)');
+    
+    if (volsError) {
+      console.error("Error loading volunteers:", volsError);
+    }
+
+    // Fetch committees
+    const { data: commsData, error: commsError } = await supabase
+      .from('committees')
+      .select('id, name');
+    
+    if (commsError) {
+      console.error("Error loading committees:", commsError);
+    } else if (commsData) {
+      setCommitteesList(commsData);
+    }
+
+    // Fetch shifts
+    const { data: shiftsData, error: shiftsError } = await supabase
+      .from('shifts')
+      .select('*');
+    
+    const sCounts: Record<string, number> = {};
+    const gShifts: Record<string, Record<string, string[]>> = {};
+
+    if (shiftsData) {
+      shiftsData.forEach(s => {
+        if (s.volunteer_id) {
+          sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
+          
+          if (!gShifts[s.volunteer_id]) {
+            gShifts[s.volunteer_id] = Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
+          }
+          if (!gShifts[s.volunteer_id][s.day_key]) {
+            gShifts[s.volunteer_id][s.day_key] = [];
+          }
+          if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
+            gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
+          }
+        }
+      });
+    }
+
+    setGlobalShifts(gShifts);
+
+    if (volsData) {
+      const mapped = volsData.map((v: any) => ({
+        id: v.id,
+        name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+        stake: '',
+        ward: '',
+        phone: v.phone || '',
+        shifts: sCounts[v.id] || 0,
+        reliability: 100,
+        committee: v.committees?.name || 'Sin comité',
+        committee_id: v.committee_id
+      }));
+      setVolunteers(mapped);
+    }
+  };
+
+  useEffect(() => {
+    const role = localStorage.getItem('mock_role') as any;
+    const committee = localStorage.getItem('mock_committee');
+    if (role) setCurrentRole(role);
+    if (committee) setCurrentCommittee(committee);
+
+    loadData().then(() => setLoading(false));
+  }, []);
 
   const toggleShift = (day: string, turno: string) => {
     if (!isEditingShifts) return;
@@ -72,28 +177,85 @@ export default function VolunteersPage() {
     });
   };
 
-  const handleSaveShifts = () => {
+  const handleSaveShifts = async () => {
     setIsEditingShifts(false);
+    if (!editingVolunteer) return;
+
+    // Delete existing shifts for this volunteer
+    const { error: delErr } = await supabase
+      .from('shifts')
+      .delete()
+      .eq('volunteer_id', editingVolunteer.id);
+
+    if (delErr) {
+      console.error("Error deleting shifts:", delErr);
+      return;
+    }
+
+    // Insert new shift rows
+    const insertRows = [];
+    for (const [dayKey, shiftKeys] of Object.entries(shiftsByDay)) {
+      for (const shiftKey of shiftKeys) {
+        insertRows.push({
+          volunteer_id: editingVolunteer.id,
+          day_key: dayKey,
+          shift_key: shiftKey
+        });
+      }
+    }
+
+    if (insertRows.length > 0) {
+      const { error: insErr } = await supabase
+        .from('shifts')
+        .insert(insertRows);
+
+      if (insErr) {
+        console.error("Error inserting shifts:", insErr);
+        return;
+      }
+    }
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+    await loadData();
   };
 
-  const names = ['Alejandro', 'Sofia', 'Mateo', 'Valentina', 'Diego', 'Isabella', 'Daniel', 'Camila', 'Santiago', 'Mariana', 'Gabriel', 'Lucia', 'Lucas', 'Valeria', 'Tomas', 'Elena', 'Emilio', 'Martina', 'Nicolas', 'Victoria'];
-  const lastNames = ['García', 'Martínez', 'Rodríguez', 'López', 'Hernández', 'González', 'Pérez', 'Sánchez', 'Ramírez', 'Torres', 'Flores', 'Rivera', 'Gómez', 'Díaz', 'Reyes', 'Morales', 'Cruz', 'Ortiz', 'Silva', 'Rojas'];
-  const stakes = ['Managua Sur', 'Managua Este', 'Managua Norte', 'Bello Horizonte', 'Las Colinas'];
-  const wards = ['Barrio 1', 'Barrio 2', 'Barrio 3', 'Barrio 4', 'Barrio 5'];
-  const committees = ['Historia', 'Seguridad', 'Guía', 'Traducción', 'Transporte', 'Primeros Auxilios'];
+  const handleAddVolunteer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const parts = newName.trim().split(/\s+/);
+    const first_name = parts[0] || '';
+    const last_name = parts.slice(1).join(' ') || '';
 
-  const volunteers: VolunteerType[] = Array.from({ length: 82 }).map((_, i) => ({
-    id: i + 1,
-    name: `${names[i % names.length]} ${lastNames[(i * 7) % lastNames.length]}`,
-    stake: stakes[i % stakes.length],
-    ward: wards[(i * 3) % wards.length],
-    phone: `8888 ${1000 + i}`,
-    shifts: i % 5 === 0 ? 0 : (i % 3) + 1,
-    reliability: i % 7 === 0 ? 50 : 100,
-    committee: committees[i % committees.length]
-  }));
+    const { error } = await supabase
+      .from('volunteers')
+      .insert([
+        {
+          first_name,
+          last_name,
+          phone: newPhone,
+          committee_id: newCommitteeId || null,
+        }
+      ]);
+
+    if (error) {
+      console.error("Error adding volunteer:", error);
+      alert("Error al añadir voluntario: " + error.message);
+      return;
+    }
+
+    setNewName('');
+    setNewPhone('');
+    setNewStake('');
+    setNewWard('');
+    setNewCommitteeId('');
+    setIsAddSheetOpen(false);
+    
+    await loadData();
+  };
+
+  const stakes: string[] = [];
+  const wards: string[] = [];
+  const committees = committeesList.map(c => c.name);
 
   const roleFilteredVolunteers = volunteers.filter(v => {
     if (currentRole === 'Admin') return true;
@@ -119,38 +281,48 @@ export default function VolunteersPage() {
     setIsSheetOpen(true);
     setIsEditingShifts(false);
     setSaved(false);
-    // Inicializar turnos con todas las fechas reales del evento
-    const initial = buildEmptyShifts();
-    // Simular algunos turnos según el número de shifts del voluntario
-    const keys = Object.keys(initial);
-    if (vol.shifts > 0 && keys[0]) initial[keys[0]] = ['T4'];
-    if (vol.shifts > 1 && keys[1]) initial[keys[1]] = ['T2', 'T4'];
-    if (vol.shifts > 2 && keys[2]) initial[keys[2]] = ['T3'];
-    setShiftsByDay(initial);
+    
+    const volShifts = globalShifts[vol.id] || Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
+    setShiftsByDay(volShifts);
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0084d1]"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 tracking-tight">Directorio de Voluntarios</h2>
-            <Badge variant="secondary" className="bg-slate-100 text-slate-800 font-medium text-sm rounded-full px-2.5">
-              {filteredVolunteers.length} {filteredVolunteers.length === 1 ? 'voluntario' : 'voluntarios'}
+    <motion.div 
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6 max-w-6xl mx-auto pb-12"
+    >
+      <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <h1 className="text-4xl tracking-tight text-slate-900 leading-none">
+              Voluntarios
+            </h1>
+            <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold border-none text-[10px] px-2.5 h-5 shadow-sm">
+              {filteredVolunteers.length} registrados
             </Badge>
           </div>
-          <p className="text-sm font-medium text-slate-500">Gestiona los miembros de tu comité y visualiza su información clave.</p>
+          <p className="text-base font-medium text-slate-400">Gestiona los miembros del equipo y visualiza su desempeño.</p>
         </div>
         <Button 
           onClick={() => setIsAddSheetOpen(true)}
-          className="btn-base bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-xl shadow-sm h-10 px-4"
+          className="bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-xl shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
         >
           <UserPlus className="mr-2 h-4 w-4" />
           Añadir Voluntario
         </Button>
-      </div>
+      </motion.div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden overflow-hidden">
+      <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
         {/* Barra de Filtros */}
         <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center gap-4 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -215,74 +387,84 @@ export default function VolunteersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredVolunteers.length > 0 ? (
-                filteredVolunteers.map((vol) => (
-                  <TableRow key={vol.id} className="border-slate-200 hover:bg-slate-100 transition-colors">
-                    <TableCell className="font-medium text-slate-800 pl-8">{vol.name}</TableCell>
-                    <TableCell className="text-slate-800 text-center">{vol.ward}</TableCell>
-                    <TableCell className="text-slate-500 text-center">{vol.stake}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="outline" className="bg-white text-slate-500 border-slate-200 font-medium">
-                        {vol.committee}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="secondary" className="bg-slate-100 text-slate-800 border-slate-200 font-medium">
-                        {vol.shifts} {vol.shifts === 1 ? 'turno' : 'turnos'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {vol.shifts === 0 ? (
-                        <span className="text-sm text-slate-500">N/A</span>
-                      ) : (
-                        <div className="flex items-center justify-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${vol.reliability >= 80 ? 'bg-success' : 'bg-warning'}`} />
-                          <span className="text-sm font-medium text-slate-800">{vol.reliability}%</span>
+              <AnimatePresence mode="popLayout">
+                {filteredVolunteers.length > 0 ? (
+                  filteredVolunteers.map((vol) => (
+                    <motion.tr 
+                      key={vol.id} 
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="border-slate-200 hover:bg-slate-50 transition-colors"
+                    >
+                      <TableCell className="font-bold text-slate-800 pl-8">{vol.name}</TableCell>
+                      <TableCell className="text-slate-800 text-center">{vol.ward}</TableCell>
+                      <TableCell className="text-slate-500 text-center">{vol.stake}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className="bg-white text-slate-500 border-slate-200 font-medium">
+                          {vol.committee}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="secondary" className="bg-slate-100 text-slate-800 border-slate-200 font-medium">
+                          {vol.shifts} {vol.shifts === 1 ? 'turno' : 'turnos'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {vol.shifts === 0 ? (
+                          <span className="text-sm text-slate-500">N/A</span>
+                        ) : (
+                          <div className="flex items-center justify-center gap-2">
+                            <div className={`w-1.5 h-1.5 rounded-full ${vol.reliability >= 80 ? 'bg-emerald-500' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
+                            <span className="text-sm font-bold text-slate-700 tabular-nums">{vol.reliability}%</span>
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-[#0084d1] hover:bg-slate-100 hover:text-[#0084d1] transition-all active:scale-90" title="WhatsApp">
+                            <MessageCircle className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-[#0084d1] hover:bg-slate-100 hover:text-[#0084d1] transition-all active:scale-90" title="Llamar">
+                            <Phone className="h-4 w-4" />
+                          </Button>
                         </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-slate-100 hover:text-blue-600" title="WhatsApp">
-                          <MessageCircle className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-slate-100 hover:text-blue-600" title="Llamar">
-                          <Phone className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center pr-8">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger 
-                          render={
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          }
-                        />
-                        <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[140px] p-1 rounded-xl shadow-md">
-                          <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-lg focus:bg-slate-100 focus:text-slate-800" onClick={() => handleEditClick(vol)}>
-                            Editar Perfil
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="cursor-pointer text-error hover:bg-error/10 hover:text-error rounded-lg focus:bg-error/10 focus:text-error">
-                            Archivar
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      </TableCell>
+                      <TableCell className="text-center pr-8">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger 
+                            render={
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-0 transition-all active:scale-90">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            }
+                          />
+                          <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[140px] p-1 rounded-xl shadow-md">
+                            <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-lg focus:bg-slate-100 focus:text-slate-800 transition-colors" onClick={() => handleEditClick(vol)}>
+                              Editar Perfil
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="cursor-pointer text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg focus:bg-red-50 focus:text-red-700 transition-colors">
+                              Archivar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </motion.tr>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={8} className="h-32 text-center text-slate-500">
+                      No se encontraron voluntarios con esos términos.
                     </TableCell>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center text-slate-500">
-                    No se encontraron voluntarios con esos términos.
-                  </TableCell>
-                </TableRow>
-              )}
+                )}
+              </AnimatePresence>
             </TableBody>
           </Table>
         </div>
-      </div>
+      </motion.div>
 
       {/* Editor Lateral */}
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
@@ -293,21 +475,6 @@ export default function VolunteersPage() {
         >
           {editingVolunteer && (
             <div className="p-7 space-y-7">
-              {/* Profile Header */}
-              <div className="flex flex-col justify-center bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                <h3 className="text-2xl font-bold text-slate-800 tracking-tight leading-tight mb-3">
-                  {editingVolunteer.name}
-                </h3>
-                <div className="flex items-center gap-2">
-                  <Badge className="bg-blue-600 text-white border-none text-[10px] px-2 uppercase font-bold tracking-wide">
-                    Voluntario
-                  </Badge>
-                  <Badge variant="outline" className="text-slate-500 border-slate-200 text-[10px] px-2 font-medium bg-white">
-                    Comité: {editingVolunteer.committee}
-                  </Badge>
-                </div>
-              </div>
-
               {/* Profile Card */}
               <div className="flex flex-col bg-slate-50 p-6 rounded-2xl border border-slate-200 gap-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
@@ -406,15 +573,15 @@ export default function VolunteersPage() {
                   return (
                     <div className="grid grid-cols-3 gap-3 mb-6">
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                        <p className="text-3xl font-black text-slate-800">{totalTurnos}</p>
+                        <p className="text-3xl font-bold text-slate-800 tabular-nums">{totalTurnos}</p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Turnos</p>
                       </div>
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                        <p className="text-3xl font-black text-slate-800">{diasCubiertos}</p>
+                        <p className="text-3xl font-bold text-slate-800 tabular-nums">{diasCubiertos}</p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Días</p>
                       </div>
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                        <p className={`text-3xl font-black ${editingVolunteer.reliability >= 80 ? 'text-teal-600' : 'text-amber-500'}`}>
+                        <p className={`text-3xl font-bold tabular-nums ${editingVolunteer.reliability >= 80 ? 'text-teal-600' : 'text-amber-500'}`}>
                           {editingVolunteer.reliability}%
                         </p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Confiab.</p>
@@ -431,10 +598,10 @@ export default function VolunteersPage() {
                     }`}>
                       {/* Left: white date panel */}
                       <div className="shrink-0 sm:w-20 flex sm:flex-col items-center justify-center bg-white py-3 px-4 border-b sm:border-b-0 sm:border-r border-slate-200 gap-2 sm:gap-0">
-                        <p className="text-[10px] font-black text-[#0084d1] uppercase tracking-widest leading-none">
+                        <p className="text-[10px] font-bold text-[#0084d1] uppercase tracking-widest leading-none">
                           {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
                         </p>
-                        <p className="text-xl sm:text-2xl font-black text-slate-800 leading-tight sm:mt-0.5">{d.dateNum}</p>
+                        <p className="text-xl sm:text-2xl font-bold text-slate-800 leading-tight sm:mt-0.5">{d.dateNum}</p>
                         <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider leading-none hidden sm:block">Sept</p>
                       </div>
 
@@ -457,7 +624,7 @@ export default function VolunteersPage() {
                                   : 'cursor-default'
                               }`}
                             >
-                              <span className="text-sm font-black">{t}</span>
+                              <span className="text-sm font-bold">{t}</span>
                               <span className={`text-[8px] font-bold tracking-tight mt-0.5 whitespace-nowrap ${active ? 'text-white/80' : 'text-slate-400'}`}>
                                 {shiftInfo?.time}
                               </span>
@@ -489,15 +656,19 @@ export default function VolunteersPage() {
           </SheetHeader>
           <form 
             id="add-volunteer-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setIsAddSheetOpen(false);
-            }}
+            onSubmit={handleAddVolunteer}
             className="flex-1 overflow-y-auto px-6 space-y-6 pb-24"
           >
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-slate-800">Nombre y Apellido</label>
-              <Input required minLength={3} className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" placeholder="Ej. Juan Pérez" />
+              <Input 
+                required 
+                minLength={3} 
+                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" 
+                placeholder="Ej. Juan Pérez" 
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
               <p className="text-[11px] text-slate-500">Asegúrate de incluir ambos apellidos si es posible.</p>
             </div>
             <div className="flex flex-col gap-2">
@@ -512,31 +683,45 @@ export default function VolunteersPage() {
                 }}
                 className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" 
                 placeholder="Ej. 88888888" 
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
               />
               <p className="text-[11px] text-slate-500">Solo 8 dígitos, sin código de país o espacios.</p>
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-slate-800">Estaca</label>
-              <Input required className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" placeholder="Ej. Managua Sur" />
+              <Input 
+                required 
+                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" 
+                placeholder="Ej. Managua Sur" 
+                value={newStake}
+                onChange={(e) => setNewStake(e.target.value)}
+              />
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-slate-800">Barrio</label>
-              <Input required className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" placeholder="Ej. Barrio 1" />
+              <Input 
+                required 
+                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" 
+                placeholder="Ej. Barrio 1" 
+                value={newWard}
+                onChange={(e) => setNewWard(e.target.value)}
+              />
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-slate-800">Comité</label>
-              <Select required>
+              <Select required onValueChange={(val) => setNewCommitteeId(val || '')} value={newCommitteeId}>
                 <SelectTrigger className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint">
                   <SelectValue placeholder="Selecciona un comité" />
                 </SelectTrigger>
                 <SelectContent className="bg-white border-slate-200 text-slate-800">
-                  {committees.map((com) => (
+                  {committeesList.map((com) => (
                     <SelectItem 
-                      key={com} 
-                      value={com} 
-                      className="cursor-pointer rounded-lg hover:bg-slate-50 focus:bg-slate-50 focus:text-blue-700 data-[state=checked]:bg-blue-50 data-[state=checked]:text-blue-700 transition-colors"
+                      key={com.id} 
+                      value={com.id} 
+                      className="cursor-pointer rounded-lg hover:bg-slate-50 focus:bg-slate-50 focus:text-[#0084d1] data-[state=checked]:bg-[#0084d1]/10 data-[state=checked]:text-[#0084d1] transition-colors"
                     >
-                      {com}
+                      {com.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -555,6 +740,6 @@ export default function VolunteersPage() {
           </div>
         </SheetContent>
       </Sheet>
-    </div>
+    </motion.div>
   );
 }

@@ -7,6 +7,30 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { generateWaMeLink } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
+import { motion, AnimatePresence } from "framer-motion";
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 400,
+      damping: 30
+    }
+  }
+};
 
 const COMMITTEES = ['Historia', 'Seguridad', 'Guía', 'Traducción', 'Transporte', 'Primeros Auxilios'];
 const ROLES = ['Admin', 'Editor', 'Lector'] as const;
@@ -143,27 +167,39 @@ export default function UsersPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight mb-1">Usuarios y Accesos</h2>
-          <p className="text-slate-500 text-sm font-medium">Administra administradores, coordinadores y su nivel de acceso.</p>
+    <motion.div 
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="max-w-6xl mx-auto space-y-10 pb-12"
+    >
+      <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <h1 className="text-4xl tracking-tight text-slate-900 leading-none">
+              Usuarios
+            </h1>
+            <Badge className="bg-slate-900 text-white border-none text-[10px] px-2.5 py-0.5 uppercase font-bold tracking-widest h-5 shadow-sm">
+              Accesos
+            </Badge>
+          </div>
+          <p className="text-base font-medium text-slate-500">Administra el equipo de gestión y sus niveles de privilegio.</p>
         </div>
         <Button 
           onClick={() => setIsInviteOpen(true)}
-          className="bg-[#0084d1] hover:bg-[#006eb3] text-white w-full sm:w-auto shadow-sm"
+          className="bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-xl shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
         >
           <UserPlus className="w-4 h-4 mr-2" />
           Invitar Usuario
         </Button>
-      </div>
+      </motion.div>
 
       {isInviteOpen && (
 
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm animate-in fade-in slide-in-from-top-4 overflow-hidden">
           <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-blue-600" />
+              <ShieldCheck className="w-5 h-5 text-[#0084d1]" />
               <h3 className="text-lg font-bold text-slate-800 tracking-tight">Nueva Invitación</h3>
             </div>
             <button onClick={resetInviteForm} className="text-slate-400 hover:text-slate-600 transition-colors">
@@ -330,7 +366,7 @@ export default function UsersPage() {
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className={`font-bold border ${
-                        user.role === 'Admin' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-blue-50 text-blue-700 border-blue-200'
+                        user.role === 'Admin' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-blue-50 text-[#0084d1] border-blue-200'
                       }`}>
                         {user.role}
                       </Badge>
@@ -364,6 +400,6 @@ export default function UsersPage() {
           </table>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
