@@ -1,48 +1,51 @@
 # Design
 
 ## Visual Identity
-A clean, professional, and trustworthy aesthetic utilizing a high-contrast palette with sky-blue accents. The design prioritizes legibility and spatial organization to manage dense administrative data.
+A modern, professional, and authoritative aesthetic utilizing a high-contrast palette. The design focuses on high-precision administrative workflows using Public Sans and Material Symbols.
 
 ## Color Palette
-Using OKLCH for precise color control (referencing Tailwind/CSS variables in `globals.css`).
 
-| Role | Variable | Hex | OKLCH (Target) | Usage |
-| --- | --- | --- | --- | --- |
-| **Background** | `--dark` | `#fbfcfd` | `oklch(0.985 0 0)` | Primary app background |
-| **Surface** | `--dark2` | `#ffffff` | `oklch(1 0 0)` | Cards, sidebar, elevated containers |
-| **Muted Surface** | `--dark3` | `#f1f5f9` | `oklch(0.967 0.011 286.375)` | Hover states, secondary inputs |
-| **Primary (Brand)** | `--gold` | `#0284c7` | `oklch(0.588 0.158 241.966)` | Primary actions, branding, key accents |
-| **Accent Light** | `--gold-light` | `#38bdf8` | `oklch(0.77 0.17 241)` | Secondary accents, progress indicators |
-| **Accent Faint** | `--gold-faint` | `#e0f2fe` | `oklch(0.94 0.04 241)` | Background tints, subtle highlights |
-| **Ink (Text)** | `--text` | `#0f172a` | `oklch(0.145 0 0)` | Primary headings and body text |
-| **Ink Dim** | `--text-dim` | `#334155` | `oklch(0.35 0 0)` | Secondary labels and descriptions |
-| **Muted** | `--muted` | `#64748b` | `oklch(0.55 0 0)` | Placeholder text, disabled states |
-| **Success** | `--accent` | `#10b981` | `oklch(0.69 0.19 154)` | Verified states, complete shifts |
-| **Danger** | `--red` | `#ef4444` | `oklch(0.63 0.25 25)` | Critical alerts, empty shifts |
+| Role | Hex | Usage |
+| --- | --- | --- |
+| **Primary (Brand)** | `#4D7CFE` | Primary actions, branding, key accents |
+| **Primary Faint** | `rgba(77, 124, 254, 0.15)` | Chips, tags, background highlights |
+| **Heading/Dark Text** | `#252631` | Main text and headings |
+| **Success** | `#6DD230` | Active states, online dots, completed shifts |
+| **Danger** | `#FE4D97` | Alerts, critical understaffing |
+| **Secondary Grey** | `#778CA2` | Descriptions, secondary labels |
+| **Background App** | `#F8FAFB` | Primary background |
+| **Background Surface** | `#FFFFFF` | Cards and elevated containers |
+| **Background Muted** | `#F2F4F6` | Hover states, sidebar background |
+| **Border** | `#E8ECEF` | Dividers and input borders |
 
 ## Typography
-System focuses on a balance between modern sans-serif for readability and monospace for data precision.
+System uses **Public Sans** for all textual content.
 
-- **Headings & Body**: `Outfit` (sans-serif)
-  - Letter-spacing: `-0.02em` to `-0.03em` for headers.
-  - Weight: `800` (Mega/LG), `700` (MD/SM), `400` (Regular body).
-- **Data & PINs**: `JetBrains Mono` (monospace)
-  - Used for numbers, PIN inputs, and technical data points.
+| Level | Size | Weight | Color |
+| --- | --- | --- | --- |
+| **H1** | 24px | 700 (Bold) | `#252631` |
+| **H2** | 22px | 700 (Bold) | `#252631` |
+| **H3** | 20px | 700 (Bold) | `#252631` or `#4D7CFE` |
+| **H4** | 18px | 700 (Bold) | `#252631` or `#4D7CFE` |
+
+## Iconography
+Using **Material Symbols Outlined**.
+- Default size: 20px.
+- Sizing variants: 18px, 20px, 22px, 24px.
+- Implementation: `<span className="material-symbols-outlined text-[size]">symbol_name</span>`.
 
 ## Components & Patterns
 
-### Cards
-- **Premium Card**: `12px` radius, `1px` border (`--border`), subtle shadow.
-- **Elevation**: On hover, shift shadow to `var(--shadow-md)` and border to `var(--border-strong)`.
+### Chips & Tags
+- Background: 15% opacity of the semantic color (Primary, Success, or Danger).
+- Text/Border: Full opacity of the semantic color.
+- Radius: 4xl (fully rounded).
 
 ### Buttons
-- **Primary**: Sky blue background, `10px` radius, bold uppercase or bold title case.
-- **Interaction**: `scale(0.97)` on `:active` for physical feedback (Emil Kowalski principle).
+- Primary: `#4D7CFE` background, white text.
+- Interaction: `scale(0.97)` on `:active`.
 
-### Inputs
-- **Base**: `12px` radius, `1px` border. On focus, transition border to `--gold` with a `4px` focus ring of `--gold-faint`.
-
-## Motion & Transitions
-- **Standard**: `160ms` to `250ms` using `cubic-bezier(0.23, 1, 0.32, 1)` (ease-out).
-- **State Changes**: Use subtle blur (`2px`) or scale shifts to prevent jarring transitions.
-- **Stagger**: List items (like volunteers or shifts) should enter with a `30-50ms` stagger delay.
+### Online/Status Dots
+- Size: `w-1.5 h-1.5`.
+- Active: `#6DD230` (Success Green).
+- Error: `#FE4D97` (Danger Pink).

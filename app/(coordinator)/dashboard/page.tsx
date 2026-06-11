@@ -3,7 +3,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Users, AlertTriangle, UserCheck, ArrowUpRight, TrendingUp, Target, Activity, ShieldAlert, Sparkles, ChevronRight } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -283,7 +282,7 @@ export default function CoordinatorDashboard() {
       <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 pb-8 border-b border-slate-200/60 relative overflow-hidden">
         <div className="space-y-2 relative z-10">
           <div className="flex items-center gap-3">
-            <h1 className="text-4xl tracking-tight text-slate-900 leading-none">
+            <h1 className="tracking-tight text-slate-900 leading-none">
               Visión General
             </h1>
             <Badge className="bg-slate-900 text-white border-none text-[10px] px-2.5 py-0.5 uppercase font-bold tracking-widest h-5 shadow-sm">
@@ -297,14 +296,14 @@ export default function CoordinatorDashboard() {
         
         <div className="flex items-center gap-4 shrink-0 relative z-10">
           <Link href="/settings">
-            <Button variant="outline" size="lg" className="rounded-xl font-bold border-slate-200 bg-white hover:bg-slate-50 shadow-sm transition-all active:scale-[0.96]">
+            <Button variant="outline" size="lg" className="rounded-sm font-bold border-slate-200 bg-white hover:bg-slate-50 shadow-sm transition-all active:scale-[0.96]">
               Ajustes Globales
             </Button>
           </Link>
           <Link href="/shifts">
-            <Button size="lg" className="bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-xl font-bold shadow-xl shadow-blue-500/20 transition-all active:scale-[0.96] group px-6">
+            <Button size="lg" className="bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-sm font-bold shadow-xl shadow-blue-500/20 transition-all active:scale-[0.96] group px-6">
               Gestionar Turnos
-              <ArrowUpRight className="w-4 h-4 ml-2 opacity-70 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              <span className="material-symbols-outlined text-[18px] ml-2 opacity-70 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform">north_east</span>
             </Button>
           </Link>
         </div>
@@ -316,11 +315,11 @@ export default function CoordinatorDashboard() {
       {/* Primary KPIs - Interactive Bento Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
-          <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 h-full">
+          <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 h-full">
             <CardContent className="p-7">
               <div className="flex items-start justify-between mb-6">
-                <div className="p-3 bg-blue-50 rounded-2xl group-hover:bg-[#0084d1] group-hover:text-white transition-colors duration-300">
-                  <Target className="w-5 h-5" />
+                <div className="p-3 bg-blue-50 rounded-sm group-hover:bg-[#0084d1] group-hover:text-white transition-colors duration-300">
+                  <span className="material-symbols-outlined text-[20px]">track_changes</span>
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-1">Progreso</span>
@@ -330,7 +329,7 @@ export default function CoordinatorDashboard() {
                 </div>
               </div>
               <div className="space-y-1">
-                <h3 className="text-3xl text-slate-900 font-bold tracking-tighter flex items-baseline gap-2">
+                <h3 className="text-slate-900 font-bold tracking-tighter flex items-baseline gap-2">
                   {globalStats.totalRecruited} <span className="text-sm font-bold text-slate-300 uppercase tracking-widest">/ {globalStats.targetVolunteers}</span>
                 </h3>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Voluntarios Reclutados</p>
@@ -348,22 +347,22 @@ export default function CoordinatorDashboard() {
         </motion.div>
 
         <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
-          <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-teal-500/10 h-full">
+          <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-teal-500/10 h-full">
             <CardContent className="p-7">
               <div className="flex items-start justify-between mb-6">
-                <div className="p-3 bg-teal-50 rounded-2xl group-hover:bg-teal-600 group-hover:text-white transition-colors duration-300 text-teal-600">
-                  <Activity className="w-5 h-5" />
+                <div className="p-3 bg-teal-50 rounded-sm group-hover:bg-accent group-hover:text-white transition-colors duration-300 text-accent">
+                  <span className="material-symbols-outlined text-[20px]">monitoring</span>
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-1">Estado</span>
                   <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
-                    <span className="text-[10px] font-bold text-teal-600 uppercase tracking-widest">Óptimo</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                    <span className="text-[10px] font-bold text-accent uppercase tracking-widest">Óptimo</span>
                   </div>
                 </div>
               </div>
               <div className="space-y-1">
-                <h3 className="text-3xl text-slate-900 font-bold tracking-tighter">
+                <h3 className="text-slate-900 font-bold tracking-tighter">
                   {globalStats.globalCoveragePercentage}%
                 </h3>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cobertura de Turnos</p>
@@ -374,21 +373,21 @@ export default function CoordinatorDashboard() {
         </motion.div>
 
         <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
-          <Card className={`border-none ${globalStats.criticalAlerts > 0 ? 'bg-red-50/50' : 'bg-white'} shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/10 h-full border border-transparent hover:border-red-100`}>
+          <Card className={`border-none ${globalStats.criticalAlerts > 0 ? 'bg-red-50/50' : 'bg-white'} shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/10 h-full border border-transparent hover:border-red-100`}>
             <CardContent className="p-7">
               <div className="flex items-start justify-between mb-6">
-                <div className={`p-3 rounded-2xl transition-colors duration-300 ${globalStats.criticalAlerts > 0 ? 'bg-red-100 text-red-600 group-hover:bg-red-600 group-hover:text-white' : 'bg-slate-50 text-slate-400'}`}>
-                  <ShieldAlert className="w-5 h-5" />
+                <div className={`p-3 rounded-sm transition-colors duration-300 ${globalStats.criticalAlerts > 0 ? 'bg-red-100 text-red group-hover:bg-red group-hover:text-white' : 'bg-slate-50 text-slate-400'}`}>
+                  <span className="material-symbols-outlined text-[20px]">security</span>
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-1">Prioridad</span>
-                  <Badge variant="outline" className={`font-bold text-[10px] border-none px-2 h-5 ${globalStats.criticalAlerts > 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500'}`}>
+                  <Badge variant="outline" className={`font-bold text-[10px] border-none px-2 h-5 ${globalStats.criticalAlerts > 0 ? 'bg-red-100 text-red' : 'bg-slate-100 text-slate-500'}`}>
                     {globalStats.criticalAlerts > 0 ? 'ACCIÓN REQ.' : 'NORMAL'}
                   </Badge>
                 </div>
               </div>
               <div className="space-y-1">
-                <h3 className={`text-3xl font-bold tracking-tighter ${globalStats.criticalAlerts > 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                <h3 className={`font-bold tracking-tighter ${globalStats.criticalAlerts > 0 ? 'text-red' : 'text-slate-900'}`}>
                   {globalStats.criticalAlerts}
                 </h3>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Alertas Críticas</p>
@@ -401,16 +400,16 @@ export default function CoordinatorDashboard() {
         </motion.div>
 
         <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
-          <Card className="border-none bg-slate-900 text-white shadow-2xl shadow-slate-900/20 rounded-3xl overflow-hidden h-full relative group">
+          <Card className="border-none bg-slate-900 text-white shadow-2xl shadow-slate-900/20 rounded-sm overflow-hidden h-full relative group">
             <CardContent className="p-7 relative z-10">
               <div className="flex items-start justify-between mb-6">
-                <div className="p-3 bg-white/10 rounded-2xl group-hover:bg-blue-500 transition-colors duration-300 text-white">
-                  <UserCheck className="w-5 h-5" />
+                <div className="p-3 bg-white/10 rounded-sm group-hover:bg-blue-500 transition-colors duration-300 text-white">
+                  <span className="material-symbols-outlined text-[20px]">person_check</span>
                 </div>
-                <TrendingUp className="w-5 h-5 text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <span className="material-symbols-outlined text-[20px] text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity">trending_up</span>
               </div>
               <div className="space-y-1">
-                <h3 className="text-3xl font-bold tracking-tighter text-white">
+                <h3 className="font-bold tracking-tighter text-white">
                   {globalStats.averageReliability}%
                 </h3>
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Compromiso Real</p>
@@ -434,14 +433,14 @@ export default function CoordinatorDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         {/* Left: Committee Status Ranking */}
         <motion.div variants={itemVariants} className="lg:col-span-3">
-          <Card className="border-none bg-white shadow-xl shadow-slate-200/50 rounded-3xl overflow-hidden border border-slate-100 h-full flex flex-col">
+          <Card className="border-none bg-white shadow-xl shadow-slate-200/50 rounded-sm overflow-hidden border border-slate-100 h-full flex flex-col">
             <div className="px-8 py-7 border-b border-slate-50 flex items-center justify-between">
               <div className="space-y-1">
-                <h3 className="text-xl text-slate-800 tracking-tight leading-none">Estado por Comité</h3>
+                <h3 className="text-slate-800 tracking-tight leading-none">Estado por Comité</h3>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ranking de Cobertura</p>
               </div>
               <Link href="/volunteers" className="group flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#0084d1] hover:text-[#006eb3] transition-colors">
-                Ver Detalles <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                Ver Detalles <span className="material-symbols-outlined text-[18px] group-hover:translate-x-0.5 transition-transform">chevron_right</span>
               </Link>
             </div>
             <CardContent className="p-0 flex-1">
@@ -459,7 +458,7 @@ export default function CoordinatorDashboard() {
                         <span className="text-[10px] font-bold text-slate-300 w-4">0{idx + 1}</span>
                         <h4 className="text-sm font-bold text-slate-700 group-hover:text-slate-900 transition-colors">{committee.name}</h4>
                         {committee.status === 'high_risk' && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-red animate-ping" />
                         )}
                       </div>
                       <div className="flex items-center gap-4">
@@ -469,8 +468,8 @@ export default function CoordinatorDashboard() {
                             animate={{ width: `${committee.coverage}%` }}
                             transition={{ duration: 1, delay: 0.5 + idx * 0.05 }}
                             className={`h-full rounded-full ${
-                              committee.status === 'success' ? 'bg-emerald-500' :
-                              committee.status === 'warning' ? 'bg-amber-400' : 'bg-red-500'
+                              committee.status === 'success' ? 'bg-accent' :
+                              committee.status === 'warning' ? 'bg-amber-400' : 'bg-red'
                             }`}
                           />
                         </div>
@@ -494,14 +493,14 @@ export default function CoordinatorDashboard() {
 
         {/* Right: Critical Bottlenecks */}
         <motion.div variants={itemVariants} className="lg:col-span-2">
-          <Card className="border-none bg-slate-50/50 shadow-inner rounded-3xl overflow-hidden h-full flex flex-col border border-slate-200/60">
+          <Card className="border-none bg-slate-50/50 shadow-inner rounded-sm overflow-hidden h-full flex flex-col border border-slate-200/60">
             <div className="px-8 py-7 flex items-center justify-between">
               <div className="space-y-1">
-                <h3 className="text-xl text-slate-800 tracking-tight leading-none">Cuellos de Botella</h3>
+                <h3 className="text-slate-800 tracking-tight leading-none">Cuellos de Botella</h3>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Top Turnos en Riesgo</p>
               </div>
-              <div className="w-10 h-10 bg-red-100 rounded-2xl flex items-center justify-center shadow-sm">
-                <AlertTriangle className="w-5 h-5 text-red-600" />
+              <div className="w-10 h-10 bg-red-100 rounded-sm flex items-center justify-center shadow-sm">
+                <span className="material-symbols-outlined text-[20px] text-red">warning</span>
               </div>
             </div>
             <CardContent className="px-6 pb-8 space-y-4 flex-1">
@@ -512,7 +511,7 @@ export default function CoordinatorDashboard() {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.3 + idx * 0.05 }}
-                    className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 group hover:shadow-md transition-all cursor-default"
+                    className="bg-white p-5 rounded-sm shadow-sm border border-slate-100 group hover:shadow-md transition-all cursor-default"
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div className="space-y-1">
@@ -521,7 +520,7 @@ export default function CoordinatorDashboard() {
                           <span className="text-slate-500">{shift.day}</span> &bull; {shift.shift}
                         </p>
                       </div>
-                      <Badge className="bg-red-50 text-red-600 text-[9px] font-bold px-2 py-0.5 border-none shadow-none uppercase tracking-widest">
+                      <Badge className="bg-red-50 text-red text-[9px] font-bold px-2 py-0.5 border-none shadow-none uppercase tracking-widest">
                         -{shift.missing}
                       </Badge>
                     </div>
@@ -550,7 +549,7 @@ export default function CoordinatorDashboard() {
               {criticalShifts.length === 0 && (
                 <div className="h-full flex flex-col items-center justify-center py-12 text-center space-y-4">
                   <div className="w-16 h-16 bg-teal-50 rounded-full flex items-center justify-center">
-                    <Sparkles className="w-8 h-8 text-teal-500" />
+                    <span className="material-symbols-outlined text-[24px] text-teal-500">auto_awesome</span>
                   </div>
                   <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Todo bajo control</p>
                 </div>
@@ -559,7 +558,7 @@ export default function CoordinatorDashboard() {
             <div className="p-4 bg-slate-100/50 text-center border-t border-slate-200/50">
               <Link href="/shifts">
                 <Button variant="ghost" className="w-full text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 hover:text-slate-800 hover:bg-transparent transition-all">
-                  Ver Agenda Completa <ChevronRight className="w-3 h-3 ml-2" />
+                  Ver Agenda Completa <span className="material-symbols-outlined text-[18px] ml-2">chevron_right</span>
                 </Button>
               </Link>
             </div>

@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from "react";
-import { Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SlotCellProps {
@@ -66,17 +65,17 @@ export function SlotCell({
       )}
     >
       {isPending ? (
-        <Loader2 className="h-5 w-5 animate-spin text-[#0084d1]" />
+        <span className="material-symbols-outlined text-[20px] animate-spin text-[#0084d1]">progress_activity</span>
       ) : isEnrolled ? (
         <>
-          <div className="bg-[#0084d1] rounded-full p-1 mb-1 shadow-sm shadow-[#0084d1]/20">
-            <Check className="h-3 w-3 text-white" />
+          <div className="bg-[#0084d1] rounded-full p-1 mb-1 shadow-sm shadow-[#0084d1]/20 flex items-center justify-center">
+            <span className="material-symbols-outlined text-[16px] text-white">check</span>
           </div>
           <span className="text-[10px] font-bold text-[#0084d1] uppercase tracking-widest">
             Confirmado
           </span>
           {/* Tooltip on hover to unenroll */}
-          <div className="absolute inset-0 bg-red-600 flex items-center justify-center text-white text-[10px] font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-2 group-hover:translate-y-0">
+          <div className="absolute inset-0 bg-red flex items-center justify-center text-white text-[10px] font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-2 group-hover:translate-y-0">
             Remover Turno
           </div>
         </>

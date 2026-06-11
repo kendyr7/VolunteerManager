@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { UploadCloud, FileText, CheckCircle2, AlertTriangle, Send } from "lucide-react";
 import { generatePinMessage, generateWaMeLink } from "@/lib/whatsapp";
 
 // Estructura esperada del voluntario
@@ -64,7 +63,7 @@ export default function ImportPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-slate-800 tracking-tight">Importación Masiva</h2>
+        <h2 className="font-semibold text-slate-800 tracking-tight">Importación Masiva</h2>
         <p className="text-slate-500 mt-1">Añade múltiples voluntarios copiando un archivo CSV.</p>
       </div>
 
@@ -78,7 +77,7 @@ export default function ImportPage() {
           </CardHeader>
           <CardContent>
             <textarea
-              className="w-full h-64 p-4 rounded-xl border border-slate-200 bg-slate-50 font-mono text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+              className="w-full h-64 p-4 rounded-sm border border-slate-200 bg-slate-50 font-mono text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
               placeholder="Juan, Pérez, 35, Las Colinas, Managua Sur, 88881111&#10;María, García, 28, El Dorado, Managua Este, 88882222"
               value={csvText}
               onChange={(e) => setCsvText(e.target.value)}
@@ -86,7 +85,7 @@ export default function ImportPage() {
           </CardContent>
           <CardFooter className="justify-end">
             <Button onClick={handleParse} disabled={!csvText.trim()} className="bg-[#0084d1] hover:bg-[#006eb3]">
-              <FileText className="w-4 h-4 mr-2" />
+              <span className="material-symbols-outlined text-[18px] mr-2">description</span>
               Procesar Datos
             </Button>
           </CardFooter>
@@ -97,7 +96,7 @@ export default function ImportPage() {
         <Card className="border-0 shadow-sm animate-in fade-in slide-in-from-bottom-4">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+              <span className="material-symbols-outlined text-[20px] text-emerald-500">check_circle</span>
               Vista Previa
             </CardTitle>
             <CardDescription>
@@ -127,7 +126,7 @@ export default function ImportPage() {
           <CardFooter className="justify-between border-t border-slate-100 pt-6">
             <Button variant="ghost" onClick={() => setStep(1)}>Volver y editar</Button>
             <Button onClick={handleImport} className="bg-[#0084d1] hover:bg-[#006eb3] text-white">
-              <UploadCloud className="w-4 h-4 mr-2" />
+              <span className="material-symbols-outlined text-[18px] mr-2">cloud_upload</span>
               Generar PINs e Importar
             </Button>
           </CardFooter>
@@ -144,13 +143,13 @@ export default function ImportPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {parsedData.map((vol, i) => (
-              <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 gap-4">
+              <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 rounded-sm border border-slate-100 gap-4">
                 <div>
                   <h4 className="font-semibold text-slate-800">{vol.firstName} {vol.lastName}</h4>
                   <p className="text-sm text-slate-500 font-mono mt-1">Tel: {vol.phone} • PIN: <span className="font-bold text-slate-700">{vol.pin}</span></p>
                 </div>
                 <Button render={<a href={vol.waLink} target="_blank" rel="noopener noreferrer" />} size="sm" className="bg-[#25D366] hover:bg-[#1ebd5a] text-white whitespace-nowrap shadow-sm">
-                  <Send className="w-4 h-4 mr-2" />
+                  <span className="material-symbols-outlined text-[18px] mr-2">send</span>
                   Enviar PIN
                 </Button>
               </div>

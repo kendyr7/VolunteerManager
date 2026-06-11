@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from "react";
-import { Save, Users, Plus, Minus, Upload, FileText, CheckCircle2, Send, UploadCloud, X, AlertTriangle, AlertCircle, Pencil, Check, Link, Unlink, ShieldCheck } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -234,7 +233,7 @@ export default function SettingsPage() {
       <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
         <div className="space-y-1.5">
           <div className="flex items-center gap-3">
-            <h1 className="text-4xl tracking-tight text-slate-900 leading-none">
+            <h1 className="tracking-tight text-slate-900 leading-none">
               Ajustes
             </h1>
             <Badge className="bg-slate-900 text-white border-none text-[10px] px-2.5 py-0.5 uppercase font-bold tracking-widest h-5 shadow-sm">
@@ -246,16 +245,16 @@ export default function SettingsPage() {
       </motion.div>
 
       {/* Tabs con Motion */}
-      <motion.div variants={itemVariants} className="flex gap-1 p-1 bg-slate-100 border border-slate-200 rounded-2xl w-fit">
+      <motion.div variants={itemVariants} className="flex gap-1 p-1 bg-slate-100 border border-slate-200 rounded-sm w-fit">
         {([
-          { key: 'config' as Tab, label: 'Configuración', icon: Users },
-          { key: 'import' as Tab, label: 'Importación Masiva', icon: Upload },
-        ] as const).map(({ key, label, icon: Icon }) => (
+          { key: 'config' as Tab, label: 'Configuración', symbol: 'group' },
+          { key: 'import' as Tab, label: 'Importación Masiva', symbol: 'upload' },
+        ] as const).map(({ key, label, symbol }) => (
           <button key={key} onClick={() => setActiveTab(key)}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.97] ${
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-sm text-sm font-bold transition-all active:scale-[0.97] ${
               activeTab === key ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'
             }`}>
-            <Icon className="h-4 w-4" />
+            <span className="material-symbols-outlined text-[18px]">{symbol}</span>
             {label}
           </button>
         ))}
@@ -263,11 +262,11 @@ export default function SettingsPage() {
 
       {/* ── Tab: Configuración ───────────────────────────────────────────────── */}
       {activeTab === 'config' && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm">
+        <div className="bg-white border border-slate-200 rounded-sm shadow-sm">
           <div className="p-6 border-b border-slate-100 flex flex-col lg:flex-row lg:items-start justify-between gap-6">
             <div className="max-w-xl">
               <div className="flex items-center gap-2 mb-2">
-                <Users className="h-5 w-5 text-[#0084d1]" />
+                <span className="material-symbols-outlined text-[20px] text-[#0084d1]">group</span>
                 <h3 className="text-lg font-bold text-slate-800 tracking-tight">Cupos por Turno</h3>
               </div>
               <p className="text-sm font-medium text-slate-500">
@@ -284,7 +283,7 @@ export default function SettingsPage() {
                       <button
                         key={c}
                         onClick={() => setSelectedCommittee(c)}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                        className={`px-3.5 py-1.5 rounded-sm text-xs font-bold transition-all border ${
                           selectedCommittee === c 
                             ? 'bg-[#0084d1]/10 border-[#0084d1]/30 text-[#0084d1]' 
                             : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800'
@@ -296,7 +295,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ) : (
-                <div className="inline-block bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
+                <div className="inline-block bg-slate-50 px-4 py-2 rounded-sm border border-slate-200">
                   <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-0.5">Comité Asignado</label>
                   <span className="text-sm font-bold text-slate-800">{selectedCommittee}</span>
                 </div>
@@ -308,13 +307,13 @@ export default function SettingsPage() {
             <span className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">Mínimos Requeridos</span>
             <button
               onClick={() => setLinkAll(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all shadow-sm ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-bold border transition-all shadow-sm ${
                 linkAll
                   ? 'bg-[#0084d1]/10 border-[#0084d1]/30 text-[#0084d1]'
                   : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'
               }`}
             >
-              {linkAll ? <Link className="h-3.5 w-3.5" /> : <Unlink className="h-3.5 w-3.5" />}
+              {linkAll ? <span className="material-symbols-outlined text-[16px]">link</span> : <span className="material-symbols-outlined text-[16px]">link_off</span>}
               {linkAll ? 'Edición Sincronizada' : 'Edición Individual'}
             </button>
           </div>
@@ -323,20 +322,20 @@ export default function SettingsPage() {
           <div className="p-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {SHIFT_LABELS.map(({ id, label, time }) => (
-                <div key={id} className="flex flex-col p-4 rounded-xl border border-slate-200 bg-white shadow-sm hover:border-[#0084d1]/40 transition-colors">
+                <div key={id} className="flex flex-col p-4 rounded-sm border border-slate-200 bg-white shadow-sm hover:border-[#0084d1]/40 transition-colors">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-sm font-bold text-slate-800 tracking-tight">{label}</span>
                     <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{time}</span>
                   </div>
                   <div className="flex items-center justify-between mt-auto">
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Voluntarios</span>
-                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg p-1">
-                      <button onClick={() => updateCapacity(id, -1)} className="h-7 w-7 flex items-center justify-center rounded-md bg-white border border-slate-200 shadow-sm hover:bg-slate-100 text-slate-600 transition-colors">
-                        <Minus className="h-3.5 w-3.5" />
+                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-sm p-1">
+                      <button onClick={() => updateCapacity(id, -1)} className="h-7 w-7 flex items-center justify-center rounded-sm bg-white border border-slate-200 shadow-sm hover:bg-slate-100 text-slate-600 transition-colors">
+                        <span className="material-symbols-outlined text-[16px]">remove</span>
                       </button>
                       <div className="w-10 text-center font-mono text-slate-800 font-bold text-lg leading-none">{capacities[id]}</div>
-                      <button onClick={() => updateCapacity(id, 1)} className="h-7 w-7 flex items-center justify-center rounded-md bg-white border border-slate-200 shadow-sm hover:bg-slate-100 text-slate-600 transition-colors">
-                        <Plus className="h-3.5 w-3.5" />
+                      <button onClick={() => updateCapacity(id, 1)} className="h-7 w-7 flex items-center justify-center rounded-sm bg-white border border-slate-200 shadow-sm hover:bg-slate-100 text-slate-600 transition-colors">
+                        <span className="material-symbols-outlined text-[16px]">add</span>
                       </button>
                     </div>
                   </div>
@@ -347,7 +346,7 @@ export default function SettingsPage() {
 
           <div className="px-5 pb-5 border-t border-slate-200 pt-4 flex justify-end">
             <button onClick={handleSave} disabled={isSaving} className="btn-base bg-[#0084d1] hover:bg-[#006eb3] text-white w-full sm:w-auto">
-              {isSaving ? "Guardando..." : (<><Save className="h-4 w-4" />Guardar Configuración</>)}
+              {isSaving ? "Guardando..." : (<><span className="material-symbols-outlined text-[18px]">save</span>Guardar Configuración</>)}
             </button>
           </div>
         </div>
@@ -355,9 +354,9 @@ export default function SettingsPage() {
 
       {/* ── Permissions Section ─────────────────────────────────────────────── */}
       {activeTab === 'config' && currentRole === 'Admin' && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
           <div className="p-5 border-b border-slate-200 flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-[#0084d1]" />
+            <span className="material-symbols-outlined text-[20px] text-[#0084d1]">verified_user</span>
             <div>
               <h3 className="text-lg font-bold tracking-tight text-slate-800">Permisos por Rol</h3>
               <p className="text-[11px] text-slate-500 mt-0.5">Define qué puede hacer cada tipo de usuario en la plataforma.</p>
@@ -390,7 +389,7 @@ export default function SettingsPage() {
                             disabled={isLocked}
                             title={isLocked ? 'El rol Admin siempre tiene acceso completo' : undefined}
                             className={`w-9 h-5 rounded-full transition-all relative ${
-                              isOn ? 'bg-teal-500' : 'bg-slate-100 border border-slate-200'
+                              isOn ? 'bg-accent' : 'bg-slate-100 border border-slate-200'
                             } ${isLocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:opacity-80'}`}
                           >
                             <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
@@ -407,7 +406,7 @@ export default function SettingsPage() {
           </div>
           <div className="px-5 py-4 border-t border-slate-200 flex justify-end">
             <button className="btn-base bg-[#0084d1] hover:bg-[#006eb3] text-white w-full sm:w-auto">
-              <Save className="h-4 w-4" />Guardar Permisos
+              <span className="material-symbols-outlined text-[18px]">save</span>Guardar Permisos
             </button>
           </div>
         </div>
@@ -426,11 +425,11 @@ export default function SettingsPage() {
               <div key={n} className="flex items-center gap-2">
                 <div className={`flex items-center gap-2 ${importStep >= n ? 'text-slate-800' : 'text-slate-500'}`}>
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold border transition-all ${
-                    importStep > n ? 'bg-teal-500 border-teal-500 text-white'
+                    importStep > n ? 'bg-accent border-accent text-white'
                     : importStep === n ? 'bg-[#0084d1] border-[#0084d1] text-white'
                     : 'bg-slate-50 border-slate-200 text-slate-500'
                   }`}>
-                    {importStep > n ? <CheckCircle2 className="h-3.5 w-3.5" /> : n}
+                    {importStep > n ? <span className="material-symbols-outlined text-[14px]">check_circle</span> : n}
                   </div>
                   <span className="text-xs font-semibold hidden sm:block">{label}</span>
                 </div>
@@ -441,20 +440,20 @@ export default function SettingsPage() {
 
           {/* ── Step 1: CSV Input ─────────────────────────────────────────── */}
           {importStep === 1 && (
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
               <div className="p-6 border-b border-slate-200">
                 <div className="flex items-center gap-2 mb-1">
-                  <FileText className="h-5 w-5 text-[#0084d1]" />
+                  <span className="material-symbols-outlined text-[20px] text-[#0084d1]">description</span>
                   <h3 className="text-lg font-bold tracking-tight text-slate-800">Pegar datos CSV</h3>
                 </div>
                 <p className="text-xs font-medium text-slate-500 mb-3">Una fila por voluntario, campos separados por coma:</p>
-                <code className="block text-[11px] font-mono bg-white border border-slate-200 text-slate-500 px-3 py-2 rounded-lg">
+                <code className="block text-[11px] font-mono bg-white border border-slate-200 text-slate-500 px-3 py-2 rounded-sm">
                   Nombre, Apellido, Edad, Barrio, Estaca, Teléfono
                 </code>
               </div>
               <div className="p-6 space-y-4">
                 <textarea
-                  className="w-full h-52 p-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-mono text-sm focus:ring-2 focus:ring-primary-cta/40 outline-none transition-all resize-none placeholder:text-slate-500"
+                  className="w-full h-52 p-4 rounded-sm border border-slate-200 bg-white text-slate-800 font-mono text-sm focus:ring-2 focus:ring-primary-cta/40 outline-none transition-all resize-none placeholder:text-slate-500"
                   placeholder={"Juan, Pérez, 35, Las Colinas, Managua Sur, 88881111\nMaría, García, 28, El Dorado, Managua Este, 88882222"}
                   value={csvText}
                   onChange={(e) => setCsvText(e.target.value)}
@@ -466,7 +465,7 @@ export default function SettingsPage() {
                       : 'Sin datos aún'}
                   </p>
                   <Button onClick={handleParse} disabled={!csvText.trim()} className="bg-[#0084d1] hover:bg-[#006eb3] text-white">
-                    <FileText className="w-4 h-4 mr-2" />
+                    <span className="material-symbols-outlined text-[18px] mr-2">description</span>
                     Procesar y Validar
                   </Button>
                 </div>
@@ -478,14 +477,14 @@ export default function SettingsPage() {
           {importStep === 2 && (
             <div className="space-y-3">
               {/* Summary banner */}
-              <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-semibold ${
+              <div className={`flex items-center gap-3 px-4 py-3 rounded-sm border text-sm font-semibold ${
                 errorCount > 0
                   ? 'bg-rose-50 border-rose-200 text-rose-700'
                   : 'bg-teal-50 border-teal-200 text-teal-700'
               }`}>
                 {errorCount > 0
-                  ? <AlertTriangle className="h-4 w-4 shrink-0" />
-                  : <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  ? <span className="material-symbols-outlined text-[18px] shrink-0">warning</span>
+                  : <span className="material-symbols-outlined text-[18px] shrink-0">check_circle</span>
                 }
                 <span>
                   {errorCount > 0
@@ -495,11 +494,11 @@ export default function SettingsPage() {
                 </span>
                 <div className="ml-auto flex items-center gap-2 font-normal text-xs">
                   {errorCount > 0 && <span className="bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-bold">{errorCount} errores</span>}
-                  <span className="bg-teal-100 text-teal-600 px-2 py-0.5 rounded-full font-bold">{validCount} válidos</span>
+                  <span className="bg-teal-100 text-accent px-2 py-0.5 rounded-full font-bold">{validCount} válidos</span>
                 </div>
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden overflow-hidden">
+              <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden overflow-hidden">
                 {/* Table header */}
                 <div className="grid grid-cols-[2rem_1fr_1fr_1fr_1fr_1fr_5rem] gap-2 px-4 py-2 bg-slate-50 border-b border-slate-200">
                   {['#', 'Nombre', 'Apellido', 'Barrio', 'Estaca', 'Teléfono', ''].map((h, i) => (
@@ -519,7 +518,7 @@ export default function SettingsPage() {
                         <div className={`grid grid-cols-[2rem_1fr_1fr_1fr_1fr_1fr_5rem] gap-2 px-4 py-2.5 items-center`}>
                           {/* # */}
                           <span className={`text-[11px] font-bold ${hasError ? 'text-rose-500' : 'text-slate-500'}`}>
-                            {hasError ? <AlertCircle className="h-3.5 w-3.5 text-rose-400" /> : row.id + 1}
+                            {hasError ? <span className="material-symbols-outlined text-[16px] text-rose-400">error</span> : row.id + 1}
                           </span>
 
                           {isEditing ? (
@@ -528,7 +527,7 @@ export default function SettingsPage() {
                               {(['firstName', 'lastName', 'ward', 'stake', 'phone'] as const).map(field => (
                                 <div key={field} className="relative">
                                   <input
-                                    className={`w-full text-xs px-2 py-1.5 rounded-lg border bg-white text-slate-800 outline-none focus:ring-2 ${
+                                    className={`w-full text-xs px-2 py-1.5 rounded-sm border bg-white text-slate-800 outline-none focus:ring-2 ${
                                       row.errors[field]
                                         ? 'border-rose-300 focus:ring-rose-300'
                                         : 'border-slate-200 focus:ring-primary-cta/40'
@@ -542,15 +541,15 @@ export default function SettingsPage() {
                               <div className="flex items-center gap-1">
                                 <button
                                   onClick={() => saveEdit(row.id)}
-                                  className="flex items-center justify-center w-7 h-7 rounded-lg bg-teal-500 hover:bg-teal-600 text-white transition-colors"
+                                  className="flex items-center justify-center w-7 h-7 rounded-sm bg-accent hover:bg-teal-600 text-white transition-colors"
                                 >
-                                  <Check className="h-3.5 w-3.5" />
+                                  <span className="material-symbols-outlined text-[16px]">check</span>
                                 </button>
                                 <button
                                   onClick={() => setEditingRowId(null)}
-                                  className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-500 transition-colors"
+                                  className="flex items-center justify-center w-7 h-7 rounded-sm bg-slate-50 hover:bg-slate-100 text-slate-500 transition-colors"
                                 >
-                                  <X className="h-3.5 w-3.5" />
+                                  <span className="material-symbols-outlined text-[16px]">close</span>
                                 </button>
                               </div>
                             </>
@@ -567,15 +566,15 @@ export default function SettingsPage() {
                               <div className="flex items-center gap-1">
                                 <button
                                   onClick={() => startEdit(row)}
-                                  className="flex items-center justify-center w-7 h-7 rounded-lg hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-colors"
+                                  className="flex items-center justify-center w-7 h-7 rounded-sm hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-colors"
                                 >
-                                  <Pencil className="h-3 w-3" />
+                                  <span className="material-symbols-outlined text-[14px]">edit</span>
                                 </button>
                                 <button
                                   onClick={() => removeRow(row.id)}
-                                  className="flex items-center justify-center w-7 h-7 rounded-lg hover:bg-rose-50 text-slate-500 hover:text-rose-500 transition-colors"
+                                  className="flex items-center justify-center w-7 h-7 rounded-sm hover:bg-rose-50 text-slate-500 hover:text-rose-500 transition-colors"
                                 >
-                                  <X className="h-3 w-3" />
+                                  <span className="material-symbols-outlined text-[14px]">close</span>
                                 </button>
                               </div>
                             </>
@@ -587,7 +586,7 @@ export default function SettingsPage() {
                           <div className="flex gap-1.5 flex-wrap px-4 pb-2.5">
                             {Object.entries(row.errors).map(([field, msg]) => (
                               <span key={field} className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 border border-rose-200">
-                                <AlertCircle className="h-2.5 w-2.5" />
+                                <span className="material-symbols-outlined text-[12px]">error</span>
                                 {FIELD_LABELS[field]}: {msg}
                               </span>
                             ))}
@@ -595,7 +594,7 @@ export default function SettingsPage() {
                               onClick={() => startEdit(row)}
                               className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0084d1]/10 text-[#0084d1] border border-[#0084d1]/20 hover:bg-[#0084d1]/20 transition-colors"
                             >
-                              <Pencil className="h-2.5 w-2.5" />
+                              <span className="material-symbols-outlined text-[12px]">edit</span>
                               Corregir
                             </button>
                           </div>
@@ -615,7 +614,7 @@ export default function SettingsPage() {
                     disabled={validCount === 0 || editingRowId !== null}
                     className="bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50"
                   >
-                    <UploadCloud className="w-4 h-4 mr-2" />
+                    <span className="material-symbols-outlined text-[18px] mr-2">cloud_upload</span>
                     {errorCount > 0
                       ? `Importar ${validCount} válidos (omitir ${errorCount} con errores)`
                       : `Importar ${validCount} voluntarios`
@@ -628,18 +627,18 @@ export default function SettingsPage() {
 
           {/* ── Step 3: Send PINs ─────────────────────────────────────────── */}
           {importStep === 3 && (
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
               <div className="p-6 border-b border-slate-200 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <CheckCircle2 className="h-5 w-5 text-teal-500" />
+                    <span className="material-symbols-outlined text-[20px] text-accent">check_circle</span>
                     <h3 className="text-lg font-bold tracking-tight text-slate-800">¡Importación Exitosa!</h3>
                   </div>
                   <p className="text-xs font-medium text-slate-500">
                     PINs generados. Envía el acceso a cada voluntario por WhatsApp.
                   </p>
                 </div>
-                <Badge variant="outline" className="bg-teal-500/10 text-teal-600 border-teal-200/50 font-bold">
+                <Badge variant="outline" className="bg-accent/10 text-accent border-teal-200/50 font-bold">
                   {rows.length} importados
                 </Badge>
               </div>
@@ -656,9 +655,9 @@ export default function SettingsPage() {
                     </div>
                     <a
                       href={vol.waLink} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-[#25D366] hover:bg-[#1ebd5a] transition-colors shadow-sm shrink-0"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-bold text-white bg-[#25D366] hover:bg-[#1ebd5a] transition-colors shadow-sm shrink-0"
                     >
-                      <Send className="w-3.5 h-3.5" />
+                      <span className="material-symbols-outlined text-[14px]">send</span>
                       Enviar PIN
                     </a>
                   </div>
@@ -666,7 +665,7 @@ export default function SettingsPage() {
               </div>
               <div className="p-5 border-t border-slate-200">
                 <Button variant="outline" className="w-full border-slate-200 text-slate-500 hover:text-slate-800" onClick={resetImport}>
-                  <X className="w-4 h-4 mr-2" />
+                  <span className="material-symbols-outlined text-[18px] mr-2">close</span>
                   Nueva importación
                 </Button>
               </div>

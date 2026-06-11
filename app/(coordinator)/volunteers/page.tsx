@@ -304,7 +304,7 @@ export default function VolunteersPage() {
       <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
         <div className="space-y-1.5">
           <div className="flex items-center gap-3">
-            <h1 className="text-4xl tracking-tight text-slate-900 leading-none">
+            <h1 className="tracking-tight text-slate-900 leading-none">
               Voluntarios
             </h1>
             <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold border-none text-[10px] px-2.5 h-5 shadow-sm">
@@ -315,14 +315,14 @@ export default function VolunteersPage() {
         </div>
         <Button 
           onClick={() => setIsAddSheetOpen(true)}
-          className="bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-xl shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
+          className="bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
         >
           <UserPlus className="mr-2 h-4 w-4" />
           Añadir Voluntario
         </Button>
       </motion.div>
 
-      <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+      <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
         {/* Barra de Filtros */}
         <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center gap-4 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -363,7 +363,7 @@ export default function VolunteersPage() {
                   setSelectedStakes([]);
                   setSelectedWards([]);
                 }}
-                className="h-10 px-3 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl"
+                className="h-10 px-3 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-sm"
               >
                 Limpiar todo
               </Button>
@@ -417,7 +417,7 @@ export default function VolunteersPage() {
                           <span className="text-sm text-slate-500">N/A</span>
                         ) : (
                           <div className="flex items-center justify-center gap-2">
-                            <div className={`w-1.5 h-1.5 rounded-full ${vol.reliability >= 80 ? 'bg-emerald-500' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
+                            <div className={`w-1.5 h-1.5 rounded-full ${vol.reliability >= 80 ? 'bg-accent' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
                             <span className="text-sm font-bold text-slate-700 tabular-nums">{vol.reliability}%</span>
                           </div>
                         )}
@@ -441,11 +441,11 @@ export default function VolunteersPage() {
                               </Button>
                             }
                           />
-                          <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[140px] p-1 rounded-xl shadow-md">
-                            <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-lg focus:bg-slate-100 focus:text-slate-800 transition-colors" onClick={() => handleEditClick(vol)}>
+                          <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[140px] p-1 rounded-sm shadow-md">
+                            <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors" onClick={() => handleEditClick(vol)}>
                               Editar Perfil
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="cursor-pointer text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg focus:bg-red-50 focus:text-red-700 transition-colors">
+                            <DropdownMenuItem className="cursor-pointer text-red hover:bg-red-50 hover:text-red rounded-sm focus:bg-red-50 focus:text-red transition-colors">
                               Archivar
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -476,10 +476,10 @@ export default function VolunteersPage() {
           {editingVolunteer && (
             <div className="p-7 space-y-7">
               {/* Profile Card */}
-              <div className="flex flex-col bg-slate-50 p-6 rounded-2xl border border-slate-200 gap-6">
+              <div className="flex flex-col bg-slate-50 p-6 rounded-sm border border-slate-200 gap-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                   <div>
-                    <h3 className="text-2xl font-bold text-slate-800 tracking-tight leading-tight mb-3">
+                    <h3 className="font-bold text-slate-800 tracking-tight leading-tight mb-3">
                       {editingVolunteer.name}
                     </h3>
                     <div className="flex items-center gap-2">
@@ -549,14 +549,14 @@ export default function VolunteersPage() {
                   </div>
                   <div className="flex items-center gap-2 w-full sm:w-auto">
                     {saved && (
-                      <span className="text-[11px] text-teal-600 font-bold animate-pulse shrink-0">✓ Guardado</span>
+                      <span className="text-[11px] text-accent font-bold animate-pulse shrink-0">✓ Guardado</span>
                     )}
                     {isEditingShifts ? (
-                      <Button onClick={handleSaveShifts} className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-xl font-bold shadow-sm">
+                      <Button onClick={handleSaveShifts} className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-sm font-bold shadow-sm">
                         Guardar Cambios
                       </Button>
                     ) : (
-                      <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-xl font-bold shadow-sm">
+                      <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-sm font-bold shadow-sm">
                         Editar Turnos
                       </Button>
                     )}
@@ -572,16 +572,16 @@ export default function VolunteersPage() {
                   const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
                   return (
                     <div className="grid grid-cols-3 gap-3 mb-6">
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                      <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
                         <p className="text-3xl font-bold text-slate-800 tabular-nums">{totalTurnos}</p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Turnos</p>
                       </div>
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                      <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
                         <p className="text-3xl font-bold text-slate-800 tabular-nums">{diasCubiertos}</p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Días</p>
                       </div>
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                        <p className={`text-3xl font-bold tabular-nums ${editingVolunteer.reliability >= 80 ? 'text-teal-600' : 'text-amber-500'}`}>
+                      <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
+                        <p className={`text-3xl font-bold tabular-nums ${editingVolunteer.reliability >= 80 ? 'text-accent' : 'text-amber-500'}`}>
                           {editingVolunteer.reliability}%
                         </p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Confiab.</p>
@@ -593,7 +593,7 @@ export default function VolunteersPage() {
                 {/* Timeline por día */}
                 <div className="space-y-3">
                   {(isEditingShifts ? EVENT_DAYS : EVENT_DAYS.filter(d => (shiftsByDay[d.key]?.length ?? 0) > 0)).map((d) => (
-                    <div key={d.key} className={`flex flex-col sm:flex-row sm:items-stretch border rounded-xl overflow-hidden transition-colors shadow-sm ${
+                    <div key={d.key} className={`flex flex-col sm:flex-row sm:items-stretch border rounded-sm overflow-hidden transition-colors shadow-sm ${
                       isEditingShifts ? 'border-slate-200 hover:border-[#0084d1]/40 bg-white' : 'border-slate-200 bg-white opacity-80'
                     }`}>
                       {/* Left: white date panel */}
@@ -614,7 +614,7 @@ export default function VolunteersPage() {
                             <button
                               key={t}
                               onClick={() => toggleShift(d.key, t)}
-                              className={`flex-1 inline-flex flex-col items-center justify-center rounded-xl py-2 px-1 border transition-all ${
+                              className={`flex-1 inline-flex flex-col items-center justify-center rounded-sm py-2 px-1 border transition-all ${
                                 active
                                   ? 'bg-[#0084d1] border-[#006eb3] text-white shadow-sm'
                                   : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-slate-300 shadow-sm'
@@ -632,7 +632,7 @@ export default function VolunteersPage() {
                           );
                         })}
                         <div className={`shrink-0 w-2 h-2 rounded-full ml-1 ${
-                          (shiftsByDay[d.key]?.length ?? 0) > 0 ? 'bg-teal-400' : 'bg-transparent'
+                          (shiftsByDay[d.key]?.length ?? 0) > 0 ? 'bg-accent' : 'bg-transparent'
                         }`} />
                       </div>
                     </div>
@@ -719,7 +719,7 @@ export default function VolunteersPage() {
                     <SelectItem 
                       key={com.id} 
                       value={com.id} 
-                      className="cursor-pointer rounded-lg hover:bg-slate-50 focus:bg-slate-50 focus:text-[#0084d1] data-[state=checked]:bg-[#0084d1]/10 data-[state=checked]:text-[#0084d1] transition-colors"
+                      className="cursor-pointer rounded-sm hover:bg-slate-50 focus:bg-slate-50 focus:text-[#0084d1] data-[state=checked]:bg-[#0084d1]/10 data-[state=checked]:text-[#0084d1] transition-colors"
                     >
                       {com.name}
                     </SelectItem>

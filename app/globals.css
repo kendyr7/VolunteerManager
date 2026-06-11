@@ -60,67 +60,66 @@
   --color-card: var(--dark2);
 
   --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-2xl: 24px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
 }
 
 :root {
-  /* Templo Design System */
+  /* Templo Design System - New Identity */
   /* Backgrounds */
-  --dark: #fbfcfd;         /* Main app background (Neutral 50ish) */
-  --dark2: #ffffff;        /* Cards / Sidebar / Modals (White) */
-  --dark3: #f1f5f9;        /* Hover states / Secondary inputs (slate-100) */
+  --dark: #f8fafb;         /* App background */
+  --dark2: #ffffff;        /* Cards / Surface */
+  --dark3: #f2f4f6;        /* Muted backgrounds */
   
-  /* Brand Accents (Sky Blue) */
-  --gold: #0084d1;         /* Primary Action (Brand Blue) */
-  --gold-light: #38bdf8;   /* Light Accent (sky-400) */
-  --gold-faint: #e0f2fe;   /* Faint Background (sky-100) */
+  /* Brand Accents */
+  --gold: #4d7cfe;         /* Primary Action Blue */
+  --gold-light: #4d7cfe;   /* Placeholder */
+  --gold-faint: rgba(77, 124, 254, 0.15); /* Primary 15% */
   
   /* Text */
-  --text: #0f172a;         /* Main text (slate-900) */
-  --text-dim: #334155;     /* Secondary text (slate-700) */
-  --muted: #64748b;        /* Muted / Ghost text (slate-500) */
+  --text: #252631;         /* Main Headings/Text */
+  --text-dim: #778ca2;     /* Secondary Text */
+  --muted: #98a9bc;        /* Muted Text */
   
   /* Borders */
-  --border: #e2e8f0;       /* Default border (slate-200) */
-  --border-strong: #cbd5e1;/* Hover border (slate-300) */
-  --mid: #cbd5e1;          /* Mid-level slate */
+  --border: #e8ecef;       /* Default border */
+  --border-strong: #e8ecef;
+  --mid: #98a9bc;          
   
   /* States */
-  --accent: #10b981;       /* Success (emerald-500) */
-  --red: #ef4444;          /* Danger/Error (red-500) */
-  --red-faint: rgba(239,68,68,0.1);
+  --accent: #6dd230;       /* Success Green */
+  --accent-faint: rgba(109, 210, 48, 0.15); /* Success 15% */
+  --red: #fe4d97;          /* Danger Pink */
+  --red-faint: rgba(254, 77, 151, 0.15);    /* Danger 15% */
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.04), 0 4px 6px -4px rgb(0 0 0 / 0.04);
-  --shadow-premium: 0 20px 25px -5px rgba(0,0,0,0.03), 0 10px 10px -5px rgba(0,0,0,0.02);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.02);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.02);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,0.03);
+  --shadow-premium: 0 20px 25px rgba(0,0,0,0.02);
 
   /* Shadcn Overrides */
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #252631;
+  --sidebar-primary: #4d7cfe;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f2f4f6;
+  --sidebar-accent-foreground: #4d7cfe;
+  --sidebar-border: #e8ecef;
+  --sidebar-ring: #4d7cfe;
 }
 
 .dark {
-  /* If dark mode needs to be strictly supported, the variables here would be inverted. 
-     Currently the design system prompt didn't specify dark mode values, so we keep them consistent or default. */
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar: #1a1a24;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #4d7cfe;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #252631;
+  --sidebar-accent-foreground: #4d7cfe;
+  --sidebar-border: #252631;
+  --sidebar-ring: #4d7cfe;
 }
 
 @layer base {
@@ -139,19 +138,40 @@
   }
   
   h1 {
+    font-size: 24px !important;
     font-weight: 700;
-    letter-spacing: -0.04em;
-    line-height: 1.1;
-  }
-  h2 {
-    font-weight: 400;
-    letter-spacing: -0.03em;
+    color: #252631;
+    letter-spacing: -0.02em;
     line-height: 1.2;
   }
-  h3 {
+  h2 {
+    font-size: 22px !important;
     font-weight: 700;
-    letter-spacing: -0.02em;
+    color: #252631;
+    letter-spacing: -0.015em;
     line-height: 1.3;
+  }
+  h3 {
+    font-size: 20px !important;
+    font-weight: 700;
+    color: #252631;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
+  }
+  /* Variant for primary H3 */
+  h3.text-primary {
+    color: #4d7cfe !important;
+  }
+  
+  h4 {
+    font-size: 18px !important;
+    font-weight: 700;
+    color: #252631;
+    line-height: 1.5;
+  }
+  /* Variant for primary H4 */
+  h4.text-primary {
+    color: #4d7cfe !important;
   }
 }
 
@@ -159,7 +179,7 @@
   .card-premium {
     background: var(--dark2);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 8px;
     box-shadow: var(--shadow-sm);
     transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
   }
@@ -176,7 +196,7 @@
     padding: 8px 16px;
     font-size: 13px;
     font-weight: 700;
-    border-radius: 10px;
+    border-radius: 8px;
     transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
   }
   .btn-base:active {
@@ -213,7 +233,7 @@
   .input-base {
     background: var(--dark2);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 9px 12px;
     font-weight: 500;
     transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);

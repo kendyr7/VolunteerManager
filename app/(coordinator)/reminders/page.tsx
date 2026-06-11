@@ -13,19 +13,6 @@ import {
   SHIFT_TIMES, 
   isHoliday 
 } from "@/lib/dates";
-import { 
-  Send, 
-  Copy, 
-  CalendarClock, 
-  MessageCircle, 
-  Info, 
-  Users, 
-  CheckSquare,
-  Square,
-  Eye,
-  EyeOff,
-  Search
-} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -322,14 +309,14 @@ export default function RemindersPage() {
   return (
     <div className="max-w-7xl xl:max-w-[1440px] mx-auto px-4 lg:px-8 space-y-6">
       <div>
-        <h2 className="text-3xl text-slate-800 tracking-tight mb-1">Recordatorios de Turnos</h2>
+        <h2 className="text-slate-800 tracking-tight mb-1">Recordatorios de Turnos</h2>
         <p className="text-sm font-medium text-slate-500">Visualiza las asignaciones reales y envía mensajes de confirmación a los voluntarios.</p>
       </div>
 
       {/* Barra de Filtros Globales (Prioritaria) */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200 shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200 shadow-sm">
         <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-500 pointer-events-none">search</span>
           <Input 
             placeholder="Buscar por nombre, estaca o barrio..." 
             value={searchTerm}
@@ -366,7 +353,7 @@ export default function RemindersPage() {
                 setSelectedWards([]);
                 setSearchTerm("");
               }}
-              className="h-9 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl"
+              className="h-9 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-sm"
             >
               Limpiar Filtros
             </Button>
@@ -375,7 +362,7 @@ export default function RemindersPage() {
       </div>
 
       {/* Selector de Turnos Rediseñado en Dos Filas */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-5 flex flex-col bg-white shadow-sm border border-slate-200 gap-5">
+      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex flex-col bg-white shadow-sm border border-slate-200 gap-5">
         
         {/* FILA 1: FECHA */}
         <div className="space-y-2">
@@ -388,7 +375,7 @@ export default function RemindersPage() {
                   setSelectedDayKey("");
                   setSelectedShiftId("");
                 }}
-                className="h-7 px-3 text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-250 hover:bg-rose-100 hover:text-rose-750 transition-colors shadow-sm rounded-lg"
+                className="h-7 px-3 text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-250 hover:bg-rose-100 hover:text-rose-750 transition-colors shadow-sm rounded-sm"
               >
                 Limpiar Selección
               </Button>
@@ -415,7 +402,7 @@ export default function RemindersPage() {
                       }
                     }
                   }}
-                  className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-xl border font-bold text-xs transition-all ${
+                  className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-sm border font-bold text-xs transition-all ${
                     isSelected
                       ? 'bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105'
                       : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
@@ -428,7 +415,7 @@ export default function RemindersPage() {
                   </span>
                   <span>{day.dateNum} Sep</span>
                   <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    totalVolunteersOnDay > 0 ? (isSelected ? 'bg-white' : 'bg-teal-500') : (isSelected ? 'bg-white/30' : 'bg-slate-200')
+                    totalVolunteersOnDay > 0 ? (isSelected ? 'bg-white' : 'bg-accent') : (isSelected ? 'bg-white/30' : 'bg-slate-200')
                   }`} />
                 </button>
               );
@@ -486,8 +473,8 @@ export default function RemindersPage() {
                     buttonClass = "bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100/20 hover:text-rose-700 font-bold";
                     countTextClass = "text-rose-500";
                   } else {
-                    buttonClass = "bg-teal-50 border-teal-100 text-teal-600 hover:bg-teal-100/20 hover:text-teal-700 font-bold";
-                    countTextClass = "text-teal-600";
+                    buttonClass = "bg-teal-50 border-teal-100 text-accent hover:bg-teal-100/20 hover:text-teal-700 font-bold";
+                    countTextClass = "text-accent";
                   }
                 } else {
                   // Estilo neutro vista global
@@ -523,7 +510,7 @@ export default function RemindersPage() {
                     }
                   }}
                   title={!selectedDayKey ? "Por favor selecciona una fecha primero" : `Seleccionar ${shiftTimeLabel}`}
-                  className={`inline-flex items-center gap-2.5 px-4.5 py-2.5 rounded-xl border text-xs transition-all ${buttonClass}`}
+                  className={`inline-flex items-center gap-2.5 px-4.5 py-2.5 rounded-sm border text-xs transition-all ${buttonClass}`}
                 >
                   <span className="font-bold">{t}</span>
                   <span className="text-[10px] opacity-30">|</span>
@@ -540,8 +527,8 @@ export default function RemindersPage() {
       {/* Panel de Gestión del Turno Seleccionado (Debajo) */}
       <div className="space-y-4">
         {!selectedDayKey || !selectedShiftId ? (
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-12 bg-white shadow-sm border border-slate-200 flex flex-col items-center justify-center text-center min-h-[300px]">
-            <CalendarClock className="h-16 w-16 text-slate-500/30 mb-4 animate-pulse" />
+          <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-12 bg-white shadow-sm border border-slate-200 flex flex-col items-center justify-center text-center min-h-[300px]">
+            <span className="material-symbols-outlined text-[64px] text-slate-500/30 mb-4 animate-pulse">calendar_month</span>
             <h3 className="text-lg font-bold tracking-tight font-bold text-slate-800 mb-2">Ningún turno seleccionado</h3>
             <p className="text-xs font-medium text-slate-500 max-w-sm leading-relaxed">
               Selecciona un día y un turno específico (T1 - T4) en el selector superior para comenzar a enviar recordatorios de WhatsApp.
@@ -550,14 +537,14 @@ export default function RemindersPage() {
         ) : (
           <>
             {/* Cabecera del Turno Seleccionado */}
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-5 bg-white shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 bg-white shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-1.5">
-                  <Badge className="bg-[#0084d1] text-white text-[10px] py-0.5 px-2 uppercase font-bold tracking-wider rounded-md">
+                  <Badge className="bg-[#0084d1] text-white text-[10px] py-0.5 px-2 uppercase font-bold tracking-wider rounded-sm">
                     {selectedShiftDetails?.name}
                   </Badge>
                   {isSelectedHoliday && (
-                    <Badge variant="destructive" className="text-[10px] py-0.5 px-2 uppercase font-bold tracking-wider rounded-md">
+                    <Badge variant="destructive" className="text-[10px] py-0.5 px-2 uppercase font-bold tracking-wider rounded-sm">
                       Feriado
                     </Badge>
                   )}
@@ -582,7 +569,7 @@ export default function RemindersPage() {
             </div>
 
             {/* Barra de Alternar Plantilla */}
-            <div className="flex items-center justify-end bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-end bg-white p-3 rounded-sm border border-slate-200 shadow-sm">
               <Button
                 variant="outline"
                 size="sm"
@@ -591,12 +578,12 @@ export default function RemindersPage() {
               >
                 {showTemplate ? (
                   <>
-                    <EyeOff className="h-4 w-4" />
+                    <span className="material-symbols-outlined text-[18px]">visibility_off</span>
                     Ocultar Plantilla
                   </>
                 ) : (
                   <>
-                    <Eye className="h-4 w-4" />
+                    <span className="material-symbols-outlined text-[18px]">visibility</span>
                     Ver Plantilla
                   </>
                 )}
@@ -607,10 +594,10 @@ export default function RemindersPage() {
               
               {/* Lista de Voluntarios (Dos columnas) */}
               <div className={showTemplate ? "lg:col-span-8 space-y-4" : "lg:col-span-12 space-y-4"}>
-                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col overflow-hidden bg-white border border-slate-200 shadow-sm">
+                <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden flex flex-col overflow-hidden bg-white border border-slate-200 shadow-sm">
                   <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                     <h3 className="text-xs uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5">
-                      <Users className="h-3.5 w-3.5 text-[#0084d1]" />
+                      <span className="material-symbols-outlined text-[16px] text-[#0084d1]">group</span>
                       Asistencias
                     </h3>
                     <Button 
@@ -618,9 +605,9 @@ export default function RemindersPage() {
                       size="sm" 
                       onClick={handleCopyNumbers}
                       disabled={activeVolunteers.length === 0}
-                      className="h-7 text-[10.5px] font-bold text-[#0084d1] hover:bg-slate-100 px-2 rounded-md"
+                      className="h-7 text-[10.5px] font-bold text-[#0084d1] hover:bg-slate-100 px-2 rounded-sm"
                     >
-                      <Copy className="h-3 w-3 mr-1" />
+                      <span className="material-symbols-outlined text-[14px] mr-1">content_copy</span>
                       Copiar Teléfonos
                     </Button>
                   </div>
@@ -628,7 +615,7 @@ export default function RemindersPage() {
                   <div className="p-4 bg-slate-50/20 min-h-[320px] max-h-[500px] overflow-y-auto">
                     {activeVolunteers.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-12 text-center text-slate-500">
-                        <Users className="h-10 w-10 text-slate-500/40 mb-3" />
+                        <span className="material-symbols-outlined text-[40px] text-slate-500/40 mb-3">group</span>
                         <p className="text-sm font-semibold">Sin resultados</p>
                         <p className="text-xs max-w-[200px] mt-1 leading-relaxed">No hay voluntarios de este comité asignados a este turno.</p>
                       </div>
@@ -649,7 +636,7 @@ export default function RemindersPage() {
                           return (
                             <div 
                               key={vol.id} 
-                              className={`flex items-center justify-between group bg-white shadow-sm border rounded-lg px-2.5 py-2 hover:bg-slate-50 transition-colors ${
+                              className={`flex items-center justify-between group bg-white shadow-sm border rounded-sm px-2.5 py-2 hover:bg-slate-50 transition-colors ${
                                 isConfirmed 
                                   ? 'border-teal-500/30 bg-teal-50/5' 
                                   : 'border-slate-200/50'
@@ -663,15 +650,15 @@ export default function RemindersPage() {
                                   title={isConfirmed ? "Marcar como pendiente" : "Confirmar asistencia"}
                                 >
                                   {isConfirmed ? (
-                                    <CheckSquare className="h-4 w-4 text-accent fill-accent/10" />
+                                    <span className="material-symbols-outlined text-[18px] text-accent fill-accent/10">check_box</span>
                                   ) : (
-                                    <Square className="h-4 w-4 text-slate-500/80" />
+                                    <span className="material-symbols-outlined text-[18px] text-slate-500/80">check_box_outline_blank</span>
                                   )}
                                 </button>
 
                                 {/* Dot similar al de turnos */}
                                 <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                  isConfirmed ? 'bg-teal-500 animate-pulse' : 'bg-slate-300'
+                                  isConfirmed ? 'bg-accent animate-pulse' : 'bg-slate-300'
                                 }`} />
 
                                 <div className="min-w-0">
@@ -696,9 +683,9 @@ export default function RemindersPage() {
 
                               <button 
                                 onClick={(e) => { e.stopPropagation(); window.open(link, '_blank', 'noopener,noreferrer'); }}
-                                className="h-7 px-2 bg-[#25D366] hover:bg-[#1ebd5a] active:bg-[#128c7e] text-white text-[10px] font-bold rounded-lg flex items-center gap-1 transition-colors shadow-sm ml-2 shrink-0"
+                                className="h-7 px-2 bg-[#25D366] hover:bg-[#1ebd5a] active:bg-[#128c7e] text-white text-[10px] font-bold rounded-sm flex items-center gap-1 transition-colors shadow-sm ml-2 shrink-0"
                               >
-                                <Send className="h-2.5 w-2.5" />
+                                <span className="material-symbols-outlined text-[12px]">send</span>
                                 WA
                               </button>
                             </div>
@@ -713,19 +700,19 @@ export default function RemindersPage() {
               {/* Vista Previa del Mensaje (Condicional) */}
               {showTemplate && (
                 <div className="lg:col-span-4 space-y-4">
-                  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden overflow-hidden bg-white border border-slate-200 shadow-sm h-full flex flex-col">
+                  <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden overflow-hidden bg-white border border-slate-200 shadow-sm h-full flex flex-col">
                     <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
-                      <MessageCircle className="h-4 w-4 text-[#0084d1]" />
+                      <span className="material-symbols-outlined text-[18px] text-[#0084d1]">chat_bubble</span>
                       <h3 className="text-xs uppercase font-bold text-slate-500 tracking-wider">Mensaje Plantilla</h3>
                     </div>
                     <div className="p-4 bg-slate-50/20 flex-1 flex flex-col justify-between gap-4">
-                      <div className="bg-sky-50 p-3.5 rounded-2xl rounded-tl-none border border-sky-100 shadow-sm text-[11px] text-sky-950 leading-relaxed whitespace-pre-wrap font-sans relative">
+                      <div className="bg-sky-50 p-3.5 rounded-sm rounded-tl-none border border-sky-100 shadow-sm text-[11px] text-sky-950 leading-relaxed whitespace-pre-wrap font-sans relative">
                         {previewMessage}
                         <div className="absolute top-0 -left-2 w-0 h-0 border-8 border-transparent border-r-sky-50 border-t-sky-50" />
                       </div>
 
-                      <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/60 text-[10px] text-slate-500 flex items-start gap-1.5 leading-normal">
-                        <Info className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
+                      <div className="p-2.5 rounded-sm bg-slate-50 border border-slate-200/60 text-[10px] text-slate-500 flex items-start gap-1.5 leading-normal">
+                        <span className="material-symbols-outlined text-[16px] text-blue-500 shrink-0 mt-0.5">info</span>
                         <span>
                           Este mensaje se genera automáticamente reemplazando el nombre del voluntario, la fecha, y la hora del turno.
                         </span>

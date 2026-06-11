@@ -15,7 +15,7 @@ export default function CalendarPage() {
             <div className="w-8 h-8 rounded-full bg-[#0084d1] flex items-center justify-center text-white font-bold">
               V
             </div>
-            <h1 className="text-xl font-semibold tracking-tight text-slate-800">
+            <h1 className="font-semibold tracking-tight text-slate-800">
               Mis Turnos
             </h1>
           </div>

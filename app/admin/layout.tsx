@@ -2,15 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, AlertTriangle, ShieldCheck, Download, LayoutTemplate } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { name: "Global", href: "/admin/dashboard", icon: LayoutDashboard },
-  { name: "Reemplazos", href: "/admin/replacements", icon: AlertTriangle },
-  { name: "Coordinadores", href: "/admin/coordinators", icon: ShieldCheck },
-  { name: "Ver Comités", href: "/dashboard", icon: LayoutTemplate }, // Link to standard coordinator view
-  { name: "Exportar", href: "/admin/export", icon: Download },
+  { name: "Global", href: "/admin/dashboard", icon: "dashboard" },
+  { name: "Reemplazos", href: "/admin/replacements", icon: "warning" },
+  { name: "Coordinadores", href: "/admin/coordinators", icon: "verified_user" },
+  { name: "Ver Comités", href: "/dashboard", icon: "dashboard_customize" }, // Link to standard coordinator view
+  { name: "Exportar", href: "/admin/export", icon: "download" },
 ];
 
 export default function AdminLayout({
@@ -25,7 +24,7 @@ export default function AdminLayout({
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-slate-200 bg-slate-900 sticky top-0 h-screen overflow-y-auto shrink-0">
         <div className="p-6 border-b border-slate-800">
-          <h1 className="text-xl text-white tracking-tight">
+          <h1 className="text-white tracking-tight">
             Administración
           </h1>
           <p className="text-xs text-slate-400 uppercase tracking-wider mt-1 font-medium">Control Global</p>
@@ -39,13 +38,15 @@ export default function AdminLayout({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-sm font-medium",
                   isActive 
                     ? "bg-[#0084d1] text-white shadow-sm" 
                     : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 )}
               >
-                <item.icon className={cn("h-5 w-5", isActive ? "text-white" : "text-slate-400")} />
+                <span className={cn("material-symbols-outlined text-[20px]", isActive ? "text-white" : "text-slate-400")}>
+                  {item.icon}
+                </span>
                 {item.name}
               </Link>
             );
@@ -79,11 +80,13 @@ export default function AdminLayout({
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center p-2 rounded-lg min-w-[64px] transition-all",
+                "flex flex-col items-center p-2 rounded-sm min-w-[64px] transition-all",
                 isActive ? "text-blue-400" : "text-slate-400 hover:text-slate-200"
               )}
             >
-              <item.icon className={cn("h-5 w-5 mb-1", isActive && "text-blue-400")} />
+              <span className={cn("material-symbols-outlined text-[20px] mb-1", isActive && "text-blue-400")}>
+                {item.icon}
+              </span>
               <span className="text-[10px] font-medium">{item.name}</span>
             </Link>
           );

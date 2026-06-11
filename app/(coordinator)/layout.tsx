@@ -69,7 +69,7 @@ export default function CoordinatorLayout({
               alt="Templo Managua" 
               width={32} 
               height={32} 
-              className="rounded-lg object-contain"
+              className="rounded-sm object-contain"
             />
             <span className="font-bold text-xl text-slate-900 tracking-tight">Templo Managua</span>
           </div>
@@ -90,7 +90,7 @@ export default function CoordinatorLayout({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "relative flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 text-[14px] font-medium",
+                    "relative flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-[14px] font-medium",
                     isActive 
                       ? "bg-[#eff6ff] text-[#2563eb]" 
                       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
@@ -108,7 +108,7 @@ export default function CoordinatorLayout({
             {/* Added an "All Apps" link to match the image visually, though it might not go anywhere useful */}
             <Link
               href="#"
-              className="relative flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              className="relative flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
             >
               <Icon name="grid_view" size={20} className="text-slate-500" />
               All Apps
@@ -122,24 +122,24 @@ export default function CoordinatorLayout({
               <Icon name="add_circle" size={16} />
             </div>
             
-            <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-md text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+            <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               <div className="w-5 h-5 rounded-full bg-pink-500 flex items-center justify-center text-white">
                 <Icon name="sports_basketball" size={12} />
               </div>
               UI/UX Inspiration
             </Link>
-            <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-md text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+            <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               <div className="w-5 h-5 rounded-t-full rounded-bl-full bg-green-500" />
               Theme Development
             </Link>
-            <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-md text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+            <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               <div className="w-5 h-5 rounded-sm bg-blue-500 flex items-center justify-center text-white">
                 <Icon name="deployed_code" size={14} />
               </div>
               Campaing Design
             </Link>
             
-            <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-medium text-[#3b82f6] hover:underline mt-2">
+            <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[13px] font-medium text-[#3b82f6] hover:underline mt-2">
               <Icon name="more_horiz" size={16} />
               See More Projects
             </Link>
@@ -152,7 +152,7 @@ export default function CoordinatorLayout({
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
             >
               <Icon name={item.icon} size={20} className="text-slate-500" />
               {item.name}
@@ -160,7 +160,7 @@ export default function CoordinatorLayout({
           ))}
           <button
             onClick={handleLogout}
-            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           >
             <Icon name="logout" size={20} className="text-slate-500" />
             Cerrar Sesión
@@ -207,7 +207,7 @@ export default function CoordinatorLayout({
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center justify-center p-2 rounded-md min-w-[64px] transition-all",
+                "flex flex-col items-center justify-center p-2 rounded-sm min-w-[64px] transition-all",
                 isActive ? "text-[#2563eb]" : "text-slate-400 hover:text-slate-600"
               )}
             >

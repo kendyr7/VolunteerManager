@@ -1,7 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight, AlertTriangle, ShieldCheck, UserMinus, CalendarClock, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
@@ -156,16 +155,16 @@ export default async function AdminDashboard() {
           <p className="text-body-md text-muted">Métricas generales de la Jornada de Puertas Abiertas en tiempo real.</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button render={<Link href="/shifts" />} nativeButton={false} className="bg-[#0084d1] hover:bg-[#006eb3] text-white text-btn rounded-lg h-10 px-5 shadow-sm transition-all active:scale-95">
+          <Button render={<Link href="/shifts" />} nativeButton={false} className="bg-[#0084d1] hover:bg-[#006eb3] text-white text-btn rounded-sm h-10 px-5 shadow-sm transition-all active:scale-95">
             Gestionar Turnos
-            <ArrowUpRight className="w-4 h-4 ml-1.5 opacity-70" />
+            <span className="material-symbols-outlined text-[18px] ml-1.5 opacity-70">north_east</span>
           </Button>
         </div>
       </div>
 
       {/* Primary KPIs - Bento Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-2xl overflow-hidden group">
+        <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-sm overflow-hidden group">
           <CardContent className="p-5">
             <div className="text-caption-uppercase text-muted mb-3 flex items-center justify-between">
               Voluntarios Total
@@ -176,7 +175,7 @@ export default async function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-2xl overflow-hidden">
+        <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-sm overflow-hidden">
           <CardContent className="p-5">
             <div className="text-caption-uppercase text-muted mb-3">Turnos Asignados</div>
             <div className="text-display-lg text-ink font-semibold tracking-tighter">
@@ -188,10 +187,10 @@ export default async function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card className={`border shadow-sm rounded-2xl overflow-hidden transition-colors ${atRiskShifts > 0 ? 'border-warning/20 bg-warning/5' : 'border-hairline-strong bg-canvas'}`}>
+        <Card className={`border shadow-sm rounded-sm overflow-hidden transition-colors ${atRiskShifts > 0 ? 'border-warning/20 bg-warning/5' : 'border-hairline-strong bg-canvas'}`}>
           <CardContent className="p-5">
             <div className={`text-caption-uppercase mb-3 flex items-center gap-1.5 ${atRiskShifts > 0 ? 'text-warning' : 'text-muted'}`}>
-              <AlertTriangle className="w-3.5 h-3.5" />
+              <span className="material-symbols-outlined text-[18px]">warning</span>
               Turnos Incompletos
             </div>
             <div className={`text-display-lg font-semibold tracking-tighter ${atRiskShifts > 0 ? 'text-warning' : 'text-ink'}`}>
@@ -203,10 +202,10 @@ export default async function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card className={`border shadow-sm rounded-2xl overflow-hidden transition-colors ${volunteersNoShift > 0 ? 'border-error/20 bg-error/5' : 'border-hairline-strong bg-canvas'}`}>
+        <Card className={`border shadow-sm rounded-sm overflow-hidden transition-colors ${volunteersNoShift > 0 ? 'border-error/20 bg-error/5' : 'border-hairline-strong bg-canvas'}`}>
           <CardContent className="p-5">
             <div className={`text-caption-uppercase mb-3 flex items-center gap-1.5 ${volunteersNoShift > 0 ? 'text-error' : 'text-muted'}`}>
-              <UserMinus className="w-3.5 h-3.5" />
+              <span className="material-symbols-outlined text-[18px]">person_remove</span>
               Sin Asignación
             </div>
             <div className={`text-display-lg font-semibold tracking-tighter ${volunteersNoShift > 0 ? 'text-error' : 'text-ink'}`}>
@@ -223,7 +222,7 @@ export default async function AdminDashboard() {
         
         {/* Cobertura por Comité (Main column) */}
         <div className="lg:col-span-2 space-y-6">
-          <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-2xl">
+          <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-sm">
             <div className="px-6 py-5 border-b border-hairline flex items-center justify-between">
               <div>
                 <h3 className="text-title-md text-ink">Cobertura por Comité</h3>
@@ -265,25 +264,25 @@ export default async function AdminDashboard() {
         <div className="space-y-6">
           
           {/* Confiabilidad Global */}
-          <Card className="border border-hairline-strong bg-surface-dark text-white shadow-sm rounded-2xl">
+          <Card className="border border-hairline-strong bg-surface-dark text-white shadow-sm rounded-sm">
             <CardContent className="p-6">
               <div className="flex items-center gap-3 text-muted-soft mb-2">
-                <ShieldCheck className="w-4 h-4" />
+                <span className="material-symbols-outlined text-[18px]">verified_user</span>
                 <h3 className="text-caption-uppercase">Confiabilidad Global</h3>
               </div>
               <div className="flex items-baseline gap-2 mb-2">
                 <span className="text-display-xl font-bold tracking-tighter text-white">98%</span>
-                <span className="text-body-sm text-success flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +2%</span>
+                <span className="text-body-sm text-success flex items-center gap-1"><span className="material-symbols-outlined text-[18px]">trending_up</span> +2%</span>
               </div>
               <p className="text-body-sm text-muted-soft">Porcentaje general estimado de asistencia y puntualidad de los voluntarios asignados.</p>
             </CardContent>
           </Card>
 
           {/* Próximo Cuello de Botella */}
-          <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-2xl">
+          <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-sm">
             <CardContent className="p-6">
               <div className="flex items-center gap-3 text-muted mb-3">
-                <CalendarClock className="w-4 h-4" />
+                <span className="material-symbols-outlined text-[18px]">event_busy</span>
                 <h3 className="text-caption-uppercase">Cuello de Botella Inmediato</h3>
               </div>
               <p className="text-body-md font-medium text-ink leading-tight mb-2">
@@ -296,7 +295,7 @@ export default async function AdminDashboard() {
                 }
               </p>
               <Link href="/shifts" className="block w-full">
-                <Button variant="outline" className="w-full border-hairline-strong text-ink hover:bg-canvas-soft rounded-lg h-9 text-btn">
+                <Button variant="outline" className="w-full border-hairline-strong text-ink hover:bg-canvas-soft rounded-sm h-9 text-btn">
                   Ver Turno Detallado
                 </Button>
               </Link>
@@ -309,7 +308,7 @@ export default async function AdminDashboard() {
               <h3 className="text-caption-uppercase text-muted mb-3 pl-1">Ausencias de Hoy ({todayAlerts.length})</h3>
               <div className="space-y-2">
                 {todayAlerts.map((alert, i) => (
-                  <div key={i} className="flex items-center justify-between bg-error/5 border border-error/10 p-3 rounded-xl">
+                  <div key={i} className="flex items-center justify-between bg-error/5 border border-error/10 p-3 rounded-sm">
                     <div>
                       <p className="text-body-sm font-medium text-ink">{alert.name}</p>
                       <p className="text-[11px] text-muted">{alert.committee} • {alert.shift}</p>

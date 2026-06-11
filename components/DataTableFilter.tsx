@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from "react"
-import { Filter } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -45,7 +44,9 @@ export function DataTableFilter({
                 : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900 aria-expanded:bg-slate-50 aria-expanded:text-slate-900 border-dashed"
             )}
           >
-            <Filter className={cn("mr-2 h-4 w-4", selectedValues.size > 0 ? "text-[#0084d1]" : "text-slate-400")} />
+            <span className={cn("material-symbols-outlined text-[18px] mr-2", selectedValues.size > 0 ? "text-[#0084d1]" : "text-slate-400")}>
+              filter_list
+            </span>
             {title}
             {selectedValues.size > 0 && (
               <>

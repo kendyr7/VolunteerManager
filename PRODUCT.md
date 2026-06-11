@@ -11,18 +11,18 @@ Primary users are administrators and coordinators who need to manage complex vol
 The platform exists to ensure efficient and reliable shift distribution for the Managua Temple Open House event. Success is defined by 100% shift coverage, clear communication of assignments, and zero friction for volunteers during the check-in process.
 
 ## Brand Personality
-Structured, Minimalist, and Reliable. The interface should feel authoritative yet approachable, with a focus on high information density without clutter.
+Structured, Modern, and Authoritative. The interface uses a high-contrast palette with Professional Blue accents and clean typography to ensure maximum data clarity.
 
 ## Anti-references
 Avoid "playful" or "bubbly" SaaS aesthetics. No rounded "bubble" buttons, no excessive vibrant gradients, and no generic stock illustrations. Avoid over-simplification that hides critical data.
 
 ## Design Principles
-1. **Utility First**: Every visual element must serve a functional purpose. If it doesn't aid in understanding or managing shifts, remove it.
-2. **Predictable Hierarchy**: Use a strict typographic and spatial grid to ensure coordinators can scan large amounts of data (volunteer lists, shift calendars) without cognitive fatigue.
-3. **Implicit Trust**: Use stable, balanced layouts and a sober color palette to reinforce the reliability of the system.
-4. **Frictionless Action**: Critical paths (like assigning a volunteer to a shift) should be accessible with minimal clicks and clear visual feedback.
+1. **Clarity Over Clutter**: Use strict typography (Public Sans) and Material Symbols to create a dense but readable administrative environment.
+2. **Visual Feedback**: Every interaction must feel responsive through micro-animations and clear status indicators (Success Green #6DD230, Danger Pink #FE4D97).
+3. **Structured Hierarchy**: Utilize the #252631 text color and specific heading sizes (24px, 22px, 20px, 18px) to guide coordinators through complex workflows.
+4. **Frictionless Action**: Primary actions use the #4D7CFE brand blue with 15% opacity variants for supporting elements like tags and chips.
 
 ## Accessibility & Inclusion
 - Target WCAG 2.1 Level AA compliance.
-- High contrast for text readability in high-glare environments (e.g., coordinators using tablets outdoors).
+- High contrast for text readability in high-glare environments.
 - Clear focus states and keyboard navigation for administrative power-users.

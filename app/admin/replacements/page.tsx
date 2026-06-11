@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, UserMinus, UserPlus, Send, RefreshCw, X } from "lucide-react";
 import { generateWaMeLink } from "@/lib/whatsapp";
 
 // Mocks basados en PRD
@@ -44,7 +43,7 @@ export default function ReplacementsPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-slate-800 tracking-tight">Gestión de Crisis</h2>
+        <h2 className="font-semibold text-slate-800 tracking-tight">Gestión de Crisis</h2>
         <p className="text-slate-500 mt-1">Soluciona rápidamente las ausencias buscando reemplazos sugeridos.</p>
       </div>
 
@@ -54,8 +53,8 @@ export default function ReplacementsPage() {
           <h3 className="text-lg font-medium text-slate-800">Alertas Actuales</h3>
           {activeAbsents.length === 0 ? (
             <Card className="border-0 shadow-sm bg-emerald-50 border-emerald-200">
-              <CardContent className="p-8 text-center text-emerald-700">
-                <ShieldCheck className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <CardContent className="p-8 text-center text-accent">
+                <span className="material-symbols-outlined text-[48px] mx-auto mb-3 opacity-50">verified_user</span>
                 No hay crisis activas. Todos los turnos están cubiertos.
               </CardContent>
             </Card>
@@ -82,10 +81,10 @@ export default function ReplacementsPage() {
 
                     <div className="flex sm:flex-col gap-2 justify-end">
                       <Button size="sm" variant="outline" className="text-[#0084d1] hover:bg-blue-50">
-                        <Send className="w-3.5 h-3.5 mr-2" /> Contactar
+                        <span className="material-symbols-outlined text-[18px] mr-2">send</span> Contactar
                       </Button>
                       <Button size="sm" onClick={() => handleSelectToReplace(vol.id)} className="bg-[#0084d1] hover:bg-[#006eb3] text-white shadow-sm">
-                        <RefreshCw className="w-3.5 h-3.5 mr-2" /> Reemplazar
+                        <span className="material-symbols-outlined text-[18px] mr-2">refresh</span> Reemplazar
                       </Button>
                     </div>
                   </div>
@@ -102,7 +101,7 @@ export default function ReplacementsPage() {
           {!selectedAbsent ? (
             <Card className="border-0 shadow-sm border-dashed border-2 border-slate-200 bg-slate-50">
               <CardContent className="p-12 text-center text-slate-500 flex flex-col items-center">
-                <UserPlus className="h-10 w-10 text-slate-300 mb-3" />
+                <span className="material-symbols-outlined text-[40px] text-slate-300 mb-3">person_add</span>
                 <p>Selecciona a un voluntario ausente para ver sugerencias de reemplazo.</p>
               </CardContent>
             </Card>
@@ -111,11 +110,11 @@ export default function ReplacementsPage() {
               <CardHeader className="pb-3 border-b border-slate-100">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base text-blue-800 flex items-center gap-2">
-                    <RefreshCw className="h-4 w-4" />
+                    <span className="material-symbols-outlined text-[18px]">refresh</span>
                     Buscando para: {absentVolunteers.find(v => v.id === selectedAbsent)?.shift}
                   </CardTitle>
                   <Button variant="ghost" size="icon" onClick={() => setSelectedAbsent(null)} className="h-6 w-6">
-                    <X className="h-4 w-4" />
+                    <span className="material-symbols-outlined text-[18px]">close</span>
                   </Button>
                 </div>
                 <CardDescription>
@@ -150,7 +149,7 @@ export default function ReplacementsPage() {
                         )}
                         className="bg-[#25D366] hover:bg-[#1ebd5a] text-white shadow-sm shrink-0"
                       >
-                        <Send className="w-3.5 h-3.5 mr-2" /> Notificar y Asignar
+                        <span className="material-symbols-outlined text-[18px] mr-2">send</span> Notificar y Asignar
                       </Button>
                     </div>
                   ))}
@@ -162,9 +161,4 @@ export default function ReplacementsPage() {
       </div>
     </div>
   );
-}
-
-// Dummy component for shield since I missed importing it
-function ShieldCheck(props: any) {
-  return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>;
 }

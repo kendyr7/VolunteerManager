@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from "react";
-import { Users, ShieldCheck, UserPlus, Send, Copy, CheckCircle2, Search, MoreVertical, Building2, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -176,7 +175,7 @@ export default function UsersPage() {
       <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
         <div className="space-y-1.5">
           <div className="flex items-center gap-3">
-            <h1 className="text-4xl tracking-tight text-slate-900 leading-none">
+            <h1 className="tracking-tight text-slate-900 leading-none">
               Usuarios
             </h1>
             <Badge className="bg-slate-900 text-white border-none text-[10px] px-2.5 py-0.5 uppercase font-bold tracking-widest h-5 shadow-sm">
@@ -187,23 +186,23 @@ export default function UsersPage() {
         </div>
         <Button 
           onClick={() => setIsInviteOpen(true)}
-          className="bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-xl shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
+          className="bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
         >
-          <UserPlus className="w-4 h-4 mr-2" />
+          <span className="material-symbols-outlined text-[18px] mr-2">person_add</span>
           Invitar Usuario
         </Button>
       </motion.div>
 
       {isInviteOpen && (
 
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm animate-in fade-in slide-in-from-top-4 overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-sm shadow-sm animate-in fade-in slide-in-from-top-4 overflow-hidden">
           <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-[#0084d1]" />
+              <span className="material-symbols-outlined text-[20px] text-[#0084d1]">verified_user</span>
               <h3 className="text-lg font-bold text-slate-800 tracking-tight">Nueva Invitación</h3>
             </div>
             <button onClick={resetInviteForm} className="text-slate-400 hover:text-slate-600 transition-colors">
-              <X className="w-5 h-5" />
+              <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
 
@@ -217,7 +216,7 @@ export default function UsersPage() {
                     value={newName} 
                     onChange={e => setNewName(e.target.value)}
                     placeholder="Ej. Juan Pérez"
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                    className="w-full h-10 px-3 rounded-sm border border-slate-200 bg-white text-sm text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                   />
                 </div>
                 <div className="space-y-2">
@@ -228,7 +227,7 @@ export default function UsersPage() {
                     value={newPhone} 
                     onChange={e => setNewPhone(e.target.value)}
                     placeholder="Ej. 88881111"
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-800 font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                    className="w-full h-10 px-3 rounded-sm border border-slate-200 bg-white text-sm text-slate-800 font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                   />
                 </div>
                 <div className="space-y-2">
@@ -262,7 +261,7 @@ export default function UsersPage() {
               </div>
 
               {errorMsg && (
-                <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                <div className="p-3 text-sm text-red bg-red-50 border border-red-200 rounded-sm">
                   {errorMsg}
                 </div>
               )}
@@ -279,7 +278,7 @@ export default function UsersPage() {
           ) : (
             <div className="p-8 flex flex-col items-center text-center space-y-4 animate-in fade-in zoom-in-95">
               <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 mb-2">
-                <CheckCircle2 className="w-6 h-6" />
+                <span className="material-symbols-outlined text-[24px]">check_circle</span>
               </div>
               <div>
                 <h4 className="text-lg font-bold text-slate-800">Enlace Generado Exitosamente</h4>
@@ -288,13 +287,13 @@ export default function UsersPage() {
                 </p>
               </div>
 
-              <div className="w-full max-w-md bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-3 mt-4">
+              <div className="w-full max-w-md bg-slate-50 border border-slate-200 rounded-sm p-3 flex items-center justify-between gap-3 mt-4">
                 <code className="text-xs text-slate-800 font-mono truncate">{generatedInvite.inviteLink}</code>
                 <button 
                   onClick={() => copyToClipboard(generatedInvite.inviteLink!)}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-600 transition-colors shadow-sm"
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white hover:bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-600 transition-colors shadow-sm"
                 >
-                  {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+                  {copied ? <span className="material-symbols-outlined text-[16px] text-emerald-500">check_circle</span> : <span className="material-symbols-outlined text-[16px] text-slate-400">content_copy</span>}
                   {copied ? 'Copiado' : 'Copiar'}
                 </button>
               </div>
@@ -305,7 +304,7 @@ export default function UsersPage() {
                 rel="noopener noreferrer"
                 className="mt-6 flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#25D366] hover:bg-[#1ebd5a] text-white font-bold text-sm transition-all shadow-sm"
               >
-                <Send className="w-4 h-4" />
+                <span className="material-symbols-outlined text-[18px]">send</span>
                 Enviar por WhatsApp
               </a>
             </div>
@@ -314,13 +313,13 @@ export default function UsersPage() {
       )}
 
       {/* Users Table */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-4">
           <div className="relative w-full max-w-xs">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <span className="material-symbols-outlined text-[18px] absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
             <input 
               placeholder="Buscar usuarios..." 
-              className="w-full h-9 pl-9 pr-4 rounded-lg bg-white border border-slate-200 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all shadow-sm"
+              className="w-full h-9 pl-9 pr-4 rounded-sm bg-white border border-slate-200 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all shadow-sm"
             />
           </div>
           <div className="flex gap-2">
@@ -372,7 +371,7 @@ export default function UsersPage() {
                       </Badge>
                       {user.committee && (
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
-                          <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="material-symbols-outlined text-[16px] text-slate-400">corporate_fare</span>
                           {user.committee}
                         </span>
                       )}
@@ -380,8 +379,8 @@ export default function UsersPage() {
                   </td>
                   <td className="px-5 py-3.5 text-center">
                     {user.status === 'active' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-[11px] font-bold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Activo
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-accent text-[11px] font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent" /> Activo
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-bold" title="No ha ingresado su PIN">
@@ -390,8 +389,8 @@ export default function UsersPage() {
                     )}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <button className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
-                      <MoreVertical className="w-4 h-4" />
+                    <button className="p-1.5 rounded-sm hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+                      <span className="material-symbols-outlined text-[18px]">more_vert</span>
                     </button>
                   </td>
                 </tr>

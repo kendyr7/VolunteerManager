@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useMemo, useEffect } from "react";
-import { ChevronDown, ChevronRight, Pencil, Clock, Search, Phone, Calendar, MapPin, Info, User } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
 import { format } from "date-fns";
@@ -10,6 +9,7 @@ import { DataTableFilter } from "@/components/DataTableFilter";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -70,7 +70,7 @@ const getShiftColor = (shiftId: string, count: number, isSingleCommittee: boolea
       card: 'bg-red-50/50', 
       border: 'border-red-200', 
       title: 'text-red-900', 
-      badge: 'bg-red-100 text-red-700 border border-red-200/50', 
+      badge: 'bg-red-100 text-red border border-red-200/50', 
       dot: 'bg-red-400' 
     };
   } else if (isUnderstaffed) {
@@ -88,11 +88,11 @@ const getShiftColor = (shiftId: string, count: number, isSingleCommittee: boolea
       card: 'bg-emerald-50/20',  
       border: 'border-emerald-200',  
       title: 'text-slate-800',  
-      badge: 'bg-emerald-50 text-emerald-700 border border-emerald-100',  
+      badge: 'bg-emerald-50 text-accent border border-emerald-100',  
       dot: 'bg-emerald-400' 
     };
   }
-};
+  };
 
 // ─── página ───────────────────────────────────────────────────────────────────
 export default function ShiftsPage() {
@@ -439,7 +439,7 @@ export default function ShiftsPage() {
     const totalVolsOnDay = (['T1','T2','T3','T4'] as const).reduce((acc, t) => acc + shiftData[t].length, 0);
 
     return (
-      <div key={key} className="rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden h-fit self-start w-full">
+      <div key={key} className="rounded-sm border border-slate-200 bg-slate-50 overflow-hidden h-fit self-start w-full">
         <button
           onClick={() => toggleDay(key)}
           className="w-full flex items-stretch bg-slate-100 hover:bg-slate-100/80 transition-colors text-left"
@@ -476,7 +476,7 @@ export default function ShiftsPage() {
 
                   const c = getShiftColor(t, count, isSingleCommittee, minRequired);
                   return (
-                    <span key={t} className={`inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1 rounded-xl border transition-all ${c.badge} ${c.border}`}>
+                    <span key={t} className={`inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1 rounded-sm border transition-all ${c.badge} ${c.border}`}>
                       <span className="font-bold">{t}</span>
                       <span className="opacity-25 text-xs">|</span>
                       <span className="font-bold tabular-nums">{count}/{minRequired}</span>
@@ -496,8 +496,8 @@ export default function ShiftsPage() {
             <div className="flex items-center gap-2 shrink-0">
               <div className={`w-2 h-2 rounded-full ${totalVolsOnDay > 0 ? 'bg-teal-400' : 'bg-border'}`} />
               {isOpen
-                ? <ChevronDown className="h-4 w-4 text-slate-500" />
-                : <ChevronRight className="h-4 w-4 text-slate-500" />
+                ? <span className="material-symbols-outlined text-[18px] text-slate-500">expand_more</span>
+                : <span className="material-symbols-outlined text-[18px] text-slate-500">chevron_right</span>
               }
             </div>
           </div>
@@ -526,11 +526,11 @@ export default function ShiftsPage() {
               const hiddenCount = vols.length - displayedVols.length;
               
               return (
-                <div key={t} className={`rounded-xl border p-3 h-fit ${c.card} ${c.border}`}>
+                <div key={t} className={`rounded-sm border p-3 h-fit ${c.card} ${c.border}`}>
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <Clock className={`h-3 w-3 ${c.title}`} />
+                        <span className={`material-symbols-outlined text-[14px] ${c.title}`}>schedule</span>
                         <p className={`text-[10px] font-bold uppercase tracking-widest ${c.title}`}>
                           Turno {t[1]}
                         </p>
@@ -546,7 +546,7 @@ export default function ShiftsPage() {
                     {vols.length === 0 ? (
                       <p className="text-[11px] text-slate-500 italic">Sin voluntarios asignados</p>
                     ) : currentRole === 'Lector' ? (
-                      <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-center">
+                      <div className="bg-slate-50 border border-slate-100 rounded-sm p-3 text-center">
                         <p className="text-[11px] text-slate-500 font-medium italic">Lista de nombres oculta por privacidad.</p>
                       </div>
                     ) : (
@@ -555,7 +555,7 @@ export default function ShiftsPage() {
                           {displayedVols.map(vol => (
                             <div 
                               key={vol.id} 
-                              className="flex items-center justify-between group bg-white shadow-sm border border-slate-200/50 rounded-lg px-2.5 py-2 hover:bg-slate-100 transition-colors cursor-pointer"
+                              className="flex items-center justify-between group bg-white shadow-sm border border-slate-200/50 rounded-sm px-2.5 py-2 hover:bg-slate-100 transition-colors cursor-pointer"
                               onClick={(e) => { e.stopPropagation(); handleEditClick(vol); }}
                             >
                               <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -574,10 +574,10 @@ export default function ShiftsPage() {
                                     handleEditClick(vol);
                                     setTimeout(() => setIsEditingShifts(true), 0);
                                   }}
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity bg-white p-1 rounded-md border border-slate-200" 
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity bg-white p-1 rounded-sm border border-slate-200" 
                                   title={`Editar turnos de ${vol.name}`}
                                 >
-                                  <Pencil className="h-3 w-3 text-slate-500 hover:text-slate-800" />
+                                  <span className="material-symbols-outlined text-[14px] text-slate-500 hover:text-slate-800">edit</span>
                                 </button>
                               </div>
                             </div>
@@ -587,12 +587,12 @@ export default function ShiftsPage() {
                         {vols.length > 10 && (
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleShiftExpand(key, t); }}
-                            className="w-full mt-2 py-1.5 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors border border-dashed border-slate-200/60"
+                            className="w-full mt-2 py-1.5 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-sm transition-colors border border-dashed border-slate-200/60"
                           >
                             {isShiftExpanded ? (
-                              <>Ver menos <ChevronDown className="h-3.5 w-3.5 rotate-180" /></>
+                              <>Ver menos <span className="material-symbols-outlined text-[16px] rotate-180">expand_more</span></>
                             ) : (
-                              <>Ver {hiddenCount} más <ChevronDown className="h-3.5 w-3.5" /></>
+                              <>Ver {hiddenCount} más <span className="material-symbols-outlined text-[16px]">expand_more</span></>
                             )}
                           </button>
                         )}
@@ -632,13 +632,13 @@ export default function ShiftsPage() {
     return (
       <div className="max-w-6xl mx-auto space-y-6">
         <div>
-          <h2 className="text-3xl font-bold text-slate-800 tracking-tight mb-1">Mi Perfil</h2>
+          <h2 className="font-bold text-slate-800 tracking-tight mb-1">Mi Perfil</h2>
           <p className="text-slate-500 text-sm font-medium">Gestiona tu información personal y selecciona tus turnos de servicio.</p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-6 sm:p-8 space-y-8">
+        <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-6 sm:p-8 space-y-8">
           {/* Profile Card */}
-          <div className="flex flex-col bg-slate-50 p-6 sm:p-8 rounded-2xl border border-slate-200 gap-8">
+          <div className="flex flex-col bg-slate-50 p-6 sm:p-8 rounded-sm border border-slate-200 gap-8">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
               <div>
                 <h3 className="text-2xl font-bold text-slate-800 tracking-tight leading-tight mb-3">
@@ -663,28 +663,28 @@ export default function ShiftsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5 text-slate-500">
-                    <Phone className="h-3.5 w-3.5" />
+                    <span className="material-symbols-outlined text-[16px]">call</span>
                     <span className="text-[10px] font-bold uppercase tracking-wide">Celular</span>
                   </div>
                   <p className="text-sm font-semibold text-slate-800">{mockLector.phone}</p>
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5 text-slate-500">
-                    <Calendar className="h-3.5 w-3.5" />
+                    <span className="material-symbols-outlined text-[16px]">calendar_today</span>
                     <span className="text-[10px] font-bold uppercase tracking-wide">Edad</span>
                   </div>
                   <p className="text-sm font-semibold text-slate-800">27</p>
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5 text-slate-500">
-                    <MapPin className="h-3.5 w-3.5" />
+                    <span className="material-symbols-outlined text-[16px]">location_on</span>
                     <span className="text-[10px] font-bold uppercase tracking-wide">Barrio</span>
                   </div>
                   <p className="text-sm font-semibold text-slate-800">{mockLector.ward}</p>
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5 text-slate-500">
-                    <MapPin className="h-3.5 w-3.5" />
+                    <span className="material-symbols-outlined text-[16px]">location_on</span>
                     <span className="text-[10px] font-bold uppercase tracking-wide">Estaca</span>
                   </div>
                   <p className="text-sm font-semibold text-slate-800">{mockLector.stake}</p>
@@ -720,7 +720,7 @@ export default function ShiftsPage() {
                     setSaved(true);
                     setTimeout(() => setSaved(false), 2500);
                   }}
-                  className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-xl font-bold shadow-sm"
+                  className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-sm font-bold shadow-sm"
                 >
                   Guardar Cambios
                 </Button>
@@ -729,11 +729,11 @@ export default function ShiftsPage() {
             <p className="text-[11px] text-slate-500 font-medium mb-6">Toca un turno para activarlo o desactivarlo. Asegúrate de guardar tus cambios.</p>
 
             <div className="grid grid-cols-2 gap-3 mb-6">
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+              <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
                 <p className="text-3xl font-bold text-slate-800">{totalTurnos}</p>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Turnos</p>
               </div>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+              <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
                 <p className="text-3xl font-bold text-slate-800">{diasCubiertos}</p>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Días</p>
               </div>
@@ -741,7 +741,7 @@ export default function ShiftsPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start">
               {/* Columna Izquierda (Días impares) */}
-              <div className="flex flex-col border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+              <div className="flex flex-col border border-slate-200 rounded-sm overflow-hidden bg-white shadow-sm">
                 {EVENT_DAYS.filter((_, i) => i % 2 === 0).map((d) => (
                   <div key={d.key} className="flex flex-col sm:flex-row sm:items-stretch border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors">
                     {/* Left: date panel */}
@@ -762,7 +762,7 @@ export default function ShiftsPage() {
                           <button
                             key={t}
                             onClick={() => toggleShift(d.key, t)}
-                            className={`flex-1 inline-flex flex-col items-center justify-center rounded-xl py-2 px-1 transition-all cursor-pointer ${
+                            className={`flex-1 inline-flex flex-col items-center justify-center rounded-sm py-2 px-1 transition-all cursor-pointer ${
                               active
                                 ? 'bg-[#0084d1] text-white shadow-md shadow-blue-900/10 scale-[1.02] active:scale-95'
                                 : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200/60 active:scale-95'
@@ -783,7 +783,7 @@ export default function ShiftsPage() {
               </div>
 
               {/* Columna Derecha (Días pares) */}
-              <div className="flex flex-col border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+              <div className="flex flex-col border border-slate-200 rounded-sm overflow-hidden bg-white shadow-sm">
                 {EVENT_DAYS.filter((_, i) => i % 2 === 1).map((d) => (
                   <div key={d.key} className="flex flex-col sm:flex-row sm:items-stretch border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors">
                     {/* Left: date panel */}
@@ -804,7 +804,7 @@ export default function ShiftsPage() {
                           <button
                             key={t}
                             onClick={() => toggleShift(d.key, t)}
-                            className={`flex-1 inline-flex flex-col items-center justify-center rounded-xl py-2 px-1 transition-all cursor-pointer ${
+                            className={`flex-1 inline-flex flex-col items-center justify-center rounded-sm py-2 px-1 transition-all cursor-pointer ${
                               active
                                 ? 'bg-[#0084d1] text-white shadow-md shadow-blue-900/10 scale-[1.02] active:scale-95'
                                 : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200/60 active:scale-95'
@@ -841,7 +841,7 @@ export default function ShiftsPage() {
       <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
         <div className="space-y-1.5">
           <div className="flex items-center gap-3">
-            <h1 className="text-4xl tracking-tight text-slate-900 leading-none">
+            <h1 className="tracking-tight text-slate-900 leading-none">
               Gestión de Turnos
             </h1>
             <Badge className="bg-slate-900 text-white border-none text-[10px] px-2.5 py-0.5 uppercase font-bold tracking-widest h-5">
@@ -855,129 +855,137 @@ export default function ShiftsPage() {
         
         {currentRole === 'Admin' && (
           <div className="flex items-center gap-3 shrink-0">
-            <Button variant="outline" size="lg" className="rounded-xl font-bold border-slate-200 hover:bg-slate-50 shadow-sm transition-all active:scale-[0.97] group">
+            <Button variant="outline" size="lg" className="rounded-sm font-bold border-slate-200 hover:bg-slate-50 shadow-sm transition-all active:scale-[0.97] group">
               Exportar Reporte
-              <Info className="w-4 h-4 ml-2 opacity-40 group-hover:opacity-100 transition-opacity" />
+              <span className="material-symbols-outlined text-[18px] ml-2 opacity-40 group-hover:opacity-100 transition-opacity">info</span>
             </Button>
           </div>
         )}
       </motion.div>
 
       {/* KPI Section */}
-      <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-6 flex flex-col justify-between">
-          <div>
-            <h3 className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-1.5">Cobertura Global</h3>
-            <p className="text-xs text-slate-500 font-medium mb-5">Slots cubiertos vs. requeridos.</p>
-          </div>
-          <div className="flex items-end justify-between gap-4">
-            <span className="text-4xl font-bold tracking-tight text-slate-900 leading-none tabular-nums">{kpiData.coverage}%</span>
-            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/30">
+      <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-sm overflow-hidden h-full">
+          <CardContent className="p-5 h-full flex flex-col justify-between">
+            <div>
+              <div className="text-caption-uppercase text-muted mb-3">Cobertura Global</div>
+              <div className="text-display-lg text-ink font-semibold tracking-tighter">
+                {kpiData.coverage}%
+              </div>
+              <p className="text-[11px] mt-2 font-medium text-muted/70">
+                Slots cubiertos vs. requeridos
+              </p>
+            </div>
+            <div className="w-full h-1 bg-surface-strong mt-4 rounded-full overflow-hidden">
               <div 
-                className={`h-full transition-all duration-700 cubic-bezier(0.23, 1, 0.32, 1) ${kpiData.coverage < 60 ? 'bg-red-400' : kpiData.coverage < 90 ? 'bg-amber-400' : 'bg-teal-400'}`}
+                className={`h-full transition-all duration-700 cubic-bezier(0.23, 1, 0.32, 1) ${kpiData.coverage < 60 ? 'bg-error' : kpiData.coverage < 90 ? 'bg-warning' : 'bg-success'}`}
                 style={{ width: `${kpiData.coverage}%` }}
               />
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* KPI Alertas Críticas por Comité */}
         {currentRole === 'Admin' ? (
-          <div className="md:col-span-2 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-5 flex flex-col">
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200/40 shrink-0">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h3 className="text-xs uppercase font-bold text-slate-500 tracking-wider">Turnos Incompletos por Comité</h3>
-                  <div className="relative group cursor-pointer inline-flex items-center">
-                    <Info className="h-3.5 w-3.5 text-slate-500 hover:text-slate-800 transition-colors" />
-                    <div className="absolute left-0 sm:left-1/2 sm:-translate-x-1/2 top-full mt-2 w-64 sm:w-72 p-3 bg-slate-900 border border-slate-800 text-[11.5px] text-slate-200 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
-                      <p className="font-bold mb-1 text-sky-400">¿Cómo funciona el contador?</p>
-                      <p className="leading-relaxed">
-                        Este número representa la cantidad de turnos de todo el evento que están por debajo del mínimo requerido.
-                        <strong className="text-white"> El contador disminuirá únicamente cuando agregues el mínimo completo de voluntarios </strong>
-                        configurado para ese turno en Ajustes. Asignar solo un voluntario no reducirá la alerta si el mínimo es mayor.
-                      </p>
-                      <div className="absolute bottom-full left-4 sm:left-1/2 sm:-translate-x-1/2 -mb-1 border-4 border-transparent border-b-slate-900" />
+          <Card className="md:col-span-2 border border-hairline-strong bg-canvas shadow-sm rounded-sm overflow-hidden h-full">
+            <CardContent className="p-5 h-full flex flex-col">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-hairline-strong shrink-0">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="text-caption-uppercase text-muted">Turnos Incompletos por Comité</div>
+                    <div className="relative group cursor-pointer inline-flex items-center">
+                      <span className="material-symbols-outlined text-[16px] text-muted hover:text-ink transition-colors">info</span>
+                      <div className="absolute left-0 sm:left-1/2 sm:-translate-x-1/2 top-full mt-2 w-64 sm:w-72 p-3 bg-slate-900 border border-slate-800 text-[11.5px] text-slate-200 rounded-sm shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                        <p className="font-bold mb-1 text-sky-400">¿Cómo funciona el contador?</p>
+                        <p className="leading-relaxed">
+                          Este número representa la cantidad de turnos de todo el evento que están por debajo del mínimo requerido.
+                          <strong className="text-white"> El contador disminuirá únicamente cuando agregues el mínimo completo de voluntarios </strong>
+                          configurado para ese turno en Ajustes. Asignar solo un voluntario no reducirá la alerta si el mínimo es mayor.
+                        </p>
+                        <div className="absolute bottom-full left-4 sm:left-1/2 sm:-translate-x-1/2 -mb-1 border-4 border-transparent border-b-slate-900" />
+                      </div>
                     </div>
                   </div>
+                  <p className="text-[11px] mt-1 font-medium text-muted/70">Alertas activas donde no se cumple con el mínimo requerido.</p>
                 </div>
-                <p className="text-body-xs text-slate-500 font-medium mt-0.5">Alertas activas donde no se cumple con el mínimo requerido.</p>
+                <Badge variant="outline" className="bg-error/10 text-error border-error/20 font-bold">
+                  {kpiData.totalAlertsCount} Alertas en Total
+                </Badge>
               </div>
-              <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-200/50 font-bold">
-                {kpiData.totalAlertsCount} Alertas en Total
-              </Badge>
-            </div>
-            
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {committees.map(comm => {
-                const alertCount = kpiData.committeeAlerts[comm] ?? 0;
-                const isSelected = selectedCommittees.includes(comm);
-                return (
-                  <button
-                    key={comm}
-                    onClick={() => {
-                      if (isSelected) {
-                        setSelectedCommittees(prev => prev.filter(c => c !== comm));
-                      } else {
-                        setSelectedCommittees([comm]); // Filtrar solo por este comité
-                      }
-                    }}
-                    className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${
-                      isSelected 
-                        ? 'bg-[#0084d1]/10 border-[#0084d1] text-slate-800 shadow-sm' 
-                        : alertCount > 0 
-                          ? 'bg-rose-500/5 border-rose-200/40 hover:bg-rose-500/10 text-slate-800' 
-                          : 'bg-white hover:bg-slate-100 border-slate-200/40 text-slate-500'
-                    }`}
-                  >
-                    <span className="text-xs font-bold truncate pr-1">{comm}</span>
-                    {alertCount > 0 ? (
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                        isSelected ? 'bg-[#0084d1] text-white' : 'bg-rose-500/10 text-rose-600'
-                      }`}>
-                        {alertCount}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-teal-600 bg-teal-500/10 px-1.5 py-0.5 rounded-full">
-                        OK
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {committees.map(comm => {
+                  const alertCount = kpiData.committeeAlerts[comm] ?? 0;
+                  const isSelected = selectedCommittees.includes(comm);
+                  return (
+                    <button
+                      key={comm}
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedCommittees(prev => prev.filter(c => c !== comm));
+                        } else {
+                          setSelectedCommittees([comm]); // Filtrar solo por este comité
+                        }
+                      }}
+                      className={`flex items-center justify-between p-2.5 rounded-sm border text-left transition-all ${
+                        isSelected 
+                          ? 'bg-text-link/10 border-text-link text-ink shadow-sm' 
+                          : alertCount > 0 
+                            ? 'bg-error/5 border-error/20 hover:bg-error/10 text-ink' 
+                            : 'bg-canvas hover:bg-canvas-soft border-hairline-strong text-muted-soft hover:text-ink'
+                      }`}
+                    >
+                      <span className="text-xs font-bold truncate pr-1">{comm}</span>
+                      {alertCount > 0 ? (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                          isSelected ? 'bg-text-link text-white' : 'bg-error/10 text-error'
+                        }`}>
+                          {alertCount}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-success bg-success/10 px-1.5 py-0.5 rounded-full">
+                          OK
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
         ) : (
-          <div className="md:col-span-2 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-5 flex flex-col justify-center">
-             <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200/40 shrink-0">
-               <div>
-                 <h3 className="text-xs uppercase font-bold text-slate-500 tracking-wider">Estado de Reclutamiento</h3>
-                 <p className="text-body-xs text-slate-500 font-medium mt-0.5">Resumen de asignaciones para tu comité.</p>
+          <Card className="md:col-span-2 border border-hairline-strong bg-canvas shadow-sm rounded-sm overflow-hidden h-full">
+            <CardContent className="p-5 h-full flex flex-col justify-center">
+               <div className="flex items-center justify-between mb-5 pb-4 border-b border-hairline-strong shrink-0">
+                 <div>
+                   <div className="text-caption-uppercase text-muted">Estado de Reclutamiento</div>
+                   <p className="text-[11px] mt-1 font-medium text-muted/70">Resumen de asignaciones para tu comité.</p>
+                 </div>
+                 <Badge variant="outline" className={kpiData.editorMissingVolunteers > 0 ? "bg-error/10 text-error border-error/20 font-bold" : "bg-success/10 text-success border-success/20 font-bold"}>
+                   {kpiData.editorMissingVolunteers > 0 ? `Faltan ${kpiData.editorMissingVolunteers} Voluntarios` : "Reclutamiento Completo"}
+                 </Badge>
                </div>
-               <Badge variant="outline" className={kpiData.editorMissingVolunteers > 0 ? "bg-rose-500/10 text-rose-600 border-rose-200/50 font-bold" : "bg-teal-500/10 text-teal-600 border-teal-200/50 font-bold"}>
-                 {kpiData.editorMissingVolunteers > 0 ? `Faltan ${kpiData.editorMissingVolunteers} Voluntarios` : "Reclutamiento Completo"}
-               </Badge>
-             </div>
-             
-             <div className="flex gap-4">
-               <div className="flex-1 bg-teal-50/50 rounded-xl border border-teal-100/50 p-4">
-                 <p className="text-[10px] uppercase font-bold text-teal-600 mb-1">Turnos Cubiertos</p>
-                 <p className="text-3xl font-bold text-teal-700 leading-none">{kpiData.editorShiftsOk}</p>
+               
+               <div className="flex gap-4">
+                 <div className="flex-1 bg-success/5 rounded-sm border border-success/20 p-4">
+                   <p className="text-caption-uppercase text-success mb-2">Turnos Cubiertos</p>
+                   <p className="text-display-md font-bold text-success leading-none">{kpiData.editorShiftsOk}</p>
+                 </div>
+                 <div className="flex-1 bg-error/5 rounded-sm border border-error/20 p-4">
+                   <p className="text-caption-uppercase text-error mb-2">Turnos Incompletos</p>
+                   <p className="text-display-md font-bold text-error leading-none">{kpiData.editorShiftsUnderstaffed}</p>
+                 </div>
                </div>
-               <div className="flex-1 bg-rose-50/50 rounded-xl border border-rose-100/50 p-4">
-                 <p className="text-[10px] uppercase font-bold text-rose-600 mb-1">Turnos Incompletos</p>
-                 <p className="text-3xl font-bold text-rose-700 leading-none">{kpiData.editorShiftsUnderstaffed}</p>
-               </div>
-             </div>
-          </div>
+            </CardContent>
+          </Card>
         )}
       </motion.div>
 
       {/* Barra de Filtros (Igual a Volunteers) */}
-      <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden overflow-hidden">
+      <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden overflow-hidden">
         <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center gap-4 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-500 pointer-events-none">search</span>
             <Input 
               placeholder="Buscar por nombre, estaca o barrio..." 
               value={searchTerm}
@@ -1041,10 +1049,10 @@ export default function ShiftsPage() {
           {editingVolunteer && (
             <div className="p-7 space-y-7">
               {/* Profile Card */}
-              <div className="flex flex-col bg-slate-50 p-6 rounded-2xl border border-slate-200 gap-6">
+              <div className="flex flex-col bg-slate-50 p-6 rounded-sm border border-slate-200 gap-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                   <div>
-                    <h3 className="text-2xl font-bold text-slate-800 tracking-tight leading-tight mb-3">
+                    <h3 className="font-bold text-slate-800 tracking-tight leading-tight mb-3">
                       {editingVolunteer.name}
                     </h3>
                     <div className="flex items-center gap-2">
@@ -1066,28 +1074,28 @@ export default function ShiftsPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 text-slate-500">
-                        <Phone className="h-3.5 w-3.5" />
+                        <span className="material-symbols-outlined text-[16px]">call</span>
                         <span className="text-[10px] font-bold uppercase tracking-wide">Celular</span>
                       </div>
                       <p className="text-sm font-semibold text-slate-800">{editingVolunteer.phone}</p>
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 text-slate-500">
-                        <Calendar className="h-3.5 w-3.5" />
+                        <span className="material-symbols-outlined text-[16px]">calendar_today</span>
                         <span className="text-[10px] font-bold uppercase tracking-wide">Edad</span>
                       </div>
                       <p className="text-sm font-semibold text-slate-800">27</p>
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 text-slate-500">
-                        <MapPin className="h-3.5 w-3.5" />
+                        <span className="material-symbols-outlined text-[16px]">location_on</span>
                         <span className="text-[10px] font-bold uppercase tracking-wide">Barrio</span>
                       </div>
                       <p className="text-sm font-semibold text-slate-800">{editingVolunteer.ward}</p>
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 text-slate-500">
-                        <MapPin className="h-3.5 w-3.5" />
+                        <span className="material-symbols-outlined text-[16px]">location_on</span>
                         <span className="text-[10px] font-bold uppercase tracking-wide">Estaca</span>
                       </div>
                       <p className="text-sm font-semibold text-slate-800">{editingVolunteer.stake}</p>
@@ -1114,14 +1122,14 @@ export default function ShiftsPage() {
                   </div>
                   <div className="flex items-center gap-2 w-full sm:w-auto">
                     {saved && (
-                      <span className="text-[11px] text-teal-600 font-bold animate-pulse shrink-0">✓ Guardado</span>
+                      <span className="text-[11px] text-accent font-bold animate-pulse shrink-0">✓ Guardado</span>
                     )}
                     {isEditingShifts ? (
-                      <Button onClick={handleSaveShifts} className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-xl font-bold shadow-sm">
+                      <Button onClick={handleSaveShifts} className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-sm font-bold shadow-sm">
                         Guardar Cambios
                       </Button>
                     ) : (
-                      <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-xl font-bold shadow-sm">
+                      <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-sm font-bold shadow-sm">
                         Editar Turnos
                       </Button>
                     )}
@@ -1137,16 +1145,16 @@ export default function ShiftsPage() {
                   const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
                   return (
                     <div className="grid grid-cols-3 gap-3 mb-6">
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                      <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
                         <p className="text-3xl font-bold text-slate-800">{totalTurnos}</p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Turnos</p>
                       </div>
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                      <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
                         <p className="text-3xl font-bold text-slate-800">{diasCubiertos}</p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Días</p>
                       </div>
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                        <p className={`text-3xl font-bold ${editingVolunteer.reliability >= 80 ? 'text-teal-600' : 'text-amber-500'}`}>
+                      <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
+                        <p className={`text-3xl font-bold ${editingVolunteer.reliability >= 80 ? 'text-accent' : 'text-amber-500'}`}>
                           {editingVolunteer.reliability}%
                         </p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Confiab.</p>
@@ -1156,7 +1164,7 @@ export default function ShiftsPage() {
                 })()}
 
                 {/* Timeline por día */}
-                <div className={`flex flex-col border border-slate-200 rounded-2xl overflow-hidden shadow-sm ${
+                <div className={`flex flex-col border border-slate-200 rounded-sm overflow-hidden shadow-sm ${
                   isEditingShifts ? 'bg-white' : 'bg-slate-50/50 opacity-80'
                 }`}>
                   {(isEditingShifts ? EVENT_DAYS : EVENT_DAYS.filter(d => (shiftsByDay[d.key]?.length ?? 0) > 0)).map((d) => (
@@ -1181,7 +1189,7 @@ export default function ShiftsPage() {
                             <button
                               key={t}
                               onClick={() => toggleShift(d.key, t)}
-                              className={`flex-1 inline-flex flex-col items-center justify-center rounded-xl py-2 px-1 transition-all ${
+                              className={`flex-1 inline-flex flex-col items-center justify-center rounded-sm py-2 px-1 transition-all ${
                                 active
                                   ? 'bg-[#0084d1] text-white shadow-md shadow-blue-900/10 scale-[1.02]'
                                   : 'bg-slate-100/70 text-slate-500'
