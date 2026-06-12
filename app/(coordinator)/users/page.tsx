@@ -12,6 +12,7 @@ import { generateWaMeLink } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearch } from "@/lib/search-context";
+import { DataTableFilter } from "@/components/DataTableFilter";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -336,21 +337,7 @@ export default function UsersPage() {
       animate="visible"
       className="max-w-6xl mx-auto space-y-10 pb-12"
     >
-      <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
-        <div className="space-y-1.5">
-          <h1 className="tracking-tight text-slate-900 leading-none">
-            Usuarios
-          </h1>
-          <p className="text-base font-medium text-slate-500">Administra el equipo de gestión y sus niveles de privilegio.</p>
-        </div>
-        <Button 
-          onClick={() => setIsInviteOpen(true)}
-          className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
-        >
-          <span className="material-symbols-outlined text-[18px] mr-2">person_add</span>
-          Invitar Usuario
-        </Button>
-      </motion.div>
+
 
       {isInviteOpen && (
         <div className="bg-white border border-slate-200 rounded-sm shadow-sm animate-in fade-in slide-in-from-top-4 overflow-hidden">
@@ -395,8 +382,18 @@ export default function UsersPage() {
                         <SelectValue />
                       </SelectTrigger>
                     <SelectContent className="bg-white border-slate-200 text-slate-800">
-                      <SelectItem value="Admin">Admin (Acceso total)</SelectItem>
-                      <SelectItem value="Editor">Editor (Coordinador de comité)</SelectItem>
+                      <SelectItem value="Admin">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[18px] text-slate-400">admin_panel_settings</span>
+                          <span>Admin</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="Editor">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[18px] text-slate-400">manage_accounts</span>
+                          <span>Editor</span>
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -404,16 +401,24 @@ export default function UsersPage() {
                 {newRole === 'Editor' && (
                   <div className="space-y-2 animate-in fade-in zoom-in-95">
                     <label className="text-xs font-semibold text-slate-700">Comité Asignado</label>
-                    <Select value={newCommittee} onValueChange={(v) => v && setNewCommittee(v)}>
-                      <SelectTrigger className="w-full h-10 bg-white border-slate-200 text-slate-800 flex items-center justify-between">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white border-slate-200 text-slate-800">
-                        {committeesList.map(c => (
-                          <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <DataTableFilter
+                      title={newCommittee || "Selecciona un comité"}
+                      options={committeesList.map(c => c.name)}
+                      value={newCommittee ? [newCommittee] : []}
+                      dropdownLabel="Comités disponibles"
+                      hideClearButton
+                      hideCountBadge
+                      isCommitteeFilter
+                      className="w-full bg-white justify-between h-10 border-slate-200"
+                      onChange={(vals) => {
+                        if (vals.length === 0) {
+                          setNewCommittee("");
+                          return;
+                        }
+                        const newName = vals.find(v => v !== newCommittee) || vals[0];
+                        setNewCommittee(newName);
+                      }}
+                    />
                   </div>
                 )}
               </div>
@@ -473,6 +478,13 @@ export default function UsersPage() {
       {/* Users Table */}
       <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-4">
+          <Button 
+            onClick={() => setIsInviteOpen(true)}
+            className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
+          >
+            <span className="material-symbols-outlined text-[18px] mr-2">person_add</span>
+            Invitar Usuario
+          </Button>
           <div className="flex gap-2 ml-auto">
             <Badge variant="outline" className="bg-white text-slate-600 border-slate-200 font-medium">
               {users.length} usuarios

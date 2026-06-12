@@ -27,8 +27,8 @@ const containerVariants = {
 
 const itemVariants = {
   hidden: { opacity: 0, y: 10 },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     y: 0,
     transition: {
       type: "spring" as const,
@@ -56,60 +56,60 @@ type VolunteerType = {
 const getShiftColor = (shiftId: string, count: number, isSingleCommittee: boolean, minRequired: number) => {
   if (!isSingleCommittee) {
     // Vista Global (Admin sin filtro de comité): Estilo neutro y limpio
-    return { 
-      card: 'bg-white',  
-      border: 'border-slate-200/60 shadow-sm',  
-      title: 'text-slate-800',  
-      badge: 'bg-slate-100 text-slate-500 border border-slate-200/50',  
-      dot: 'bg-border-strong' 
+    return {
+      card: 'bg-white',
+      border: 'border-slate-200/60 shadow-sm',
+      title: 'text-slate-800',
+      badge: 'bg-slate-100 text-slate-500 border border-slate-200/50',
+      dot: 'bg-border-strong'
     };
   }
 
   const isUnderstaffed = count < minRequired;
   const isCritical = minRequired > 0 && count <= minRequired / 2;
-  
+
   if (isCritical) {
     // Rojo suave para alertas críticas
-    return { 
-      card: 'bg-red-50/50', 
-      border: 'border-red-200', 
-      title: 'text-red-900', 
-      badge: 'bg-red-100 text-red border border-red-200/50', 
-      dot: 'bg-red-400' 
+    return {
+      card: 'bg-red-50/50',
+      border: 'border-red-200',
+      title: 'text-red-900',
+      badge: 'bg-red-100 text-red border border-red-200/50',
+      dot: 'bg-red-400'
     };
   } else if (isUnderstaffed) {
     // Rosa suave para déficit
-    return { 
-      card: 'bg-rose-50/30',  
-      border: 'border-rose-200',  
-      title: 'text-slate-800',  
-      badge: 'bg-rose-50 text-rose-600 border border-rose-100',  
-      dot: 'bg-rose-400' 
+    return {
+      card: 'bg-rose-50/30',
+      border: 'border-rose-200',
+      title: 'text-slate-800',
+      badge: 'bg-rose-50 text-rose-600 border border-rose-100',
+      dot: 'bg-rose-400'
     };
   } else {
     // Verde suave para cubierto
-    return { 
-      card: 'bg-emerald-50/20',  
-      border: 'border-emerald-200',  
-      title: 'text-slate-800',  
-      badge: 'bg-emerald-50 text-accent border border-emerald-100',  
-      dot: 'bg-emerald-400' 
+    return {
+      card: 'bg-emerald-50/20',
+      border: 'border-emerald-200',
+      title: 'text-slate-800',
+      badge: 'bg-emerald-50 text-accent border border-emerald-100',
+      dot: 'bg-emerald-400'
     };
   }
-  };
+};
 
 // ─── página ───────────────────────────────────────────────────────────────────
 export default function ShiftsPage() {
   const EVENT_DAYS_RAW = getActiveEventDays();
   const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
     date,
-    key: formatDateShort(date),
-    label: formatDateShort(date).split(' ')[0],
-    dateNum: formatDateShort(date).split(' ')[1],
+    key: formatDateShort(date),                   // clave única: 'jue 10'
+    label: formatDateShort(date).split(' ')[0],    // solo el día: 'jue'
+    dateNum: formatDateShort(date).split(' ')[1],  // solo el número: '10'
   }));
 
   // Estados de filtros
-  const { searchTerm } = useSearch();
+  const { searchTerm, setSearchTerm } = useSearch();
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
@@ -131,9 +131,19 @@ export default function ShiftsPage() {
     setToast({ message, type, isVisible: true });
   };
 
+  const stakes = useMemo(() => {
+    const set = new Set<string>();
+    volunteers.forEach(v => { if (v.stake) set.add(v.stake); });
+    return Array.from(set).sort();
+  }, [volunteers]);
+
+  const wards = useMemo(() => {
+    const set = new Set<string>();
+    volunteers.forEach(v => { if (v.ward) set.add(v.ward); });
+    return Array.from(set).sort();
+  }, [volunteers]);
+
   const committees = committeesList.map(c => c.name);
-  const stakes: string[] = [];
-  const wards: string[] = [];
 
   const loadData = async () => {
     // 1. Role-based strict isolation
@@ -141,21 +151,21 @@ export default function ShiftsPage() {
     const committee = localStorage.getItem('mock_committee') || '';
 
     let query = supabase.from('volunteers').select('*, committees(name)');
-    
+
     if (role === 'Editor' && committee) {
-       const { data: commObj } = await supabase
+      const { data: commObj } = await supabase
         .from('committees')
         .select('id')
         .eq('name', committee)
         .maybeSingle();
-      
+
       if (commObj) {
         query = query.eq('committee_id', commObj.id);
       }
     }
 
     const { data: volsData, error: volsError } = await query;
-    
+
     if (volsError) {
       console.error("Error loading volunteers:", volsError);
     }
@@ -164,7 +174,7 @@ export default function ShiftsPage() {
     const { data: commsData, error: commsError } = await supabase
       .from('committees')
       .select('id, name');
-    
+
     if (commsError) {
       console.error("Error loading committees:", commsError);
     } else if (commsData) {
@@ -175,7 +185,7 @@ export default function ShiftsPage() {
     const { data: shiftsData, error: shiftsError } = await supabase
       .from('shifts')
       .select('*');
-    
+
     const sCounts: Record<string, number> = {};
     const gShifts: Record<string, Record<string, string[]>> = {};
 
@@ -183,7 +193,7 @@ export default function ShiftsPage() {
       shiftsData.forEach(s => {
         if (s.volunteer_id) {
           sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
-          
+
           if (!gShifts[s.volunteer_id]) {
             gShifts[s.volunteer_id] = Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
           }
@@ -301,7 +311,7 @@ export default function ShiftsPage() {
   const kpiData = useMemo(() => {
     let totalRequired = 0;
     let totalAssignedInRequired = 0;
-    
+
     const committees = committeesList.map(c => c.name);
     const committeeAlerts: Record<string, number> = {};
     committees.forEach(c => {
@@ -427,7 +437,7 @@ export default function ShiftsPage() {
     setIsSheetOpen(true);
     setIsEditingShifts(false);
     setSaved(false);
-    
+
     setShiftsByDay(globalShifts[vol.id] || buildEmptyShifts());
   };
 
@@ -443,10 +453,10 @@ export default function ShiftsPage() {
       const userCommittee = localStorage.getItem('mock_committee');
       if (currentRole === 'Editor' && v.committee !== userCommittee) return false;
 
-      const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            v.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            v.ward.toLowerCase().includes(searchTerm.toLowerCase());
-      
+      const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.ward.toLowerCase().includes(searchTerm.toLowerCase());
+
       const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(v.committee);
       const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(v.stake);
       const matchesWard = selectedWards.length === 0 || selectedWards.includes(v.ward);
@@ -474,7 +484,7 @@ export default function ShiftsPage() {
       T3: getAssignedVolunteers(key, 'T3'),
       T4: getAssignedVolunteers(key, 'T4'),
     };
-    const totalVolsOnDay = (['T1','T2','T3','T4'] as const).reduce((acc, t) => acc + shiftData[t].length, 0);
+    const totalVolsOnDay = (['T1', 'T2', 'T3', 'T4'] as const).reduce((acc, t) => acc + shiftData[t].length, 0);
 
     return (
       <div key={key} className="rounded-sm border border-slate-200 bg-slate-50 overflow-hidden h-fit self-start w-full">
@@ -498,9 +508,9 @@ export default function ShiftsPage() {
           <div className="flex-1 min-w-0 flex items-center gap-4 px-4 py-3.5">
             <div className="flex-1 min-w-0 flex flex-col gap-1.5">
               <div className="flex gap-1.5 flex-wrap">
-                {(['T1','T2','T3','T4'] as const).map(t => {
+                {(['T1', 'T2', 'T3', 'T4'] as const).map(t => {
                   const count = shiftData[t].length;
-                  
+
                   // Calculate global requirement if no single committee is selected
                   let minRequired = 0;
                   if (activeCommittee) {
@@ -543,11 +553,11 @@ export default function ShiftsPage() {
 
         {isOpen && (
           <div className="grid grid-cols-2 gap-3 p-4 items-start">
-            {(['T1','T2','T3','T4'] as const).map(t => {
+            {(['T1', 'T2', 'T3', 'T4'] as const).map(t => {
               const info = SHIFT_TIMES[parseInt(t[1]) - 1];
               const vols = shiftData[t];
               const count = vols.length;
-              
+
               let minRequired = 0;
               if (activeCommittee) {
                 minRequired = committeeRequirements[activeCommittee]?.[t] ?? 0;
@@ -562,7 +572,7 @@ export default function ShiftsPage() {
               const isShiftExpanded = !!expandedShifts[combinedKey];
               const displayedVols = isShiftExpanded ? vols : vols.slice(0, 10);
               const hiddenCount = vols.length - displayedVols.length;
-              
+
               return (
                 <div key={t} className={`rounded-sm border p-3 h-fit ${c.card} ${c.border}`}>
                   <div className="flex items-start justify-between mb-3">
@@ -591,8 +601,8 @@ export default function ShiftsPage() {
                       <>
                         <div className="space-y-1.5">
                           {displayedVols.map(vol => (
-                            <div 
-                              key={vol.id} 
+                            <div
+                              key={vol.id}
                               className="flex items-center justify-between group bg-white shadow-sm border border-slate-200/50 rounded-sm px-2.5 py-2 hover:bg-slate-100 transition-colors cursor-pointer"
                               onClick={(e) => { e.stopPropagation(); handleEditClick(vol); }}
                             >
@@ -606,13 +616,13 @@ export default function ShiftsPage() {
                                 <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-white text-slate-500 font-semibold border-slate-200/60">
                                   {vol.committee}
                                 </Badge>
-                                <button 
-                                  onClick={(e) => { 
-                                    e.stopPropagation(); 
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     handleEditClick(vol);
                                     setTimeout(() => setIsEditingShifts(true), 0);
                                   }}
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity bg-white p-1 rounded-sm border border-slate-200" 
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity bg-white p-1 rounded-sm border border-slate-200"
                                   title={`Editar turnos de ${vol.name}`}
                                 >
                                   <span className="material-symbols-outlined text-[14px] text-slate-500 hover:text-slate-800">edit</span>
@@ -621,7 +631,7 @@ export default function ShiftsPage() {
                             </div>
                           ))}
                         </div>
-                        
+
                         {vols.length > 10 && (
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleShiftExpand(key, t); }}
@@ -655,29 +665,13 @@ export default function ShiftsPage() {
   }
 
   return (
-    <motion.div 
+    <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="visible"
       className="max-w-6xl mx-auto space-y-10 pb-12"
     >
-      {/* Header Seccional Refinado */}
-      <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
-        <div className="space-y-1.5">
-          <p className="text-base font-medium text-slate-500">
-            {activeCommittee ? `Monitoreo de asignaciones para ${activeCommittee}` : 'Visión global de la distribución de voluntarios en el evento.'}
-          </p>
-        </div>
-        
-        {currentRole === 'Admin' && (
-          <div className="flex items-center gap-3 shrink-0">
-            <Button variant="outline" size="lg" className="rounded-sm font-bold border-slate-200 hover:bg-slate-50 shadow-sm transition-all active:scale-[0.97] group">
-              Exportar Reporte
-              <span className="material-symbols-outlined text-[18px] ml-2 opacity-40 group-hover:opacity-100 transition-opacity">info</span>
-            </Button>
-          </div>
-        )}
-      </motion.div>
+
 
       {/* KPI Section */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -697,13 +691,12 @@ export default function ShiftsPage() {
                 initial={{ width: 0 }}
                 animate={{ width: `${kpiData.coverage}%` }}
                 transition={{ duration: 1, ease: "circOut" }}
-                className={`h-full rounded-full ${
-                  kpiData.coverage < 60
+                className={`h-full rounded-full ${kpiData.coverage < 60
                     ? 'bg-red-500'
                     : kpiData.coverage < 90
                       ? 'bg-amber-400'
                       : 'bg-teal-500'
-                }`}
+                  }`}
               />
             </div>
           </CardContent>
@@ -736,7 +729,7 @@ export default function ShiftsPage() {
                   {kpiData.totalAlertsCount} Alertas en Total
                 </Badge>
               </div>
-              
+
               {committees.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {committees.map(comm => {
@@ -752,25 +745,22 @@ export default function ShiftsPage() {
                             setSelectedCommittees([comm]);
                           }
                         }}
-                        className={`flex items-center justify-between p-2.5 rounded-sm border text-left transition-all ${
-                          isSelected
+                        className={`flex items-center justify-between p-2.5 rounded-sm border text-left transition-all ${isSelected
                             ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-sm'
                             : alertCount > 0
                               ? 'bg-red-50 border-red-200 hover:bg-red-100 text-slate-800'
                               : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500 hover:text-slate-800'
-                        }`}
+                          }`}
                       >
                         <span className="text-xs font-bold truncate pr-1">{comm}</span>
                         {alertCount > 0 ? (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                            isSelected ? 'bg-white/20 text-white' : 'bg-red-100 text-red-600'
-                          }`}>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-red-100 text-red-600'
+                            }`}>
                             {alertCount}
                           </span>
                         ) : (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                            isSelected ? 'bg-white/20 text-white' : 'bg-green-100 text-green-700'
-                          }`}>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-green-100 text-green-700'
+                            }`}>
                             OK
                           </span>
                         )}
@@ -790,26 +780,26 @@ export default function ShiftsPage() {
         ) : (
           <Card className="md:col-span-2 border border-hairline-strong bg-canvas shadow-sm rounded-sm overflow-hidden h-full">
             <CardContent className="p-5 h-full flex flex-col justify-center">
-               <div className="flex items-center justify-between mb-5 pb-4 border-b border-hairline-strong shrink-0">
-                 <div>
-                   <div className="text-caption-uppercase text-muted">Estado de Reclutamiento</div>
-                   <p className="text-[11px] mt-1 font-medium text-muted/70">Resumen de asignaciones para tu comité.</p>
-                 </div>
-                 <Badge variant="outline" className={kpiData.editorMissingVolunteers > 0 ? "bg-error/10 text-error border-error/20 font-bold" : "bg-success/10 text-success border-success/20 font-bold"}>
-                   {kpiData.editorMissingVolunteers > 0 ? `Faltan ${kpiData.editorMissingVolunteers} Voluntarios` : "Reclutamiento Completo"}
-                 </Badge>
-               </div>
-               
-               <div className="flex gap-4">
-                 <div className="flex-1 bg-success/5 rounded-sm border border-success/20 p-4">
-                   <p className="text-caption-uppercase text-success mb-2">Turnos Cubiertos</p>
-                   <p className="text-display-md font-bold text-success leading-none">{kpiData.editorShiftsOk}</p>
-                 </div>
-                 <div className="flex-1 bg-error/5 rounded-sm border border-error/20 p-4">
-                   <p className="text-caption-uppercase text-error mb-2">Turnos Incompletos</p>
-                   <p className="text-display-md font-bold text-error leading-none">{kpiData.editorShiftsUnderstaffed}</p>
-                 </div>
-               </div>
+              <div className="flex items-center justify-between mb-5 pb-4 border-b border-hairline-strong shrink-0">
+                <div>
+                  <div className="text-caption-uppercase text-muted">Estado de Reclutamiento</div>
+                  <p className="text-[11px] mt-1 font-medium text-muted/70">Resumen de asignaciones para tu comité.</p>
+                </div>
+                <Badge variant="outline" className={kpiData.editorMissingVolunteers > 0 ? "bg-error/10 text-error border-error/20 font-bold" : "bg-success/10 text-success border-success/20 font-bold"}>
+                  {kpiData.editorMissingVolunteers > 0 ? `Faltan ${kpiData.editorMissingVolunteers} Voluntarios` : "Reclutamiento Completo"}
+                </Badge>
+              </div>
+
+              <div className="flex gap-4">
+                <div className="flex-1 bg-success/5 rounded-sm border border-success/20 p-4">
+                  <p className="text-caption-uppercase text-success mb-2">Turnos Cubiertos</p>
+                  <p className="text-display-md font-bold text-success leading-none">{kpiData.editorShiftsOk}</p>
+                </div>
+                <div className="flex-1 bg-error/5 rounded-sm border border-error/20 p-4">
+                  <p className="text-caption-uppercase text-error mb-2">Turnos Incompletos</p>
+                  <p className="text-display-md font-bold text-error leading-none">{kpiData.editorShiftsUnderstaffed}</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -817,7 +807,7 @@ export default function ShiftsPage() {
 
       {/* Barra de Filtros (Igual a Volunteers) */}
       <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden overflow-hidden">
-        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center gap-4 flex-wrap">
+        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">
             {currentRole === 'Admin' && (
               <DataTableFilter
@@ -832,14 +822,23 @@ export default function ShiftsPage() {
               options={stakes}
               value={selectedStakes}
               onChange={setSelectedStakes}
+              showSearch
             />
             <DataTableFilter
               title="Barrio"
               options={wards}
               value={selectedWards}
               onChange={setSelectedWards}
+              showSearch
             />
           </div>
+          
+          {currentRole === 'Admin' && (
+            <Button className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97] shrink-0 group">
+              <span className="material-symbols-outlined text-[18px] mr-2">download</span>
+              Exportar Reporte
+            </Button>
+          )}
         </div>
       </motion.div>
 
@@ -853,7 +852,7 @@ export default function ShiftsPage() {
             </motion.div>
           ))}
         </div>
-        
+
         {/* Columna Derecha (Días pares: 2, 4, 6...) */}
         <div className="flex-1 flex flex-col gap-4 w-full">
           {EVENT_DAYS.filter((_, i) => i % 2 === 1).map(d => (
@@ -922,7 +921,7 @@ export default function ShiftsPage() {
                       <h3 className="font-bold text-slate-900 leading-none">Cronograma de Servicio</h3>
                       <p className="text-sm font-medium text-slate-400">Gestión de disponibilidad y asignaciones.</p>
                     </div>
-                    
+
                     <div className="flex items-center gap-3">
                       {saved && <span className="text-[11px] text-accent font-bold animate-pulse">✓ Guardado</span>}
                       {isEditingShifts ? (
@@ -964,24 +963,22 @@ export default function ShiftsPage() {
                     {EVENT_DAYS.map((d, idx) => {
                       const dayShifts = shiftsByDay[d.key] || [];
                       const hasShifts = dayShifts.length > 0;
-                      
+
                       return (
-                        <motion.div 
+                        <motion.div
                           key={d.key}
                           initial={{ opacity: 0, x: 10 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1 + idx * 0.03 }}
-                          className={`group border rounded-3xl overflow-hidden transition-all duration-300 ${
-                            hasShifts || isEditingShifts 
-                              ? 'border-slate-200 bg-white shadow-sm' 
+                          className={`group border rounded-3xl overflow-hidden transition-all duration-300 ${hasShifts || isEditingShifts
+                              ? 'border-slate-200 bg-white shadow-sm'
                               : 'border-slate-100 bg-slate-50/50 opacity-40 grayscale-[0.5]'
-                          }`}
+                            }`}
                         >
                           <div className="flex flex-col sm:flex-row sm:items-stretch">
                             {/* Date Panel */}
-                            <div className={`shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-4 px-4 border-b sm:border-b-0 sm:border-r transition-colors ${
-                              hasShifts ? 'bg-[#4d7cfe]/5 border-[#4d7cfe]/10' : 'bg-slate-50 border-slate-100'
-                            }`}>
+                            <div className={`shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-4 px-4 border-b sm:border-b-0 sm:border-r transition-colors ${hasShifts ? 'bg-[#4d7cfe]/5 border-[#4d7cfe]/10' : 'bg-slate-50 border-slate-100'
+                              }`}>
                               <p className={`text-[10px] font-bold uppercase tracking-widest leading-none mb-1 ${hasShifts ? 'text-[#4d7cfe]' : 'text-slate-400'}`}>
                                 {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
                               </p>
@@ -993,19 +990,17 @@ export default function ShiftsPage() {
                               {['T1', 'T2', 'T3', 'T4'].map((t) => {
                                 const active = dayShifts.includes(t);
                                 const shiftInfo = SHIFT_TIMES[parseInt(t[1]) - 1];
-                                
+
                                 return (
                                   <button
                                     key={t}
                                     disabled={!isEditingShifts}
                                     onClick={() => toggleShift(d.key, t)}
-                                    className={`relative flex flex-col items-center justify-center py-2.5 rounded-xl border transition-all ${
-                                      active 
-                                        ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md shadow-blue-500/20' 
+                                    className={`relative flex flex-col items-center justify-center py-2.5 rounded-xl border transition-all ${active
+                                        ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md shadow-blue-500/20'
                                         : 'bg-white border-slate-100 text-slate-300 hover:border-slate-300'
-                                    } ${
-                                      isEditingShifts ? 'cursor-pointer active:scale-[0.92]' : 'cursor-default'
-                                    }`}
+                                      } ${isEditingShifts ? 'cursor-pointer active:scale-[0.92]' : 'cursor-default'
+                                      }`}
                                   >
                                     <span className="text-xs font-bold">{t}</span>
                                     <span className={`text-[8px] font-bold uppercase tracking-tighter mt-0.5 ${active ? 'text-white/80' : 'text-slate-300'}`}>
@@ -1027,11 +1022,11 @@ export default function ShiftsPage() {
         </SheetContent>
       </Sheet>
 
-      <Toast 
-        message={toast.message} 
-        type={toast.type} 
-        isVisible={toast.isVisible} 
-        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.isVisible}
+        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
       />
     </motion.div>
   );

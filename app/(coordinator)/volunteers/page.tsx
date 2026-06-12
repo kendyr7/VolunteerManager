@@ -30,8 +30,8 @@ const containerVariants = {
 
 const itemVariants = {
   hidden: { opacity: 0, y: 10 },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     y: 0,
     transition: {
       type: "spring" as const,
@@ -69,11 +69,11 @@ const getCommitteeColor = (committee: string) => {
 
 export default function VolunteersPage() {
   const supabase = createClient();
-  const { searchTerm } = useSearch();
+  const { searchTerm, setSearchTerm } = useSearch();
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
-  
+
   const [volunteers, setVolunteers] = useState<VolunteerType[]>([]);
   const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
   const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
@@ -100,7 +100,7 @@ export default function VolunteersPage() {
     title: '',
     message: '',
     confirmText: '',
-    onConfirm: () => {},
+    onConfirm: () => { },
     type: 'primary'
   });
 
@@ -114,7 +114,7 @@ export default function VolunteersPage() {
   const [newStake, setNewStake] = useState('');
   const [newWard, setNewWard] = useState('');
   const [newCommitteeId, setNewCommitteeId] = useState('');
-  
+
   const [editingVolunteer, setEditingVolunteer] = useState<VolunteerType | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
@@ -136,7 +136,7 @@ export default function VolunteersPage() {
       onConfirm: async () => {
         const { error } = await supabase
           .from('volunteers')
-          .update({ pin_hash: '1234' }) 
+          .update({ pin_hash: '1234' })
           .eq('id', vol.id);
 
         if (error) {
@@ -152,9 +152,9 @@ export default function VolunteersPage() {
 
   const handleArchiveVolunteer = async () => {
     if (!volunteerToArchive) return;
-    
+
     const newStatus = volunteerToArchive.status === 'archived' ? 'active' : 'archived';
-    
+
     const { error } = await supabase
       .from('volunteers')
       .update({ status: newStatus })
@@ -167,7 +167,7 @@ export default function VolunteersPage() {
       showToast(`Voluntario ${newStatus === 'archived' ? 'archivado' : 'desarchivado'}`);
       await loadData();
     }
-    
+
     setIsArchiveModalOpen(false);
     setVolunteerToArchive(null);
   };
@@ -191,7 +191,7 @@ export default function VolunteersPage() {
 
     // 2. Fetch volunteers with server-side filtering for Editors
     let query = supabase.from('volunteers').select('*, committees(name)');
-    
+
     if (role === 'Editor' && committee) {
       // Find committee ID first
       const { data: commObj } = await supabase
@@ -199,14 +199,14 @@ export default function VolunteersPage() {
         .select('id')
         .eq('name', committee)
         .maybeSingle();
-      
+
       if (commObj) {
         query = query.eq('committee_id', commObj.id);
       }
     }
 
     const { data: volsData, error: volsError } = await query;
-    
+
     if (volsError) {
       console.error("Error loading volunteers:", volsError);
     }
@@ -215,7 +215,7 @@ export default function VolunteersPage() {
     const { data: commsData, error: commsError } = await supabase
       .from('committees')
       .select('id, name');
-    
+
     if (commsError) {
       console.error("Error loading committees:", commsError);
     } else if (commsData) {
@@ -226,7 +226,7 @@ export default function VolunteersPage() {
     const { data: shiftsData, error: shiftsError } = await supabase
       .from('shifts')
       .select('*');
-    
+
     const sCounts: Record<string, number> = {};
     const gShifts: Record<string, Record<string, string[]>> = {};
 
@@ -234,7 +234,7 @@ export default function VolunteersPage() {
       shiftsData.forEach(s => {
         if (s.volunteer_id) {
           sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
-          
+
           if (!gShifts[s.volunteer_id]) {
             gShifts[s.volunteer_id] = Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
           }
@@ -366,12 +366,22 @@ export default function VolunteersPage() {
     setNewWard('');
     setNewCommitteeId('');
     setIsAddSheetOpen(false);
-    
+
     await loadData();
   };
 
-  const stakes: string[] = [];
-  const wards: string[] = [];
+  const stakes = useMemo(() => {
+    const set = new Set<string>();
+    volunteers.forEach(v => { if (v.stake) set.add(v.stake); });
+    return Array.from(set).sort();
+  }, [volunteers]);
+
+  const wards = useMemo(() => {
+    const set = new Set<string>();
+    volunteers.forEach(v => { if (v.ward) set.add(v.ward); });
+    return Array.from(set).sort();
+  }, [volunteers]);
+
   const committees = committeesList.map(c => c.name);
 
   const roleFilteredVolunteers = volunteers.filter(v => {
@@ -391,10 +401,10 @@ export default function VolunteersPage() {
       if (!matchesStatus) return false;
 
       // 3. User search and dynamic filters
-      const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            v.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            v.ward.toLowerCase().includes(searchTerm.toLowerCase());
-      
+      const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.ward.toLowerCase().includes(searchTerm.toLowerCase());
+
       const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(v.committee);
       const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(v.stake);
       const matchesWard = selectedWards.length === 0 || selectedWards.includes(v.ward);
@@ -408,7 +418,7 @@ export default function VolunteersPage() {
     setIsSheetOpen(true);
     setIsEditingShifts(false);
     setSaved(false);
-    
+
     const volShifts = globalShifts[vol.id] || Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
     setShiftsByDay(volShifts);
   };
@@ -422,24 +432,13 @@ export default function VolunteersPage() {
   }
 
   return (
-    <motion.div 
+    <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="visible"
       className="space-y-6 max-w-6xl mx-auto pb-12"
     >
-      <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-200/60">
-        <div className="space-y-1.5">
-          <p className="text-base font-medium text-slate-400">Gestiona los miembros del equipo y visualiza su desempeño.</p>
-        </div>
-        <Button 
-          onClick={() => setIsAddSheetOpen(true)}
-          className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
-        >
-          <UserPlus className="mr-2 h-4 w-4" />
-          Añadir Voluntario
-        </Button>
-      </motion.div>
+
 
       <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
         {/* Barra de Filtros */}
@@ -449,8 +448,8 @@ export default function VolunteersPage() {
               onClick={() => setShowArchived(!showArchived)}
               className={cn(
                 "flex items-center gap-2 px-4 h-10 rounded-sm text-sm font-bold transition-all active:scale-[0.97] border",
-                showArchived 
-                  ? "bg-[#fe4d97]/10 text-[#fe4d97] border-[#fe4d97]/20" 
+                showArchived
+                  ? "bg-[#fe4d97]/10 text-[#fe4d97] border-[#fe4d97]/20"
                   : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-800"
               )}
             >
@@ -473,27 +472,36 @@ export default function VolunteersPage() {
               options={stakes}
               value={selectedStakes}
               onChange={setSelectedStakes}
+              showSearch
             />
             <DataTableFilter
               title="Barrio"
               options={wards}
               value={selectedWards}
               onChange={setSelectedWards}
+              showSearch
             />
             {(selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0) && (
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 onClick={() => {
                   setSelectedCommittees([]);
                   setSelectedStakes([]);
                   setSelectedWards([]);
                 }}
-                className="h-10 px-3 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-sm"
+                className="h-10 px-3 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-sm font-bold text-xs uppercase tracking-widest"
               >
                 Limpiar todo
               </Button>
             )}
           </div>
+          <Button
+            onClick={() => setIsAddSheetOpen(true)}
+            className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97] shrink-0"
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            Añadir Voluntario
+          </Button>
         </div>
 
         {/* Tabla */}
@@ -515,8 +523,8 @@ export default function VolunteersPage() {
               <AnimatePresence mode="popLayout">
                 {filteredVolunteers.length > 0 ? (
                   filteredVolunteers.map((vol) => (
-                    <motion.tr 
-                      key={vol.id} 
+                    <motion.tr
+                      key={vol.id}
                       layout
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -559,7 +567,7 @@ export default function VolunteersPage() {
                       </TableCell>
                       <TableCell className="text-center pr-8">
                         <DropdownMenu>
-                          <DropdownMenuTrigger 
+                          <DropdownMenuTrigger
                             render={
                               <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-0 transition-all active:scale-90">
                                 <MoreHorizontal className="h-4 w-4" />
@@ -574,7 +582,7 @@ export default function VolunteersPage() {
                               <span className="material-symbols-outlined text-[18px]">lock_reset</span>
                               Resetear PIN
                             </DropdownMenuItem>
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               className="cursor-pointer text-red hover:bg-red-50 hover:text-red rounded-sm focus:bg-red-50 focus:text-red transition-colors flex items-center gap-2"
                               onClick={() => {
                                 setVolunteerToArchive(vol);
@@ -660,7 +668,7 @@ export default function VolunteersPage() {
                       <h3 className="font-bold text-slate-900 leading-none">Cronograma de Servicio</h3>
                       <p className="text-sm font-medium text-slate-400">Gestión de disponibilidad y asignaciones.</p>
                     </div>
-                    
+
                     <div className="flex items-center gap-3">
                       {saved && <span className="text-[11px] text-accent font-bold animate-pulse">✓ Guardado</span>}
                       {isEditingShifts ? (
@@ -702,24 +710,22 @@ export default function VolunteersPage() {
                     {EVENT_DAYS.map((d, idx) => {
                       const dayShifts = shiftsByDay[d.key] || [];
                       const hasShifts = dayShifts.length > 0;
-                      
+
                       return (
-                        <motion.div 
+                        <motion.div
                           key={d.key}
                           initial={{ opacity: 0, x: 10 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1 + idx * 0.03 }}
-                          className={`group border rounded-3xl overflow-hidden transition-all duration-300 ${
-                            hasShifts || isEditingShifts 
-                              ? 'border-slate-200 bg-white shadow-sm' 
+                          className={`group border rounded-3xl overflow-hidden transition-all duration-300 ${hasShifts || isEditingShifts
+                              ? 'border-slate-200 bg-white shadow-sm'
                               : 'border-slate-100 bg-slate-50/50 opacity-40 grayscale-[0.5]'
-                          }`}
+                            }`}
                         >
                           <div className="flex flex-col sm:flex-row sm:items-stretch">
                             {/* Date Panel */}
-                            <div className={`shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-4 px-4 border-b sm:border-b-0 sm:border-r transition-colors ${
-                              hasShifts ? 'bg-[#4d7cfe]/5 border-[#4d7cfe]/10' : 'bg-slate-50 border-slate-100'
-                            }`}>
+                            <div className={`shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-4 px-4 border-b sm:border-b-0 sm:border-r transition-colors ${hasShifts ? 'bg-[#4d7cfe]/5 border-[#4d7cfe]/10' : 'bg-slate-50 border-slate-100'
+                              }`}>
                               <p className={`text-[10px] font-bold uppercase tracking-widest leading-none mb-1 ${hasShifts ? 'text-[#4d7cfe]' : 'text-slate-400'}`}>
                                 {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
                               </p>
@@ -731,19 +737,17 @@ export default function VolunteersPage() {
                               {['T1', 'T2', 'T3', 'T4'].map((t) => {
                                 const active = dayShifts.includes(t);
                                 const shiftInfo = SHIFT_TIMES[parseInt(t[1]) - 1];
-                                
+
                                 return (
                                   <button
                                     key={t}
                                     disabled={!isEditingShifts}
                                     onClick={() => toggleShift(d.key, t)}
-                                    className={`relative flex flex-col items-center justify-center py-2.5 rounded-xl border transition-all ${
-                                      active 
-                                        ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md shadow-blue-500/20' 
+                                    className={`relative flex flex-col items-center justify-center py-2.5 rounded-xl border transition-all ${active
+                                        ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md shadow-blue-500/20'
                                         : 'bg-white border-slate-100 text-slate-300 hover:border-slate-300'
-                                    } ${
-                                      isEditingShifts ? 'cursor-pointer active:scale-[0.92]' : 'cursor-default'
-                                    }`}
+                                      } ${isEditingShifts ? 'cursor-pointer active:scale-[0.92]' : 'cursor-default'
+                                      }`}
                                   >
                                     <span className="text-xs font-bold">{t}</span>
                                     <span className={`text-[8px] font-bold uppercase tracking-tighter mt-0.5 ${active ? 'text-white/80' : 'text-slate-300'}`}>
@@ -775,18 +779,18 @@ export default function VolunteersPage() {
           <SheetHeader>
             <SheetTitle className="text-xl font-bold text-slate-800">Añadir Voluntario</SheetTitle>
           </SheetHeader>
-          <form 
+          <form
             id="add-volunteer-form"
             onSubmit={handleAddVolunteer}
             className="flex-1 overflow-y-auto px-6 space-y-6 pb-24"
           >
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-slate-800">Nombre y Apellido</label>
-              <Input 
-                required 
-                minLength={3} 
-                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" 
-                placeholder="Ej. Juan Pérez" 
+              <Input
+                required
+                minLength={3}
+                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint"
+                placeholder="Ej. Juan Pérez"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
               />
@@ -794,16 +798,16 @@ export default function VolunteersPage() {
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-slate-800">Celular</label>
-              <Input 
-                required 
-                type="tel" 
-                pattern="[0-9]{8}" 
+              <Input
+                required
+                type="tel"
+                pattern="[0-9]{8}"
                 maxLength={8}
                 onKeyPress={(e) => {
                   if (!/[0-9]/.test(e.key)) e.preventDefault();
                 }}
-                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" 
-                placeholder="Ej. 88888888" 
+                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint"
+                placeholder="Ej. 88888888"
                 value={newPhone}
                 onChange={(e) => setNewPhone(e.target.value)}
               />
@@ -811,42 +815,46 @@ export default function VolunteersPage() {
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-slate-800">Estaca</label>
-              <Input 
-                required 
-                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" 
-                placeholder="Ej. Managua Sur" 
+              <Input
+                required
+                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint"
+                placeholder="Ej. Managua Sur"
                 value={newStake}
                 onChange={(e) => setNewStake(e.target.value)}
               />
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-slate-800">Barrio</label>
-              <Input 
-                required 
-                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint" 
-                placeholder="Ej. Barrio 1" 
+              <Input
+                required
+                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint"
+                placeholder="Ej. Barrio 1"
                 value={newWard}
                 onChange={(e) => setNewWard(e.target.value)}
               />
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-slate-800">Comité</label>
-              <Select required onValueChange={(val) => setNewCommitteeId(val || '')} value={newCommitteeId}>
-                <SelectTrigger className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint">
-                  <SelectValue placeholder="Selecciona un comité" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-slate-200 text-slate-800">
-                  {committeesList.map((com) => (
-                    <SelectItem 
-                      key={com.id} 
-                      value={com.id} 
-                      className="cursor-pointer rounded-sm hover:bg-slate-50 focus:bg-slate-50 focus:text-[#4d7cfe] data-[state=checked]:bg-[#4d7cfe]/10 data-[state=checked]:text-[#4d7cfe] transition-colors"
-                    >
-                      {com.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <DataTableFilter
+                title={newCommitteeId ? (committeesList.find(c => c.id === newCommitteeId)?.name || "Comité") : "Selecciona un comité"}
+                options={committeesList.map(c => c.name)}
+                value={newCommitteeId ? [committeesList.find(c => c.id === newCommitteeId)?.name || ""] : []}
+                dropdownLabel="Comités disponibles"
+                hideClearButton
+                hideCountBadge
+                isCommitteeFilter
+                className="w-full bg-slate-50 justify-between h-10"
+                onChange={(vals) => {
+                  if (vals.length === 0) {
+                    setNewCommitteeId("");
+                    return;
+                  }
+                  const currentName = committeesList.find(c => c.id === newCommitteeId)?.name;
+                  const newName = vals.find(v => v !== currentName) || vals[0];
+                  const comm = committeesList.find(c => c.name === newName);
+                  setNewCommitteeId(comm ? comm.id : "");
+                }}
+              />
             </div>
           </form>
 
@@ -862,11 +870,11 @@ export default function VolunteersPage() {
         </SheetContent>
       </Sheet>
 
-      <Toast 
-        message={toast.message} 
-        type={toast.type} 
-        isVisible={toast.isVisible} 
-        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.isVisible}
+        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
       />
 
       <ConfirmationModal
@@ -882,7 +890,7 @@ export default function VolunteersPage() {
       <ConfirmationModal
         isOpen={isArchiveModalOpen}
         title={volunteerToArchive?.status === 'archived' ? 'Desarchivar Voluntario' : 'Archivar Voluntario'}
-        message={volunteerToArchive?.status === 'archived' 
+        message={volunteerToArchive?.status === 'archived'
           ? `¿Estás seguro de que deseas desarchivar a ${volunteerToArchive?.name}? Volverá a aparecer en las listas activas.`
           : `¿Estás seguro de que deseas archivar a ${volunteerToArchive?.name}? Dejará de aparecer en las listas y conteos de turnos.`
         }

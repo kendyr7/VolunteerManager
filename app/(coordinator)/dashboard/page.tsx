@@ -43,6 +43,7 @@ export default function CoordinatorDashboard() {
   const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
   const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
+  const [greeting, setGreeting] = useState<React.ReactNode>("Monitor central de operaciones para el programa de Puertas Abiertas.");
 
   const EVENT_DAYS_RAW = getActiveEventDays();
   const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
@@ -128,10 +129,58 @@ export default function CoordinatorDashboard() {
 
   useEffect(() => {
     const role = localStorage.getItem('mock_role') || 'Admin';
+    const phone = localStorage.getItem('volunteer_phone');
+
+    const fetchUserNameAndSetGreeting = async () => {
+      let firstName = 'Coordinador';
+      
+      if (phone) {
+        const cleanPhone = phone.replace(/\s+/g, '');
+        const { data: user } = await supabase
+          .from('platform_users')
+          .select('full_name')
+          .eq('phone', cleanPhone)
+          .maybeSingle();
+          
+        if (user && user.full_name) {
+          firstName = user.full_name.split(' ')[0];
+        }
+      }
+
+      // Generar saludo dinámico
+      const hour = new Date().getHours();
+      let timeOfDay = 'Buenas noches';
+      let emoji = '🌙';
+      if (hour >= 5 && hour < 12) {
+        timeOfDay = 'Buenos días';
+        emoji = '☀️';
+      } else if (hour >= 12 && hour < 19) {
+        timeOfDay = 'Buenas tardes';
+        emoji = '🌤️';
+      }
+
+      const messages = [
+        `¿Listo para organizar un excelente evento? 🚀`,
+        `Aquí tienes el resumen operativo de hoy. 📊`,
+        `Vamos a hacer grandes cosas hoy. ✨`,
+        `Es un buen momento para revisar los turnos. 🕒`,
+        `El equipo cuenta contigo. 💪`
+      ];
+      const randomMsg = messages[Math.floor(Math.random() * messages.length)];
+      
+      setGreeting(
+        <>
+          <span className="block mb-1 text-slate-800">{timeOfDay}, <span className="font-bold">{firstName}</span> {emoji}</span>
+          <span className="block text-base text-slate-500 font-normal">{randomMsg}</span>
+        </>
+      );
+    };
+
     if (role === 'Editor' || role === 'Lector') {
       router.replace('/volunteers');
     } else {
       setIsAuthorized(true);
+      fetchUserNameAndSetGreeting();
       loadData().then(() => setLoading(false));
     }
   }, [router]);
@@ -309,9 +358,14 @@ export default function CoordinatorDashboard() {
       {/* Header Administrativo - High-End Redesign */}
       <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 pb-8 border-b border-slate-200/60 relative overflow-hidden">
         <div className="space-y-2 relative z-10">
-          <p className="text-lg font-medium text-slate-400 max-w-xl leading-relaxed">
-            Monitor central de operaciones para el programa de Puertas Abiertas.
-          </p>
+          <motion.div 
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+            className="text-2xl tracking-tight leading-relaxed"
+          >
+            {greeting}
+          </motion.div>
         </div>
         
         <div className="flex items-center gap-4 shrink-0 relative z-10">

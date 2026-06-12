@@ -3,15 +3,15 @@
 import { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { 
-  generateReminderMessage, 
-  generateWaMeLink 
+import {
+  generateReminderMessage,
+  generateWaMeLink
 } from "@/lib/whatsapp";
-import { 
-  getActiveEventDays, 
-  formatDateShort, 
-  SHIFT_TIMES, 
-  isHoliday 
+import {
+  getActiveEventDays,
+  formatDateShort,
+  SHIFT_TIMES,
+  isHoliday
 } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -105,7 +105,7 @@ export default function RemindersPage() {
     const { data: volsData, error: volsError } = await supabase
       .from('volunteers')
       .select('*, committees(name)');
-    
+
     if (volsError) {
       console.error("Error loading volunteers:", volsError);
     }
@@ -114,7 +114,7 @@ export default function RemindersPage() {
     const { data: commsData, error: commsError } = await supabase
       .from('committees')
       .select('id, name');
-    
+
     if (commsError) {
       console.error("Error loading committees:", commsError);
     } else if (commsData) {
@@ -125,7 +125,7 @@ export default function RemindersPage() {
     const { data: shiftsData, error: shiftsError } = await supabase
       .from('shifts')
       .select('*');
-    
+
     const sCounts: Record<string, number> = {};
     const gShifts: Record<string, Record<string, string[]>> = {};
 
@@ -133,7 +133,7 @@ export default function RemindersPage() {
       shiftsData.forEach(s => {
         if (s.volunteer_id) {
           sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
-          
+
           if (!gShifts[s.volunteer_id]) {
             gShifts[s.volunteer_id] = Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
           }
@@ -218,7 +218,7 @@ export default function RemindersPage() {
       counts[day.key] = { T1: 0, T2: 0, T3: 0, T4: 0 };
       volunteers.forEach(vol => {
         // Filtrado multicriterio
-        const matchesSearch = !searchTerm || 
+        const matchesSearch = !searchTerm ||
           vol.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
           vol.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
           vol.ward.toLowerCase().includes(searchTerm.toLowerCase());
@@ -247,7 +247,7 @@ export default function RemindersPage() {
   const activeVolunteers = useMemo(() => {
     if (!selectedDayKey || !selectedShiftId) return [];
     return volunteers.filter(vol => {
-      const matchesSearch = !searchTerm || 
+      const matchesSearch = !searchTerm ||
         vol.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         vol.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
         vol.ward.toLowerCase().includes(searchTerm.toLowerCase());
@@ -268,17 +268,17 @@ export default function RemindersPage() {
   const selectedShiftDetails = SHIFT_TIMES.find(s => `T${s.id}` === selectedShiftId);
   const selectedDayObj = EVENT_DAYS.find(d => d.key === selectedDayKey);
   const isSelectedHoliday = selectedDayObj ? isHoliday(selectedDayObj.date) : false;
-  
-  const dateStr = selectedDayObj 
-    ? format(selectedDayObj.date, "EEEE d 'de' MMMM", { locale: es }) 
+
+  const dateStr = selectedDayObj
+    ? format(selectedDayObj.date, "EEEE d 'de' MMMM", { locale: es })
     : "";
 
   const previewMessage = generateReminderMessage(
-    "[Nombre del Voluntario]", 
-    dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "", 
-    selectedShiftDetails?.name || "", 
-    selectedShiftDetails?.time || "", 
-    selectedCommittees.length === 1 ? selectedCommittees[0] : "Seguridad", 
+    "[Nombre del Voluntario]",
+    dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
+    selectedShiftDetails?.name || "",
+    selectedShiftDetails?.time || "",
+    selectedCommittees.length === 1 ? selectedCommittees[0] : "Seguridad",
     isSelectedHoliday
   );
 
@@ -320,9 +320,7 @@ export default function RemindersPage() {
 
   return (
     <div className="max-w-7xl xl:max-w-[1440px] mx-auto px-4 lg:px-8 space-y-6">
-      <div>
-        <p className="text-base font-medium text-slate-500">Visualiza las asignaciones reales y envía mensajes de confirmación a los voluntarios.</p>
-      </div>
+
 
       {/* Barra de Filtros Globales (Prioritaria) */}
       <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex items-center justify-between gap-4">
@@ -338,12 +336,14 @@ export default function RemindersPage() {
             options={stakes}
             value={selectedStakes}
             onChange={setSelectedStakes}
+            showSearch
           />
           <DataTableFilter
             title="Barrio"
             options={wards}
             value={selectedWards}
             onChange={setSelectedWards}
+            showSearch
           />
           {(selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0 || searchTerm) && (
             <Button
@@ -363,7 +363,7 @@ export default function RemindersPage() {
 
       {/* Selector de Turnos Rediseñado en Dos Filas */}
       <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex flex-col bg-white shadow-sm border border-slate-200 gap-5">
-        
+
         {/* FILA 1: FECHA */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -402,21 +402,18 @@ export default function RemindersPage() {
                       }
                     }
                   }}
-                  className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-sm border font-bold text-xs transition-all ${
-                    isSelected
+                  className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-sm border font-bold text-xs transition-all ${isSelected
                       ? 'bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105'
                       : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
-                  }`}
+                    }`}
                 >
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                    isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
-                  }`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                    }`}>
                     {dayInitial}
                   </span>
                   <span>{day.dateNum} Sep</span>
-                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    totalVolunteersOnDay > 0 ? (isSelected ? 'bg-white' : 'bg-accent') : (isSelected ? 'bg-white/30' : 'bg-slate-200')
-                  }`} />
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${totalVolunteersOnDay > 0 ? (isSelected ? 'bg-white' : 'bg-accent') : (isSelected ? 'bg-white/30' : 'bg-slate-200')
+                    }`} />
                 </button>
               );
             })}
@@ -442,15 +439,15 @@ export default function RemindersPage() {
               }
 
               const isSelected = selectedDayKey && selectedShiftId === t;
-              
+
               // Lógica de colores según requerimientos de comité
               const isSingleCommittee = selectedCommittees.length === 1;
               const activeCommittee = isSingleCommittee ? selectedCommittees[0] : null;
               const minRequired = activeCommittee ? (committeeRequirements[activeCommittee]?.[t] ?? 0) : 0;
-              
+
               let buttonClass = "";
               let countTextClass = "";
-              
+
               if (isSelected) {
                 if (isSingleCommittee) {
                   const isUnderstaffed = count < minRequired;
@@ -493,7 +490,7 @@ export default function RemindersPage() {
                 buttonClass = "bg-white border-slate-200 text-slate-500 opacity-60 cursor-not-allowed";
                 countTextClass = "text-slate-500/50";
               }
-              
+
               const shiftTimeLabel = SHIFT_TIMES.find(s => `T${s.id}` === t)?.name || "";
 
               return (
@@ -560,7 +557,7 @@ export default function RemindersPage() {
                   </span>
                 </p>
               </div>
-              
+
               <div className="shrink-0 flex items-center gap-2">
                 <Badge variant="outline" className="bg-slate-50 text-slate-600 font-bold border-slate-200 text-xs py-1 px-3">
                   {activeVolunteers.length} Voluntarios
@@ -591,7 +588,7 @@ export default function RemindersPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              
+
               {/* Lista de Voluntarios (Dos columnas) */}
               <div className={showTemplate ? "lg:col-span-8 space-y-4" : "lg:col-span-12 space-y-4"}>
                 <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden flex flex-col overflow-hidden bg-white border border-slate-200 shadow-sm">
@@ -600,9 +597,9 @@ export default function RemindersPage() {
                       <span className="material-symbols-outlined text-[16px] text-[#0084d1]">group</span>
                       Asistencias
                     </h3>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={handleCopyNumbers}
                       disabled={activeVolunteers.length === 0}
                       className="h-7 text-[10.5px] font-bold text-[#0084d1] hover:bg-slate-100 px-2 rounded-sm"
@@ -624,27 +621,26 @@ export default function RemindersPage() {
                         {activeVolunteers.map((vol) => {
                           const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                           const msg = generateReminderMessage(
-                            vol.name, 
-                            dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "", 
-                            selectedShiftDetails?.name || "", 
-                            selectedShiftDetails?.time || "", 
-                            vol.committee, 
+                            vol.name,
+                            dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
+                            selectedShiftDetails?.name || "",
+                            selectedShiftDetails?.time || "",
+                            vol.committee,
                             isSelectedHoliday
                           );
                           const link = generateWaMeLink(vol.phone, msg);
 
                           return (
-                            <div 
-                              key={vol.id} 
-                              className={`flex items-center justify-between group bg-white shadow-sm border rounded-sm px-2.5 py-2 hover:bg-slate-50 transition-colors ${
-                                isConfirmed 
-                                  ? 'border-teal-500/30 bg-teal-50/5' 
+                            <div
+                              key={vol.id}
+                              className={`flex items-center justify-between group bg-white shadow-sm border rounded-sm px-2.5 py-2 hover:bg-slate-50 transition-colors ${isConfirmed
+                                  ? 'border-teal-500/30 bg-teal-50/5'
                                   : 'border-slate-200/50'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                 {/* Checkbox de Confirmación */}
-                                <button 
+                                <button
                                   onClick={(e) => { e.stopPropagation(); toggleConfirmed(vol.id); }}
                                   className="shrink-0 p-0.5 text-slate-500 hover:text-slate-800 transition-colors"
                                   title={isConfirmed ? "Marcar como pendiente" : "Confirmar asistencia"}
@@ -657,15 +653,13 @@ export default function RemindersPage() {
                                 </button>
 
                                 {/* Dot similar al de turnos */}
-                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                  isConfirmed ? 'bg-accent animate-pulse' : 'bg-slate-300'
-                                }`} />
+                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isConfirmed ? 'bg-accent animate-pulse' : 'bg-slate-300'
+                                  }`} />
 
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className={`text-sm font-medium text-slate-800 truncate transition-colors ${
-                                      isConfirmed ? 'text-teal-900 font-bold' : ''
-                                    }`}>
+                                    <span className={`text-sm font-medium text-slate-800 truncate transition-colors ${isConfirmed ? 'text-teal-900 font-bold' : ''
+                                      }`}>
                                       {vol.name}
                                     </span>
                                     <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-slate-50 text-slate-500 font-semibold border-slate-200/60">
@@ -681,7 +675,7 @@ export default function RemindersPage() {
                                 </div>
                               </div>
 
-                              <button 
+                              <button
                                 onClick={(e) => { e.stopPropagation(); window.open(link, '_blank', 'noopener,noreferrer'); }}
                                 className="h-7 px-2 bg-[#25D366] hover:bg-[#1ebd5a] active:bg-[#128c7e] text-white text-[10px] font-bold rounded-sm flex items-center gap-1 transition-colors shadow-sm ml-2 shrink-0"
                               >
@@ -727,11 +721,11 @@ export default function RemindersPage() {
         )}
       </div>
 
-      <Toast 
-        message={toast.message} 
-        type={toast.type} 
-        isVisible={toast.isVisible} 
-        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.isVisible}
+        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
       />
     </div>
   );

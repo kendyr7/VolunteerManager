@@ -195,7 +195,7 @@ function CoordinatorLayoutInner({
                       "relative flex items-center rounded-sm transition-all duration-200 text-[14px] font-medium overflow-hidden",
                       sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5",
                       isActive
-                        ? "bg-[#eff6ff] text-[#4d7cfe]"
+                        ? "bg-[#4d7cfe]/10 text-[#4d7cfe]"
                         : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     )}
                   >
@@ -207,49 +207,7 @@ function CoordinatorLayoutInner({
                   </Link>
                 );
               })}
-
-              <Link
-                href="#"
-                title={!sidebarOpen ? "All Apps" : undefined}
-                className={cn(
-                  "relative flex items-center rounded-sm transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                  sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5"
-                )}
-              >
-                <Icon name="grid_view" size={20} className="text-slate-500 shrink-0" />
-                {sidebarOpen && <span className="truncate">All Apps</span>}
-              </Link>
             </div>
-
-            {/* Latest Projects Section — hidden when collapsed */}
-            {sidebarOpen && (
-              <div className="space-y-1 pt-2">
-                <div className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-slate-400">
-                  <span>Latest Projects</span>
-                  <Icon name="add_circle" size={16} />
-                </div>
-                <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-                  <div className="w-5 h-5 rounded-full bg-pink-500 flex items-center justify-center text-white shrink-0">
-                    <Icon name="sports_basketball" size={12} />
-                  </div>
-                  <span className="truncate">UI/UX Inspiration</span>
-                </Link>
-                <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-                  <div className="w-5 h-5 rounded-t-full rounded-bl-full bg-green-500 shrink-0" />
-                  <span className="truncate">Theme Development</span>
-                </Link>
-                <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-                  <div className="w-5 h-5 rounded-sm bg-blue-500 flex items-center justify-center text-white shrink-0">
-                    <Icon name="deployed_code" size={14} />
-                  </div>
-                  <span className="truncate">Campaing Design</span>
-                </Link>
-                <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[13px] font-medium text-[#4d7cfe] hover:underline mt-2">
-                  <Icon name="more_horiz" size={16} />
-                  See More Projects
-                </Link>
-              </div>
-            )}
           </div>
 
           {/* Bottom Section — always pinned */}
@@ -347,4 +305,3 @@ export default function CoordinatorLayout({
     </SearchProvider>
   );
 }
-

@@ -168,10 +168,7 @@ export default function ImportPage() {
       animate="visible"
       className="max-w-6xl mx-auto space-y-10 pb-20"
     >
-      <motion.div variants={itemVariants} className="pb-6 border-b border-slate-200/60">
-        <h1 className="tracking-tight text-slate-900 leading-none mb-2 text-2xl font-bold">Importación Masiva</h1>
-        <p className="text-base font-medium text-slate-500">Carga múltiples voluntarios al sistema de forma instantánea.</p>
-      </motion.div>
+
 
       {step === 1 && (
         <motion.div variants={itemVariants}>
