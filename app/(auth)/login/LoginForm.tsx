@@ -170,7 +170,7 @@ export function LoginForm() {
                 </>
               ) : (
                 <>
-                  <span>Ingresar a la Plataforma</span>
+                  <span>Ingresar</span>
                   <span className="material-symbols-outlined text-[18px] opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all">north_east</span>
                 </>
               )}

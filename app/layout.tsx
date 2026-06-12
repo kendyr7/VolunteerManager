@@ -11,22 +11,9 @@ const publicSans = Public_Sans({
 export const metadata: Metadata = {
   title: "Volunteer Manager",
   description: "Gestión de voluntarios para Puertas Abiertas del Templo",
-  icons: {
-    icon: "/icon-192.png",
-    shortcut: "/icon-192.png",
-    apple: "/icon-192.png",
-  },
   openGraph: {
     title: "Volunteer Manager",
     description: "Gestión de voluntarios para Puertas Abiertas del Templo",
-    images: [
-      {
-        url: "/icon-192.png",
-        width: 192,
-        height: 192,
-        alt: "Volunteer Manager Icon",
-      },
-    ],
   },
 };
 

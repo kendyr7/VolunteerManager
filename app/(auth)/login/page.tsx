@@ -13,10 +13,8 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center p-6 md:p-12 lg:p-16 z-10 bg-white">
         <div className="w-full max-w-sm">
           <div className="mb-10">
-            <div className="w-12 h-12 bg-[#0084d1] rounded-sm flex items-center justify-center text-white font-bold text-xl mb-6 shadow-lg shadow-[#0084d1]/20">
-              V
-            </div>
-            <h1 className="text-3xl tracking-tight text-slate-900 mb-2">
+            <h1 className="text-3xl tracking-tight text-slate-900 mb-2 flex items-center gap-3">
+              <Image src="/icon-192.png" alt="Templo Managua" width={32} height={32} className="object-contain" />
               Bienvenido de nuevo
             </h1>
             <p className="text-slate-500 font-medium">
@@ -42,7 +40,7 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-[#0084d1]/10 z-10" />
         <div className="absolute bottom-12 left-12 right-12 z-20 text-white">
           <div className="backdrop-blur-md bg-black/20 p-8 rounded-sm border border-white/20 shadow-2xl">
-            <h2 className="tracking-tight mb-4">
+            <h2 className="tracking-tight mb-4 text-white">
               "El servicio es el lenguaje del amor en acción."
             </h2>
             <div className="flex items-center gap-3">
