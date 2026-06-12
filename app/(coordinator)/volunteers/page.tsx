@@ -136,9 +136,9 @@ export default function VolunteersPage() {
       observerRef.current = new ResizeObserver((entries) => {
         const height = entries[0].contentRect.height;
         if (height > 42) {
-          const calc = Math.ceil((height - 42) / 49); // 42px header, ~49px row
+          const calc = Math.floor((height - 42) / 49); // 42px header, ~49px row
           setItemsPerPage((prev) => {
-            const next = Math.max(5, calc);
+            const next = Math.max(1, calc);
             return prev !== next ? next : prev;
           });
         }
@@ -470,14 +470,14 @@ export default function VolunteersPage() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-6 max-w-6xl mx-auto pb-6 flex flex-col h-[calc(100vh-6rem)]"
+      className="space-y-4 md:space-y-6 w-full flex flex-col h-[calc(100dvh-10rem)] md:h-[calc(100dvh-8rem)]"
     >
 
 
       <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
         {/* Barra de Filtros */}
-        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-4 flex-wrap shrink-0">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="p-4 md:p-5 border-b border-slate-200 bg-slate-50 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shrink-0">
+          <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
             <button
               onClick={() => setShowArchived(!showArchived)}
               className={cn(
@@ -529,18 +529,20 @@ export default function VolunteersPage() {
               </Button>
             )}
           </div>
-          <Button
-            onClick={() => setIsAddSheetOpen(true)}
-            className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97] shrink-0"
-          >
-            <UserPlus className="mr-2 h-4 w-4" />
-            Añadir Voluntario
-          </Button>
+          <div className="w-full lg:w-auto flex mt-2 lg:mt-0">
+            <Button
+              onClick={() => setIsAddSheetOpen(true)}
+              className="w-full sm:w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97] shrink-0"
+            >
+              <UserPlus className="mr-2 h-4 w-4" />
+              Añadir Voluntario
+            </Button>
+          </div>
         </div>
 
         {/* Tabla */}
-        <div className="overflow-auto bg-white flex-1 relative" ref={tableContainerRef}>
-          <Table>
+        <div className="overflow-auto bg-white flex-1 relative [&>div]:h-full" ref={tableContainerRef}>
+          <Table className={cn(currentVolunteers.length === itemsPerPage && "h-full")}>
             <TableHeader className="bg-slate-50 border-b border-slate-200">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="font-medium text-slate-500 pl-8">Nombre y Apellido</TableHead>
@@ -644,9 +646,9 @@ export default function VolunteersPage() {
           </Table>
         </div>
         {totalPages > 1 && (
-          <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
-            <p className="text-xs text-slate-500 font-medium">
-              Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, filteredVolunteers.length)} de {filteredVolunteers.length} voluntarios
+          <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+            <p className="text-xs text-slate-500 font-medium text-center sm:text-left">
+              Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, filteredVolunteers.length)} de {filteredVolunteers.length}
             </p>
             <div className="flex items-center gap-2">
               <Button
@@ -659,7 +661,7 @@ export default function VolunteersPage() {
                 Anterior
               </Button>
               <div className="text-xs font-bold text-slate-600 px-2">
-                Página {safeCurrentPage} de {totalPages}
+                {safeCurrentPage} / {totalPages}
               </div>
               <Button
                 variant="outline"
@@ -679,8 +681,7 @@ export default function VolunteersPage() {
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetContent
           side="right"
-          style={{ width: '620px', maxWidth: '95vw' }}
-          className="bg-white text-slate-800 border-l border-slate-200 p-0 overflow-y-auto"
+          className="bg-white text-slate-800 border-l border-slate-200 p-0 overflow-y-auto w-full sm:w-[620px] sm:max-w-[95vw]"
         >
           {editingVolunteer && (
             <div className="p-0 space-y-0">
@@ -798,7 +799,7 @@ export default function VolunteersPage() {
                             </div>
 
                             {/* Shifts Grid (The Shells) */}
-                            <div className="flex-1 p-4 grid grid-cols-4 gap-2">
+                            <div className="flex-1 p-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
                               {['T1', 'T2', 'T3', 'T4'].map((t) => {
                                 const active = dayShifts.includes(t);
                                 const shiftInfo = SHIFT_TIMES[parseInt(t[1]) - 1];
@@ -838,10 +839,9 @@ export default function VolunteersPage() {
       <Sheet open={isAddSheetOpen} onOpenChange={setIsAddSheetOpen}>
         <SheetContent
           side="right"
-          style={{ width: '500px', maxWidth: '95vw' }}
-          className="bg-white text-slate-800 border-l border-slate-200 overflow-hidden"
+          className="bg-white text-slate-800 border-l border-slate-200 overflow-hidden w-full sm:w-[500px] sm:max-w-[95vw] p-0 flex flex-col"
         >
-          <SheetHeader>
+          <SheetHeader className="p-6 pb-2 shrink-0">
             <SheetTitle className="text-xl font-bold text-slate-800">Añadir Voluntario</SheetTitle>
           </SheetHeader>
           <form

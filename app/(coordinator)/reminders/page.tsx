@@ -197,9 +197,9 @@ export default function RemindersPage() {
       observerRef.current = new ResizeObserver((entries) => {
         const height = entries[0].contentRect.height;
         if (height > 42) {
-          const calc = Math.ceil((height - 42) / 49); // 42px header, ~49px row
+          const calc = Math.floor((height - 42) / 49); // 42px header, ~49px row
           setItemsPerPage((prev) => {
-            const next = Math.max(5, calc);
+            const next = Math.max(1, calc);
             return prev !== next ? next : prev;
           });
         }
@@ -377,12 +377,12 @@ export default function RemindersPage() {
   }
 
   return (
-    <div className="max-w-7xl xl:max-w-[1440px] mx-auto px-4 lg:px-8 space-y-6 flex flex-col h-[calc(100vh-6rem)] pb-6">
+    <div className="w-full space-y-4 md:space-y-6 flex flex-col h-[calc(100dvh-10rem)] md:h-[calc(100dvh-8rem)]">
 
 
       {/* Barra de Filtros Globales (Prioritaria) */}
-      <div className="shrink-0 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="shrink-0 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-4 md:p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+        <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
           <DataTableFilter
             title="Comité"
             options={committees}
@@ -429,12 +429,12 @@ export default function RemindersPage() {
             </Button>
           )}
           
-          <div className="ml-auto flex items-center">
+          <div className="w-full lg:w-auto flex items-center justify-end mt-2 lg:mt-0">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowTemplate(true)}
-              className="h-9 px-3 text-xs font-bold border-slate-200 text-slate-500 hover:text-[#0084d1] hover:bg-slate-50 hover:border-[#0084d1]/30 transition-colors shadow-sm rounded-sm flex items-center gap-1.5"
+              className="w-full sm:w-auto h-9 px-3 text-xs font-bold border-slate-200 text-slate-500 hover:text-[#0084d1] hover:bg-slate-50 hover:border-[#0084d1]/30 transition-colors shadow-sm rounded-sm flex items-center gap-1.5"
             >
               <span className="material-symbols-outlined text-[16px]">chat_bubble</span>
               Ver Plantilla
@@ -444,14 +444,14 @@ export default function RemindersPage() {
       </div>
 
       {/* Selector de Turnos Rediseñado en Dos Filas */}
-      <div className="shrink-0 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex flex-col gap-5">
+      <div className="shrink-0 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-4 md:p-5 flex flex-col gap-4 md:gap-5">
 
         {/* FILA 1: FECHA */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">FECHA</span>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 -mb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {EVENT_DAYS.map((day) => {
               const dayCounts = shiftCounts[day.key] || { T1: 0, T2: 0, T3: 0, T4: 0 };
               const totalVolunteersOnDay = Object.values(dayCounts).reduce((acc, count) => acc + count, 0);
@@ -472,7 +472,7 @@ export default function RemindersPage() {
                       }
                     }
                   }}
-                  className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-sm border font-bold text-xs transition-all ${isSelected
+                  className={`shrink-0 inline-flex items-center gap-2.5 px-4 py-2 rounded-sm border font-bold text-xs transition-all ${isSelected
                       ? 'bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105'
                       : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
                     }`}
@@ -496,7 +496,7 @@ export default function RemindersPage() {
         {/* FILA 2: TURNOS */}
         <div className="space-y-2">
           <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">TURNOS</span>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 -mb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {['T1', 'T2', 'T3', 'T4'].map((t) => {
               // Obtener conteo de voluntarios para este turno (si hay día seleccionado, del día; si no, total acumulado de todos los días)
               let count = 0;
@@ -577,7 +577,7 @@ export default function RemindersPage() {
                     }
                   }}
                   title={!selectedDayKey ? "Por favor selecciona una fecha primero" : `Seleccionar ${shiftTimeLabel}`}
-                  className={`inline-flex items-center gap-2.5 px-4.5 py-2.5 rounded-sm border text-xs transition-all ${buttonClass}`}
+                  className={`shrink-0 inline-flex items-center gap-2.5 px-4.5 py-2.5 rounded-sm border text-xs transition-all ${buttonClass}`}
                 >
                   <span className="font-bold">{t}</span>
                   <span className="text-[10px] opacity-30">|</span>
@@ -607,15 +607,15 @@ export default function RemindersPage() {
             <div className="flex-1 min-h-0 flex flex-col">
               <div className="flex-1 flex flex-col min-h-0">
                 <div className="bg-white border border-slate-200 rounded-sm shadow-sm flex flex-col flex-1 overflow-hidden">
-                  <div className="overflow-auto bg-white flex-1 relative" ref={tableContainerRef}>
+                  <div className="overflow-auto bg-white flex-1 relative [&>div]:h-full" ref={tableContainerRef}>
                     {activeVolunteers.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 text-center text-slate-500">
+                      <div className="flex flex-col items-center justify-center py-16 text-center text-slate-500 h-full">
                         <span className="material-symbols-outlined text-[48px] text-slate-200 mb-4">group_off</span>
                         <p className="text-base font-bold text-slate-700">Sin voluntarios asignados</p>
                         <p className="text-sm max-w-[250px] mt-1 text-slate-400">No hay voluntarios asignados a este turno para los filtros seleccionados.</p>
                       </div>
                     ) : (
-                      <Table>
+                      <Table className={cn(currentVolunteers.length === itemsPerPage && "h-full")}>
                         <TableHeader className="bg-slate-50 border-b border-slate-200">
                           <TableRow className="hover:bg-transparent">
                             <TableHead className="font-medium text-slate-500 text-center pl-8 w-16">Asist.</TableHead>
@@ -714,9 +714,9 @@ export default function RemindersPage() {
                   </div>
                   
                   {totalPages > 1 && (
-                    <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
-                      <p className="text-xs text-slate-500 font-medium">
-                        Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, activeVolunteers.length)} de {activeVolunteers.length} voluntarios
+                    <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                      <p className="text-xs text-slate-500 font-medium text-center sm:text-left">
+                        Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, activeVolunteers.length)} de {activeVolunteers.length}
                       </p>
                       <div className="flex items-center gap-2">
                         <Button
@@ -729,7 +729,7 @@ export default function RemindersPage() {
                           Anterior
                         </Button>
                         <div className="text-xs font-bold text-slate-600 px-2">
-                          Página {safeCurrentPage} de {totalPages}
+                          {safeCurrentPage} / {totalPages}
                         </div>
                         <Button
                           variant="outline"
@@ -751,7 +751,7 @@ export default function RemindersPage() {
       </div>
 
       <Sheet open={showTemplate} onOpenChange={setShowTemplate}>
-        <SheetContent side="right" className="w-[400px] sm:w-[540px] bg-white p-0 flex flex-col border-l border-slate-200/60 shadow-2xl">
+        <SheetContent side="right" className="w-full sm:w-[540px] bg-white p-0 flex flex-col border-l border-slate-200/60 shadow-2xl">
           <SheetHeader className="p-6 border-b border-slate-100 bg-slate-50/50">
             <SheetTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <span className="material-symbols-outlined text-[#0084d1]">chat_bubble</span>

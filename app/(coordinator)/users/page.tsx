@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,7 +61,30 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const { searchTerm } = useSearch();
 
-  // Toast State
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(15);
+  const observerRef = useRef<ResizeObserver | null>(null);
+
+  const tableContainerRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+    if (node) {
+      observerRef.current = new ResizeObserver((entries) => {
+        const height = entries[0].contentRect.height;
+        if (height > 42) {
+          const calc = Math.floor((height - 42) / 49); // 42px header, ~49px row
+          setItemsPerPage((prev) => {
+            const next = Math.max(1, calc);
+            return prev !== next ? next : prev;
+          });
+        }
+      });
+      observerRef.current.observe(node);
+    }
+  }, []);
+
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({
     message: '',
     type: 'success',
@@ -330,12 +353,28 @@ export default function UsersPage() {
     setErrorMsg(null);
   };
 
+  const filteredUsers = useMemo(() => {
+    return users.filter(user => 
+      !searchTerm || 
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      user.phone.includes(searchTerm)
+    );
+  }, [users, searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredUsers.length]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const currentUsers = filteredUsers.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage);
+
   return (
     <motion.div 
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="max-w-6xl mx-auto space-y-10 pb-12"
+      className="space-y-4 md:space-y-6 w-full flex flex-col h-[calc(100dvh-10rem)] md:h-[calc(100dvh-8rem)]"
     >
 
 
@@ -476,25 +515,25 @@ export default function UsersPage() {
       )}
 
       {/* Users Table */}
-      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
           <Button 
             onClick={() => setIsInviteOpen(true)}
-            className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
+            className="w-full sm:w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
           >
             <span className="material-symbols-outlined text-[18px] mr-2">person_add</span>
             Invitar Usuario
           </Button>
-          <div className="flex gap-2 ml-auto">
+          <div className="flex gap-2 w-full sm:w-auto sm:ml-auto justify-end">
             <Badge variant="outline" className="bg-white text-slate-600 border-slate-200 font-medium">
-              {users.length} usuarios
+              {filteredUsers.length} usuarios
             </Badge>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-auto bg-white flex-1 relative [&>div]:h-full" ref={tableContainerRef}>
           <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            <thead className="bg-slate-50/80 sticky top-0 z-10 backdrop-blur-md border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               <tr>
                 <th className="px-5 py-3">Usuario</th>
                 <th className="px-5 py-3">Teléfono</th>
@@ -510,16 +549,14 @@ export default function UsersPage() {
                     Cargando usuarios...
                   </td>
                 </tr>
-              ) : users.length === 0 ? (
+              ) : currentUsers.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-5 py-8 text-center text-slate-500">
                     No se encontraron usuarios.
                   </td>
                 </tr>
               ) : (
-                users
-                  .filter(u => !searchTerm || u.name.toLowerCase().includes(searchTerm.toLowerCase()) || u.phone.includes(searchTerm))
-                  .map(user => (
+                currentUsers.map(user => (
                   <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
                     <td className="px-5 py-3.5">
                     <p className="font-semibold text-slate-800">{user.name}</p>
@@ -583,14 +620,43 @@ export default function UsersPage() {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+            <p className="text-xs text-slate-500 font-medium text-center sm:text-left">
+              Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, filteredUsers.length)} de {filteredUsers.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={safeCurrentPage === 1}
+                className="h-8 text-xs font-bold"
+              >
+                Anterior
+              </Button>
+              <div className="text-xs font-bold text-slate-600 px-2">
+                {safeCurrentPage} / {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={safeCurrentPage === totalPages}
+                className="h-8 text-xs font-bold"
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Sheet de Edición */}
       <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
         <SheetContent
           side="right"
-          style={{ width: '450px', maxWidth: '95vw' }}
-          className="bg-white text-slate-800 border-l border-slate-200 p-0 overflow-y-auto"
+          className="bg-white text-slate-800 border-l border-slate-200 p-0 overflow-y-auto w-full sm:w-[450px] sm:max-w-[95vw]"
         >
           <div className="p-7 space-y-7">
             <div>
