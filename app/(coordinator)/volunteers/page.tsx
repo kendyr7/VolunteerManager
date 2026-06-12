@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -122,6 +122,30 @@ export default function VolunteersPage() {
   const [volunteerToArchive, setVolunteerToArchive] = useState<VolunteerType | null>(null);
   const [isEditingShifts, setIsEditingShifts] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(15);
+  const observerRef = useRef<ResizeObserver | null>(null);
+
+  const tableContainerRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+    if (node) {
+      observerRef.current = new ResizeObserver((entries) => {
+        const height = entries[0].contentRect.height;
+        if (height > 42) {
+          const calc = Math.ceil((height - 42) / 49); // 42px header, ~49px row
+          setItemsPerPage((prev) => {
+            const next = Math.max(5, calc);
+            return prev !== next ? next : prev;
+          });
+        }
+      });
+      observerRef.current.observe(node);
+    }
+  }, []);
 
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [currentCommittee, setCurrentCommittee] = useState<string>('');
@@ -391,7 +415,7 @@ export default function VolunteersPage() {
     return false;
   });
   const filteredVolunteers = useMemo(() => {
-    return volunteers.filter(v => {
+    const result = volunteers.filter(v => {
       // 1. Role-based isolation: Editors only see their committee
       if (currentRole === 'Editor' && v.committee !== currentCommittee) return false;
       if (currentRole === 'Lector') return false;
@@ -411,7 +435,17 @@ export default function VolunteersPage() {
 
       return matchesSearch && matchesCommittee && matchesStake && matchesWard;
     });
+    return result;
   }, [volunteers, searchTerm, selectedCommittees, selectedStakes, selectedWards, showArchived, currentRole, currentCommittee]);
+
+  // Reset page on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredVolunteers.length]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredVolunteers.length / itemsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const currentVolunteers = filteredVolunteers.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage);
 
   const handleEditClick = (vol: VolunteerType) => {
     setEditingVolunteer(vol);
@@ -436,13 +470,13 @@ export default function VolunteersPage() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-6 max-w-6xl mx-auto pb-12"
+      className="space-y-6 max-w-6xl mx-auto pb-6 flex flex-col h-[calc(100vh-6rem)]"
     >
 
 
-      <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden">
+      <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
         {/* Barra de Filtros */}
-        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-4 flex-wrap">
+        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-4 flex-wrap shrink-0">
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setShowArchived(!showArchived)}
@@ -505,7 +539,7 @@ export default function VolunteersPage() {
         </div>
 
         {/* Tabla */}
-        <div className="overflow-x-auto bg-white">
+        <div className="overflow-auto bg-white flex-1 relative" ref={tableContainerRef}>
           <Table>
             <TableHeader className="bg-slate-50 border-b border-slate-200">
               <TableRow className="hover:bg-transparent">
@@ -521,8 +555,8 @@ export default function VolunteersPage() {
             </TableHeader>
             <TableBody>
               <AnimatePresence mode="popLayout">
-                {filteredVolunteers.length > 0 ? (
-                  filteredVolunteers.map((vol) => (
+                {currentVolunteers.length > 0 ? (
+                  currentVolunteers.map((vol) => (
                     <motion.tr
                       key={vol.id}
                       layout
@@ -609,6 +643,36 @@ export default function VolunteersPage() {
             </TableBody>
           </Table>
         </div>
+        {totalPages > 1 && (
+          <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
+            <p className="text-xs text-slate-500 font-medium">
+              Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, filteredVolunteers.length)} de {filteredVolunteers.length} voluntarios
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={safeCurrentPage === 1}
+                className="h-8 text-xs font-bold"
+              >
+                Anterior
+              </Button>
+              <div className="text-xs font-bold text-slate-600 px-2">
+                Página {safeCurrentPage} de {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={safeCurrentPage === totalPages}
+                className="h-8 text-xs font-bold"
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* Editor Lateral */}

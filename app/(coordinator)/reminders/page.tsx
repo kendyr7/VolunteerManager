@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -186,7 +186,27 @@ export default function RemindersPage() {
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
+  const [itemsPerPage, setItemsPerPage] = useState(15);
+  const observerRef = useRef<ResizeObserver | null>(null);
+
+  const tableContainerRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+    if (node) {
+      observerRef.current = new ResizeObserver((entries) => {
+        const height = entries[0].contentRect.height;
+        if (height > 42) {
+          const calc = Math.ceil((height - 42) / 49); // 42px header, ~49px row
+          setItemsPerPage((prev) => {
+            const next = Math.max(5, calc);
+            return prev !== next ? next : prev;
+          });
+        }
+      });
+      observerRef.current.observe(node);
+    }
+  }, []);
 
   // Estado de los filtros y visualización de plantilla
   const { searchTerm } = useSearch();
@@ -288,8 +308,9 @@ export default function RemindersPage() {
     setCurrentPage(1);
   }, [activeVolunteers.length, selectedDayKey, selectedShiftId]);
 
-  const totalPages = Math.ceil(activeVolunteers.length / itemsPerPage);
-  const currentVolunteers = activeVolunteers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(activeVolunteers.length / itemsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const currentVolunteers = activeVolunteers.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage);
 
   // Detalles del turno seleccionado
   const selectedShiftDetails = SHIFT_TIMES.find(s => `T${s.id}` === selectedShiftId);
@@ -356,11 +377,11 @@ export default function RemindersPage() {
   }
 
   return (
-    <div className="max-w-7xl xl:max-w-[1440px] mx-auto px-4 lg:px-8 space-y-6">
+    <div className="max-w-7xl xl:max-w-[1440px] mx-auto px-4 lg:px-8 space-y-6 flex flex-col h-[calc(100vh-6rem)] pb-6">
 
 
       {/* Barra de Filtros Globales (Prioritaria) */}
-      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex items-center justify-between gap-4">
+      <div className="shrink-0 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 flex-wrap">
           <DataTableFilter
             title="Comité"
@@ -423,7 +444,7 @@ export default function RemindersPage() {
       </div>
 
       {/* Selector de Turnos Rediseñado en Dos Filas */}
-      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex flex-col bg-white shadow-sm border border-slate-200 gap-5">
+      <div className="shrink-0 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex flex-col gap-5">
 
         {/* FILA 1: FECHA */}
         <div className="space-y-2">
@@ -571,11 +592,11 @@ export default function RemindersPage() {
       </div>
 
       {/* Panel de Gestión del Turno Seleccionado (Debajo) */}
-      <div className="space-y-4">
+      <div className="flex-1 min-h-0 flex flex-col">
         {!selectedDayKey || !selectedShiftId ? (
-          <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-12 bg-white shadow-sm border border-slate-200 flex flex-col items-center justify-center text-center min-h-[300px]">
+          <div className="flex-1 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-12 flex flex-col items-center justify-center text-center min-h-[300px]">
             <span className="material-symbols-outlined text-[64px] text-slate-500/30 mb-4 animate-pulse">calendar_month</span>
-            <h3 className="text-lg font-bold tracking-tight font-bold text-slate-800 mb-2">Ningún turno seleccionado</h3>
+            <h3 className="text-lg font-bold tracking-tight text-slate-800 mb-2">Ningún turno seleccionado</h3>
             <p className="text-xs font-medium text-slate-500 max-w-sm leading-relaxed">
               Selecciona un día y un turno específico (T1 - T4) en el selector superior para comenzar a enviar recordatorios de WhatsApp.
             </p>
@@ -583,10 +604,10 @@ export default function RemindersPage() {
         ) : (
           <>
             {/* Lista de Voluntarios (Completa) */}
-            <div className="grid grid-cols-1 gap-6">
-              <div className="col-span-1 space-y-4">
-                <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden flex flex-col overflow-hidden bg-white border border-slate-200 shadow-sm">
-                  <div className="overflow-x-auto bg-white min-h-[320px] max-h-[500px]">
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="bg-white border border-slate-200 rounded-sm shadow-sm flex flex-col flex-1 overflow-hidden">
+                  <div className="overflow-auto bg-white flex-1 relative" ref={tableContainerRef}>
                     {activeVolunteers.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-16 text-center text-slate-500">
                         <span className="material-symbols-outlined text-[48px] text-slate-200 mb-4">group_off</span>
@@ -598,17 +619,16 @@ export default function RemindersPage() {
                         <TableHeader className="bg-slate-50 border-b border-slate-200">
                           <TableRow className="hover:bg-transparent">
                             <TableHead className="font-medium text-slate-500 text-center pl-8 w-16">Asist.</TableHead>
-                            <TableHead className="font-medium text-slate-500 text-center w-24">Estado</TableHead>
+                            <TableHead className="font-medium text-slate-500 text-center w-32">Estado</TableHead>
                             <TableHead className="font-medium text-slate-500">Nombre y Apellido</TableHead>
                             <TableHead className="font-medium text-slate-500 text-center">Barrio</TableHead>
                             <TableHead className="font-medium text-slate-500 text-center">Estaca</TableHead>
-                            <TableHead className="font-medium text-slate-500 text-center">Comité</TableHead>
-                            <TableHead className="font-medium text-slate-500 text-center pr-8">Contacto</TableHead>
+                            <TableHead className="font-medium text-slate-500 text-center pr-8">Comité</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           <AnimatePresence mode="popLayout">
-                            {activeVolunteers.map((vol) => {
+                            {currentVolunteers.map((vol) => {
                               const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                               const msg = generateReminderMessage(
                                 vol.name,
@@ -649,27 +669,22 @@ export default function RemindersPage() {
                                       </span>
                                     </button>
                                   </TableCell>
+                                  <TableCell className="text-center">
+                                    {!isConfirmed ? (
+                                      <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
+                                        Pendiente
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
+                                        Confirmado
+                                      </Badge>
+                                    )}
+                                  </TableCell>
                                   <TableCell className="font-bold text-slate-800">
-                                    <div className="flex flex-col">
+                                    <div className="flex items-center gap-2">
                                       <span className={isConfirmed ? "text-slate-900" : "text-slate-800"}>
                                         {vol.name}
                                       </span>
-                                      {!isConfirmed ? (
-                                        <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mt-0.5">Pendiente</span>
-                                      ) : (
-                                        <span className="text-[10px] font-bold text-accent uppercase tracking-widest mt-0.5">Confirmado</span>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-slate-800 text-center">{vol.ward}</TableCell>
-                                  <TableCell className="text-slate-500 text-center">{vol.stake}</TableCell>
-                                  <TableCell className="text-center">
-                                    <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
-                                      {vol.committee}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-center pr-8">
-                                    <div className="flex items-center justify-center gap-1">
                                       <a 
                                         href={link}
                                         target="_blank"
@@ -682,6 +697,13 @@ export default function RemindersPage() {
                                       </a>
                                     </div>
                                   </TableCell>
+                                  <TableCell className="text-slate-800 text-center">{vol.ward}</TableCell>
+                                  <TableCell className="text-slate-500 text-center">{vol.stake}</TableCell>
+                                  <TableCell className="text-center pr-8">
+                                    <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
+                                      {vol.committee}
+                                    </Badge>
+                                  </TableCell>
                                 </motion.tr>
                               );
                             })}
@@ -690,9 +712,39 @@ export default function RemindersPage() {
                       </Table>
                     )}
                   </div>
+                  
+                  {totalPages > 1 && (
+                    <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
+                      <p className="text-xs text-slate-500 font-medium">
+                        Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, activeVolunteers.length)} de {activeVolunteers.length} voluntarios
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={safeCurrentPage === 1}
+                          className="h-8 text-xs font-bold"
+                        >
+                          Anterior
+                        </Button>
+                        <div className="text-xs font-bold text-slate-600 px-2">
+                          Página {safeCurrentPage} de {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={safeCurrentPage === totalPages}
+                          className="h-8 text-xs font-bold"
+                        >
+                          Siguiente
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-
             </div>
           </>
         )}
