@@ -126,6 +126,7 @@ export default function VolunteersPage() {
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
 
   const tableContainerRef = useCallback((node: HTMLDivElement | null) => {
@@ -134,6 +135,10 @@ export default function VolunteersPage() {
     }
     if (node) {
       observerRef.current = new ResizeObserver((entries) => {
+        if (window.innerWidth < 1024) {
+          setItemsPerPage(10);
+          return;
+        }
         const height = entries[0].contentRect.height;
         if (height > 42) {
           const calc = Math.floor((height - 42) / 49); // 42px header, ~49px row
@@ -477,44 +482,69 @@ export default function VolunteersPage() {
       <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
         {/* Barra de Filtros */}
         <div className="p-4 md:p-5 border-b border-slate-200 bg-slate-50 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shrink-0">
-          <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
-            <button
-              onClick={() => setShowArchived(!showArchived)}
-              className={cn(
-                "flex items-center gap-2 px-4 h-10 rounded-sm text-sm font-bold transition-all active:scale-[0.97] border",
-                showArchived
-                  ? "bg-[#fe4d97]/10 text-[#fe4d97] border-[#fe4d97]/20"
-                  : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-800"
+          <div className="flex flex-col w-full lg:w-auto gap-3">
+            <div className="grid grid-cols-2 lg:flex lg:items-center gap-2 w-full lg:w-auto">
+              <button
+                onClick={() => setShowArchived(!showArchived)}
+                className={cn(
+                  "flex items-center justify-center gap-2 px-4 h-10 rounded-sm text-sm font-bold transition-all active:scale-[0.97] border w-full lg:w-auto lg:min-w-[140px]",
+                  showArchived
+                    ? "bg-[#fe4d97]/10 text-[#fe4d97] border-[#fe4d97]/20"
+                    : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-800"
+                )}
+              >
+                <span className="material-symbols-outlined text-[20px]">{showArchived ? 'inventory_2' : 'archive'}</span>
+                {showArchived ? 'Activos' : 'Archivados'}
+              </button>
+
+              <div className="hidden lg:block w-px h-6 bg-slate-200 mx-2" />
+
+              {currentRole === 'Admin' && (
+                <DataTableFilter
+                  title="Comité"
+                  options={committees}
+                  value={selectedCommittees}
+                  onChange={setSelectedCommittees}
+                  className="w-full lg:w-auto"
+                />
               )}
-            >
-              <span className="material-symbols-outlined text-[20px]">{showArchived ? 'inventory_2' : 'archive'}</span>
-              {showArchived ? 'Ver Activos' : 'Ver Archivados'}
-            </button>
-
-            <div className="w-px h-6 bg-slate-200 mx-2 hidden sm:block" />
-
-            {currentRole === 'Admin' && (
               <DataTableFilter
-                title="Comité"
-                options={committees}
-                value={selectedCommittees}
-                onChange={setSelectedCommittees}
+                title="Estaca"
+                options={stakes}
+                value={selectedStakes}
+                onChange={setSelectedStakes}
+                showSearch
+                className="w-full lg:w-auto"
               />
+              <DataTableFilter
+                title="Barrio"
+                options={wards}
+                value={selectedWards}
+                onChange={setSelectedWards}
+                showSearch
+                className="w-full lg:w-auto"
+              />
+            </div>
+            
+            {(selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0) && (
+              <div className="flex lg:hidden">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setSelectedCommittees([]);
+                    setSelectedStakes([]);
+                    setSelectedWards([]);
+                  }}
+                  className="h-8 px-0 text-slate-400 hover:text-red hover:bg-transparent rounded-sm font-bold text-[10px] uppercase tracking-widest flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                  Limpiar filtros
+                </Button>
+              </div>
             )}
-            <DataTableFilter
-              title="Estaca"
-              options={stakes}
-              value={selectedStakes}
-              onChange={setSelectedStakes}
-              showSearch
-            />
-            <DataTableFilter
-              title="Barrio"
-              options={wards}
-              value={selectedWards}
-              onChange={setSelectedWards}
-              showSearch
-            />
+          </div>
+
+          <div className="flex items-center gap-3 w-full lg:w-auto">
             {(selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0) && (
               <Button
                 variant="ghost"
@@ -523,16 +553,14 @@ export default function VolunteersPage() {
                   setSelectedStakes([]);
                   setSelectedWards([]);
                 }}
-                className="h-10 px-3 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-sm font-bold text-xs uppercase tracking-widest"
+                className="hidden lg:flex h-10 px-3 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-sm font-bold text-xs uppercase tracking-widest"
               >
                 Limpiar todo
               </Button>
             )}
-          </div>
-          <div className="w-full lg:w-auto flex mt-2 lg:mt-0">
             <Button
               onClick={() => setIsAddSheetOpen(true)}
-              className="w-full sm:w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97] shrink-0"
+              className="flex-1 lg:flex-none bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97] shrink-0"
             >
               <UserPlus className="mr-2 h-4 w-4" />
               Añadir Voluntario
@@ -540,110 +568,268 @@ export default function VolunteersPage() {
           </div>
         </div>
 
-        {/* Tabla */}
-        <div className="overflow-auto bg-white flex-1 relative [&>div]:h-full" ref={tableContainerRef}>
-          <Table className={cn(currentVolunteers.length === itemsPerPage && "h-full")}>
-            <TableHeader className="bg-slate-50 border-b border-slate-200">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="font-medium text-slate-500 pl-8">Nombre y Apellido</TableHead>
-                <TableHead className="font-medium text-slate-500 text-center">Barrio</TableHead>
-                <TableHead className="font-medium text-slate-500 text-center">Estaca</TableHead>
-                <TableHead className="font-medium text-slate-500 text-center">Comité</TableHead>
-                <TableHead className="font-medium text-slate-500 text-center">Turnos</TableHead>
-                <TableHead className="font-medium text-slate-500 text-center">Confiabilidad</TableHead>
-                <TableHead className="font-medium text-slate-500 text-center">Contacto</TableHead>
-                <TableHead className="font-medium text-slate-500 text-center w-12 pr-8">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+        {/* Contenedor de Datos */}
+        <div className="overflow-auto bg-white flex-1 relative" ref={tableContainerRef}>
+          {/* Vista Desktop: Tabla */}
+          <div className="hidden lg:block h-full">
+            <Table className={cn(currentVolunteers.length === itemsPerPage && "h-full")}>
+              <TableHeader className="bg-slate-50 border-b border-slate-200">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="font-medium text-slate-500 pl-8">Nombre y Apellido</TableHead>
+                  <TableHead className="font-medium text-slate-500 text-center">Barrio</TableHead>
+                  <TableHead className="font-medium text-slate-500 text-center">Estaca</TableHead>
+                  <TableHead className="font-medium text-slate-500 text-center">Comité</TableHead>
+                  <TableHead className="font-medium text-slate-500 text-center">Turnos</TableHead>
+                  <TableHead className="font-medium text-slate-500 text-center">Confiabilidad</TableHead>
+                  <TableHead className="font-medium text-slate-500 text-center">Contacto</TableHead>
+                  <TableHead className="font-medium text-slate-500 text-center w-12 pr-8">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <AnimatePresence mode="popLayout">
+                  {currentVolunteers.length > 0 ? (
+                    currentVolunteers.map((vol) => (
+                      <motion.tr
+                        key={vol.id}
+                        layout
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="border-slate-200 hover:bg-slate-50 transition-colors"
+                      >
+                        <TableCell className="font-bold text-slate-800 pl-8">{vol.name}</TableCell>
+                        <TableCell className="text-slate-800 text-center">{vol.ward}</TableCell>
+                        <TableCell className="text-slate-500 text-center">{vol.stake}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
+                            {vol.committee}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary" className="bg-slate-100 text-slate-800 border-slate-200 font-medium">
+                            {vol.shifts} {vol.shifts === 1 ? 'turno' : 'turnos'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {vol.shifts === 0 ? (
+                            <span className="text-sm text-slate-500">N/A</span>
+                          ) : (
+                            <div className="flex items-center justify-center gap-2">
+                              <div className={`w-1.5 h-1.5 rounded-full ${vol.reliability >= 80 ? 'bg-[#6dd230]' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
+                              <span className="text-sm font-bold text-slate-700 tabular-nums">{vol.reliability}%</span>
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-[#4d7cfe] hover:bg-slate-100 hover:text-[#4d7cfe] transition-all active:scale-90"
+                              title="WhatsApp"
+                              onClick={() => window.open(`https://wa.me/${vol.phone.replace(/\s+/g, '')}`, '_blank')}
+                            >
+                              <span className="material-symbols-outlined text-[20px]">message</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-[#4d7cfe] hover:bg-slate-100 hover:text-[#4d7cfe] transition-all active:scale-90"
+                              title="Llamar"
+                              onClick={() => window.location.href = `tel:${vol.phone.replace(/\s+/g, '')}`}
+                            >
+                              <span className="material-symbols-outlined text-[20px]">call</span>
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center pr-8">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-0 transition-all active:scale-90">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              }
+                            />
+                            <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[140px] p-1 rounded-sm shadow-md">
+                              <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-2" onClick={() => handleEditClick(vol)}>
+                                <span className="material-symbols-outlined text-[18px]">edit</span>
+                                Editar Perfil
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-2" onClick={() => handleResetPin(vol)}>
+                                <span className="material-symbols-outlined text-[18px]">lock_reset</span>
+                                Resetear PIN
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="cursor-pointer text-red hover:bg-red-50 hover:text-red rounded-sm focus:bg-red-50 focus:text-red transition-colors flex items-center gap-2"
+                                onClick={() => {
+                                  setVolunteerToArchive(vol);
+                                  setIsArchiveModalOpen(true);
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
+                                {vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </motion.tr>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={8} className="h-32 text-center text-slate-500">
+                        No se encontraron voluntarios con esos términos.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </AnimatePresence>
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Vista Mobile/Tablet: Tarjetas Expandibles */}
+          <div className="lg:hidden h-full flex flex-col bg-slate-50">
+            <div className="flex-1 overflow-y-auto">
               <AnimatePresence mode="popLayout">
                 {currentVolunteers.length > 0 ? (
                   currentVolunteers.map((vol) => (
-                    <motion.tr
+                    <motion.div
                       key={vol.id}
                       layout
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="border-slate-200 hover:bg-slate-50 transition-colors"
+                      className={cn(
+                        "mb-px bg-white border-b border-slate-100 transition-all duration-200",
+                        expandedId === vol.id && "ring-1 ring-[#4d7cfe]/20 shadow-sm z-10"
+                      )}
                     >
-                      <TableCell className="font-bold text-slate-800 pl-8">{vol.name}</TableCell>
-                      <TableCell className="text-slate-800 text-center">{vol.ward}</TableCell>
-                      <TableCell className="text-slate-500 text-center">{vol.stake}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
-                          {vol.committee}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary" className="bg-slate-100 text-slate-800 border-slate-200 font-medium">
-                          {vol.shifts} {vol.shifts === 1 ? 'turno' : 'turnos'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {vol.shifts === 0 ? (
-                          <span className="text-sm text-slate-500">N/A</span>
-                        ) : (
-                          <div className="flex items-center justify-center gap-2">
-                            <div className={`w-1.5 h-1.5 rounded-full ${vol.reliability >= 80 ? 'bg-accent' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
-                            <span className="text-sm font-bold text-slate-700 tabular-nums">{vol.reliability}%</span>
+                      <div
+                        className="p-4 flex items-center justify-between cursor-pointer active:bg-slate-50"
+                        onClick={() => setExpandedId(expandedId === vol.id ? null : vol.id)}
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${vol.reliability >= 80 ? 'bg-[#6dd230]' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-bold text-slate-800 text-[15px] truncate">{vol.name}</span>
+                            <div className="flex mt-0.5">
+                              <Badge variant="outline" className={cn("font-bold px-1.5 py-0 text-[9px] h-4 uppercase tracking-tighter", getCommitteeColor(vol.committee))}>
+                                {vol.committee}
+                              </Badge>
+                            </div>
                           </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-[#4d7cfe] hover:bg-slate-100 hover:text-[#4d7cfe] transition-all active:scale-90" title="WhatsApp">
-                            <span className="material-symbols-outlined text-[20px]">message</span>
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-[#4d7cfe] hover:bg-slate-100 hover:text-[#4d7cfe] transition-all active:scale-90" title="Llamar">
-                            <span className="material-symbols-outlined text-[20px]">call</span>
-                          </Button>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-center pr-8">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-0 transition-all active:scale-90">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            }
-                          />
-                          <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[140px] p-1 rounded-sm shadow-md">
-                            <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-2" onClick={() => handleEditClick(vol)}>
-                              <span className="material-symbols-outlined text-[18px]">edit</span>
-                              Editar Perfil
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-2" onClick={() => handleResetPin(vol)}>
-                              <span className="material-symbols-outlined text-[18px]">lock_reset</span>
-                              Resetear PIN
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="cursor-pointer text-red hover:bg-red-50 hover:text-red rounded-sm focus:bg-red-50 focus:text-red transition-colors flex items-center gap-2"
-                              onClick={() => {
-                                setVolunteerToArchive(vol);
-                                setIsArchiveModalOpen(true);
-                              }}
-                            >
-                              <span className="material-symbols-outlined text-[18px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
-                              {vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </motion.tr>
+                        <div className="flex items-center gap-3 shrink-0 ml-2">
+                          <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none font-bold text-[10px] px-1.5 py-0.5">
+                            {vol.shifts} {vol.shifts === 1 ? 'T' : 'Ts'}
+                          </Badge>
+                          <motion.span
+                            animate={{ rotate: expandedId === vol.id ? 180 : 0 }}
+                            className="material-symbols-outlined text-slate-300 text-[20px]"
+                          >
+                            expand_more
+                          </motion.span>
+                        </div>
+                      </div>
+
+                      <AnimatePresence>
+                        {expandedId === vol.id && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden border-t border-slate-50"
+                          >
+                            <div className="p-4 pt-2 space-y-4">
+                              <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-xl">
+                                <div className="space-y-0.5">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Barrio / Estaca</span>
+                                  <p className="text-xs font-bold text-slate-700 leading-tight">
+                                    {vol.ward || '—'} <br />
+                                    <span className="text-slate-400 font-medium">{vol.stake || '—'}</span>
+                                  </p>
+                                </div>
+                                <div className="space-y-0.5">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Confiabilidad</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-bold text-slate-800">{vol.reliability}%</span>
+                                    <span className="text-[10px] text-slate-400 font-medium">del puntaje</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  className="flex-1 h-11 gap-2 text-[#4d7cfe] border-slate-200 bg-white font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(`https://wa.me/${vol.phone.replace(/\s+/g, '')}`, '_blank');
+                                  }}
+                                >
+                                  <span className="material-symbols-outlined text-[20px]">message</span>
+                                  WHATSAPP
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  className="flex-1 h-11 gap-2 text-[#4d7cfe] border-slate-200 bg-white font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.location.href = `tel:${vol.phone.replace(/\s+/g, '')}`;
+                                  }}
+                                >
+                                  <span className="material-symbols-outlined text-[20px]">call</span>
+                                  LLAMAR
+                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    render={
+                                      <Button variant="ghost" size="icon" className="h-11 w-11 bg-slate-100 text-slate-600 rounded-xl shrink-0">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    }
+                                  />
+                                  <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[160px] p-1 rounded-sm shadow-md">
+                                    <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-3" onClick={() => handleEditClick(vol)}>
+                                      <span className="material-symbols-outlined text-[20px] text-slate-400">edit</span>
+                                      <span className="font-medium">Editar Perfil</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-3" onClick={() => handleResetPin(vol)}>
+                                      <span className="material-symbols-outlined text-[20px] text-slate-400">lock_reset</span>
+                                      <span className="font-medium">Resetear PIN</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="py-2.5 cursor-pointer text-red hover:bg-red-50 hover:text-red rounded-sm focus:bg-red-50 focus:text-red transition-colors flex items-center gap-3"
+                                      onClick={() => {
+                                        setVolunteerToArchive(vol);
+                                        setIsArchiveModalOpen(true);
+                                      }}
+                                    >
+                                      <span className="material-symbols-outlined text-[20px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
+                                      <span className="font-medium">{vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}</span>
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
                   ))
                 ) : (
-                  <TableRow>
-                    <TableCell colSpan={8} className="h-32 text-center text-slate-500">
-                      No se encontraron voluntarios con esos términos.
-                    </TableCell>
-                  </TableRow>
+                  <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-300">
+                      <span className="material-symbols-outlined text-[32px]">person_off</span>
+                    </div>
+                    <h3 className="font-bold text-slate-800 mb-1">No se encontraron voluntarios</h3>
+                    <p className="text-sm text-slate-400">Prueba ajustando los filtros o el término de búsqueda.</p>
+                  </div>
                 )}
               </AnimatePresence>
-            </TableBody>
-          </Table>
+            </div>
+          </div>
         </div>
         {totalPages > 1 && (
           <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">

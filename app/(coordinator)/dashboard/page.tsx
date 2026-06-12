@@ -148,9 +148,9 @@ export default function CoordinatorDashboard() {
           console.error("Error fetching profile:", error);
           userName = 'Error BD';
         } else if (user) {
-          userName = user.full_name || 'Sin Nombre en BD';
+          userName = user.full_name ? user.full_name.split(' ')[0] : 'Sin Nombre';
         } else {
-          userName = 'Coordinador (No encontrado)';
+          userName = 'Coordinador';
         }
       }
 
@@ -176,10 +176,10 @@ export default function CoordinatorDashboard() {
       const randomMsg = messages[Math.floor(Math.random() * messages.length)];
 
       setGreeting(
-        <>
-          <span className="block mb-1 text-slate-800">{timeOfDay}, <span className="font-bold">{userName}</span> {emoji}</span>
-          <span className="block text-base text-slate-500 font-normal">{randomMsg}</span>
-        </>
+        <div className="flex flex-row sm:flex-col items-baseline sm:items-start gap-2 sm:gap-1 flex-wrap sm:flex-nowrap">
+          <span className="text-slate-800">{timeOfDay}, <span className="font-bold">{userName}</span> {emoji}</span>
+          <span className="text-base text-slate-500 font-normal">{randomMsg}</span>
+        </div>
       );
     };
 
@@ -383,10 +383,10 @@ export default function CoordinatorDashboard() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-12 pb-20"
+      className="w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6 md:space-y-12 pb-20"
     >
       {/* Header Administrativo - High-End Redesign */}
-      <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 pb-8 border-b border-slate-200/60 relative overflow-hidden">
+      <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 md:gap-8 pb-4 md:pb-8 border-b border-slate-200/60 relative overflow-hidden">
         <div className="space-y-2 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 5 }}
@@ -398,16 +398,18 @@ export default function CoordinatorDashboard() {
           </motion.div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 shrink-0 relative z-10 w-full lg:w-auto">
-          <Link href="/settings" className="w-full sm:w-auto">
-            <Button variant="outline" size="lg" className="w-full sm:w-auto rounded-sm font-bold border-slate-200 bg-white hover:bg-slate-50 shadow-sm transition-all active:scale-[0.96]">
-              Ajustes Globales
+        <div className="flex flex-row items-center gap-2 sm:gap-4 shrink-0 relative z-10 w-full lg:w-auto">
+          <Link href="/settings" className="flex-1 sm:flex-none">
+            <Button variant="outline" size="lg" className="w-full sm:w-auto rounded-sm font-bold border-slate-200 bg-white hover:bg-slate-50 shadow-sm transition-all active:scale-[0.96] px-2 sm:px-6">
+              <span className="sm:hidden">Ajustes</span>
+              <span className="hidden sm:inline">Ajustes Globales</span>
             </Button>
           </Link>
-          <Link href="/shifts" className="w-full sm:w-auto">
-            <Button size="lg" className="w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-sm font-bold shadow-xl shadow-blue-500/20 transition-all active:scale-[0.96] group px-6">
-              Gestionar Turnos
-              <span className="material-symbols-outlined text-[18px] ml-2 opacity-70 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform">north_east</span>
+          <Link href="/shifts" className="flex-1 sm:flex-none">
+            <Button size="lg" className="w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-sm font-bold shadow-xl shadow-blue-500/20 transition-all active:scale-[0.96] group px-2 sm:px-6">
+              <span className="sm:hidden">Turnos</span>
+              <span className="hidden sm:inline">Gestionar Turnos</span>
+              <span className="material-symbols-outlined text-[18px] ml-1 sm:ml-2 opacity-70 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform">north_east</span>
             </Button>
           </Link>
         </div>
@@ -420,8 +422,8 @@ export default function CoordinatorDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
           <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 h-full">
-            <CardContent className="p-5 sm:p-7">
-              <div className="flex items-start justify-between mb-6">
+            <CardContent className="p-4 sm:p-7">
+              <div className="flex items-start justify-between mb-3 sm:mb-6">
                 <div className="p-3 bg-blue-50 rounded-sm group-hover:bg-[#0084d1] group-hover:text-white transition-colors duration-300">
                   <span className="material-symbols-outlined text-[20px]">track_changes</span>
                 </div>
@@ -438,7 +440,7 @@ export default function CoordinatorDashboard() {
                 </h3>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Voluntarios Reclutados</p>
               </div>
-              <div className="w-full h-1.5 bg-slate-50 mt-6 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-slate-50 mt-3 sm:mt-6 rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${globalStats.recruitmentPercentage}%` }}
@@ -452,8 +454,8 @@ export default function CoordinatorDashboard() {
 
         <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
           <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-teal-500/10 h-full">
-            <CardContent className="p-5 sm:p-7">
-              <div className="flex items-start justify-between mb-6">
+            <CardContent className="p-4 sm:p-7">
+              <div className="flex items-start justify-between mb-3 sm:mb-6">
                 <div className="p-3 bg-teal-50 rounded-sm group-hover:bg-accent group-hover:text-white transition-colors duration-300 text-accent">
                   <span className="material-symbols-outlined text-[20px]">monitoring</span>
                 </div>
@@ -471,15 +473,15 @@ export default function CoordinatorDashboard() {
                 </h3>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cobertura de Turnos</p>
               </div>
-              <p className="text-[10px] text-slate-400 mt-6 font-bold uppercase tracking-[0.1em]">Análisis Global del Evento</p>
+              <p className="text-[10px] text-slate-400 mt-3 sm:mt-6 font-bold uppercase tracking-[0.1em]">Análisis Global del Evento</p>
             </CardContent>
           </Card>
         </motion.div>
 
         <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
           <Card className={`border-none ${globalStats.criticalAlerts > 0 ? 'bg-red-50/50' : 'bg-white'} shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/10 h-full border border-transparent hover:border-red-100`}>
-            <CardContent className="p-5 sm:p-7">
-              <div className="flex items-start justify-between mb-6">
+            <CardContent className="p-4 sm:p-7">
+              <div className="flex items-start justify-between mb-3 sm:mb-6">
                 <div className={`p-3 rounded-sm transition-colors duration-300 ${globalStats.criticalAlerts > 0 ? 'bg-red-100 text-red group-hover:bg-red group-hover:text-white' : 'bg-slate-50 text-slate-400'}`}>
                   <span className="material-symbols-outlined text-[20px]">security</span>
                 </div>
@@ -496,7 +498,7 @@ export default function CoordinatorDashboard() {
                 </h3>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Alertas Críticas</p>
               </div>
-              <p className={`text-[10px] mt-6 font-bold uppercase tracking-[0.1em] ${globalStats.criticalAlerts > 0 ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
+              <p className={`text-[10px] mt-3 sm:mt-6 font-bold uppercase tracking-[0.1em] ${globalStats.criticalAlerts > 0 ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
                 {globalStats.criticalAlerts > 0 ? 'Turnos bajo el mínimo' : 'Estabilidad operativa'}
               </p>
             </CardContent>
@@ -505,8 +507,8 @@ export default function CoordinatorDashboard() {
 
         <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
           <Card className="border-none bg-slate-900 text-white shadow-2xl shadow-slate-900/20 rounded-sm overflow-hidden h-full relative group">
-            <CardContent className="p-7 relative z-10">
-              <div className="flex items-start justify-between mb-6">
+            <CardContent className="p-4 sm:p-7 relative z-10">
+              <div className="flex items-start justify-between mb-3 sm:mb-6">
                 <div className="p-3 bg-white/10 rounded-sm group-hover:bg-blue-500 transition-colors duration-300 text-white">
                   <span className="material-symbols-outlined text-[20px]">person_check</span>
                 </div>
@@ -518,7 +520,7 @@ export default function CoordinatorDashboard() {
                 </h3>
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Compromiso Real</p>
               </div>
-              <div className="mt-6 flex items-center gap-2">
+              <div className="mt-3 sm:mt-6 flex items-center gap-2">
                 <div className="flex -space-x-2">
                   {[1, 2, 3].map(i => (
                     <div key={i} className="w-5 h-5 rounded-full border border-slate-900 bg-slate-700" />
@@ -538,21 +540,21 @@ export default function CoordinatorDashboard() {
         {/* Left: Daily Volunteer Distribution Chart */}
         <motion.div variants={itemVariants} className="lg:col-span-3 min-w-0">
           <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden h-full flex flex-col min-w-0">
-            <CardContent className="p-5 sm:p-7 flex-1 flex flex-col justify-between min-w-0">
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 sm:gap-0 mb-8">
-                <div>
-                  <p className="text-4xl font-bold text-slate-900 tracking-tighter leading-none tabular-nums">
+            <CardContent className="p-4 pt-3 sm:p-7 flex-1 flex flex-col justify-between min-w-0">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xl font-bold text-slate-900 tracking-tighter leading-none tabular-nums">
                     {totalVolsWithShifts.toLocaleString()}
                   </p>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-2">Voluntarios con turnos asignados</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight max-w-none mt-0.5">Voluntarios con turnos</p>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-slate-200 bg-slate-50 text-xs font-bold text-slate-500">
-                  10 – 26 Sep 2026
+                <div className="flex items-center px-2 py-1 rounded-sm border border-slate-200 bg-slate-50 text-[10px] font-bold text-slate-500 shrink-0 mt-0.5">
+                  10 – 26 Sep
                 </div>
               </div>
 
               <div className="relative flex-1 flex flex-col overflow-x-auto w-full pb-2">
-                <div className="min-w-[400px] flex flex-col h-full"><div className="flex-1 flex items-end gap-1.5 min-h-[100px] mt-4">
+                <div className="min-w-[400px] flex flex-col h-full"><div className="flex-1 flex items-end gap-1.5 min-h-[220px] mt-1 pt-8">
                   {(() => {
                     const maxCount = Math.max(...Object.values(volsPerDay), 1);
                     return EVENT_DAYS.map((day, idx) => {
@@ -562,25 +564,25 @@ export default function CoordinatorDashboard() {
                       return (
                         <div
                           key={day.key}
-                          className="flex-1 flex flex-col items-center justify-end h-full relative group cursor-pointer"
+                          className="flex-1 flex flex-col items-center justify-end h-full group cursor-pointer"
                           onMouseEnter={() => setHoveredDay(day.key)}
                           onMouseLeave={() => setHoveredDay(null)}
                         >
-                          {isHovered && (
-                            <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-sm whitespace-nowrap z-20 shadow-lg pointer-events-none">
-                              {count} voluntarios
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-4 border-transparent border-t-slate-900" />
-                            </div>
-                          )}
                           <motion.div
                             initial={{ height: 0 }}
                             animate={{ height: `${heightPct}%` }}
                             transition={{ duration: 0.7, delay: idx * 0.025, ease: "circOut" }}
-                            className={`w-full rounded-[3px] transition-colors duration-150 ${isHovered
+                            className={`w-full rounded-[3px] transition-colors duration-150 relative ${isHovered
                               ? 'bg-[#0084d1]'
                               : 'bg-slate-200 hover:bg-[#0084d1]/50'
                               }`}
-                          />
+                          >
+                            {isHovered && (
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 bg-white border border-slate-200 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-sm whitespace-nowrap shadow-sm pointer-events-none z-50">
+                                {count}
+                              </div>
+                            )}
+                          </motion.div>
                         </div>
                       );
                     });

@@ -31,6 +31,8 @@ function CoordinatorLayoutInner({
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [currentCommittee, setCurrentCommittee] = useState<string>('Historia');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { searchTerm, setSearchTerm } = useSearch();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -76,7 +78,7 @@ function CoordinatorLayoutInner({
     <div className="h-screen bg-slate-50 flex flex-col font-sans text-slate-700 overflow-hidden">
       
       {/* Desktop Top Navbar */}
-      <header className="hidden md:flex h-16 bg-white border-b border-slate-100 shrink-0 sticky top-0 z-50">
+      <header className="hidden lg:flex h-16 bg-white border-b border-slate-100 shrink-0 sticky top-0 z-50">
         {/* Left Logo Section — collapses with sidebar */}
         <div
           className="flex items-center px-6 border-r border-slate-100 shrink-0 overflow-hidden transition-all duration-300"
@@ -165,11 +167,11 @@ function CoordinatorLayoutInner({
       </header>
 
       {/* Main Layout Area */}
-      <div className="flex flex-1 min-h-0 overflow-hidden pb-20 md:pb-0">
+      <div className="flex flex-1 min-h-0 overflow-hidden pb-20 lg:pb-0">
         
         {/* Desktop Sidebar */}
         <aside
-          className="hidden md:flex flex-col border-r border-slate-100 bg-white shrink-0 overflow-hidden transition-all duration-300"
+          className="hidden lg:flex flex-col border-r border-slate-100 bg-white shrink-0 overflow-hidden transition-all duration-300"
           style={{ width: sidebarOpen ? 260 : 72 }}
         >
           {/* Scrollable nav content */}
@@ -243,36 +245,111 @@ function CoordinatorLayoutInner({
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto min-w-0 bg-slate-50 relative">
           {/* Mobile Header (Only visible on small screens) */}
-          <header className="md:hidden bg-white border-b border-slate-100 p-4 sticky top-0 z-40 shadow-sm flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Image 
-                src="/icon-192.png" 
-                alt="Templo Managua" 
-                width={28} 
-                height={28} 
-                className="rounded-sm object-contain"
-              />
-              <h1 className="text-lg font-bold text-slate-900 tracking-tight">
-                Templo Managua
-              </h1>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="p-2 text-slate-500 hover:text-red-600 transition-colors"
-              title="Cerrar Sesión"
-            >
-              <Icon name="logout" size={20} />
-            </button>
+          <header className="lg:hidden bg-white border-b border-slate-100 px-4 py-3 sticky top-0 z-40 shadow-sm flex items-center justify-between min-h-[57px]">
+            {isMobileSearchOpen ? (
+              <div className="flex w-full items-center gap-2 animate-in fade-in slide-in-from-right-4 duration-200">
+                <button
+                  onClick={() => {
+                    setIsMobileSearchOpen(false);
+                    setSearchTerm('');
+                  }}
+                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+                >
+                  <Icon name="arrow_back" size={20} />
+                </button>
+                <div className="relative flex-1 flex items-center">
+                  <Icon name="search" size={18} className="absolute left-3 text-slate-400 pointer-events-none" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder={
+                      pathname === '/volunteers' ? 'Buscar voluntario...' :
+                      pathname === '/shifts' ? 'Buscar voluntario...' :
+                      pathname === '/reminders' ? 'Buscar avisos...' :
+                      pathname === '/users' ? 'Buscar usuario...' :
+                      'Buscar...'
+                    }
+                    className="w-full pl-9 pr-4 h-9 text-[13px] font-medium bg-slate-50 border border-slate-200 rounded-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4d7cfe]/30 focus:border-[#4d7cfe]/50 transition-all"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-2.5 text-slate-400 hover:text-slate-600"
+                    >
+                      <Icon name="close" size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center">
+                  <Image 
+                    src="/icon-192.png" 
+                    alt="Templo Managua" 
+                    width={32} 
+                    height={32} 
+                    className="rounded-sm object-contain"
+                  />
+                </div>
+                <div className="flex items-center gap-1 relative">
+                  <button
+                    onClick={() => setIsMobileSearchOpen(true)}
+                    className="p-2 text-slate-400 hover:text-[#4d7cfe] transition-colors"
+                    title="Buscar"
+                  >
+                    <Icon name="search" size={24} />
+                  </button>
+                  <button
+                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                    title="Más opciones"
+                  >
+                    <Icon name="more_vert" size={24} />
+                  </button>
+                  
+                  {isMobileMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setIsMobileMenuOpen(false)} />
+                      <div className="absolute top-12 right-0 w-48 bg-white border border-slate-100 shadow-lg rounded-sm py-1 z-50 animate-in fade-in slide-in-from-top-2">
+                        <button className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors text-left">
+                          <Icon name="dark_mode" size={20} className="text-slate-400" />
+                          Tema
+                        </button>
+                        <Link 
+                          href="/settings" 
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
+                          <Icon name="settings" size={20} className="text-slate-400" />
+                          Ajustes
+                        </Link>
+                        <div className="h-[1px] bg-slate-100 my-1" />
+                        <button 
+                          onClick={handleLogout}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors text-left font-medium"
+                        >
+                          <Icon name="logout" size={20} className="text-red-400" />
+                          Cerrar Sesión
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </header>
 
-          <div className="p-4 md:p-8">
+          <div className="p-4 lg:p-8">
             {children}
           </div>
         </main>
       </div>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex justify-around p-2 z-50 pb-[env(safe-area-inset-bottom,0.5rem)] shadow-[0_-4px_10px_-4px_rgba(0,0,0,0.05)]">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex justify-around p-2 z-50 pb-[env(safe-area-inset-bottom,0.5rem)] shadow-[0_-4px_10px_-4px_rgba(0,0,0,0.05)]">
         {visibleNavItems.slice(0, 5).map((item) => {
           const isActive = pathname === item.href;
           return (

@@ -196,11 +196,7 @@ export default function SettingsPage() {
       animate="visible"
       className="max-w-4xl mx-auto space-y-10 pb-20"
     >
-      {/* Header */}
-      <motion.div variants={itemVariants} className="pb-6 border-b border-slate-200/60">
-        <h1 className="tracking-tight text-slate-900 leading-none mb-2">Ajustes</h1>
-        <p className="text-base font-medium text-slate-500">Administra tu información y revisa tus privilegios de acceso.</p>
-      </motion.div>
+
 
       {/* Profile Card */}
       <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
