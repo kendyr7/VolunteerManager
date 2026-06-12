@@ -183,30 +183,11 @@ export default function RemindersPage() {
   // Estado del turno seleccionado (ninguno por defecto)
   const [selectedDayKey, setSelectedDayKey] = useState<string>("");
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(15);
-  const observerRef = useRef<ResizeObserver | null>(null);
-
-  const tableContainerRef = useCallback((node: HTMLDivElement | null) => {
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-    }
-    if (node) {
-      observerRef.current = new ResizeObserver((entries) => {
-        const height = entries[0].contentRect.height;
-        if (height > 42) {
-          const calc = Math.floor((height - 42) / 49); // 42px header, ~49px row
-          setItemsPerPage((prev) => {
-            const next = Math.max(1, calc);
-            return prev !== next ? next : prev;
-          });
-        }
-      });
-      observerRef.current.observe(node);
-    }
-  }, []);
+  const itemsPerPage = 50;
 
   // Estado de los filtros y visualización de plantilla
   const { searchTerm } = useSearch();
@@ -377,7 +358,7 @@ export default function RemindersPage() {
   }
 
   return (
-    <div className="w-full space-y-4 md:space-y-6 flex flex-col h-[calc(100dvh-10rem)] md:h-[calc(100dvh-8rem)]">
+    <div className="w-full space-y-4 md:space-y-6 flex flex-col min-h-[calc(100dvh-10rem)] md:h-[calc(100dvh-8rem)]">
 
 
       {/* Barra de Filtros Globales (Prioritaria) */}
@@ -451,7 +432,7 @@ export default function RemindersPage() {
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">FECHA</span>
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 -mb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="grid grid-cols-5 sm:grid-cols-8 md:flex md:flex-wrap gap-2">
             {EVENT_DAYS.map((day) => {
               const dayCounts = shiftCounts[day.key] || { T1: 0, T2: 0, T3: 0, T4: 0 };
               const totalVolunteersOnDay = Object.values(dayCounts).reduce((acc, count) => acc + count, 0);
@@ -472,17 +453,16 @@ export default function RemindersPage() {
                       }
                     }
                   }}
-                  className={`shrink-0 inline-flex items-center gap-2.5 px-4 py-2 rounded-sm border font-bold text-xs transition-all ${isSelected
+                  className={`relative shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto w-full ${isSelected
                       ? 'bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105'
                       : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
                     }`}
                 >
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
-                    }`}>
+                  <span className={`text-[10px] md:text-[9px] font-bold uppercase tracking-widest ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>
                     {dayInitial}
                   </span>
-                  <span>{day.dateNum} Sep</span>
-                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${totalVolunteersOnDay > 0 ? (isSelected ? 'bg-white' : 'bg-accent') : (isSelected ? 'bg-white/30' : 'bg-slate-200')
+                  <span className="text-base md:text-sm font-black leading-none">{day.dateNum}</span>
+                  <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? (isSelected ? 'bg-white' : 'bg-accent') : (isSelected ? 'bg-white/30' : 'bg-slate-200')
                     }`} />
                 </button>
               );
@@ -496,7 +476,7 @@ export default function RemindersPage() {
         {/* FILA 2: TURNOS */}
         <div className="space-y-2">
           <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">TURNOS</span>
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 -mb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="flex items-center gap-2 flex-wrap">
             {['T1', 'T2', 'T3', 'T4'].map((t) => {
               // Obtener conteo de voluntarios para este turno (si hay día seleccionado, del día; si no, total acumulado de todos los días)
               let count = 0;
@@ -607,7 +587,7 @@ export default function RemindersPage() {
             <div className="flex-1 min-h-0 flex flex-col">
               <div className="flex-1 flex flex-col min-h-0">
                 <div className="bg-white border border-slate-200 rounded-sm shadow-sm flex flex-col flex-1 overflow-hidden">
-                  <div className="overflow-auto bg-white flex-1 relative [&>div]:h-full" ref={tableContainerRef}>
+                  <div className="overflow-auto bg-white flex-1 relative">
                     {activeVolunteers.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-16 text-center text-slate-500 h-full">
                         <span className="material-symbols-outlined text-[48px] text-slate-200 mb-4">group_off</span>
@@ -615,9 +595,143 @@ export default function RemindersPage() {
                         <p className="text-sm max-w-[250px] mt-1 text-slate-400">No hay voluntarios asignados a este turno para los filtros seleccionados.</p>
                       </div>
                     ) : (
-                      <Table className={cn(currentVolunteers.length === itemsPerPage && "h-full")}>
-                        <TableHeader className="bg-slate-50 border-b border-slate-200">
-                          <TableRow className="hover:bg-transparent">
+                      <>
+                        {/* Vista Mobile/Tablet: Tarjetas Expandibles */}
+                        <div className="lg:hidden flex flex-col bg-slate-50">
+                          <div>
+                            <AnimatePresence mode="popLayout">
+                              {currentVolunteers.map((vol) => {
+                                const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
+                                const msg = generateReminderMessage(
+                                  vol.name,
+                                  dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
+                                  selectedShiftDetails?.name || "",
+                                  selectedShiftDetails?.time || "",
+                                  vol.committee,
+                                  isSelectedHoliday
+                                );
+                                const link = generateWaMeLink(vol.phone, msg);
+
+                                return (
+                                  <motion.div
+                                    key={vol.id}
+                                    layout
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className={cn(
+                                      "mb-px bg-white border-b border-slate-100 transition-all duration-200",
+                                      expandedId === vol.id && "ring-1 ring-[#4d7cfe]/20 shadow-sm z-10",
+                                      isConfirmed && "bg-[#6dd230]/5"
+                                    )}
+                                  >
+                                    <div
+                                      className="p-4 flex items-center justify-between cursor-pointer active:bg-slate-50"
+                                      onClick={() => setExpandedId(expandedId === vol.id ? null : vol.id)}
+                                    >
+                                      <div className="flex items-center gap-3 overflow-hidden">
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${isConfirmed ? 'bg-[#6dd230] shadow-[0_0_8px_rgba(109,210,48,0.3)]' : 'bg-slate-200'}`} />
+                                        <div className="flex flex-col min-w-0">
+                                          <span className="font-bold text-slate-800 text-[15px] truncate">{vol.name}</span>
+                                          <div className="flex mt-0.5 items-center gap-2">
+                                            <Badge variant="outline" className={cn("font-bold px-1.5 py-0 text-[9px] h-4 uppercase tracking-tighter", getCommitteeColor(vol.committee))}>
+                                              {vol.committee}
+                                            </Badge>
+                                            {isConfirmed && (
+                                              <Badge variant="secondary" className="bg-accent/10 text-accent font-bold px-1.5 py-0 text-[9px] h-4 uppercase tracking-tighter border-none">
+                                                Confirmado
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-3 shrink-0 ml-2">
+                                        <motion.span
+                                          animate={{ rotate: expandedId === vol.id ? 180 : 0 }}
+                                          className="material-symbols-outlined text-slate-300 text-[20px]"
+                                        >
+                                          expand_more
+                                        </motion.span>
+                                      </div>
+                                    </div>
+
+                                    <AnimatePresence>
+                                      {expandedId === vol.id && (
+                                        <motion.div
+                                          initial={{ height: 0, opacity: 0 }}
+                                          animate={{ height: "auto", opacity: 1 }}
+                                          exit={{ height: 0, opacity: 0 }}
+                                          className="overflow-hidden border-t border-slate-50"
+                                        >
+                                          <div className="p-4 pt-2 space-y-4">
+                                            <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-xl">
+                                              <div className="space-y-0.5">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Barrio / Estaca</span>
+                                                <p className="text-xs font-bold text-slate-700 leading-tight">
+                                                  {vol.ward || '—'} <br />
+                                                  <span className="text-slate-400 font-medium">{vol.stake || '—'}</span>
+                                                </p>
+                                              </div>
+                                              <div className="space-y-0.5">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estado</span>
+                                                <div className="flex items-center gap-1.5 mt-1">
+                                                  {isConfirmed ? (
+                                                    <Badge variant="outline" className="bg-[#6dd230]/10 text-[#6dd230] border-[#6dd230]/20 font-bold uppercase text-[10px] tracking-widest px-2">
+                                                      Confirmado
+                                                    </Badge>
+                                                  ) : (
+                                                    <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold uppercase text-[10px] tracking-widest px-2">
+                                                      Pendiente
+                                                    </Badge>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex flex-col sm:flex-row items-center gap-2">
+                                              <Button
+                                                variant="outline"
+                                                className="w-full sm:flex-1 h-11 gap-2 text-[#25D366] hover:bg-[#25D366] hover:text-white border-slate-200 bg-white font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  window.open(link, '_blank');
+                                                }}
+                                              >
+                                                <span className="material-symbols-outlined text-[20px]">send</span>
+                                                WHATSAPP
+                                              </Button>
+                                              <Button
+                                                className={cn(
+                                                  "w-full sm:flex-1 h-11 gap-2 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all",
+                                                  isConfirmed
+                                                    ? "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                                    : "bg-[#6dd230] text-white hover:bg-[#5bbd24]"
+                                                )}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  toggleConfirmed(vol.id);
+                                                }}
+                                              >
+                                                <span className="material-symbols-outlined text-[20px]">{isConfirmed ? 'close' : 'check'}</span>
+                                                {isConfirmed ? 'DESMARCAR' : 'CONFIRMAR ASISTENCIA'}
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </motion.div>
+                                      )}
+                                    </AnimatePresence>
+                                  </motion.div>
+                                );
+                              })}
+                            </AnimatePresence>
+                          </div>
+                        </div>
+
+                        {/* Desktop Table (Hidden on small screens) */}
+                        <div className="hidden lg:block">
+                          <Table>
+                            <TableHeader className="bg-slate-50 border-b border-slate-200">
+                              <TableRow className="hover:bg-transparent">
                             <TableHead className="font-medium text-slate-500 text-center pl-8 w-16">Asist.</TableHead>
                             <TableHead className="font-medium text-slate-500 text-center w-32">Estado</TableHead>
                             <TableHead className="font-medium text-slate-500">Nombre y Apellido</TableHead>
@@ -710,7 +824,9 @@ export default function RemindersPage() {
                           </AnimatePresence>
                         </TableBody>
                       </Table>
-                    )}
+                    </div>
+                  </>
+                )}
                   </div>
                   
                   {totalPages > 1 && (
