@@ -166,29 +166,30 @@ export default function ImportPage() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="max-w-6xl mx-auto space-y-10 pb-20"
+      className="w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6 md:space-y-10 pb-20 max-w-6xl"
     >
-
-
       {step === 1 && (
         <motion.div variants={itemVariants}>
           <Card className="border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-8">
-              <CardTitle className="font-bold text-slate-800 text-lg">Pegar datos CSV</CardTitle>
-              <CardDescription className="text-slate-500 font-medium">
-                Formato: Nombre, Apellido, Edad, Barrio, Estaca, Teléfono, Comité
+            <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-6 sm:p-8">
+              <CardTitle className="font-bold text-slate-800 text-lg">1. Pegar datos CSV</CardTitle>
+              <CardDescription className="text-slate-500 font-medium mt-3 flex flex-wrap gap-2 items-center">
+                <span className="text-xs font-bold mr-1">Formato:</span>
+                {['Nombre', 'Apellido', 'Edad', 'Barrio', 'Estaca', 'Teléfono', 'Comité'].map(f => (
+                  <Badge key={f} variant="secondary" className="bg-white border-slate-200 text-slate-500 font-bold px-2 py-0.5 text-[10px] uppercase tracking-wider">{f}</Badge>
+                ))}
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-8">
+            <CardContent className="p-4 sm:p-8">
               <textarea
-                className="w-full h-80 p-6 rounded-2xl border border-slate-200 bg-white font-mono text-sm focus:ring-4 focus:ring-[#4d7cfe]/10 focus:border-[#4d7cfe] outline-none transition-all resize-none text-slate-800"
+                className="w-full h-64 sm:h-80 p-4 sm:p-6 rounded-2xl border border-slate-200 bg-white font-mono text-sm focus:ring-4 focus:ring-[#4d7cfe]/10 focus:border-[#4d7cfe] outline-none transition-all resize-none text-slate-800"
                 placeholder="Juan, Pérez, 35, Las Colinas, Managua Sur, 88881111, Seguridad&#10;María, García, 28, El Dorado, Managua Este, 88882222, Guía"
                 value={csvText}
                 onChange={(e) => setCsvText(e.target.value)}
               />
             </CardContent>
-            <CardFooter className="justify-end p-8 bg-slate-50/50 border-t border-slate-100">
-              <Button onClick={handleParse} disabled={!csvText.trim()} className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-xl h-12 px-8 font-bold shadow-lg shadow-blue-500/20 transition-all active:scale-[0.97]">
+            <CardFooter className="flex-col sm:flex-row justify-end p-6 sm:p-8 bg-slate-50/50 border-t border-slate-100 gap-4">
+              <Button onClick={handleParse} disabled={!csvText.trim()} className="w-full sm:w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-xl h-12 px-8 font-bold shadow-lg shadow-blue-500/20 transition-all active:scale-[0.97]">
                 <span className="material-symbols-outlined text-[20px] mr-2">description</span>
                 Procesar Datos
               </Button>
@@ -200,7 +201,7 @@ export default function ImportPage() {
       {step === 2 && (
         <motion.div variants={itemVariants}>
           <Card className="border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-8 flex flex-row items-center justify-between">
+            <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <CardTitle className="font-bold text-slate-800 flex items-center gap-3 text-lg">
                   <span className="material-symbols-outlined text-[24px] text-[#6dd230]">check_circle</span>
@@ -210,54 +211,81 @@ export default function ImportPage() {
                   Se detectaron {parsedData.length} registros válidos.
                 </CardDescription>
               </div>
-              <Button variant="ghost" onClick={() => setStep(1)} className="text-slate-500 hover:text-slate-800 font-bold">Corregir</Button>
+              <Button variant="ghost" onClick={() => setStep(1)} className="w-full sm:w-auto text-slate-500 hover:text-slate-800 font-bold border border-slate-200 sm:border-transparent bg-white sm:bg-transparent">
+                Volver y Corregir
+              </Button>
             </CardHeader>
-            <CardContent className="p-0 max-h-[500px] overflow-auto">
-              <Table>
-                <TableHeader className="bg-slate-50/80 sticky top-0 z-10">
-                  <TableRow className="hover:bg-transparent border-slate-100 text-slate-800">
-                    <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 pl-8 h-12">Voluntario</TableHead>
-                    <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 h-12">Ubicación</TableHead>
-                    <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 h-12 text-center">Comité</TableHead>
-                    <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 h-12 pr-8 text-right">Contacto</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {parsedData.map((vol, i) => (
-                    <TableRow key={i} className="border-slate-50 hover:bg-slate-50 transition-colors">
-                      <TableCell className="font-bold text-slate-800 pl-8 py-4">
-                        {vol.firstName} {vol.lastName}
-                        <span className="block text-[10px] font-medium text-slate-400 uppercase mt-0.5">{vol.age} años</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm font-medium text-slate-600">{vol.ward}</span>
-                        <span className="block text-[11px] text-slate-400">{vol.stake}</span>
-                      </TableCell>
-                      <TableCell className="text-center">
+            <CardContent className="p-0 bg-slate-50/30">
+              <div className="max-h-[500px] overflow-y-auto divide-y divide-slate-100">
+                {/* Desktop Header */}
+                <div className="hidden md:grid grid-cols-12 gap-4 px-8 py-4 bg-slate-50/90 backdrop-blur-sm sticky top-0 z-10 border-b border-slate-100 font-bold text-[10px] uppercase tracking-widest text-slate-400">
+                  <div className="col-span-4">Voluntario</div>
+                  <div className="col-span-4">Ubicación</div>
+                  <div className="col-span-2 text-center">Comité</div>
+                  <div className="col-span-2 text-right">Contacto</div>
+                </div>
+                {/* Rows / Cards */}
+                {parsedData.map((vol, i) => (
+                  <div key={i} className="flex flex-col md:grid md:grid-cols-12 gap-4 px-5 sm:px-8 py-5 md:py-4 bg-white hover:bg-slate-50 transition-colors">
+                    {/* User Info */}
+                    <div className="md:col-span-4 flex justify-between md:block items-start">
+                      <div>
+                        <p className="font-bold text-slate-800">{vol.firstName} {vol.lastName}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 tracking-wider">{vol.age} años</p>
+                      </div>
+                      <div className="md:hidden">
                         {vol.error ? (
-                          <div className="flex flex-col items-center gap-1">
-                            <Badge variant="outline" className="bg-[#fe4d97]/15 text-[#fe4d97] border-[#fe4d97]/20 font-bold">
-                              No Permitido
-                            </Badge>
-                            <span className="text-[10px] text-red-500 font-medium">{vol.error}</span>
+                          <Badge variant="outline" className="bg-[#fe4d97]/10 text-[#fe4d97] border-[#fe4d97]/20 font-bold text-[10px]">Error</Badge>
+                        ) : vol.committeeId ? (
+                          <Badge variant="outline" className="bg-[#4d7cfe]/10 text-[#4d7cfe] border-[#4d7cfe]/20 font-bold text-[10px]">{vol.committeeName}</Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-red/10 text-red border-red/20 font-bold text-[10px]">Inválido</Badge>
+                        )}
+                      </div>
+                    </div>
+                    {/* Location Info */}
+                    <div className="md:col-span-4 flex items-center md:items-start text-sm font-medium text-slate-600 gap-2 md:gap-0 md:flex-col">
+                      <span className="material-symbols-outlined text-[18px] md:hidden text-slate-300">location_on</span>
+                      <div>
+                        <p>{vol.ward}</p>
+                        <p className="text-[11px] font-bold text-slate-400 leading-none mt-0.5 uppercase tracking-wider">{vol.stake}</p>
+                      </div>
+                    </div>
+                    {/* Committee Desktop */}
+                    <div className="hidden md:flex md:col-span-2 justify-center items-center">
+                        {vol.error ? (
+                          <div className="flex flex-col items-center gap-1 text-center">
+                            <Badge variant="outline" className="bg-[#fe4d97]/10 text-[#fe4d97] border-[#fe4d97]/20 font-bold text-[11px]">No Permitido</Badge>
+                            <span className="text-[10px] text-red-500 font-bold leading-tight">{vol.error}</span>
                           </div>
                         ) : vol.committeeId ? (
-                          <Badge variant="outline" className="bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20 font-bold">
+                          <Badge variant="outline" className="bg-[#4d7cfe]/10 text-[#4d7cfe] border-[#4d7cfe]/20 font-bold text-[11px]">
                             {vol.committeeName}
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="bg-red/10 text-red border-red/20 font-bold">
+                          <Badge variant="outline" className="bg-red/10 text-red border-red/20 font-bold text-[11px] text-center">
                             Inválido: {vol.committeeName}
                           </Badge>
                         )}
-                      </TableCell>
-                      <TableCell className="text-right pr-8 font-mono text-xs text-slate-500">{vol.phone}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                    </div>
+                    {/* Phone & Footer Mobile */}
+                    <div className="md:col-span-2 flex justify-between md:justify-end items-center md:items-start pt-3 md:pt-0 border-t border-slate-100 md:border-none mt-2 md:mt-0">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest md:hidden">Teléfono</span>
+                      <span className="font-mono text-[13px] md:text-xs text-slate-600 font-bold bg-slate-50 md:bg-transparent px-2 py-1 md:p-0 rounded border border-slate-100 md:border-none">{vol.phone}</span>
+                    </div>
+                    {/* Error display on mobile */}
+                    {vol.error && (
+                      <div className="md:hidden mt-2 p-3 bg-red-50 rounded-xl border border-red-100">
+                        <p className="text-[11px] text-red-600 font-bold flex items-center gap-1.5 leading-tight">
+                          <span className="material-symbols-outlined text-[16px]">error</span> {vol.error}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </CardContent>
-            <CardFooter className="p-8 bg-slate-50/50 border-t border-slate-100">
+            <CardFooter className="p-6 sm:p-8 bg-slate-50/50 border-t border-slate-100">
               <Button 
                 onClick={handleImport} 
                 disabled={isImporting || parsedData.some(v => !v.committeeId)} 
@@ -277,46 +305,45 @@ export default function ImportPage() {
       {step === 3 && (
         <motion.div variants={itemVariants}>
           <Card className="border border-[#6dd230]/20 bg-white shadow-xl shadow-[#6dd230]/5 rounded-3xl overflow-hidden">
-            <CardHeader className="bg-[#6dd230]/5 p-10 text-center border-b border-[#6dd230]/10">
-              <div className="w-20 h-20 bg-[#6dd230] rounded-full flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-[#6dd230]/30">
-                <span className="material-symbols-outlined text-[40px]">task_alt</span>
+            <CardHeader className="bg-[#6dd230]/5 p-8 sm:p-10 text-center border-b border-[#6dd230]/10">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-[#6dd230] rounded-full flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-[#6dd230]/30">
+                <span className="material-symbols-outlined text-[32px] sm:text-[40px]">task_alt</span>
               </div>
-              <CardTitle className="text-2xl font-bold text-slate-900">¡Importación Exitosa!</CardTitle>
-              <CardDescription className="text-slate-500 text-lg mt-2 font-medium">
+              <CardTitle className="text-xl sm:text-2xl font-bold text-slate-900">¡Importación Exitosa!</CardTitle>
+              <CardDescription className="text-slate-500 text-base sm:text-lg mt-2 font-medium">
                 Se han registrado los voluntarios y generado sus PINs de acceso.
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-10 space-y-4">
-              <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 text-center">Lista de Envíos Pendientes</p>
-              <div className="max-h-[600px] overflow-auto pr-2 space-y-3">
+            <CardContent className="p-6 sm:p-10 space-y-4">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6 text-center">Lista de Envíos Pendientes</p>
+              <div className="max-h-[600px] overflow-auto sm:pr-2 space-y-3">
                 {parsedData.map((vol, i) => (
-                  <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-6 bg-slate-50 rounded-2xl border border-slate-100 gap-6 group hover:bg-white hover:shadow-md transition-all">
+                  <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 sm:p-6 bg-slate-50 rounded-2xl border border-slate-100 gap-5 sm:gap-6 group hover:bg-white hover:shadow-md transition-all">
                     <div>
-                      <h4 className="font-bold text-slate-800 group-hover:text-[#4d7cfe] transition-colors">{vol.firstName} {vol.lastName}</h4>
-                      <div className="flex items-center gap-4 mt-1.5">
-                        <p className="text-sm text-slate-400 font-mono flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-[16px]">call</span> {vol.phone}
+                      <h4 className="font-bold text-slate-800 text-lg sm:text-base group-hover:text-[#4d7cfe] transition-colors">{vol.firstName} {vol.lastName}</h4>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-3 sm:mt-1.5">
+                        <p className="text-xs sm:text-sm text-slate-500 font-mono flex items-center gap-1.5 bg-white sm:bg-transparent px-3 py-1.5 sm:p-0 rounded-lg border sm:border-none border-slate-200">
+                          <span className="material-symbols-outlined text-[16px] text-slate-400">call</span> {vol.phone}
                         </p>
-                        <p className="text-sm text-slate-400 font-mono flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-[16px]">key</span> PIN: <span className="font-bold text-slate-700">{vol.pin}</span>
+                        <p className="text-xs sm:text-sm text-slate-500 font-mono flex items-center gap-1.5 bg-white sm:bg-transparent px-3 py-1.5 sm:p-0 rounded-lg border sm:border-none border-slate-200">
+                          <span className="material-symbols-outlined text-[16px] text-slate-400">key</span> PIN: <span className="font-bold text-slate-700">{vol.pin}</span>
                         </p>
                       </div>
                     </div>
                     <Button 
                       size="sm" 
-                      className="bg-[#25D366] hover:bg-[#1ebd5a] text-white rounded-xl px-6 font-bold shadow-sm shadow-green-500/20 h-10 transition-all active:scale-[0.95]"
+                      className="w-full sm:w-auto bg-[#25D366] hover:bg-[#1ebd5a] text-white rounded-xl px-6 font-bold shadow-sm shadow-green-500/20 h-12 sm:h-10 transition-all active:scale-[0.95]"
+                      onClick={() => window.open(vol.waLink, '_blank')}
                     >
-                      <a href={vol.waLink} target="_blank" rel="noopener noreferrer" className="flex items-center">
-                        <span className="material-symbols-outlined text-[18px] mr-2">send</span>
-                        Enviar PIN
-                      </a>
+                      <span className="material-symbols-outlined text-[20px] sm:text-[18px] mr-2">send</span>
+                      Enviar PIN
                     </Button>
                   </div>
                 ))}
               </div>
             </CardContent>
-            <CardFooter className="p-10 bg-slate-50/50 border-t border-slate-100">
-              <Button variant="outline" className="w-full h-12 rounded-2xl border-slate-200 text-slate-600 font-bold" onClick={() => { setCsvText(""); setParsedData([]); setStep(1); }}>
+            <CardFooter className="p-6 sm:p-10 bg-slate-50/50 border-t border-slate-100">
+              <Button variant="outline" className="w-full h-12 rounded-2xl border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50" onClick={() => { setCsvText(""); setParsedData([]); setStep(1); }}>
                 Realizar otra importación
               </Button>
             </CardFooter>
