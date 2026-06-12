@@ -24,8 +24,8 @@ const containerVariants = {
 
 const itemVariants = {
   hidden: { opacity: 0, y: 15 },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     y: 0,
     transition: {
       type: "spring" as const,
@@ -132,18 +132,25 @@ export default function CoordinatorDashboard() {
     const phone = localStorage.getItem('volunteer_phone');
 
     const fetchUserNameAndSetGreeting = async () => {
-      let firstName = 'Coordinador';
-      
+      let userName = 'Coordinador (Sin Teléfono)';
+
       if (phone) {
         const cleanPhone = phone.replace(/\s+/g, '');
-        const { data: user } = await supabase
-          .from('platform_users')
+        console.log("Buscando en supabase con el teléfono:", cleanPhone);
+        
+        const { data: user, error } = await supabase
+          .from('profiles')
           .select('full_name')
           .eq('phone', cleanPhone)
           .maybeSingle();
-          
-        if (user && user.full_name) {
-          firstName = user.full_name.split(' ')[0];
+
+        if (error) {
+          console.error("Error fetching profile:", error);
+          userName = 'Error BD';
+        } else if (user) {
+          userName = user.full_name || 'Sin Nombre en BD';
+        } else {
+          userName = 'Coordinador (No encontrado)';
         }
       }
 
@@ -167,10 +174,10 @@ export default function CoordinatorDashboard() {
         `El equipo cuenta contigo. 💪`
       ];
       const randomMsg = messages[Math.floor(Math.random() * messages.length)];
-      
+
       setGreeting(
         <>
-          <span className="block mb-1 text-slate-800">{timeOfDay}, <span className="font-bold">{firstName}</span> {emoji}</span>
+          <span className="block mb-1 text-slate-800">{timeOfDay}, <span className="font-bold">{userName}</span> {emoji}</span>
           <span className="block text-base text-slate-500 font-normal">{randomMsg}</span>
         </>
       );
@@ -362,7 +369,7 @@ export default function CoordinatorDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <motion.div 
+        <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
           className="rounded-full h-8 w-8 border-b-2 border-[#0084d1]"
@@ -372,16 +379,16 @@ export default function CoordinatorDashboard() {
   }
 
   return (
-    <motion.div 
+    <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-12 max-w-6xl mx-auto pb-20"
+      className="w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-12 pb-20"
     >
       {/* Header Administrativo - High-End Redesign */}
       <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 pb-8 border-b border-slate-200/60 relative overflow-hidden">
         <div className="space-y-2 relative z-10">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.5 }}
@@ -390,21 +397,21 @@ export default function CoordinatorDashboard() {
             {greeting}
           </motion.div>
         </div>
-        
-        <div className="flex items-center gap-4 shrink-0 relative z-10">
-          <Link href="/settings">
-            <Button variant="outline" size="lg" className="rounded-sm font-bold border-slate-200 bg-white hover:bg-slate-50 shadow-sm transition-all active:scale-[0.96]">
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 shrink-0 relative z-10 w-full lg:w-auto">
+          <Link href="/settings" className="w-full sm:w-auto">
+            <Button variant="outline" size="lg" className="w-full sm:w-auto rounded-sm font-bold border-slate-200 bg-white hover:bg-slate-50 shadow-sm transition-all active:scale-[0.96]">
               Ajustes Globales
             </Button>
           </Link>
-          <Link href="/shifts">
-            <Button size="lg" className="bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-sm font-bold shadow-xl shadow-blue-500/20 transition-all active:scale-[0.96] group px-6">
+          <Link href="/shifts" className="w-full sm:w-auto">
+            <Button size="lg" className="w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white rounded-sm font-bold shadow-xl shadow-blue-500/20 transition-all active:scale-[0.96] group px-6">
               Gestionar Turnos
               <span className="material-symbols-outlined text-[18px] ml-2 opacity-70 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform">north_east</span>
             </Button>
           </Link>
         </div>
-        
+
         {/* Subtle Background Accent */}
         <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-blue-50/50 rounded-full blur-3xl pointer-events-none" />
       </motion.div>
@@ -413,7 +420,7 @@ export default function CoordinatorDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
           <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 h-full">
-            <CardContent className="p-7">
+            <CardContent className="p-5 sm:p-7">
               <div className="flex items-start justify-between mb-6">
                 <div className="p-3 bg-blue-50 rounded-sm group-hover:bg-[#0084d1] group-hover:text-white transition-colors duration-300">
                   <span className="material-symbols-outlined text-[20px]">track_changes</span>
@@ -425,18 +432,18 @@ export default function CoordinatorDashboard() {
                   </Badge>
                 </div>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 pr-4 sm:pr-0">
                 <h3 className="text-slate-900 font-bold tracking-tighter flex items-baseline gap-2">
                   {globalStats.totalRecruited} <span className="text-sm font-bold text-slate-300 uppercase tracking-widest">/ {globalStats.targetVolunteers}</span>
                 </h3>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Voluntarios Reclutados</p>
               </div>
               <div className="w-full h-1.5 bg-slate-50 mt-6 rounded-full overflow-hidden">
-                <motion.div 
+                <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${globalStats.recruitmentPercentage}%` }}
                   transition={{ duration: 1, ease: "circOut" }}
-                  className="h-full bg-[#0084d1] rounded-full" 
+                  className="h-full bg-[#0084d1] rounded-full"
                 />
               </div>
             </CardContent>
@@ -445,7 +452,7 @@ export default function CoordinatorDashboard() {
 
         <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
           <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-teal-500/10 h-full">
-            <CardContent className="p-7">
+            <CardContent className="p-5 sm:p-7">
               <div className="flex items-start justify-between mb-6">
                 <div className="p-3 bg-teal-50 rounded-sm group-hover:bg-accent group-hover:text-white transition-colors duration-300 text-accent">
                   <span className="material-symbols-outlined text-[20px]">monitoring</span>
@@ -471,7 +478,7 @@ export default function CoordinatorDashboard() {
 
         <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="group">
           <Card className={`border-none ${globalStats.criticalAlerts > 0 ? 'bg-red-50/50' : 'bg-white'} shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/10 h-full border border-transparent hover:border-red-100`}>
-            <CardContent className="p-7">
+            <CardContent className="p-5 sm:p-7">
               <div className="flex items-start justify-between mb-6">
                 <div className={`p-3 rounded-sm transition-colors duration-300 ${globalStats.criticalAlerts > 0 ? 'bg-red-100 text-red group-hover:bg-red group-hover:text-white' : 'bg-slate-50 text-slate-400'}`}>
                   <span className="material-symbols-outlined text-[20px]">security</span>
@@ -513,7 +520,7 @@ export default function CoordinatorDashboard() {
               </div>
               <div className="mt-6 flex items-center gap-2">
                 <div className="flex -space-x-2">
-                  {[1,2,3].map(i => (
+                  {[1, 2, 3].map(i => (
                     <div key={i} className="w-5 h-5 rounded-full border border-slate-900 bg-slate-700" />
                   ))}
                 </div>
@@ -531,8 +538,8 @@ export default function CoordinatorDashboard() {
         {/* Left: Daily Volunteer Distribution Chart */}
         <motion.div variants={itemVariants} className="lg:col-span-3 min-w-0">
           <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden h-full flex flex-col min-w-0">
-            <CardContent className="p-7 flex-1 flex flex-col justify-between min-w-0">
-              <div className="flex items-start justify-between mb-8">
+            <CardContent className="p-5 sm:p-7 flex-1 flex flex-col justify-between min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 sm:gap-0 mb-8">
                 <div>
                   <p className="text-4xl font-bold text-slate-900 tracking-tighter leading-none tabular-nums">
                     {totalVolsWithShifts.toLocaleString()}
@@ -544,8 +551,8 @@ export default function CoordinatorDashboard() {
                 </div>
               </div>
 
-              <div className="relative flex-1 flex flex-col">
-                <div className="flex-1 flex items-end gap-1.5 min-h-[100px] mt-4">
+              <div className="relative flex-1 flex flex-col overflow-x-auto w-full pb-2">
+                <div className="min-w-[400px] flex flex-col h-full"><div className="flex-1 flex items-end gap-1.5 min-h-[100px] mt-4">
                   {(() => {
                     const maxCount = Math.max(...Object.values(volsPerDay), 1);
                     return EVENT_DAYS.map((day, idx) => {
@@ -569,11 +576,10 @@ export default function CoordinatorDashboard() {
                             initial={{ height: 0 }}
                             animate={{ height: `${heightPct}%` }}
                             transition={{ duration: 0.7, delay: idx * 0.025, ease: "circOut" }}
-                            className={`w-full rounded-[3px] transition-colors duration-150 ${
-                              isHovered
-                                ? 'bg-[#0084d1]'
-                                : 'bg-slate-200 hover:bg-[#0084d1]/50'
-                            }`}
+                            className={`w-full rounded-[3px] transition-colors duration-150 ${isHovered
+                              ? 'bg-[#0084d1]'
+                              : 'bg-slate-200 hover:bg-[#0084d1]/50'
+                              }`}
                           />
                         </div>
                       );
@@ -581,17 +587,16 @@ export default function CoordinatorDashboard() {
                   })()}
                 </div>
 
-                <div className="flex gap-1.5 mt-2">
-                  {EVENT_DAYS.map(day => (
-                    <div key={day.key} className="flex-1 text-center">
-                      <span className={`text-[10px] font-bold transition-colors ${
-                        hoveredDay === day.key ? 'text-[#0084d1]' : 'text-slate-400'
-                      }`}>{day.dateNum}</span>
-                    </div>
-                  ))}
-                </div>
+                  <div className="flex gap-1.5 mt-2">
+                    {EVENT_DAYS.map(day => (
+                      <div key={day.key} className="flex-1 text-center">
+                        <span className={`text-[10px] font-bold transition-colors ${hoveredDay === day.key ? 'text-[#0084d1]' : 'text-slate-400'
+                          }`}>{day.dateNum}</span>
+                      </div>
+                    ))}
+                  </div>
 
-                <div className="mt-1.5">
+                </div><div className="mt-1.5">
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Septiembre 2026</span>
                 </div>
               </div>
@@ -605,8 +610,8 @@ export default function CoordinatorDashboard() {
             <CardContent className="p-0 flex-1 flex flex-col">
               <div className="divide-y divide-slate-50 flex-1 flex flex-col justify-evenly h-full">
                 {committeeStatus.map((committee, idx) => (
-                  <motion.div 
-                    key={committee.id} 
+                  <motion.div
+                    key={committee.id}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.2 + idx * 0.05 }}
@@ -614,21 +619,20 @@ export default function CoordinatorDashboard() {
                   >
                     <div className="flex-1 w-full min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-slate-600 transition-colors">{committee.name}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-slate-600 transition-colors truncate" title={committee.name}>{committee.name}</p>
                         {committee.status === 'high_risk' && (
                           <div className="w-1.5 h-1.5 rounded-full bg-red animate-ping" />
                         )}
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="flex-1 h-1.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
-                          <motion.div 
+                          <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${committee.coverage}%` }}
                             transition={{ duration: 1, delay: 0.5 + idx * 0.05 }}
-                            className={`h-full rounded-full ${
-                              committee.status === 'success' ? 'bg-accent' :
+                            className={`h-full rounded-full ${committee.status === 'success' ? 'bg-accent' :
                               committee.status === 'warning' ? 'bg-amber-400' : 'bg-red'
-                            }`}
+                              }`}
                           />
                         </div>
                         <span className="text-[11px] font-bold text-slate-500 w-10 tabular-nums">{committee.coverage}%</span>
@@ -644,74 +648,74 @@ export default function CoordinatorDashboard() {
 
       {/* Bottom Row: Mapa de Calor Operativo */}
       <motion.div variants={itemVariants} className="w-full min-w-0">
-          <Card className="border-none bg-slate-50/50 shadow-inner rounded-sm overflow-hidden flex flex-col border border-slate-200/60 min-w-0">
-            <div className="px-8 py-7 flex items-center justify-between">
-              <div className="space-y-1">
-                <h3 className="text-slate-800 tracking-tight leading-none">Mapa de Calor Operativo</h3>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Cobertura por Día y Turno</p>
-              </div>
-              <div className="w-10 h-10 bg-[#4d7cfe]/10 rounded-sm flex items-center justify-center shadow-sm">
-                <span className="material-symbols-outlined text-[20px] text-[#4d7cfe]">grid_view</span>
+        <Card className="border-none bg-slate-50/50 shadow-inner rounded-sm overflow-hidden flex flex-col border border-slate-200/60 min-w-0">
+          <div className="px-5 sm:px-8 py-5 sm:py-7 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h3 className="text-slate-800 tracking-tight leading-none">Mapa de Calor Operativo</h3>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Cobertura por Día y Turno</p>
+            </div>
+            <div className="w-10 h-10 bg-[#4d7cfe]/10 rounded-sm flex items-center justify-center shadow-sm">
+              <span className="material-symbols-outlined text-[20px] text-[#4d7cfe]">grid_view</span>
+            </div>
+          </div>
+          <CardContent className="p-0 flex-1 min-w-0">
+            <div className="overflow-x-auto w-full">
+              <div className="min-w-[600px] flex">
+                <div className="w-24 shrink-0 bg-white/50 border-r border-slate-200/60 flex flex-col pt-8">
+                  {['T1', 'T2', 'T3', 'T4'].map((shiftId) => (
+                    <div key={shiftId} className="flex-1 min-h-[60px] flex items-center justify-center border-b border-slate-100/50 last:border-0">
+                      <span className="text-[10px] font-bold text-slate-500">{shiftId}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex-1 grid grid-cols-8">
+                  {heatmapMatrix.map((dayData, idx) => (
+                    <div key={dayData.day} className="flex flex-col border-r border-slate-100/50 last:border-0 min-w-0">
+                      <div className="h-8 flex flex-col items-center justify-center bg-white/30 border-b border-slate-200/60">
+                        <span className="text-[10px] font-bold text-slate-800">{dayData.shortLabel}</span>
+                      </div>
+                      {dayData.shifts.map((shift) => (
+                        <div
+                          key={shift.shift}
+                          className="flex-1 min-h-[60px] flex flex-col items-center justify-center border-b border-white border-r border-white last:border-b-0 p-1 transition-all duration-300 relative group"
+                          style={{
+                            backgroundColor: shift.required === 0 ? 'rgba(248, 250, 252, 0.5)' :
+                              shift.coverage >= 1 ? 'rgba(20, 184, 166, 0.15)' :
+                                shift.coverage >= 0.7 ? 'rgba(251, 191, 36, 0.15)' :
+                                  'rgba(248, 113, 113, 0.15)'
+                          }}
+                        >
+                          {shift.required > 0 ? (
+                            <>
+                              <span className="text-[11px] font-bold text-slate-700">{Math.round(shift.coverage * 100)}%</span>
+                              <span className="text-[8px] font-bold text-slate-400 mt-0.5">{shift.assigned}/{shift.required}</span>
+                            </>
+                          ) : (
+                            <span className="text-[10px] text-slate-300">-</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-            <CardContent className="p-0 flex-1 min-w-0">
-              <div className="overflow-x-auto w-full">
-                <div className="min-w-[600px] flex">
-                  <div className="w-24 shrink-0 bg-white/50 border-r border-slate-200/60 flex flex-col pt-8">
-                    {['T1', 'T2', 'T3', 'T4'].map((shiftId) => (
-                      <div key={shiftId} className="flex-1 min-h-[60px] flex items-center justify-center border-b border-slate-100/50 last:border-0">
-                        <span className="text-[10px] font-bold text-slate-500">{shiftId}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex-1 grid grid-cols-8">
-                    {heatmapMatrix.map((dayData, idx) => (
-                      <div key={dayData.day} className="flex flex-col border-r border-slate-100/50 last:border-0 min-w-0">
-                        <div className="h-8 flex flex-col items-center justify-center bg-white/30 border-b border-slate-200/60">
-                          <span className="text-[10px] font-bold text-slate-800">{dayData.shortLabel}</span>
-                        </div>
-                        {dayData.shifts.map((shift) => (
-                          <div 
-                            key={shift.shift}
-                            className="flex-1 min-h-[60px] flex flex-col items-center justify-center border-b border-white border-r border-white last:border-b-0 p-1 transition-all duration-300 relative group"
-                            style={{
-                              backgroundColor: shift.required === 0 ? 'rgba(248, 250, 252, 0.5)' : 
-                                shift.coverage >= 1 ? 'rgba(20, 184, 166, 0.15)' :
-                                shift.coverage >= 0.7 ? 'rgba(251, 191, 36, 0.15)' :
-                                'rgba(248, 113, 113, 0.15)'
-                            }}
-                          >
-                            {shift.required > 0 ? (
-                              <>
-                                <span className="text-[11px] font-bold text-slate-700">{Math.round(shift.coverage * 100)}%</span>
-                                <span className="text-[8px] font-bold text-slate-400 mt-0.5">{shift.assigned}/{shift.required}</span>
-                              </>
-                            ) : (
-                              <span className="text-[10px] text-slate-300">-</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+            <div className="flex items-center justify-center gap-4 sm:gap-6 mt-8 flex-wrap shrink-0 pb-8">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-sm bg-red-400" />
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Crítico</span>
               </div>
-              <div className="flex items-center justify-center gap-4 sm:gap-6 mt-8 flex-wrap shrink-0 pb-8">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-sm bg-red-400" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Crítico</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-sm bg-amber-400" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Riesgo</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-sm bg-teal-500" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Óptimo</span>
-                </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-sm bg-amber-400" />
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Riesgo</span>
               </div>
-            </CardContent>
-          </Card>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-sm bg-teal-500" />
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Óptimo</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </motion.div>
 
     </motion.div>
