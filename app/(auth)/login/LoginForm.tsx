@@ -137,7 +137,8 @@ export function LoginForm() {
                 <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">vpn_key</span>
                   <input
                     id="pin"
-                    type="password"
+                    type="tel"
+                    style={{ WebkitTextSecurity: "disc" } as any}
                     inputMode="numeric"
                     pattern="[0-9]*"
                     maxLength={6}
@@ -203,7 +204,8 @@ export function LoginForm() {
                 <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">lock</span>
                 <input
                   id="newPin"
-                  type="password"
+                  type="tel"
+                  style={{ WebkitTextSecurity: "disc" } as any}
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={6}
@@ -225,7 +227,8 @@ export function LoginForm() {
                 <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">check_circle</span>
                 <input
                   id="confirmPin"
-                  type="password"
+                  type="tel"
+                  style={{ WebkitTextSecurity: "disc" } as any}
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={6}
