@@ -98,6 +98,17 @@ const getShiftColor = (shiftId: string, count: number, isSingleCommittee: boolea
   }
 };
 
+const getCommitteeColor = (committee: string) => {
+  const comm = committee.toLowerCase();
+  if (comm.includes('seguridad')) return 'bg-[#fe4d97]/15 text-[#fe4d97] border-[#fe4d97]/20';
+  if (comm.includes('guía')) return 'bg-[#6dd230]/15 text-[#6dd230] border-[#6dd230]/20';
+  if (comm.includes('historia')) return 'bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20';
+  if (comm.includes('traducción')) return 'bg-amber-500/15 text-amber-600 border-amber-500/20';
+  if (comm.includes('transporte')) return 'bg-purple-500/15 text-purple-600 border-purple-500/20';
+  if (comm.includes('auxilios')) return 'bg-teal-500/15 text-teal-600 border-teal-500/20';
+  return 'bg-slate-100 text-slate-500 border-slate-200/50';
+};
+
 // ─── página ───────────────────────────────────────────────────────────────────
 export default function ShiftsPage() {
   const EVENT_DAYS_RAW = getActiveEventDays();
@@ -507,7 +518,7 @@ export default function ShiftsPage() {
           {/* Right: chips + total */}
           <div className="flex-1 min-w-0 flex items-center gap-4 px-4 py-3.5">
             <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-              <div className="flex gap-1.5 flex-wrap">
+              <div className="flex gap-2 sm:gap-3 lg:gap-4 flex-nowrap overflow-x-auto pb-1 w-full" style={{ scrollbarWidth: 'none' }}>
                 {(['T1', 'T2', 'T3', 'T4'] as const).map(t => {
                   const count = shiftData[t].length;
 
@@ -524,10 +535,10 @@ export default function ShiftsPage() {
 
                   const c = getShiftColor(t, count, isSingleCommittee, minRequired);
                   return (
-                    <span key={t} className={`inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1 rounded-sm border transition-all ${c.badge} ${c.border}`}>
+                    <span key={t} className={`flex-1 justify-center inline-flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs xl:text-sm font-semibold px-2 sm:px-3 py-1.5 rounded-sm border transition-all shrink-0 ${c.badge} ${c.border}`}>
                       <span className="font-bold">{t}</span>
-                      <span className="opacity-25 text-xs">|</span>
-                      <span className="font-bold tabular-nums">{count}/{minRequired}</span>
+                      <span className="opacity-25 text-[10px] sm:text-xs">|</span>
+                      <span className="font-bold tabular-nums tracking-tight">{count}/{minRequired}</span>
                     </span>
                   );
                 })}
@@ -573,8 +584,19 @@ export default function ShiftsPage() {
               const displayedVols = isShiftExpanded ? vols : vols.slice(0, 10);
               const hiddenCount = vols.length - displayedVols.length;
 
+              const hasMore = vols.length > 10;
+
               return (
-                <div key={t} className={`rounded-sm border p-3 h-fit ${c.card} ${c.border}`}>
+                <div 
+                  key={t} 
+                  onClick={(e) => {
+                    if (hasMore) {
+                      e.stopPropagation();
+                      toggleShiftExpand(key, t);
+                    }
+                  }}
+                  className={`rounded-sm border p-3 h-fit ${c.card} ${c.border} ${hasMore ? 'cursor-pointer hover:shadow-sm transition-shadow group/card' : ''}`}
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <div className="flex items-center gap-1.5">
@@ -599,34 +621,23 @@ export default function ShiftsPage() {
                       </div>
                     ) : (
                       <>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1">
                           {displayedVols.map(vol => (
                             <div
                               key={vol.id}
-                              className="flex items-center justify-between group bg-white shadow-sm border border-slate-200/50 rounded-sm px-2.5 py-2 hover:bg-slate-100 transition-colors cursor-pointer"
+                              className="flex items-center justify-between group bg-white border border-slate-200/40 rounded-sm px-2 py-1 hover:bg-slate-100 transition-colors cursor-pointer"
                               onClick={(e) => { e.stopPropagation(); handleEditClick(vol); }}
                             >
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.dot}`} />
-                                <span className="text-sm font-medium text-slate-800 truncate group-hover:text-[#4d7cfe] transition-colors">
+                                <span className="text-[12px] font-semibold text-slate-800 truncate group-hover:text-[#4d7cfe] transition-colors">
                                   {vol.name}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-white text-slate-500 font-semibold border-slate-200/60">
+                                <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-[18px] font-semibold border ${getCommitteeColor(vol.committee)}`}>
                                   {vol.committee}
                                 </Badge>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEditClick(vol);
-                                    setTimeout(() => setIsEditingShifts(true), 0);
-                                  }}
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity bg-white p-1 rounded-sm border border-slate-200"
-                                  title={`Editar turnos de ${vol.name}`}
-                                >
-                                  <span className="material-symbols-outlined text-[14px] text-slate-500 hover:text-slate-800">edit</span>
-                                </button>
                               </div>
                             </div>
                           ))}
@@ -669,7 +680,7 @@ export default function ShiftsPage() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="max-w-6xl mx-auto space-y-10 pb-12"
+      className="w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-10 pb-12"
     >
 
 
@@ -678,11 +689,11 @@ export default function ShiftsPage() {
         <Card className="border border-hairline-strong bg-canvas shadow-sm rounded-sm overflow-hidden h-full">
           <CardContent className="p-5 h-full flex flex-col justify-between">
             <div>
-              <div className="text-caption-uppercase text-muted mb-3">Cobertura Global</div>
+              <div className="text-caption-uppercase text-slate-600 font-bold mb-3">Cobertura Global</div>
               <div className="text-display-lg text-ink font-semibold tracking-tighter">
                 {kpiData.coverage}%
               </div>
-              <p className="text-[11px] mt-2 font-medium text-muted/70">
+              <p className="text-[11px] mt-2 font-medium text-slate-500">
                 Slots cubiertos vs. requeridos
               </p>
             </div>
@@ -709,9 +720,9 @@ export default function ShiftsPage() {
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-hairline-strong shrink-0">
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <div className="text-caption-uppercase text-muted">Turnos Incompletos por Comité</div>
+                    <div className="text-caption-uppercase text-slate-600 font-bold">Turnos Incompletos por Comité</div>
                     <div className="relative group cursor-pointer inline-flex items-center">
-                      <span className="material-symbols-outlined text-[16px] text-muted hover:text-ink transition-colors">info</span>
+                      <span className="material-symbols-outlined text-[16px] text-slate-500 hover:text-slate-800 transition-colors">info</span>
                       <div className="absolute left-0 sm:left-1/2 sm:-translate-x-1/2 top-full mt-2 w-64 sm:w-72 p-3 bg-slate-900 border border-slate-800 text-[11.5px] text-slate-200 rounded-sm shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
                         <p className="font-bold mb-1 text-sky-400">¿Cómo funciona el contador?</p>
                         <p className="leading-relaxed">
@@ -723,7 +734,7 @@ export default function ShiftsPage() {
                       </div>
                     </div>
                   </div>
-                  <p className="text-[11px] mt-1 font-medium text-muted/70">Alertas activas donde no se cumple con el mínimo requerido.</p>
+                  <p className="text-[11px] mt-1 font-medium text-slate-500">Alertas activas donde no se cumple con el mínimo requerido.</p>
                 </div>
                 <Badge variant="outline" className="bg-error/10 text-error border-error/20 font-bold">
                   {kpiData.totalAlertsCount} Alertas en Total
@@ -782,8 +793,8 @@ export default function ShiftsPage() {
             <CardContent className="p-5 h-full flex flex-col justify-center">
               <div className="flex items-center justify-between mb-5 pb-4 border-b border-hairline-strong shrink-0">
                 <div>
-                  <div className="text-caption-uppercase text-muted">Estado de Reclutamiento</div>
-                  <p className="text-[11px] mt-1 font-medium text-muted/70">Resumen de asignaciones para tu comité.</p>
+                  <div className="text-caption-uppercase text-slate-600 font-bold">Estado de Reclutamiento</div>
+                  <p className="text-[11px] mt-1 font-medium text-slate-500">Resumen de asignaciones para tu comité.</p>
                 </div>
                 <Badge variant="outline" className={kpiData.editorMissingVolunteers > 0 ? "bg-error/10 text-error border-error/20 font-bold" : "bg-success/10 text-success border-success/20 font-bold"}>
                   {kpiData.editorMissingVolunteers > 0 ? `Faltan ${kpiData.editorMissingVolunteers} Voluntarios` : "Reclutamiento Completo"}
@@ -843,20 +854,20 @@ export default function ShiftsPage() {
       </motion.div>
 
       {/* Grid de días (Flex Column Layout para no alinear alturas) */}
-      <div className="flex flex-col xl:flex-row gap-4 items-start">
+      <div className="flex flex-col 2xl:flex-row gap-4 items-start w-full min-w-0">
         {/* Columna Izquierda (Días impares: 1, 3, 5...) */}
-        <div className="flex-1 flex flex-col gap-4 w-full">
+        <div className="flex-1 flex flex-col gap-4 w-full min-w-0">
           {EVENT_DAYS.filter((_, i) => i % 2 === 0).map(d => (
-            <motion.div key={d.key} variants={itemVariants}>
+            <motion.div key={d.key} variants={itemVariants} className="w-full">
               {renderDayCard(d)}
             </motion.div>
           ))}
         </div>
 
         {/* Columna Derecha (Días pares: 2, 4, 6...) */}
-        <div className="flex-1 flex flex-col gap-4 w-full">
+        <div className="flex-1 flex flex-col gap-4 w-full min-w-0">
           {EVENT_DAYS.filter((_, i) => i % 2 === 1).map(d => (
-            <motion.div key={d.key} variants={itemVariants}>
+            <motion.div key={d.key} variants={itemVariants} className="w-full">
               {renderDayCard(d)}
             </motion.div>
           ))}

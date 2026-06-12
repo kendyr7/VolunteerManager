@@ -15,10 +15,14 @@ import {
 } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
 import { useSearch } from "@/lib/search-context";
+import { motion, AnimatePresence } from "framer-motion";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -31,6 +35,17 @@ type VolunteerType = {
   reliability: number;
   committee: string;
   committee_id?: string;
+};
+
+const getCommitteeColor = (committee: string) => {
+  const comm = committee.toLowerCase();
+  if (comm.includes('seguridad')) return 'bg-[#fe4d97]/15 text-[#fe4d97] border-[#fe4d97]/20';
+  if (comm.includes('guía')) return 'bg-[#6dd230]/15 text-[#6dd230] border-[#6dd230]/20';
+  if (comm.includes('historia')) return 'bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20';
+  if (comm.includes('traducción')) return 'bg-amber-500/15 text-amber-600 border-amber-500/20';
+  if (comm.includes('transporte')) return 'bg-purple-500/15 text-purple-600 border-purple-500/20';
+  if (comm.includes('auxilios')) return 'bg-teal-500/15 text-teal-600 border-teal-500/20';
+  return 'bg-slate-100 text-slate-500 border-slate-200/50';
 };
 
 export default function RemindersPage() {
@@ -153,11 +168,11 @@ export default function RemindersPage() {
       const mapped = volsData.map((v: any) => ({
         id: v.id,
         name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
-        stake: '',
-        ward: '',
+        stake: v.stake || '',
+        ward: v.neighborhood || '',
         phone: v.phone || '',
         shifts: sCounts[v.id] || 0,
-        reliability: 100,
+        reliability: v.reliability_score || 100,
         committee: v.committees?.name || 'Sin comité',
         committee_id: v.committee_id
       }));
@@ -168,6 +183,10 @@ export default function RemindersPage() {
   // Estado del turno seleccionado (ninguno por defecto)
   const [selectedDayKey, setSelectedDayKey] = useState<string>("");
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
 
   // Estado de los filtros y visualización de plantilla
   const { searchTerm } = useSearch();
@@ -264,6 +283,14 @@ export default function RemindersPage() {
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [volunteers, globalShifts, selectedDayKey, selectedShiftId, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
 
+  // Reset page when data changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeVolunteers.length, selectedDayKey, selectedShiftId]);
+
+  const totalPages = Math.ceil(activeVolunteers.length / itemsPerPage);
+  const currentVolunteers = activeVolunteers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   // Detalles del turno seleccionado
   const selectedShiftDetails = SHIFT_TIMES.find(s => `T${s.id}` === selectedShiftId);
   const selectedDayObj = EVENT_DAYS.find(d => d.key === selectedDayKey);
@@ -306,8 +333,18 @@ export default function RemindersPage() {
     showToast(`Se copiaron ${activeVolunteers.length} números`);
   };
 
-  const stakes: string[] = [];
-  const wards: string[] = [];
+  const stakes = useMemo(() => {
+    const set = new Set<string>();
+    volunteers.forEach(v => { if (v.stake) set.add(v.stake); });
+    return Array.from(set).sort();
+  }, [volunteers]);
+
+  const wards = useMemo(() => {
+    const set = new Set<string>();
+    volunteers.forEach(v => { if (v.ward) set.add(v.ward); });
+    return Array.from(set).sort();
+  }, [volunteers]);
+
   const committees = committeesList.map(c => c.name);
 
   if (loading) {
@@ -358,6 +395,30 @@ export default function RemindersPage() {
               Limpiar Filtros
             </Button>
           )}
+          {selectedDayKey && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedDayKey("");
+                setSelectedShiftId("");
+              }}
+              className="h-9 px-3 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-250 hover:bg-rose-100 hover:text-rose-750 transition-colors shadow-sm rounded-sm ml-2"
+            >
+              Limpiar Selección
+            </Button>
+          )}
+          
+          <div className="ml-auto flex items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTemplate(true)}
+              className="h-9 px-3 text-xs font-bold border-slate-200 text-slate-500 hover:text-[#0084d1] hover:bg-slate-50 hover:border-[#0084d1]/30 transition-colors shadow-sm rounded-sm flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]">chat_bubble</span>
+              Ver Plantilla
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -368,18 +429,6 @@ export default function RemindersPage() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">FECHA</span>
-            {selectedDayKey && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelectedDayKey("");
-                  setSelectedShiftId("");
-                }}
-                className="h-7 px-3 text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-250 hover:bg-rose-100 hover:text-rose-750 transition-colors shadow-sm rounded-sm"
-              >
-                Limpiar Selección
-              </Button>
-            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {EVENT_DAYS.map((day) => {
@@ -533,193 +582,147 @@ export default function RemindersPage() {
           </div>
         ) : (
           <>
-            {/* Cabecera del Turno Seleccionado */}
-            <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 bg-white shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Badge className="bg-[#0084d1] text-white text-[10px] py-0.5 px-2 uppercase font-bold tracking-wider rounded-sm">
-                    {selectedShiftDetails?.name}
-                  </Badge>
-                  {isSelectedHoliday && (
-                    <Badge variant="destructive" className="text-[10px] py-0.5 px-2 uppercase font-bold tracking-wider rounded-sm">
-                      Feriado
-                    </Badge>
-                  )}
-                </div>
-                <h4 className="text-lg font-bold tracking-tight font-bold text-slate-800 capitalize">
-                  {dateStr}
-                </h4>
-                <p className="text-xs font-medium text-slate-500 mt-0.5 flex items-center gap-1.5">
-                  <span className="font-semibold text-slate-800">{selectedShiftDetails?.time}</span>
-                  <span>•</span>
-                  <span>
-                    Comité: {selectedCommittees.length === 1 ? selectedCommittees[0] : selectedCommittees.length > 1 ? `${selectedCommittees.length} seleccionados` : 'Todos'}
-                  </span>
-                </p>
-              </div>
-
-              <div className="shrink-0 flex items-center gap-2">
-                <Badge variant="outline" className="bg-slate-50 text-slate-600 font-bold border-slate-200 text-xs py-1 px-3">
-                  {activeVolunteers.length} Voluntarios
-                </Badge>
-              </div>
-            </div>
-
-            {/* Barra de Alternar Plantilla */}
-            <div className="flex items-center justify-end bg-white p-3 rounded-sm border border-slate-200 shadow-sm">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowTemplate(!showTemplate)}
-                className="h-9 text-xs font-bold border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 flex items-center gap-1.5"
-              >
-                {showTemplate ? (
-                  <>
-                    <span className="material-symbols-outlined text-[18px]">visibility_off</span>
-                    Ocultar Plantilla
-                  </>
-                ) : (
-                  <>
-                    <span className="material-symbols-outlined text-[18px]">visibility</span>
-                    Ver Plantilla
-                  </>
-                )}
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-              {/* Lista de Voluntarios (Dos columnas) */}
-              <div className={showTemplate ? "lg:col-span-8 space-y-4" : "lg:col-span-12 space-y-4"}>
+            {/* Lista de Voluntarios (Completa) */}
+            <div className="grid grid-cols-1 gap-6">
+              <div className="col-span-1 space-y-4">
                 <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden flex flex-col overflow-hidden bg-white border border-slate-200 shadow-sm">
-                  <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                    <h3 className="text-xs uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-[16px] text-[#0084d1]">group</span>
-                      Asistencias
-                    </h3>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCopyNumbers}
-                      disabled={activeVolunteers.length === 0}
-                      className="h-7 text-[10.5px] font-bold text-[#0084d1] hover:bg-slate-100 px-2 rounded-sm"
-                    >
-                      <span className="material-symbols-outlined text-[14px] mr-1">content_copy</span>
-                      Copiar Teléfonos
-                    </Button>
-                  </div>
-
-                  <div className="p-4 bg-slate-50/20 min-h-[320px] max-h-[500px] overflow-y-auto">
+                  <div className="overflow-x-auto bg-white min-h-[320px] max-h-[500px]">
                     {activeVolunteers.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-12 text-center text-slate-500">
-                        <span className="material-symbols-outlined text-[40px] text-slate-500/40 mb-3">group</span>
-                        <p className="text-sm font-semibold">Sin resultados</p>
-                        <p className="text-xs max-w-[200px] mt-1 leading-relaxed">No hay voluntarios de este comité asignados a este turno.</p>
+                      <div className="flex flex-col items-center justify-center py-16 text-center text-slate-500">
+                        <span className="material-symbols-outlined text-[48px] text-slate-200 mb-4">group_off</span>
+                        <p className="text-base font-bold text-slate-700">Sin voluntarios asignados</p>
+                        <p className="text-sm max-w-[250px] mt-1 text-slate-400">No hay voluntarios asignados a este turno para los filtros seleccionados.</p>
                       </div>
                     ) : (
-                      <div className={`grid grid-cols-1 md:grid-cols-2 ${showTemplate ? 'xl:grid-cols-2' : 'xl:grid-cols-3 2xl:grid-cols-4'} gap-3`}>
-                        {activeVolunteers.map((vol) => {
-                          const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
-                          const msg = generateReminderMessage(
-                            vol.name,
-                            dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
-                            selectedShiftDetails?.name || "",
-                            selectedShiftDetails?.time || "",
-                            vol.committee,
-                            isSelectedHoliday
-                          );
-                          const link = generateWaMeLink(vol.phone, msg);
+                      <Table>
+                        <TableHeader className="bg-slate-50 border-b border-slate-200">
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead className="font-medium text-slate-500 text-center pl-8 w-16">Asist.</TableHead>
+                            <TableHead className="font-medium text-slate-500 text-center w-24">Estado</TableHead>
+                            <TableHead className="font-medium text-slate-500">Nombre y Apellido</TableHead>
+                            <TableHead className="font-medium text-slate-500 text-center">Barrio</TableHead>
+                            <TableHead className="font-medium text-slate-500 text-center">Estaca</TableHead>
+                            <TableHead className="font-medium text-slate-500 text-center">Comité</TableHead>
+                            <TableHead className="font-medium text-slate-500 text-center pr-8">Contacto</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          <AnimatePresence mode="popLayout">
+                            {activeVolunteers.map((vol) => {
+                              const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
+                              const msg = generateReminderMessage(
+                                vol.name,
+                                dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
+                                selectedShiftDetails?.name || "",
+                                selectedShiftDetails?.time || "",
+                                vol.committee,
+                                isSelectedHoliday
+                              );
+                              const link = generateWaMeLink(vol.phone, msg);
 
-                          return (
-                            <div
-                              key={vol.id}
-                              className={`flex items-center justify-between group bg-white shadow-sm border rounded-sm px-2.5 py-2 hover:bg-slate-50 transition-colors ${isConfirmed
-                                  ? 'border-teal-500/30 bg-teal-50/5'
-                                  : 'border-slate-200/50'
-                                }`}
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                {/* Checkbox de Confirmación */}
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); toggleConfirmed(vol.id); }}
-                                  className="shrink-0 p-0.5 text-slate-500 hover:text-slate-800 transition-colors"
-                                  title={isConfirmed ? "Marcar como pendiente" : "Confirmar asistencia"}
-                                >
-                                  {isConfirmed ? (
-                                    <span className="material-symbols-outlined text-[18px] text-accent fill-accent/10">check_box</span>
-                                  ) : (
-                                    <span className="material-symbols-outlined text-[18px] text-slate-500/80">check_box_outline_blank</span>
+                              return (
+                                <motion.tr 
+                                  key={vol.id}
+                                  layout
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  onClick={() => toggleConfirmed(vol.id)}
+                                  className={cn(
+                                    "border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer",
+                                    isConfirmed && "bg-[#6dd230]/5 hover:bg-[#6dd230]/10"
                                   )}
-                                </button>
-
-                                {/* Dot similar al de turnos */}
-                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isConfirmed ? 'bg-accent animate-pulse' : 'bg-slate-300'
-                                  }`} />
-
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className={`text-sm font-medium text-slate-800 truncate transition-colors ${isConfirmed ? 'text-teal-900 font-bold' : ''
-                                      }`}>
-                                      {vol.name}
-                                    </span>
-                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-slate-50 text-slate-500 font-semibold border-slate-200/60">
+                                >
+                                  <TableCell className="pl-8 text-center">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); toggleConfirmed(vol.id); }}
+                                      className={cn(
+                                        "w-6 h-6 rounded-full flex items-center justify-center transition-all active:scale-90 mx-auto",
+                                        isConfirmed 
+                                          ? "bg-accent text-white shadow-sm shadow-accent/30" 
+                                          : "bg-slate-100 border border-slate-300 text-transparent hover:border-[#4d7cfe] group-hover:border-[#4d7cfe]/50"
+                                      )}
+                                    >
+                                      <span className="material-symbols-outlined text-[16px] font-bold">
+                                        check
+                                      </span>
+                                    </button>
+                                  </TableCell>
+                                  <TableCell className="font-bold text-slate-800">
+                                    <div className="flex flex-col">
+                                      <span className={isConfirmed ? "text-slate-900" : "text-slate-800"}>
+                                        {vol.name}
+                                      </span>
+                                      {!isConfirmed ? (
+                                        <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mt-0.5">Pendiente</span>
+                                      ) : (
+                                        <span className="text-[10px] font-bold text-accent uppercase tracking-widest mt-0.5">Confirmado</span>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-slate-800 text-center">{vol.ward}</TableCell>
+                                  <TableCell className="text-slate-500 text-center">{vol.stake}</TableCell>
+                                  <TableCell className="text-center">
+                                    <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
                                       {vol.committee}
                                     </Badge>
-                                    {isConfirmed && (
-                                      <Badge className="bg-accent/15 text-accent border border-accent/20 text-[8px] py-0 px-1 font-bold">
-                                        CONFIRMADO
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <p className="text-[10px] text-slate-500 font-mono mt-0.5">{vol.phone} • {vol.ward}</p>
-                                </div>
-                              </div>
-
-                              <button
-                                onClick={(e) => { e.stopPropagation(); window.open(link, '_blank', 'noopener,noreferrer'); }}
-                                className="h-7 px-2 bg-[#25D366] hover:bg-[#1ebd5a] active:bg-[#128c7e] text-white text-[10px] font-bold rounded-sm flex items-center gap-1 transition-colors shadow-sm ml-2 shrink-0"
-                              >
-                                <span className="material-symbols-outlined text-[12px]">send</span>
-                                WA
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
+                                  </TableCell>
+                                  <TableCell className="text-center pr-8">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <a 
+                                        href={link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="inline-flex items-center justify-center h-8 w-8 text-[#25D366] hover:bg-slate-100 transition-all active:scale-90 rounded-sm"
+                                        title="Enviar recordatorio WhatsApp"
+                                      >
+                                        <span className="material-symbols-outlined text-[20px]">send</span>
+                                      </a>
+                                    </div>
+                                  </TableCell>
+                                </motion.tr>
+                              );
+                            })}
+                          </AnimatePresence>
+                        </TableBody>
+                      </Table>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Vista Previa del Mensaje (Condicional) */}
-              {showTemplate && (
-                <div className="lg:col-span-4 space-y-4">
-                  <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden overflow-hidden bg-white border border-slate-200 shadow-sm h-full flex flex-col">
-                    <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[18px] text-[#0084d1]">chat_bubble</span>
-                      <h3 className="text-xs uppercase font-bold text-slate-500 tracking-wider">Mensaje Plantilla</h3>
-                    </div>
-                    <div className="p-4 bg-slate-50/20 flex-1 flex flex-col justify-between gap-4">
-                      <div className="bg-sky-50 p-3.5 rounded-sm rounded-tl-none border border-sky-100 shadow-sm text-[11px] text-sky-950 leading-relaxed whitespace-pre-wrap font-sans relative">
-                        {previewMessage}
-                        <div className="absolute top-0 -left-2 w-0 h-0 border-8 border-transparent border-r-sky-50 border-t-sky-50" />
-                      </div>
-
-                      <div className="p-2.5 rounded-sm bg-slate-50 border border-slate-200/60 text-[10px] text-slate-500 flex items-start gap-1.5 leading-normal">
-                        <span className="material-symbols-outlined text-[16px] text-blue-500 shrink-0 mt-0.5">info</span>
-                        <span>
-                          Este mensaje se genera automáticamente reemplazando el nombre del voluntario, la fecha, y la hora del turno.
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
             </div>
           </>
         )}
       </div>
+
+      <Sheet open={showTemplate} onOpenChange={setShowTemplate}>
+        <SheetContent side="right" className="w-[400px] sm:w-[540px] bg-white p-0 flex flex-col border-l border-slate-200/60 shadow-2xl">
+          <SheetHeader className="p-6 border-b border-slate-100 bg-slate-50/50">
+            <SheetTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[#0084d1]">chat_bubble</span>
+              Mensaje Plantilla
+            </SheetTitle>
+          </SheetHeader>
+          <div className="p-6 flex-1 flex flex-col gap-6 bg-white overflow-y-auto">
+            <div className="bg-sky-50/80 p-5 rounded-md rounded-tl-none border border-sky-100 shadow-sm text-sm text-sky-950 leading-relaxed whitespace-pre-wrap font-sans relative">
+              {previewMessage}
+              <div className="absolute top-0 -left-2 w-0 h-0 border-[10px] border-transparent border-r-sky-50 border-t-sky-50" />
+            </div>
+
+            <div className="p-4 rounded-sm bg-slate-50 border border-slate-200/60 text-xs text-slate-500 flex items-start gap-2 leading-relaxed">
+              <span className="material-symbols-outlined text-[18px] text-blue-500 shrink-0 mt-0.5">info</span>
+              <span>
+                Este mensaje se genera automáticamente para cada voluntario. 
+                Los datos como el nombre, la fecha y la hora del turno se rellenan automáticamente 
+                al hacer clic en enviar WhatsApp.
+              </span>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <Toast
         message={toast.message}

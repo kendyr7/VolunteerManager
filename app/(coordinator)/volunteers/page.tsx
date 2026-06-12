@@ -576,6 +576,7 @@ export default function VolunteersPage() {
                           />
                           <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[140px] p-1 rounded-sm shadow-md">
                             <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-2" onClick={() => handleEditClick(vol)}>
+                              <span className="material-symbols-outlined text-[18px]">edit</span>
                               Editar Perfil
                             </DropdownMenuItem>
                             <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-2" onClick={() => handleResetPin(vol)}>

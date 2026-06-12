@@ -307,6 +307,29 @@ export default function CoordinatorDashboard() {
       .map((item, index) => ({ id: index + 1, ...item }));
   }, [volunteers, committeesList, globalShifts, committeeRequirements]);
 
+  const heatmapMatrix = useMemo(() => {
+    return EVENT_DAYS.map(day => {
+      const shiftsData = ['T1', 'T2', 'T3', 'T4'].map(shiftId => {
+        let totalReq = 0;
+        let totalAssigned = 0;
+        Object.keys(committeeRequirements).forEach(commId => {
+          const reqs = committeeRequirements[commId];
+          if (reqs && reqs[shiftId] > 0) {
+            totalReq += reqs[shiftId];
+            const assigned = volunteers.filter(v => {
+              if (v.committee_id !== commId) return false;
+              const vShifts = globalShifts[v.id];
+              return vShifts && vShifts[day.key] && vShifts[day.key].includes(shiftId);
+            }).length;
+            totalAssigned += assigned;
+          }
+        });
+        return { shift: shiftId, required: totalReq, assigned: totalAssigned, coverage: totalReq === 0 ? 1 : totalAssigned / totalReq };
+      });
+      return { day: day.key, shortLabel: day.label, dayLabel: day.dateNum, shifts: shiftsData };
+    });
+  }, [committeeRequirements, volunteers, globalShifts]);
+
   // Volunteers per event day (unique volunteers with ≥1 shift that day)
   const volsPerDay = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -503,112 +526,95 @@ export default function CoordinatorDashboard() {
         </motion.div>
       </div>
 
-      {/* Daily Volunteer Distribution Chart */}
-      <motion.div variants={itemVariants}>
-        <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden">
-          <CardContent className="p-7">
-            {/* Chart Header */}
-            <div className="flex items-start justify-between mb-8">
-              <div>
-                <p className="text-4xl font-bold text-slate-900 tracking-tighter leading-none tabular-nums">
-                  {totalVolsWithShifts.toLocaleString()}
-                </p>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-2">Voluntarios con turnos asignados</p>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-slate-200 bg-slate-50 text-xs font-bold text-slate-500">
-                10 – 26 Sep 2026
-              </div>
-            </div>
-
-            {/* Bars */}
-            <div className="relative">
-              {/* Tooltip container */}
-              <div className="flex items-end gap-1.5 h-28">
-                {(() => {
-                  const maxCount = Math.max(...Object.values(volsPerDay), 1);
-                  return EVENT_DAYS.map((day, idx) => {
-                    const count = volsPerDay[day.key] || 0;
-                    const heightPct = maxCount > 0 ? Math.max((count / maxCount) * 100, count > 0 ? 5 : 2) : 2;
-                    const isHovered = hoveredDay === day.key;
-                    return (
-                      <div
-                        key={day.key}
-                        className="flex-1 flex flex-col items-center justify-end h-full relative group cursor-pointer"
-                        onMouseEnter={() => setHoveredDay(day.key)}
-                        onMouseLeave={() => setHoveredDay(null)}
-                      >
-                        {/* Tooltip */}
-                        {isHovered && (
-                          <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-sm whitespace-nowrap z-20 shadow-lg pointer-events-none">
-                            {count} voluntarios
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-4 border-transparent border-t-slate-900" />
-                          </div>
-                        )}
-                        {/* Bar */}
-                        <motion.div
-                          initial={{ height: 0 }}
-                          animate={{ height: `${heightPct}%` }}
-                          transition={{ duration: 0.7, delay: idx * 0.025, ease: "circOut" }}
-                          className={`w-full rounded-[3px] transition-colors duration-150 ${
-                            isHovered
-                              ? 'bg-[#0084d1]'
-                              : 'bg-slate-200 hover:bg-[#0084d1]/50'
-                          }`}
-                        />
-                      </div>
-                    );
-                  });
-                })()}
+      {/* Middle Row: Chart & Committee Status */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 mb-8 min-w-0">
+        {/* Left: Daily Volunteer Distribution Chart */}
+        <motion.div variants={itemVariants} className="lg:col-span-3 min-w-0">
+          <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden h-full flex flex-col min-w-0">
+            <CardContent className="p-7 flex-1 flex flex-col justify-between min-w-0">
+              <div className="flex items-start justify-between mb-8">
+                <div>
+                  <p className="text-4xl font-bold text-slate-900 tracking-tighter leading-none tabular-nums">
+                    {totalVolsWithShifts.toLocaleString()}
+                  </p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-2">Voluntarios con turnos asignados</p>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-slate-200 bg-slate-50 text-xs font-bold text-slate-500">
+                  10 – 26 Sep 2026
+                </div>
               </div>
 
-              {/* X-axis: day numbers */}
-              <div className="flex gap-1.5 mt-2">
-                {EVENT_DAYS.map(day => (
-                  <div key={day.key} className="flex-1 text-center">
-                    <span className={`text-[10px] font-bold transition-colors ${
-                      hoveredDay === day.key ? 'text-[#0084d1]' : 'text-slate-400'
-                    }`}>{day.dateNum}</span>
-                  </div>
-                ))}
-              </div>
+              <div className="relative flex-1 flex flex-col">
+                <div className="flex-1 flex items-end gap-1.5 min-h-[100px] mt-4">
+                  {(() => {
+                    const maxCount = Math.max(...Object.values(volsPerDay), 1);
+                    return EVENT_DAYS.map((day, idx) => {
+                      const count = volsPerDay[day.key] || 0;
+                      const heightPct = maxCount > 0 ? Math.max((count / maxCount) * 100, count > 0 ? 5 : 2) : 2;
+                      const isHovered = hoveredDay === day.key;
+                      return (
+                        <div
+                          key={day.key}
+                          className="flex-1 flex flex-col items-center justify-end h-full relative group cursor-pointer"
+                          onMouseEnter={() => setHoveredDay(day.key)}
+                          onMouseLeave={() => setHoveredDay(null)}
+                        >
+                          {isHovered && (
+                            <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-sm whitespace-nowrap z-20 shadow-lg pointer-events-none">
+                              {count} voluntarios
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-4 border-transparent border-t-slate-900" />
+                            </div>
+                          )}
+                          <motion.div
+                            initial={{ height: 0 }}
+                            animate={{ height: `${heightPct}%` }}
+                            transition={{ duration: 0.7, delay: idx * 0.025, ease: "circOut" }}
+                            className={`w-full rounded-[3px] transition-colors duration-150 ${
+                              isHovered
+                                ? 'bg-[#0084d1]'
+                                : 'bg-slate-200 hover:bg-[#0084d1]/50'
+                            }`}
+                          />
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
 
-              {/* Month label */}
-              <div className="mt-1.5">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Septiembre 2026</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
+                <div className="flex gap-1.5 mt-2">
+                  {EVENT_DAYS.map(day => (
+                    <div key={day.key} className="flex-1 text-center">
+                      <span className={`text-[10px] font-bold transition-colors ${
+                        hoveredDay === day.key ? 'text-[#0084d1]' : 'text-slate-400'
+                      }`}>{day.dateNum}</span>
+                    </div>
+                  ))}
+                </div>
 
-      {/* Detailed Monitoring Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-        {/* Left: Committee Status Ranking */}
-        <motion.div variants={itemVariants} className="lg:col-span-3">
+                <div className="mt-1.5">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Septiembre 2026</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Right: Committee Status Ranking */}
+        <motion.div variants={itemVariants} className="lg:col-span-1 min-w-0">
           <Card className="border-none bg-white shadow-xl shadow-slate-200/50 rounded-sm overflow-hidden border border-slate-100 h-full flex flex-col">
-            <div className="px-8 py-7 border-b border-slate-50 flex items-center justify-between">
-              <div className="space-y-1">
-                <h3 className="text-slate-800 tracking-tight leading-none">Estado por Comité</h3>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ranking de Cobertura</p>
-              </div>
-              <Link href="/volunteers" className="group flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#0084d1] hover:text-[#006eb3] transition-colors">
-                Ver Detalles <span className="material-symbols-outlined text-[18px] group-hover:translate-x-0.5 transition-transform">chevron_right</span>
-              </Link>
-            </div>
-            <CardContent className="p-0 flex-1">
-              <div className="divide-y divide-slate-50">
+            <CardContent className="p-0 flex-1 flex flex-col">
+              <div className="divide-y divide-slate-50 flex-1 flex flex-col justify-evenly h-full">
                 {committeeStatus.map((committee, idx) => (
                   <motion.div 
                     key={committee.id} 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.2 + idx * 0.05 }}
-                    className="px-8 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-colors group cursor-default"
+                    className="px-6 py-1.5 flex items-center justify-between hover:bg-slate-50/50 transition-colors group cursor-default"
                   >
-                    <div className="flex-1 max-w-md">
-                      <div className="flex items-center gap-3 mb-2.5">
-                        <span className="text-[10px] font-bold text-slate-300 w-4">0{idx + 1}</span>
-                        <h4 className="text-sm font-bold text-slate-700 group-hover:text-slate-900 transition-colors">{committee.name}</h4>
+                    <div className="flex-1 w-full min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-slate-600 transition-colors">{committee.name}</p>
                         {committee.status === 'high_risk' && (
                           <div className="w-1.5 h-1.5 rounded-full bg-red animate-ping" />
                         )}
@@ -628,96 +634,86 @@ export default function CoordinatorDashboard() {
                         <span className="text-[11px] font-bold text-slate-500 w-10 tabular-nums">{committee.coverage}%</span>
                       </div>
                     </div>
-                    <div className="pl-8 text-right shrink-0">
-                      <div className="flex flex-col items-end">
-                        <p className={`text-xl font-bold leading-none tracking-tighter ${committee.missing > 15 ? 'text-red-500' : 'text-slate-800'}`}>
-                          {committee.missing}
-                        </p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Faltan</p>
-                      </div>
-                    </div>
                   </motion.div>
                 ))}
               </div>
             </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Right: Critical Bottlenecks */}
-        <motion.div variants={itemVariants} className="lg:col-span-2">
-          <Card className="border-none bg-slate-50/50 shadow-inner rounded-sm overflow-hidden h-full flex flex-col border border-slate-200/60">
-            <div className="px-8 py-7 flex items-center justify-between">
-              <div className="space-y-1">
-                <h3 className="text-slate-800 tracking-tight leading-none">Cuellos de Botella</h3>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Top Turnos en Riesgo</p>
-              </div>
-              <div className="w-10 h-10 bg-red-100 rounded-sm flex items-center justify-center shadow-sm">
-                <span className="material-symbols-outlined text-[20px] text-red">warning</span>
-              </div>
-            </div>
-            <CardContent className="px-6 pb-8 space-y-4 flex-1">
-              <AnimatePresence>
-                {criticalShifts.map((shift, idx) => (
-                  <motion.div 
-                    key={shift.id} 
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.3 + idx * 0.05 }}
-                    className="bg-white p-5 rounded-sm shadow-sm border border-slate-100 group hover:shadow-md transition-all cursor-default"
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="space-y-1">
-                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide group-hover:text-[#0084d1] transition-colors">{shift.committee}</h4>
-                        <p className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                          <span className="text-slate-500">{shift.day}</span> &bull; {shift.shift}
-                        </p>
-                      </div>
-                      <Badge className="bg-red-50 text-red text-[9px] font-bold px-2 py-0.5 border-none shadow-none uppercase tracking-widest">
-                        -{shift.missing}
-                      </Badge>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 flex gap-0.5">
-                        {Array.from({ length: 12 }).map((_, i) => (
-                          <div 
-                            key={i} 
-                            className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
-                              i < (shift.enrolled / shift.required) * 12 
-                                ? 'bg-slate-900' 
-                                : 'bg-red-100 group-hover:bg-red-200'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                      <span className="text-[10px] font-bold text-slate-700 w-10 text-right tabular-nums">
-                        {shift.enrolled}/{shift.required}
-                      </span>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-              
-              {criticalShifts.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center py-12 text-center space-y-4">
-                  <div className="w-16 h-16 bg-teal-50 rounded-full flex items-center justify-center">
-                    <span className="material-symbols-outlined text-[24px] text-teal-500">auto_awesome</span>
-                  </div>
-                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Todo bajo control</p>
-                </div>
-              )}
-            </CardContent>
-            <div className="p-4 bg-slate-100/50 text-center border-t border-slate-200/50">
-              <Link href="/shifts">
-                <Button variant="ghost" className="w-full text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 hover:text-slate-800 hover:bg-transparent transition-all">
-                  Ver Agenda Completa <span className="material-symbols-outlined text-[18px] ml-2">chevron_right</span>
-                </Button>
-              </Link>
-            </div>
           </Card>
         </motion.div>
       </div>
+
+      {/* Bottom Row: Mapa de Calor Operativo */}
+      <motion.div variants={itemVariants} className="w-full min-w-0">
+          <Card className="border-none bg-slate-50/50 shadow-inner rounded-sm overflow-hidden flex flex-col border border-slate-200/60 min-w-0">
+            <div className="px-8 py-7 flex items-center justify-between">
+              <div className="space-y-1">
+                <h3 className="text-slate-800 tracking-tight leading-none">Mapa de Calor Operativo</h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Cobertura por Día y Turno</p>
+              </div>
+              <div className="w-10 h-10 bg-[#4d7cfe]/10 rounded-sm flex items-center justify-center shadow-sm">
+                <span className="material-symbols-outlined text-[20px] text-[#4d7cfe]">grid_view</span>
+              </div>
+            </div>
+            <CardContent className="p-0 flex-1 min-w-0">
+              <div className="overflow-x-auto w-full">
+                <div className="min-w-[600px] flex">
+                  <div className="w-24 shrink-0 bg-white/50 border-r border-slate-200/60 flex flex-col pt-8">
+                    {['T1', 'T2', 'T3', 'T4'].map((shiftId) => (
+                      <div key={shiftId} className="flex-1 min-h-[60px] flex items-center justify-center border-b border-slate-100/50 last:border-0">
+                        <span className="text-[10px] font-bold text-slate-500">{shiftId}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex-1 grid grid-cols-8">
+                    {heatmapMatrix.map((dayData, idx) => (
+                      <div key={dayData.day} className="flex flex-col border-r border-slate-100/50 last:border-0 min-w-0">
+                        <div className="h-8 flex flex-col items-center justify-center bg-white/30 border-b border-slate-200/60">
+                          <span className="text-[10px] font-bold text-slate-800">{dayData.shortLabel}</span>
+                        </div>
+                        {dayData.shifts.map((shift) => (
+                          <div 
+                            key={shift.shift}
+                            className="flex-1 min-h-[60px] flex flex-col items-center justify-center border-b border-white border-r border-white last:border-b-0 p-1 transition-all duration-300 relative group"
+                            style={{
+                              backgroundColor: shift.required === 0 ? 'rgba(248, 250, 252, 0.5)' : 
+                                shift.coverage >= 1 ? 'rgba(20, 184, 166, 0.15)' :
+                                shift.coverage >= 0.7 ? 'rgba(251, 191, 36, 0.15)' :
+                                'rgba(248, 113, 113, 0.15)'
+                            }}
+                          >
+                            {shift.required > 0 ? (
+                              <>
+                                <span className="text-[11px] font-bold text-slate-700">{Math.round(shift.coverage * 100)}%</span>
+                                <span className="text-[8px] font-bold text-slate-400 mt-0.5">{shift.assigned}/{shift.required}</span>
+                              </>
+                            ) : (
+                              <span className="text-[10px] text-slate-300">-</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-center gap-4 sm:gap-6 mt-8 flex-wrap shrink-0 pb-8">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-sm bg-red-400" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Crítico</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-sm bg-amber-400" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Riesgo</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-sm bg-teal-500" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Óptimo</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+      </motion.div>
+
     </motion.div>
   );
 }
-

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Toast } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
+import { DataTableFilter } from "@/components/DataTableFilter";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -44,7 +45,8 @@ export default function SettingsPage() {
   const [editCommittee, setEditCommittee] = useState('');
 
   // Committee Requirements State
-  const [selectedConfigCommittee, setSelectedConfigCommittee] = useState<string>('');
+  const [selectedConfigCommittees, setSelectedConfigCommittees] = useState<string[]>([]);
+  const [isSyncEnabled, setIsSyncEnabled] = useState(false);
   const [capacities, setCapacities] = useState({ T1: 0, T2: 0, T3: 0, T4: 0 });
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
@@ -85,30 +87,31 @@ export default function SettingsPage() {
       
       // Initial committee for config
       if (role === 'Editor') {
-        setSelectedConfigCommittee(userComm);
+        setSelectedConfigCommittees([userComm]);
       } else if (role === 'Admin') {
-        setSelectedConfigCommittee('Seguridad'); // Default for admin
+        setSelectedConfigCommittees(['Seguridad']); // Default for admin
       }
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    // Load requirements when committee selection changes
-    if (selectedConfigCommittee) {
+    // Load requirements when primary committee selection changes
+    if (selectedConfigCommittees.length > 0) {
+      const primary = selectedConfigCommittees[0];
       const stored = localStorage.getItem("committee_requirements");
       if (stored) {
         try {
           const allReqs = JSON.parse(stored);
-          if (allReqs[selectedConfigCommittee]) {
-            setCapacities(allReqs[selectedConfigCommittee]);
+          if (allReqs[primary]) {
+            setCapacities(allReqs[primary]);
           } else {
             setCapacities({ T1: 4, T2: 4, T3: 4, T4: 4 }); // Default
           }
         } catch (e) { console.error(e); }
       }
     }
-  }, [selectedConfigCommittee]);
+  }, [selectedConfigCommittees[0]]);
 
   const handleSaveRequirements = async () => {
     setIsSavingConfig(true);
@@ -117,7 +120,9 @@ export default function SettingsPage() {
     if (stored) {
       try { allReqs = JSON.parse(stored); } catch (e) {}
     }
-    allReqs[selectedConfigCommittee] = capacities;
+    selectedConfigCommittees.forEach(comm => {
+      allReqs[comm] = capacities;
+    });
     localStorage.setItem("committee_requirements", JSON.stringify(allReqs));
     
     // Simulate short delay for premium feel
@@ -128,7 +133,13 @@ export default function SettingsPage() {
   };
 
   const updateCapacity = (id: 'T1' | 'T2' | 'T3' | 'T4', delta: number) => {
-    setCapacities(prev => ({ ...prev, [id]: Math.max(0, (prev as any)[id] + delta) }));
+    setCapacities(prev => {
+      const newVal = Math.max(0, (prev as any)[id] + delta);
+      if (isSyncEnabled) {
+        return { T1: newVal, T2: newVal, T3: newVal, T4: newVal };
+      }
+      return { ...prev, [id]: newVal };
+    });
   };
 
   useEffect(() => {
@@ -331,30 +342,32 @@ export default function SettingsPage() {
             </div>
             
             {currentRole === 'Admin' ? (
-              <div className="flex flex-wrap gap-2">
-                {committees.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => setSelectedConfigCommittee(c.name)}
-                    className={`px-3 py-1.5 rounded-sm text-xs font-bold transition-all border ${
-                      selectedConfigCommittee === c.name 
-                        ? 'bg-[#4d7cfe]/15 border-[#4d7cfe]/20 text-[#4d7cfe]' 
-                        : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
-                    }`}
-                  >
-                    {c.name}
-                  </button>
-                ))}
+              <div className="max-w-sm">
+                <DataTableFilter
+                  title={selectedConfigCommittees.length === 1 ? selectedConfigCommittees[0] : "Comités seleccionados"}
+                  options={committees.map(c => c.name)}
+                  value={selectedConfigCommittees}
+                  dropdownLabel="Comités disponibles"
+                  hideClearButton
+                  hideCountBadge={selectedConfigCommittees.length === 1}
+                  isCommitteeFilter
+                  className="bg-white border-slate-200 justify-between min-w-[200px]"
+                  onChange={(vals) => {
+                    if (vals.length > 0) {
+                      setSelectedConfigCommittees(vals);
+                    }
+                  }}
+                />
               </div>
             ) : (
               <Badge className="bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20 font-bold uppercase tracking-widest px-3 py-1">
-                Comité: {selectedConfigCommittee}
+                Comité: {selectedConfigCommittees[0]}
               </Badge>
             )}
           </div>
 
           <div className="p-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-6">
               {([
                 { id: 'T1', label: 'Turno 1', time: '8:00 AM' },
                 { id: 'T2', label: 'Turno 2', time: '11:00 AM' },
@@ -385,6 +398,21 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ))}
+              
+              {/* Sync Button (Centered in the 2x2 grid, visible only on sm screens and larger) */}
+              <div className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center bg-white rounded-full p-2 shadow-sm border border-slate-100 z-10">
+                <button
+                  onClick={() => setIsSyncEnabled(!isSyncEnabled)}
+                  title={isSyncEnabled ? "Sincronización activada" : "Sincronización desactivada"}
+                  className={`flex items-center justify-center w-10 h-10 rounded-full transition-all shadow-md ${
+                    isSyncEnabled 
+                      ? 'bg-[#4d7cfe] text-white shadow-blue-500/20' 
+                      : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[20px]">link</span>
+                </button>
+              </div>
             </div>
 
             <div className="mt-10 pt-8 border-t border-slate-100 flex items-center justify-between">
