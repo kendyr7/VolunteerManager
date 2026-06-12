@@ -9,6 +9,9 @@ export type AuthState = {
   redirectTo?: string;
   role?: string;
   committee?: string;
+  force_pin_change?: boolean;
+  user_id?: string;
+  user_type?: 'profile' | 'volunteer';
 }
 
 export async function loginWithPin(prevState: AuthState, formData: FormData): Promise<AuthState> {
@@ -30,6 +33,16 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     .maybeSingle();
 
   if (profile) {
+    // Check if it's first login (assigned PIN 1234)
+    if (pin === '1234') {
+      return { 
+        success: true, 
+        force_pin_change: true, 
+        user_id: profile.id, 
+        user_type: 'profile' 
+      };
+    }
+
     const cookieStore = await cookies();
     const role = profile.role;
     const committeeName = profile.committees?.name || '';
@@ -62,6 +75,16 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     .maybeSingle();
 
   if (volunteer) {
+    // Check if it's first login (assigned PIN 1234)
+    if (pin === '1234') {
+       return { 
+         success: true, 
+         force_pin_change: true, 
+         user_id: volunteer.id, 
+         user_type: 'volunteer' 
+       };
+    }
+
     const cookieStore = await cookies();
     const committeeName = volunteer.committees?.name || '';
 

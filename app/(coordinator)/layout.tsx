@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/actions/auth";
 import Image from "next/image";
+import { SearchProvider, useSearch } from "@/lib/search-context";
 
 // Helper component for Material Symbols
 function Icon({ name, size = 20, className = "" }: { name: string, size?: number, className?: string }) {
@@ -19,7 +20,8 @@ function Icon({ name, size = 20, className = "" }: { name: string, size?: number
   );
 }
 
-export default function CoordinatorLayout({
+// Inner layout component that consumes SearchContext
+function CoordinatorLayoutInner({
   children,
 }: {
   children: React.ReactNode;
@@ -28,6 +30,9 @@ export default function CoordinatorLayout({
 
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [currentCommittee, setCurrentCommittee] = useState<string>('Historia');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { searchTerm, setSearchTerm } = useSearch();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const role = localStorage.getItem('mock_role') as any;
@@ -35,6 +40,11 @@ export default function CoordinatorLayout({
     if (role) setCurrentRole(role);
     if (committee) setCurrentCommittee(committee);
   }, []);
+
+  // Reset search when navigating to a new page
+  useEffect(() => {
+    setSearchTerm('');
+  }, [pathname]);
 
   const handleLogout = async () => {
     localStorage.removeItem('mock_role');
@@ -46,6 +56,7 @@ export default function CoordinatorLayout({
   const NAV_ITEMS = [
     { name: "Dashboard", href: "/dashboard", icon: "space_dashboard", roles: ['Admin'] },
     { name: "Voluntarios", href: "/volunteers", icon: "work", roles: ['Admin', 'Editor'] },
+    { name: "Importación", href: "/import", icon: "cloud_upload", roles: ['Admin', 'Editor'] },
     { name: currentRole === 'Lector' ? "Mi Perfil" : "Turnos", href: "/shifts", icon: currentRole === 'Lector' ? "person" : "checklist", roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Avisos", href: "/reminders", icon: "campaign", roles: ['Admin', 'Editor'] },
     { name: "Usuarios", href: "/users", icon: "shield_person", roles: ['Admin'] },
@@ -62,37 +73,71 @@ export default function CoordinatorLayout({
   const currentTitle = activeItem ? activeItem.name : "Dashboard";
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-700">
+    <div className="h-screen bg-slate-50 flex flex-col font-sans text-slate-700 overflow-hidden">
       
       {/* Desktop Top Navbar */}
       <header className="hidden md:flex h-16 bg-white border-b border-slate-100 shrink-0 sticky top-0 z-50">
-        {/* Left Logo Section (Matches sidebar width) */}
-        <div className="w-[260px] flex items-center px-6 border-r border-slate-100 shrink-0">
-          <div className="flex items-center gap-3">
-            <Image 
-              src="/icon-192.png" 
-              alt="Templo Managua" 
-              width={28} 
-              height={28} 
-              className="rounded-sm object-contain"
+        {/* Left Logo Section — collapses with sidebar */}
+        <div
+          className="flex items-center px-6 border-r border-slate-100 shrink-0 overflow-hidden transition-all duration-300"
+          style={{ width: sidebarOpen ? 260 : 72 }}
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <Image
+              src="/icon-192.png"
+              alt="Templo Managua"
+              width={28}
+              height={28}
+              className="rounded-sm object-contain shrink-0"
             />
-            <span className="font-bold text-lg text-slate-900 tracking-tight">Templo Managua</span>
+            <span
+              className="font-bold text-lg text-slate-900 tracking-tight whitespace-nowrap transition-all duration-300 overflow-hidden"
+              style={{ opacity: sidebarOpen ? 1 : 0, maxWidth: sidebarOpen ? 200 : 0 }}
+            >
+              Templo Managua
+            </span>
           </div>
         </div>
         
         {/* Right Action Section */}
         <div className="flex-1 flex items-center justify-between px-6">
           <div className="flex items-center gap-4">
-            <button className="text-slate-400 hover:text-slate-600 transition-colors flex items-center justify-center">
+            <button
+              onClick={() => setSidebarOpen(prev => !prev)}
+              className="text-slate-400 hover:text-slate-600 transition-colors flex items-center justify-center"
+              title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            >
               <Icon name="sort" size={24} />
             </button>
             <span className="font-semibold text-[17px] text-slate-800">{currentTitle}</span>
           </div>
           
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors">
-              <Icon name="search" size={20} />
-              <span className="text-[13px] font-medium hidden lg:inline-block">Search for task and etc.</span>
+            {/* Contextual Search Input */}
+            <div className="relative hidden lg:flex items-center">
+              <Icon name="search" size={18} className="absolute left-3 text-slate-400 pointer-events-none" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={
+                  pathname === '/volunteers' ? 'Buscar voluntario...' :
+                  pathname === '/shifts' ? 'Buscar voluntario en turnos...' :
+                  pathname === '/reminders' ? 'Buscar en avisos...' :
+                  pathname === '/users' ? 'Buscar usuario...' :
+                  'Buscar...'
+                }
+                className="pl-9 pr-4 h-9 w-56 xl:w-72 text-[13px] font-medium bg-slate-50 border border-slate-200 rounded-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4d7cfe]/30 focus:border-[#4d7cfe]/50 transition-all"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 text-slate-400 hover:text-slate-600"
+                >
+                  <Icon name="close" size={16} />
+                </button>
+              )}
             </div>
             
             <div className="flex items-center gap-4 ml-4">
@@ -120,98 +165,119 @@ export default function CoordinatorLayout({
       </header>
 
       {/* Main Layout Area */}
-      <div className="flex flex-1 overflow-hidden pb-20 md:pb-0">
+      <div className="flex flex-1 min-h-0 overflow-hidden pb-20 md:pb-0">
         
         {/* Desktop Sidebar */}
-        <aside className="hidden md:flex flex-col w-[260px] border-r border-slate-100 bg-white overflow-y-auto shrink-0">
-          <div className="flex-1 px-4 py-6 space-y-6">
+        <aside
+          className="hidden md:flex flex-col border-r border-slate-100 bg-white shrink-0 overflow-hidden transition-all duration-300"
+          style={{ width: sidebarOpen ? 260 : 72 }}
+        >
+          {/* Scrollable nav content */}
+          <div className={cn("flex-1 overflow-y-auto overflow-x-hidden py-6 space-y-6 min-h-0 transition-all duration-300", sidebarOpen ? "px-4" : "px-2")}>
             {/* Navigation Section */}
             <div className="space-y-1">
-              <div className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-slate-400">
-                <span>Navigation</span>
-                <Icon name="expand_more" size={16} />
-              </div>
-              
+              {/* Section header — hidden when collapsed */}
+              {sidebarOpen && (
+                <div className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-slate-400">
+                  <span>Navigation</span>
+                  <Icon name="expand_more" size={16} />
+                </div>
+              )}
+
               {visibleNavItems.map((item) => {
                 const isActive = pathname === item.href;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
+                    title={!sidebarOpen ? item.name : undefined}
                     className={cn(
-                      "relative flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-[14px] font-medium",
-                      isActive 
-                        ? "bg-[#eff6ff] text-[#2563eb]" 
+                      "relative flex items-center rounded-sm transition-all duration-200 text-[14px] font-medium overflow-hidden",
+                      sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5",
+                      isActive
+                        ? "bg-[#eff6ff] text-[#4d7cfe]"
                         : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     )}
                   >
-                    <Icon name={item.icon} size={20} className={isActive ? "text-[#2563eb]" : "text-slate-500"} />
-                    {item.name}
-                    {isActive && (
-                      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#3b82f6] rounded-l-full mr-[-16px]" />
+                    <Icon name={item.icon} size={20} className={cn("shrink-0", isActive ? "text-[#4d7cfe]" : "text-slate-500")} />
+                    {sidebarOpen && <span className="truncate">{item.name}</span>}
+                    {isActive && sidebarOpen && (
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#4d7cfe] rounded-l-full mr-[-16px]" />
                     )}
                   </Link>
                 );
               })}
-              
+
               <Link
                 href="#"
-                className="relative flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                title={!sidebarOpen ? "All Apps" : undefined}
+                className={cn(
+                  "relative flex items-center rounded-sm transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                  sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5"
+                )}
               >
-                <Icon name="grid_view" size={20} className="text-slate-500" />
-                All Apps
+                <Icon name="grid_view" size={20} className="text-slate-500 shrink-0" />
+                {sidebarOpen && <span className="truncate">All Apps</span>}
               </Link>
             </div>
 
-            {/* Latest Projects Section */}
-            <div className="space-y-1 pt-2">
-              <div className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-slate-400">
-                <span>Latest Projects</span>
-                <Icon name="add_circle" size={16} />
+            {/* Latest Projects Section — hidden when collapsed */}
+            {sidebarOpen && (
+              <div className="space-y-1 pt-2">
+                <div className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-slate-400">
+                  <span>Latest Projects</span>
+                  <Icon name="add_circle" size={16} />
+                </div>
+                <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+                  <div className="w-5 h-5 rounded-full bg-pink-500 flex items-center justify-center text-white shrink-0">
+                    <Icon name="sports_basketball" size={12} />
+                  </div>
+                  <span className="truncate">UI/UX Inspiration</span>
+                </Link>
+                <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+                  <div className="w-5 h-5 rounded-t-full rounded-bl-full bg-green-500 shrink-0" />
+                  <span className="truncate">Theme Development</span>
+                </Link>
+                <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+                  <div className="w-5 h-5 rounded-sm bg-blue-500 flex items-center justify-center text-white shrink-0">
+                    <Icon name="deployed_code" size={14} />
+                  </div>
+                  <span className="truncate">Campaing Design</span>
+                </Link>
+                <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[13px] font-medium text-[#4d7cfe] hover:underline mt-2">
+                  <Icon name="more_horiz" size={16} />
+                  See More Projects
+                </Link>
               </div>
-              
-              <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-                <div className="w-5 h-5 rounded-full bg-pink-500 flex items-center justify-center text-white">
-                  <Icon name="sports_basketball" size={12} />
-                </div>
-                UI/UX Inspiration
-              </Link>
-              <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-                <div className="w-5 h-5 rounded-t-full rounded-bl-full bg-green-500" />
-                Theme Development
-              </Link>
-              <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[14px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-                <div className="w-5 h-5 rounded-sm bg-blue-500 flex items-center justify-center text-white">
-                  <Icon name="deployed_code" size={14} />
-                </div>
-                Campaing Design
-              </Link>
-              
-              <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-sm text-[13px] font-medium text-[#3b82f6] hover:underline mt-2">
-                <Icon name="more_horiz" size={16} />
-                See More Projects
-              </Link>
-            </div>
+            )}
           </div>
 
-          {/* Bottom Section */}
-          <div className="p-4 space-y-1 mt-auto">
+          {/* Bottom Section — always pinned */}
+          <div className={cn("shrink-0 border-t border-slate-100 space-y-1 transition-all duration-300", sidebarOpen ? "p-4" : "p-2")}>
             {visibleBottomItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                title={!sidebarOpen ? item.name : undefined}
+                className={cn(
+                  "flex items-center rounded-sm transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                  sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5"
+                )}
               >
-                <Icon name={item.icon} size={20} className="text-slate-500" />
-                {item.name}
+                <Icon name={item.icon} size={20} className="text-slate-500 shrink-0" />
+                {sidebarOpen && <span className="truncate">{item.name}</span>}
               </Link>
             ))}
             <button
               onClick={handleLogout}
-              className="flex w-full items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              title={!sidebarOpen ? "Cerrar Sesión" : undefined}
+              className={cn(
+                "flex w-full items-center rounded-sm transition-all duration-200 text-[14px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5"
+              )}
             >
-              <Icon name="logout" size={20} className="text-slate-500" />
-              Cerrar Sesión
+              <Icon name="logout" size={20} className="text-slate-500 shrink-0" />
+              {sidebarOpen && <span className="truncate">Cerrar Sesión</span>}
             </button>
           </div>
         </aside>
@@ -257,16 +323,28 @@ export default function CoordinatorLayout({
               href={item.href}
               className={cn(
                 "flex flex-col items-center justify-center p-2 rounded-sm min-w-[64px] transition-all",
-                isActive ? "text-[#2563eb]" : "text-slate-400 hover:text-slate-600"
+                isActive ? "text-[#4d7cfe]" : "text-slate-400 hover:text-slate-600"
               )}
             >
-              <Icon name={item.icon} size={24} className={cn("mb-1", isActive ? "text-[#2563eb]" : "text-slate-400")} />
+              <Icon name={item.icon} size={24} className={cn("mb-1", isActive ? "text-[#4d7cfe]" : "text-slate-400")} />
               <span className="text-[10px] font-medium">{item.name}</span>
             </Link>
           );
         })}
       </nav>
     </div>
+  );
+}
+
+export default function CoordinatorLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <SearchProvider>
+      <CoordinatorLayoutInner>{children}</CoordinatorLayoutInner>
+    </SearchProvider>
   );
 }
 

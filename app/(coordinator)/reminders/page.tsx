@@ -15,9 +15,10 @@ import {
 } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { createClient } from "@/lib/supabase/client";
+import { Toast } from "@/components/ui/toast";
+import { useSearch } from "@/lib/search-context";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -49,6 +50,17 @@ export default function RemindersPage() {
   const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
   const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
   const [loading, setLoading] = useState(true);
+
+  // Toast State
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({
+    message: '',
+    type: 'success',
+    isVisible: false
+  });
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type, isVisible: true });
+  };
 
   // Cargar confirmaciones de localStorage
   const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>(() => {
@@ -158,7 +170,7 @@ export default function RemindersPage() {
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
 
   // Estado de los filtros y visualización de plantilla
-  const [searchTerm, setSearchTerm] = useState("");
+  const { searchTerm } = useSearch();
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
@@ -286,12 +298,12 @@ export default function RemindersPage() {
 
   const handleCopyNumbers = () => {
     if (activeVolunteers.length === 0) {
-      alert("No hay voluntarios en este turno para copiar.");
+      showToast("No hay voluntarios en este turno para copiar.", "info");
       return;
     }
     const numbers = activeVolunteers.map(v => v.phone).join(", ");
     navigator.clipboard.writeText(numbers);
-    alert(`Se copiaron los números de ${activeVolunteers.length} voluntarios al portapapeles.`);
+    showToast(`Se copiaron ${activeVolunteers.length} números`);
   };
 
   const stakes: string[] = [];
@@ -313,17 +325,7 @@ export default function RemindersPage() {
       </div>
 
       {/* Barra de Filtros Globales (Prioritaria) */}
-      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200 shadow-sm">
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-500 pointer-events-none">search</span>
-          <Input 
-            placeholder="Buscar por nombre, estaca o barrio..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 h-10 bg-white text-slate-800 border-slate-200 focus:ring-2 focus:ring-primary-cta"
-          />
-        </div>
-
+      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-5 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 flex-wrap">
           <DataTableFilter
             title="Comité"
@@ -350,7 +352,6 @@ export default function RemindersPage() {
                 setSelectedCommittees([]);
                 setSelectedStakes([]);
                 setSelectedWards([]);
-                setSearchTerm("");
               }}
               className="h-9 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-sm"
             >
@@ -725,6 +726,13 @@ export default function RemindersPage() {
           </>
         )}
       </div>
+
+      <Toast 
+        message={toast.message} 
+        type={toast.type} 
+        isVisible={toast.isVisible} 
+        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
+      />
     </div>
   );
 }

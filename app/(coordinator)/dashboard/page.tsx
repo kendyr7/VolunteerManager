@@ -41,6 +41,7 @@ export default function CoordinatorDashboard() {
   const [loading, setLoading] = useState(true);
   const [volunteers, setVolunteers] = useState<any[]>([]);
   const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
+  const [hoveredDay, setHoveredDay] = useState<string | null>(null);
   const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
 
   const EVENT_DAYS_RAW = getActiveEventDays();
@@ -257,6 +258,33 @@ export default function CoordinatorDashboard() {
       .map((item, index) => ({ id: index + 1, ...item }));
   }, [volunteers, committeesList, globalShifts, committeeRequirements]);
 
+  // Volunteers per event day (unique volunteers with ≥1 shift that day)
+  const volsPerDay = useMemo(() => {
+    const counts: Record<string, number> = {};
+    EVENT_DAYS.forEach(day => {
+      const uniqueVols = new Set<string>();
+      volunteers.forEach(vol => {
+        const shifts = globalShifts[vol.id];
+        if (shifts && shifts[day.key] && shifts[day.key].length > 0) {
+          uniqueVols.add(vol.id);
+        }
+      });
+      counts[day.key] = uniqueVols.size;
+    });
+    return counts;
+  }, [volunteers, globalShifts]);
+
+  const totalVolsWithShifts = useMemo(() => {
+    const unique = new Set<string>();
+    volunteers.forEach(vol => {
+      const shifts = globalShifts[vol.id];
+      if (shifts && Object.values(shifts).some(arr => arr.length > 0)) {
+        unique.add(vol.id);
+      }
+    });
+    return unique.size;
+  }, [volunteers, globalShifts]);
+
   if (!isAuthorized) return null;
 
   if (loading) {
@@ -420,6 +448,84 @@ export default function CoordinatorDashboard() {
           </Card>
         </motion.div>
       </div>
+
+      {/* Daily Volunteer Distribution Chart */}
+      <motion.div variants={itemVariants}>
+        <Card className="border-none bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05),0_8px_20px_-6px_rgba(0,0,0,0.03)] rounded-sm overflow-hidden">
+          <CardContent className="p-7">
+            {/* Chart Header */}
+            <div className="flex items-start justify-between mb-8">
+              <div>
+                <p className="text-4xl font-bold text-slate-900 tracking-tighter leading-none tabular-nums">
+                  {totalVolsWithShifts.toLocaleString()}
+                </p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-2">Voluntarios con turnos asignados</p>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-slate-200 bg-slate-50 text-xs font-bold text-slate-500">
+                10 – 26 Sep 2026
+              </div>
+            </div>
+
+            {/* Bars */}
+            <div className="relative">
+              {/* Tooltip container */}
+              <div className="flex items-end gap-1.5 h-28">
+                {(() => {
+                  const maxCount = Math.max(...Object.values(volsPerDay), 1);
+                  return EVENT_DAYS.map((day, idx) => {
+                    const count = volsPerDay[day.key] || 0;
+                    const heightPct = maxCount > 0 ? Math.max((count / maxCount) * 100, count > 0 ? 5 : 2) : 2;
+                    const isHovered = hoveredDay === day.key;
+                    return (
+                      <div
+                        key={day.key}
+                        className="flex-1 flex flex-col items-center justify-end h-full relative group cursor-pointer"
+                        onMouseEnter={() => setHoveredDay(day.key)}
+                        onMouseLeave={() => setHoveredDay(null)}
+                      >
+                        {/* Tooltip */}
+                        {isHovered && (
+                          <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-sm whitespace-nowrap z-20 shadow-lg pointer-events-none">
+                            {count} voluntarios
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-4 border-transparent border-t-slate-900" />
+                          </div>
+                        )}
+                        {/* Bar */}
+                        <motion.div
+                          initial={{ height: 0 }}
+                          animate={{ height: `${heightPct}%` }}
+                          transition={{ duration: 0.7, delay: idx * 0.025, ease: "circOut" }}
+                          className={`w-full rounded-[3px] transition-colors duration-150 ${
+                            isHovered
+                              ? 'bg-[#0084d1]'
+                              : 'bg-slate-200 hover:bg-[#0084d1]/50'
+                          }`}
+                        />
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              {/* X-axis: day numbers */}
+              <div className="flex gap-1.5 mt-2">
+                {EVENT_DAYS.map(day => (
+                  <div key={day.key} className="flex-1 text-center">
+                    <span className={`text-[10px] font-bold transition-colors ${
+                      hoveredDay === day.key ? 'text-[#0084d1]' : 'text-slate-400'
+                    }`}>{day.dateNum}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Month label */}
+              <div className="mt-1.5">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Septiembre 2026</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* Detailed Monitoring Section */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">

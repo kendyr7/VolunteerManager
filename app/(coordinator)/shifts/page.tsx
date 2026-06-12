@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
+import { Toast } from "@/components/ui/toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSearch } from "@/lib/search-context";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -47,6 +49,8 @@ type VolunteerType = {
   reliability: number;
   committee: string;
   committee_id?: string;
+  status?: string;
+  age?: number;
 };
 
 const getShiftColor = (shiftId: string, count: number, isSingleCommittee: boolean, minRequired: number) => {
@@ -105,7 +109,7 @@ export default function ShiftsPage() {
   }));
 
   // Estados de filtros
-  const [searchTerm, setSearchTerm] = useState("");
+  const { searchTerm } = useSearch();
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
@@ -116,15 +120,41 @@ export default function ShiftsPage() {
   const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Toast State
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({
+    message: '',
+    type: 'success',
+    isVisible: false
+  });
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type, isVisible: true });
+  };
+
   const committees = committeesList.map(c => c.name);
   const stakes: string[] = [];
   const wards: string[] = [];
 
   const loadData = async () => {
-    // Fetch volunteers
-    const { data: volsData, error: volsError } = await supabase
-      .from('volunteers')
-      .select('*, committees(name)');
+    // 1. Role-based strict isolation
+    const role = localStorage.getItem('mock_role') || 'Admin';
+    const committee = localStorage.getItem('mock_committee') || '';
+
+    let query = supabase.from('volunteers').select('*, committees(name)');
+    
+    if (role === 'Editor' && committee) {
+       const { data: commObj } = await supabase
+        .from('committees')
+        .select('id')
+        .eq('name', committee)
+        .maybeSingle();
+      
+      if (commObj) {
+        query = query.eq('committee_id', commObj.id);
+      }
+    }
+
+    const { data: volsData, error: volsError } = await query;
     
     if (volsError) {
       console.error("Error loading volunteers:", volsError);
@@ -173,13 +203,15 @@ export default function ShiftsPage() {
       const mapped = volsData.map((v: any) => ({
         id: v.id,
         name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
-        stake: '',
-        ward: '',
+        stake: v.stake || '',
+        ward: v.neighborhood || '',
         phone: v.phone || '',
         shifts: sCounts[v.id] || 0,
-        reliability: 100,
+        reliability: v.reliability_score || 100,
         committee: v.committees?.name || 'Sin comité',
-        committee_id: v.committee_id
+        committee_id: v.committee_id,
+        status: v.status,
+        age: v.age
       }));
       setVolunteers(mapped);
     }
@@ -374,11 +406,13 @@ export default function ShiftsPage() {
 
       if (insErr) {
         console.error("Error inserting shifts:", insErr);
+        showToast("Error al guardar turnos", "error");
         return;
       }
     }
 
     setSaved(true);
+    showToast("Turnos actualizados");
     setTimeout(() => setSaved(false), 2500);
     await loadData();
   };
@@ -405,6 +439,10 @@ export default function ShiftsPage() {
 
   const filteredVolunteers = useMemo(() => {
     return volunteers.filter(v => {
+      // Role-based isolation
+      const userCommittee = localStorage.getItem('mock_committee');
+      if (currentRole === 'Editor' && v.committee !== userCommittee) return false;
+
       const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             v.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             v.ward.toLowerCase().includes(searchTerm.toLowerCase());
@@ -415,7 +453,7 @@ export default function ShiftsPage() {
 
       return matchesSearch && matchesCommittee && matchesStake && matchesWard;
     });
-  }, [volunteers, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
+  }, [volunteers, searchTerm, selectedCommittees, selectedStakes, selectedWards, currentRole]);
 
   // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales
   const getAssignedVolunteers = (dateKey: string, shiftId: string) => {
@@ -446,7 +484,7 @@ export default function ShiftsPage() {
         >
           {/* Left: full-height white date section */}
           <div className="shrink-0 w-16 flex flex-col items-center justify-center bg-white py-4 px-2">
-            <p className="text-[9px] font-bold text-[#0084d1] uppercase tracking-widest leading-none">
+            <p className="text-[9px] font-bold text-[#4d7cfe] uppercase tracking-widest leading-none">
               {format(date, "EEE", { locale: es }).replace('.', '')}
             </p>
             <p className="text-lg font-bold text-slate-800 leading-tight mt-0.5">{dateNum}</p>
@@ -560,7 +598,7 @@ export default function ShiftsPage() {
                             >
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.dot}`} />
-                                <span className="text-sm font-medium text-slate-800 truncate group-hover:text-[#0084d1] transition-colors">
+                                <span className="text-sm font-medium text-slate-800 truncate group-hover:text-[#4d7cfe] transition-colors">
                                   {vol.name}
                                 </span>
                               </div>
@@ -611,221 +649,7 @@ export default function ShiftsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0084d1]"></div>
-      </div>
-    );
-  }
-
-  if (currentRole === 'Lector') {
-    const mockLector = {
-      name: 'Voluntario de Prueba',
-      committee: activeCommittee || 'Historia',
-      phone: '8888-8888',
-      ward: 'Barrio Central',
-      stake: 'Managua',
-      reliability: 100
-    };
-
-    const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
-    const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
-
-    return (
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div>
-          <h2 className="font-bold text-slate-800 tracking-tight mb-1">Mi Perfil</h2>
-          <p className="text-slate-500 text-sm font-medium">Gestiona tu información personal y selecciona tus turnos de servicio.</p>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-6 sm:p-8 space-y-8">
-          {/* Profile Card */}
-          <div className="flex flex-col bg-slate-50 p-6 sm:p-8 rounded-sm border border-slate-200 gap-8">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-              <div>
-                <h3 className="text-2xl font-bold text-slate-800 tracking-tight leading-tight mb-3">
-                  {mockLector.name}
-                </h3>
-                <div className="flex items-center gap-2">
-                  <Badge className="bg-[#0084d1] text-white border-none text-[10px] px-2 uppercase font-bold tracking-wide">
-                    Voluntario
-                  </Badge>
-                  <Badge variant="outline" className="text-slate-500 border-slate-200 text-[10px] px-2 font-medium bg-white">
-                    Comité: {mockLector.committee}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-
-            <div className="h-[1px] w-full bg-slate-200/60" />
-
-            {/* Datos de Perfil */}
-            <div>
-              <h4 className="text-[10px] font-bold text-[#0084d1] uppercase tracking-widest mb-4">Datos Personales</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-slate-500">
-                    <span className="material-symbols-outlined text-[16px]">call</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wide">Celular</span>
-                  </div>
-                  <p className="text-sm font-semibold text-slate-800">{mockLector.phone}</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-slate-500">
-                    <span className="material-symbols-outlined text-[16px]">calendar_today</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wide">Edad</span>
-                  </div>
-                  <p className="text-sm font-semibold text-slate-800">27</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-slate-500">
-                    <span className="material-symbols-outlined text-[16px]">location_on</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wide">Barrio</span>
-                  </div>
-                  <p className="text-sm font-semibold text-slate-800">{mockLector.ward}</p>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-slate-500">
-                    <span className="material-symbols-outlined text-[16px]">location_on</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wide">Estaca</span>
-                  </div>
-                  <p className="text-sm font-semibold text-slate-800">{mockLector.stake}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-[1px] w-full bg-border" />
-
-          {/* Resumen de Turnos */}
-          <div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <div className="flex items-center gap-4 flex-wrap">
-                <h4 className="text-xs font-bold text-[#0084d1] uppercase tracking-widest">Mis Turnos</h4>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-block w-3 h-3 rounded bg-[#0084d1] border border-[#006eb3]" />
-                    <span className="text-[10px] text-slate-500 font-bold">Seleccionado</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-block w-3 h-3 rounded bg-slate-100 border border-slate-200" />
-                    <span className="text-[10px] text-slate-500 font-bold">Sin asignar</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                {saved && (
-                  <span className="text-[11px] text-teal-600 font-bold animate-pulse">✓ Guardado</span>
-                )}
-                <Button 
-                  onClick={() => {
-                    setSaved(true);
-                    setTimeout(() => setSaved(false), 2500);
-                  }}
-                  className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-sm font-bold shadow-sm"
-                >
-                  Guardar Cambios
-                </Button>
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-500 font-medium mb-6">Toca un turno para activarlo o desactivarlo. Asegúrate de guardar tus cambios.</p>
-
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
-                <p className="text-3xl font-bold text-slate-800">{totalTurnos}</p>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Turnos</p>
-              </div>
-              <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
-                <p className="text-3xl font-bold text-slate-800">{diasCubiertos}</p>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Días</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start">
-              {/* Columna Izquierda (Días impares) */}
-              <div className="flex flex-col border border-slate-200 rounded-sm overflow-hidden bg-white shadow-sm">
-                {EVENT_DAYS.filter((_, i) => i % 2 === 0).map((d) => (
-                  <div key={d.key} className="flex flex-col sm:flex-row sm:items-stretch border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors">
-                    {/* Left: date panel */}
-                    <div className="shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-3 px-4 gap-1 sm:gap-0">
-                      <p className="text-[10px] font-bold text-[#0084d1] uppercase tracking-widest leading-none">
-                        {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
-                      </p>
-                      <p className="text-xl sm:text-2xl font-bold text-slate-800 leading-tight sm:mt-0.5">{d.dateNum}</p>
-                      <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider leading-none hidden sm:block">Sept</p>
-                    </div>
-
-                    {/* Right: shift buttons */}
-                    <div className="flex items-center justify-between gap-2 flex-1 px-4 py-3 sm:py-4">
-                      {['T1', 'T2', 'T3', 'T4'].map((t) => {
-                        const active = (shiftsByDay[d.key] ?? []).includes(t);
-                        const shiftInfo = SHIFT_TIMES[parseInt(t[1]) - 1];
-                        return (
-                          <button
-                            key={t}
-                            onClick={() => toggleShift(d.key, t)}
-                            className={`flex-1 inline-flex flex-col items-center justify-center rounded-sm py-2 px-1 transition-all cursor-pointer ${
-                              active
-                                ? 'bg-[#0084d1] text-white shadow-md shadow-blue-900/10 scale-[1.02] active:scale-95'
-                                : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200/60 active:scale-95'
-                            }`}
-                          >
-                            <span className="text-sm font-bold">{t}</span>
-                            <span className={`text-[8px] font-bold tracking-tight mt-0.5 whitespace-nowrap ${active ? 'text-white/90' : 'text-slate-400'}`}>
-                              {shiftInfo?.time}
-                            </span>
-                          </button>
-                        );
-                      })}
-                      {/* Status Dot */}
-                      <div className={`shrink-0 w-2 h-2 rounded-full ml-1 ${(shiftsByDay[d.key]?.length ?? 0) > 0 ? 'bg-teal-400' : 'bg-transparent'}`} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Columna Derecha (Días pares) */}
-              <div className="flex flex-col border border-slate-200 rounded-sm overflow-hidden bg-white shadow-sm">
-                {EVENT_DAYS.filter((_, i) => i % 2 === 1).map((d) => (
-                  <div key={d.key} className="flex flex-col sm:flex-row sm:items-stretch border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors">
-                    {/* Left: date panel */}
-                    <div className="shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-3 px-4 gap-1 sm:gap-0">
-                      <p className="text-[10px] font-bold text-[#0084d1] uppercase tracking-widest leading-none">
-                        {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
-                      </p>
-                      <p className="text-xl sm:text-2xl font-bold text-slate-800 leading-tight sm:mt-0.5">{d.dateNum}</p>
-                      <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider leading-none hidden sm:block">Sept</p>
-                    </div>
-
-                    {/* Right: shift buttons */}
-                    <div className="flex items-center justify-between gap-2 flex-1 px-4 py-3 sm:py-4">
-                      {['T1', 'T2', 'T3', 'T4'].map((t) => {
-                        const active = (shiftsByDay[d.key] ?? []).includes(t);
-                        const shiftInfo = SHIFT_TIMES[parseInt(t[1]) - 1];
-                        return (
-                          <button
-                            key={t}
-                            onClick={() => toggleShift(d.key, t)}
-                            className={`flex-1 inline-flex flex-col items-center justify-center rounded-sm py-2 px-1 transition-all cursor-pointer ${
-                              active
-                                ? 'bg-[#0084d1] text-white shadow-md shadow-blue-900/10 scale-[1.02] active:scale-95'
-                                : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200/60 active:scale-95'
-                            }`}
-                          >
-                            <span className="text-sm font-bold">{t}</span>
-                            <span className={`text-[8px] font-bold tracking-tight mt-0.5 whitespace-nowrap ${active ? 'text-white/90' : 'text-slate-400'}`}>
-                              {shiftInfo?.time}
-                            </span>
-                          </button>
-                        );
-                      })}
-                      {/* Status Dot */}
-                      <div className={`shrink-0 w-2 h-2 rounded-full ml-1 ${(shiftsByDay[d.key]?.length ?? 0) > 0 ? 'bg-teal-400' : 'bg-transparent'}`} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4d7cfe]"></div>
       </div>
     );
   }
@@ -868,10 +692,18 @@ export default function ShiftsPage() {
                 Slots cubiertos vs. requeridos
               </p>
             </div>
-            <div className="w-full h-1 bg-surface-strong mt-4 rounded-full overflow-hidden">
-              <div 
-                className={`h-full transition-all duration-700 cubic-bezier(0.23, 1, 0.32, 1) ${kpiData.coverage < 60 ? 'bg-error' : kpiData.coverage < 90 ? 'bg-warning' : 'bg-success'}`}
-                style={{ width: `${kpiData.coverage}%` }}
+            <div className="w-full h-2.5 bg-slate-100 mt-4 rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${kpiData.coverage}%` }}
+                transition={{ duration: 1, ease: "circOut" }}
+                className={`h-full rounded-full ${
+                  kpiData.coverage < 60
+                    ? 'bg-red-500'
+                    : kpiData.coverage < 90
+                      ? 'bg-amber-400'
+                      : 'bg-teal-500'
+                }`}
               />
             </div>
           </CardContent>
@@ -905,44 +737,54 @@ export default function ShiftsPage() {
                 </Badge>
               </div>
               
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {committees.map(comm => {
-                  const alertCount = kpiData.committeeAlerts[comm] ?? 0;
-                  const isSelected = selectedCommittees.includes(comm);
-                  return (
-                    <button
-                      key={comm}
-                      onClick={() => {
-                        if (isSelected) {
-                          setSelectedCommittees(prev => prev.filter(c => c !== comm));
-                        } else {
-                          setSelectedCommittees([comm]); // Filtrar solo por este comité
-                        }
-                      }}
-                      className={`flex items-center justify-between p-2.5 rounded-sm border text-left transition-all ${
-                        isSelected 
-                          ? 'bg-text-link/10 border-text-link text-ink shadow-sm' 
-                          : alertCount > 0 
-                            ? 'bg-error/5 border-error/20 hover:bg-error/10 text-ink' 
-                            : 'bg-canvas hover:bg-canvas-soft border-hairline-strong text-muted-soft hover:text-ink'
-                      }`}
-                    >
-                      <span className="text-xs font-bold truncate pr-1">{comm}</span>
-                      {alertCount > 0 ? (
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                          isSelected ? 'bg-text-link text-white' : 'bg-error/10 text-error'
-                        }`}>
-                          {alertCount}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold text-success bg-success/10 px-1.5 py-0.5 rounded-full">
-                          OK
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+              {committees.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {committees.map(comm => {
+                    const alertCount = kpiData.committeeAlerts[comm] ?? 0;
+                    const isSelected = selectedCommittees.includes(comm);
+                    return (
+                      <button
+                        key={comm}
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedCommittees(prev => prev.filter(c => c !== comm));
+                          } else {
+                            setSelectedCommittees([comm]);
+                          }
+                        }}
+                        className={`flex items-center justify-between p-2.5 rounded-sm border text-left transition-all ${
+                          isSelected
+                            ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-sm'
+                            : alertCount > 0
+                              ? 'bg-red-50 border-red-200 hover:bg-red-100 text-slate-800'
+                              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        <span className="text-xs font-bold truncate pr-1">{comm}</span>
+                        {alertCount > 0 ? (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                            isSelected ? 'bg-white/20 text-white' : 'bg-red-100 text-red-600'
+                          }`}>
+                            {alertCount}
+                          </span>
+                        ) : (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                            isSelected ? 'bg-white/20 text-white' : 'bg-green-100 text-green-700'
+                          }`}>
+                            OK
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center gap-2 py-6 text-center">
+                  <span className="material-symbols-outlined text-[32px] text-slate-300">group_off</span>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sin comités configurados</p>
+                  <p className="text-[11px] text-slate-400 max-w-[200px]">Agrega comités en Ajustes para ver las alertas por comité.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -976,15 +818,6 @@ export default function ShiftsPage() {
       {/* Barra de Filtros (Igual a Volunteers) */}
       <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden overflow-hidden">
         <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center gap-4 flex-wrap">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-500 pointer-events-none">search</span>
-            <Input 
-              placeholder="Buscar por nombre, estaca o barrio..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 h-10 bg-white input-base text-slate-800 border-slate-200 focus:ring-2 focus:ring-gold-faint"
-            />
-          </div>
           <div className="flex items-center gap-2 flex-wrap">
             {currentRole === 'Admin' && (
               <DataTableFilter
@@ -1039,177 +872,167 @@ export default function ShiftsPage() {
           className="bg-white text-slate-800 border-l border-slate-200 p-0 overflow-y-auto"
         >
           {editingVolunteer && (
-            <div className="p-7 space-y-7">
-              {/* Profile Card */}
-              <div className="flex flex-col bg-slate-50 p-6 rounded-sm border border-slate-200 gap-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                  <div>
-                    <h3 className="font-bold text-slate-800 tracking-tight leading-tight mb-3">
-                      {editingVolunteer.name}
-                    </h3>
+            <div className="p-0 space-y-0">
+              {/* Identity Header (High End) */}
+              <div className="bg-slate-900 px-8 py-10 text-white relative overflow-hidden">
+                <div className="relative z-10">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 bg-[#4d7cfe] rounded-2xl flex items-center justify-center shadow-lg shadow-[#4d7cfe]/30">
+                      <span className="material-symbols-outlined text-[24px]">person</span>
+                    </div>
+                  </div>
+                  <h2 className="tracking-tight text-white mb-2">{editingVolunteer.name}</h2>
+                  <div className="flex items-center gap-6 mt-4">
                     <div className="flex items-center gap-2">
-                      <Badge className="bg-[#0084d1] text-white border-none text-[10px] px-2 uppercase font-bold tracking-wide">
-                        Voluntario
-                      </Badge>
-                      <Badge variant="outline" className="text-slate-500 border-slate-200 text-[10px] px-2 font-medium bg-white">
-                        Comité: {editingVolunteer.committee}
-                      </Badge>
+                      <span className="material-symbols-outlined text-[18px] text-slate-400">corporate_fare</span>
+                      <span className="text-sm font-medium text-slate-300">{editingVolunteer.committee}</span>
+                    </div>
+                    <div className="w-px h-4 bg-white/10" />
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px] text-slate-400">call</span>
+                      <span className="text-sm font-medium text-slate-300">{editingVolunteer.phone}</span>
                     </div>
                   </div>
                 </div>
-
-                <div className="h-[1px] w-full bg-slate-200/60" />
-
-                {/* Datos de Perfil */}
-                <div>
-                  <h4 className="text-[10px] font-bold text-[#0084d1] uppercase tracking-widest mb-4">Datos Personales</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-slate-500">
-                        <span className="material-symbols-outlined text-[16px]">call</span>
-                        <span className="text-[10px] font-bold uppercase tracking-wide">Celular</span>
-                      </div>
-                      <p className="text-sm font-semibold text-slate-800">{editingVolunteer.phone}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-slate-500">
-                        <span className="material-symbols-outlined text-[16px]">calendar_today</span>
-                        <span className="text-[10px] font-bold uppercase tracking-wide">Edad</span>
-                      </div>
-                      <p className="text-sm font-semibold text-slate-800">27</p>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-slate-500">
-                        <span className="material-symbols-outlined text-[16px]">location_on</span>
-                        <span className="text-[10px] font-bold uppercase tracking-wide">Barrio</span>
-                      </div>
-                      <p className="text-sm font-semibold text-slate-800">{editingVolunteer.ward}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-slate-500">
-                        <span className="material-symbols-outlined text-[16px]">location_on</span>
-                        <span className="text-[10px] font-bold uppercase tracking-wide">Estaca</span>
-                      </div>
-                      <p className="text-sm font-semibold text-slate-800">{editingVolunteer.stake}</p>
-                    </div>
-                  </div>
-                </div>
+                {/* Decoration */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-[#4d7cfe]/10 rounded-full blur-[80px] -mr-32 -mt-32" />
               </div>
 
-              {/* Resumen de Turnos */}
-              <div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <h4 className="text-[10px] font-bold text-[#0084d1] uppercase tracking-widest">Resumen de Turnos</h4>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="inline-block w-3 h-3 rounded bg-[#0084d1] border border-[#006eb3]" />
-                        <span className="text-[10px] text-slate-500 font-bold">Seleccionado</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="inline-block w-3 h-3 rounded bg-slate-100 border border-slate-200" />
-                        <span className="text-[10px] text-slate-500 font-bold">Sin asignar</span>
-                      </div>
-                    </div>
+              <div className="p-8 space-y-10">
+                {/* Metadata Grid */}
+                <div className="grid grid-cols-3 gap-4 p-6 bg-slate-50 border border-slate-200 rounded-3xl">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Barrio</p>
+                    <span className="text-sm font-bold text-slate-800 truncate block" title={editingVolunteer.ward}>{editingVolunteer.ward || '—'}</span>
                   </div>
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    {saved && (
-                      <span className="text-[11px] text-accent font-bold animate-pulse shrink-0">✓ Guardado</span>
-                    )}
-                    {isEditingShifts ? (
-                      <Button onClick={handleSaveShifts} className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-sm font-bold shadow-sm">
-                        Guardar Cambios
-                      </Button>
-                    ) : (
-                      <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-9 w-full sm:w-auto bg-[#0084d1] hover:bg-[#006eb3] text-white text-xs px-5 rounded-sm font-bold shadow-sm">
-                        Editar Turnos
-                      </Button>
-                    )}
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estaca</p>
+                    <span className="text-sm font-bold text-slate-800 truncate block" title={editingVolunteer.stake}>{editingVolunteer.stake || '—'}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Edad</p>
+                    <span className="text-sm font-bold text-slate-800">{editingVolunteer.age ? `${editingVolunteer.age} años` : '—'}</span>
                   </div>
                 </div>
-                {isEditingShifts && (
-                  <p className="text-[11px] text-slate-500 font-medium mb-5">Toca un turno para activarlo o desactivarlo. Asegúrate de guardar tus cambios.</p>
-                )}
 
-                {/* Stats rápidas */}
-                {(() => {
-                  const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
-                  const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
-                  return (
-                    <div className="grid grid-cols-3 gap-3 mb-6">
-                      <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
-                        <p className="text-3xl font-bold text-slate-800">{totalTurnos}</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Turnos</p>
-                      </div>
-                      <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
-                        <p className="text-3xl font-bold text-slate-800">{diasCubiertos}</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Días</p>
-                      </div>
-                      <div className="bg-slate-50 border border-slate-200 rounded-sm p-4 text-center">
-                        <p className={`text-3xl font-bold ${editingVolunteer.reliability >= 80 ? 'text-accent' : 'text-amber-500'}`}>
-                          {editingVolunteer.reliability}%
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-1">Confiab.</p>
-                      </div>
+                {/* Resumen de Turnos Section */}
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <h3 className="font-bold text-slate-900 leading-none">Cronograma de Servicio</h3>
+                      <p className="text-sm font-medium text-slate-400">Gestión de disponibilidad y asignaciones.</p>
                     </div>
-                  );
-                })()}
-
-                {/* Timeline por día */}
-                <div className={`flex flex-col border border-slate-200 rounded-sm overflow-hidden shadow-sm ${
-                  isEditingShifts ? 'bg-white' : 'bg-slate-50/50 opacity-80'
-                }`}>
-                  {(isEditingShifts ? EVENT_DAYS : EVENT_DAYS.filter(d => (shiftsByDay[d.key]?.length ?? 0) > 0)).map((d) => (
-                    <div key={d.key} className={`flex flex-col sm:flex-row sm:items-stretch border-b border-slate-100 last:border-b-0 transition-colors ${
-                      isEditingShifts ? 'hover:bg-slate-50/50' : ''
-                    }`}>
-                      {/* Left: date panel */}
-                      <div className="shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-3 px-4 gap-1 sm:gap-0">
-                        <p className="text-[10px] font-bold text-[#0084d1] uppercase tracking-widest leading-none">
-                          {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
-                        </p>
-                        <p className="text-xl sm:text-2xl font-bold text-slate-800 leading-tight sm:mt-0.5">{d.dateNum}</p>
-                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider leading-none hidden sm:block">Sept</p>
-                      </div>
-
-                      {/* Right: shift buttons */}
-                      <div className="flex items-center justify-between gap-2 flex-1 px-4 py-3 sm:py-4">
-                        {['T1', 'T2', 'T3', 'T4'].map((t) => {
-                          const active = (shiftsByDay[d.key] ?? []).includes(t);
-                          const shiftInfo = SHIFT_TIMES[parseInt(t[1]) - 1];
-                          return (
-                            <button
-                              key={t}
-                              onClick={() => toggleShift(d.key, t)}
-                              className={`flex-1 inline-flex flex-col items-center justify-center rounded-sm py-2 px-1 transition-all ${
-                                active
-                                  ? 'bg-[#0084d1] text-white shadow-md shadow-blue-900/10 scale-[1.02]'
-                                  : 'bg-slate-100/70 text-slate-500'
-                              } ${
-                                isEditingShifts
-                                  ? `cursor-pointer active:scale-95 ${!active && 'hover:bg-slate-200/60'}`
-                                  : 'cursor-default'
-                              }`}
-                            >
-                              <span className="text-sm font-bold">{t}</span>
-                              <span className={`text-[8px] font-bold tracking-tight mt-0.5 whitespace-nowrap ${active ? 'text-white/90' : 'text-slate-400'}`}>
-                                {shiftInfo?.time}
-                              </span>
-                            </button>
-                          );
-                        })}
-                        <div className={`shrink-0 w-2 h-2 rounded-full ml-1 ${
-                          (shiftsByDay[d.key]?.length ?? 0) > 0 ? 'bg-teal-400' : 'bg-transparent'
-                        }`} />
-                      </div>
+                    
+                    <div className="flex items-center gap-3">
+                      {saved && <span className="text-[11px] text-accent font-bold animate-pulse">✓ Guardado</span>}
+                      {isEditingShifts ? (
+                        <Button onClick={handleSaveShifts} className="h-10 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-xl shadow-lg shadow-blue-500/15 font-bold transition-all active:scale-[0.97]">
+                          Confirmar Cambios
+                        </Button>
+                      ) : (
+                        <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} variant="outline" className="h-10 border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl font-bold transition-all active:scale-[0.97]">
+                          Ajustar Turnos
+                        </Button>
+                      )}
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Stats Bento */}
+                  {(() => {
+                    const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
+                    const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
+                    return (
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                          <p className="text-2xl font-bold text-slate-900 tabular-nums leading-none mb-1">{totalTurnos}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Turnos</p>
+                        </div>
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                          <p className="text-2xl font-bold text-slate-900 tabular-nums leading-none mb-1">{diasCubiertos}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Días</p>
+                        </div>
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm border-b-2 border-b-accent">
+                          <p className="text-2xl font-bold text-accent tabular-nums leading-none mb-1">{editingVolunteer.reliability}%</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Confiab.</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Timeline with Shells */}
+                  <div className="space-y-4">
+                    {EVENT_DAYS.map((d, idx) => {
+                      const dayShifts = shiftsByDay[d.key] || [];
+                      const hasShifts = dayShifts.length > 0;
+                      
+                      return (
+                        <motion.div 
+                          key={d.key}
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1 + idx * 0.03 }}
+                          className={`group border rounded-3xl overflow-hidden transition-all duration-300 ${
+                            hasShifts || isEditingShifts 
+                              ? 'border-slate-200 bg-white shadow-sm' 
+                              : 'border-slate-100 bg-slate-50/50 opacity-40 grayscale-[0.5]'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-stretch">
+                            {/* Date Panel */}
+                            <div className={`shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-4 px-4 border-b sm:border-b-0 sm:border-r transition-colors ${
+                              hasShifts ? 'bg-[#4d7cfe]/5 border-[#4d7cfe]/10' : 'bg-slate-50 border-slate-100'
+                            }`}>
+                              <p className={`text-[10px] font-bold uppercase tracking-widest leading-none mb-1 ${hasShifts ? 'text-[#4d7cfe]' : 'text-slate-400'}`}>
+                                {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
+                              </p>
+                              <p className="text-2xl font-bold text-slate-900 leading-tight">{d.dateNum}</p>
+                            </div>
+
+                            {/* Shifts Grid (The Shells) */}
+                            <div className="flex-1 p-4 grid grid-cols-4 gap-2">
+                              {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                                const active = dayShifts.includes(t);
+                                const shiftInfo = SHIFT_TIMES[parseInt(t[1]) - 1];
+                                
+                                return (
+                                  <button
+                                    key={t}
+                                    disabled={!isEditingShifts}
+                                    onClick={() => toggleShift(d.key, t)}
+                                    className={`relative flex flex-col items-center justify-center py-2.5 rounded-xl border transition-all ${
+                                      active 
+                                        ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md shadow-blue-500/20' 
+                                        : 'bg-white border-slate-100 text-slate-300 hover:border-slate-300'
+                                    } ${
+                                      isEditingShifts ? 'cursor-pointer active:scale-[0.92]' : 'cursor-default'
+                                    }`}
+                                  >
+                                    <span className="text-xs font-bold">{t}</span>
+                                    <span className={`text-[8px] font-bold uppercase tracking-tighter mt-0.5 ${active ? 'text-white/80' : 'text-slate-300'}`}>
+                                      {shiftInfo?.time.split(' - ')[0]}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
           )}
         </SheetContent>
       </Sheet>
+
+      <Toast 
+        message={toast.message} 
+        type={toast.type} 
+        isVisible={toast.isVisible} 
+        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
+      />
     </motion.div>
   );
 }

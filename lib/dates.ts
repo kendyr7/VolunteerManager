@@ -13,12 +13,13 @@ export const SHIFT_TIMES = [
 
 export function getActiveEventDays() {
   const days: Date[] = [];
-  let currentDate = EVENT_START_DATE;
+  const endDate = new Date(2026, 8, 26);
+  let currentDate = new Date(2026, 8, 10); // Clone to avoid mutating the constant
 
-  while (currentDate <= EVENT_END_DATE) {
-    // Excluir domingos (0 en date-fns es domingo)
+  while (currentDate <= endDate) {
+    // Excluir domingos (0 en JS es domingo)
     if (currentDate.getDay() !== 0) {
-      days.push(currentDate);
+      days.push(new Date(currentDate)); // push a clone
     }
     currentDate = addDays(currentDate, 1);
   }
