@@ -166,29 +166,29 @@ export default function ImportPage() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6 md:space-y-10 pb-20 max-w-6xl"
+      className="w-full mx-auto space-y-6 md:space-y-10 pb-20"
     >
       {step === 1 && (
         <motion.div variants={itemVariants}>
-          <Card className="border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-6 sm:p-8">
-              <CardTitle className="font-bold text-slate-800 text-lg">1. Pegar datos CSV</CardTitle>
-              <CardDescription className="text-slate-500 font-medium mt-3 flex flex-wrap gap-2 items-center">
+          <Card className="border border-border bg-dark2 rounded-3xl shadow-sm overflow-hidden">
+            <CardHeader className="bg-dark3 border-b border-border p-6 sm:p-8">
+              <CardTitle className="font-bold text-text text-lg">1. Pegar datos CSV</CardTitle>
+              <CardDescription className="text-text-dim font-medium mt-3 flex flex-wrap gap-2 items-center">
                 <span className="text-xs font-bold mr-1">Formato:</span>
                 {['Nombre', 'Apellido', 'Edad', 'Barrio', 'Estaca', 'Teléfono', 'Comité'].map(f => (
-                  <Badge key={f} variant="secondary" className="bg-white border-slate-200 text-slate-500 font-bold px-2 py-0.5 text-[10px] uppercase tracking-wider">{f}</Badge>
+                  <Badge key={f} variant="secondary" className="bg-dark2 border border-border text-text-dim font-bold px-2 py-0.5 text-[10px] uppercase tracking-wider">{f}</Badge>
                 ))}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-8">
               <textarea
-                className="w-full h-64 sm:h-80 p-4 sm:p-6 rounded-2xl border border-slate-200 bg-white font-mono text-sm focus:ring-4 focus:ring-[#4d7cfe]/10 focus:border-[#4d7cfe] outline-none transition-all resize-none text-slate-800"
+                className="w-full h-64 sm:h-80 p-4 sm:p-6 rounded-2xl border border-border bg-dark3 font-mono text-sm focus:ring-4 focus:ring-[#4d7cfe]/10 focus:border-[#4d7cfe] outline-none transition-all resize-none text-text"
                 placeholder="Juan, Pérez, 35, Las Colinas, Managua Sur, 88881111, Seguridad&#10;María, García, 28, El Dorado, Managua Este, 88882222, Guía"
                 value={csvText}
                 onChange={(e) => setCsvText(e.target.value)}
               />
             </CardContent>
-            <CardFooter className="flex-col sm:flex-row justify-end p-6 sm:p-8 bg-slate-50/50 border-t border-slate-100 gap-4">
+            <CardFooter className="flex-col sm:flex-row justify-end p-6 sm:p-8 bg-dark3 border-t border-border gap-4">
               <Button onClick={handleParse} disabled={!csvText.trim()} className="w-full sm:w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-xl h-12 px-8 font-bold shadow-lg shadow-blue-500/20 transition-all active:scale-[0.97]">
                 <span className="material-symbols-outlined text-[20px] mr-2">description</span>
                 Procesar Datos
@@ -200,25 +200,25 @@ export default function ImportPage() {
 
       {step === 2 && (
         <motion.div variants={itemVariants}>
-          <Card className="border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <Card className="border border-border bg-dark2 rounded-3xl shadow-sm overflow-hidden">
+            <CardHeader className="bg-dark3 border-b border-border p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <CardTitle className="font-bold text-slate-800 flex items-center gap-3 text-lg">
-                  <span className="material-symbols-outlined text-[24px] text-[#6dd230]">check_circle</span>
+                <CardTitle className="font-bold text-text flex items-center gap-3 text-lg">
+                  <span className="material-symbols-outlined text-[24px] text-accent">check_circle</span>
                   Vista Previa de Datos
                 </CardTitle>
-                <CardDescription className="text-slate-500 font-medium mt-1">
+                <CardDescription className="text-text-dim font-medium mt-1">
                   Se detectaron {parsedData.length} registros válidos.
                 </CardDescription>
               </div>
-              <Button variant="ghost" onClick={() => setStep(1)} className="w-full sm:w-auto text-slate-500 hover:text-slate-800 font-bold border border-slate-200 sm:border-transparent bg-white sm:bg-transparent">
+              <Button variant="ghost" onClick={() => setStep(1)} className="w-full sm:w-auto text-text hover:text-text font-bold border border-border sm:border-transparent bg-dark2 sm:bg-transparent">
                 Volver y Corregir
               </Button>
             </CardHeader>
-            <CardContent className="p-0 bg-slate-50/30">
-              <div className="max-h-[500px] overflow-y-auto divide-y divide-slate-100">
+            <CardContent className="p-0 bg-dark2">
+              <div className="max-h-[500px] overflow-y-auto divide-y divide-border">
                 {/* Desktop Header */}
-                <div className="hidden md:grid grid-cols-12 gap-4 px-8 py-4 bg-slate-50/90 backdrop-blur-sm sticky top-0 z-10 border-b border-slate-100 font-bold text-[10px] uppercase tracking-widest text-slate-400">
+                <div className="hidden md:grid grid-cols-12 gap-4 px-8 py-4 bg-dark3 sticky top-0 z-10 border-b border-border font-bold text-[10px] uppercase tracking-widest text-text-dim">
                   <div className="col-span-4">Voluntario</div>
                   <div className="col-span-4">Ubicación</div>
                   <div className="col-span-2 text-center">Comité</div>
@@ -226,12 +226,12 @@ export default function ImportPage() {
                 </div>
                 {/* Rows / Cards */}
                 {parsedData.map((vol, i) => (
-                  <div key={i} className="flex flex-col md:grid md:grid-cols-12 gap-4 px-5 sm:px-8 py-5 md:py-4 bg-white hover:bg-slate-50 transition-colors">
+                  <div key={i} className="flex flex-col md:grid md:grid-cols-12 gap-4 px-5 sm:px-8 py-5 md:py-4 bg-dark2 hover:bg-dark3 transition-colors">
                     {/* User Info */}
                     <div className="md:col-span-4 flex justify-between md:block items-start">
                       <div>
-                        <p className="font-bold text-slate-800">{vol.firstName} {vol.lastName}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 tracking-wider">{vol.age} años</p>
+                        <p className="font-bold text-text">{vol.firstName} {vol.lastName}</p>
+                        <p className="text-[10px] font-bold text-text-dim uppercase mt-0.5 tracking-wider">{vol.age} años</p>
                       </div>
                       <div className="md:hidden">
                         {vol.error ? (
@@ -244,19 +244,19 @@ export default function ImportPage() {
                       </div>
                     </div>
                     {/* Location Info */}
-                    <div className="md:col-span-4 flex items-center md:items-start text-sm font-medium text-slate-600 gap-2 md:gap-0 md:flex-col">
-                      <span className="material-symbols-outlined text-[18px] md:hidden text-slate-300">location_on</span>
+                    <div className="md:col-span-4 flex items-center md:items-start text-sm font-medium text-text-dim gap-2 md:gap-0 md:flex-col">
+                      <span className="material-symbols-outlined text-[18px] md:hidden text-text-dim">location_on</span>
                       <div>
                         <p>{vol.ward}</p>
-                        <p className="text-[11px] font-bold text-slate-400 leading-none mt-0.5 uppercase tracking-wider">{vol.stake}</p>
+                        <p className="text-[11px] font-bold text-text-dim leading-none mt-0.5 uppercase tracking-wider">{vol.stake}</p>
                       </div>
                     </div>
                     {/* Committee Desktop */}
                     <div className="hidden md:flex md:col-span-2 justify-center items-center">
                         {vol.error ? (
                           <div className="flex flex-col items-center gap-1 text-center">
-                            <Badge variant="outline" className="bg-[#fe4d97]/10 text-[#fe4d97] border-[#fe4d97]/20 font-bold text-[11px]">No Permitido</Badge>
-                            <span className="text-[10px] text-red-500 font-bold leading-tight">{vol.error}</span>
+                            <Badge variant="outline" className="bg-red-faint text-red border-red/20 font-bold text-[11px]">No Permitido</Badge>
+                            <span className="text-[10px] text-red font-bold leading-tight">{vol.error}</span>
                           </div>
                         ) : vol.committeeId ? (
                           <Badge variant="outline" className="bg-[#4d7cfe]/10 text-[#4d7cfe] border-[#4d7cfe]/20 font-bold text-[11px]">
@@ -269,14 +269,14 @@ export default function ImportPage() {
                         )}
                     </div>
                     {/* Phone & Footer Mobile */}
-                    <div className="md:col-span-2 flex justify-between md:justify-end items-center md:items-start pt-3 md:pt-0 border-t border-slate-100 md:border-none mt-2 md:mt-0">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest md:hidden">Teléfono</span>
-                      <span className="font-mono text-[13px] md:text-xs text-slate-600 font-bold bg-slate-50 md:bg-transparent px-2 py-1 md:p-0 rounded border border-slate-100 md:border-none">{vol.phone}</span>
+                    <div className="md:col-span-2 flex justify-between md:justify-end items-center md:items-start pt-3 md:pt-0 border-t border-border md:border-none mt-2 md:mt-0">
+                      <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest md:hidden">Teléfono</span>
+                      <span className="font-mono text-[13px] md:text-xs text-text font-bold bg-dark3 md:bg-transparent px-2 py-1 md:p-0 rounded border border-border md:border-none">{vol.phone}</span>
                     </div>
                     {/* Error display on mobile */}
                     {vol.error && (
-                      <div className="md:hidden mt-2 p-3 bg-red-50 rounded-xl border border-red-100">
-                        <p className="text-[11px] text-red-600 font-bold flex items-center gap-1.5 leading-tight">
+                      <div className="md:hidden mt-2 p-3 bg-red-faint rounded-xl border border-red/20">
+                        <p className="text-[11px] text-red font-bold flex items-center gap-1.5 leading-tight">
                           <span className="material-symbols-outlined text-[16px]">error</span> {vol.error}
                         </p>
                       </div>
@@ -285,7 +285,7 @@ export default function ImportPage() {
                 ))}
               </div>
             </CardContent>
-            <CardFooter className="p-6 sm:p-8 bg-slate-50/50 border-t border-slate-100">
+            <CardFooter className="p-6 sm:p-8 bg-dark3 border-t border-border">
               <Button 
                 onClick={handleImport} 
                 disabled={isImporting || parsedData.some(v => !v.committeeId)} 
@@ -304,29 +304,29 @@ export default function ImportPage() {
 
       {step === 3 && (
         <motion.div variants={itemVariants}>
-          <Card className="border border-[#6dd230]/20 bg-white shadow-xl shadow-[#6dd230]/5 rounded-3xl overflow-hidden">
-            <CardHeader className="bg-[#6dd230]/5 p-8 sm:p-10 text-center border-b border-[#6dd230]/10">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-[#6dd230] rounded-full flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-[#6dd230]/30">
+          <Card className="border border-accent/20 bg-dark2 shadow-xl shadow-accent/5 rounded-3xl overflow-hidden">
+            <CardHeader className="bg-accent/5 p-8 sm:p-10 text-center border-b border-accent/10">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-accent rounded-full flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-accent/30">
                 <span className="material-symbols-outlined text-[32px] sm:text-[40px]">task_alt</span>
               </div>
-              <CardTitle className="text-xl sm:text-2xl font-bold text-slate-900">¡Importación Exitosa!</CardTitle>
-              <CardDescription className="text-slate-500 text-base sm:text-lg mt-2 font-medium">
+              <CardTitle className="text-xl sm:text-2xl font-bold text-text">¡Importación Exitosa!</CardTitle>
+              <CardDescription className="text-text-dim text-base sm:text-lg mt-2 font-medium">
                 Se han registrado los voluntarios y generado sus PINs de acceso.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6 sm:p-10 space-y-4">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6 text-center">Lista de Envíos Pendientes</p>
+              <p className="text-xs font-bold text-text-dim uppercase tracking-widest mb-6 text-center">Lista de Envíos Pendientes</p>
               <div className="max-h-[600px] overflow-auto sm:pr-2 space-y-3">
                 {parsedData.map((vol, i) => (
-                  <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 sm:p-6 bg-slate-50 rounded-2xl border border-slate-100 gap-5 sm:gap-6 group hover:bg-white hover:shadow-md transition-all">
+                  <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 sm:p-6 bg-dark3 rounded-2xl border border-border gap-5 sm:gap-6 group hover:bg-dark2 hover:shadow-md transition-all">
                     <div>
-                      <h4 className="font-bold text-slate-800 text-lg sm:text-base group-hover:text-[#4d7cfe] transition-colors">{vol.firstName} {vol.lastName}</h4>
+                      <h4 className="font-bold text-text text-lg sm:text-base group-hover:text-[#4d7cfe] transition-colors">{vol.firstName} {vol.lastName}</h4>
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-3 sm:mt-1.5">
-                        <p className="text-xs sm:text-sm text-slate-500 font-mono flex items-center gap-1.5 bg-white sm:bg-transparent px-3 py-1.5 sm:p-0 rounded-lg border sm:border-none border-slate-200">
-                          <span className="material-symbols-outlined text-[16px] text-slate-400">call</span> {vol.phone}
+                        <p className="text-xs sm:text-sm text-text-dim font-mono flex items-center gap-1.5 bg-dark2 sm:bg-transparent px-3 py-1.5 sm:p-0 rounded-lg border sm:border-none border-border">
+                          <span className="material-symbols-outlined text-[16px] text-text-dim">call</span> {vol.phone}
                         </p>
-                        <p className="text-xs sm:text-sm text-slate-500 font-mono flex items-center gap-1.5 bg-white sm:bg-transparent px-3 py-1.5 sm:p-0 rounded-lg border sm:border-none border-slate-200">
-                          <span className="material-symbols-outlined text-[16px] text-slate-400">key</span> PIN: <span className="font-bold text-slate-700">{vol.pin}</span>
+                        <p className="text-xs sm:text-sm text-text-dim font-mono flex items-center gap-1.5 bg-dark2 sm:bg-transparent px-3 py-1.5 sm:p-0 rounded-lg border sm:border-none border-border">
+                          <span className="material-symbols-outlined text-[16px] text-text-dim">key</span> PIN: <span className="font-bold text-text">{vol.pin}</span>
                         </p>
                       </div>
                     </div>
@@ -342,8 +342,8 @@ export default function ImportPage() {
                 ))}
               </div>
             </CardContent>
-            <CardFooter className="p-6 sm:p-10 bg-slate-50/50 border-t border-slate-100">
-              <Button variant="outline" className="w-full h-12 rounded-2xl border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50" onClick={() => { setCsvText(""); setParsedData([]); setStep(1); }}>
+            <CardFooter className="p-6 sm:p-10 bg-dark3 border-t border-border">
+              <Button variant="outline" className="w-full h-12 rounded-2xl border-border bg-dark2 text-text font-bold hover:bg-dark3" onClick={() => { setCsvText(""); setParsedData([]); setStep(1); }}>
                 Realizar otra importación
               </Button>
             </CardFooter>

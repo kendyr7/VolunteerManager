@@ -60,7 +60,7 @@ export function DataTableFilter({
   }, [options, searchTerm]);
 
   // Match style of standard Select component trigger
-  let triggerClasses = "bg-white text-slate-800 border-slate-200 hover:bg-slate-50 aria-expanded:bg-slate-50 shadow-sm";
+  let triggerClasses = "bg-dark2 text-text border-border hover:bg-dark3 aria-expanded:bg-dark3 shadow-sm";
   if (selectedValues.size > 0) {
     triggerClasses = "bg-[#4d7cfe]/10 text-[#4d7cfe] border-[#4d7cfe]/30 hover:bg-[#4d7cfe]/15 hover:text-[#4d7cfe] aria-expanded:bg-[#4d7cfe]/15 aria-expanded:text-[#4d7cfe] shadow-sm";
   }
@@ -90,18 +90,18 @@ export function DataTableFilter({
           </Button>
         }
       />
-      <DropdownMenuContent align="start" className="w-[240px] bg-white border-slate-200 text-slate-800 rounded-sm shadow-md p-0 overflow-hidden">
+      <DropdownMenuContent align="start" className="w-[240px] bg-dark2 border-border text-text rounded-sm shadow-md p-0 overflow-hidden">
         <DropdownMenuGroup>
-          <div className="p-2 bg-slate-50/50 border-b border-slate-100">
-            <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2 px-1">
+          <div className="p-2 bg-dark3 border-b border-border">
+            <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-2 px-1">
               {dropdownLabel || `Filtrar por ${title}`}
             </DropdownMenuLabel>
 
             {showSearch && (
               <div className="relative mb-1">
-                <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[16px]">search</span>
+                <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-text-dim text-[16px]">search</span>
                 <input
-                  className="w-full h-8 pl-8 pr-2 bg-white border border-slate-200 rounded-sm text-xs outline-none focus:border-[#4d7cfe] transition-all text-slate-700"
+                  className="w-full h-8 pl-8 pr-2 bg-dark2 border border-border rounded-sm text-xs outline-none focus:border-[#4d7cfe] transition-all text-text"
                   placeholder={`Buscar ${title.toLowerCase()}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -138,11 +138,11 @@ export function DataTableFilter({
                   }}
                   className={cn(
                     "cursor-pointer rounded-sm text-xs transition-colors py-2 px-2 flex items-center gap-2",
-                    "focus:outline-none",
+                    "focus:outline-none focus:bg-dark3",
                     colors.bgHover,
                     colors.activeBg,
                     colors.activeText,
-                    !isSelected && "text-slate-600"
+                    !isSelected && "text-text"
                   )}
                 >
                   {option}
@@ -150,17 +150,17 @@ export function DataTableFilter({
               )
             })
           ) : (
-            <div className="py-4 text-center text-xs text-slate-400 italic">No hay resultados</div>
+            <div className="py-4 text-center text-xs text-text-dim italic">No hay resultados</div>
           )}
         </DropdownMenuGroup>
 
         {selectedValues.size > 0 && !hideClearButton && (
-          <div className="p-1 border-t border-slate-100">
+          <div className="p-1 border-t border-border">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onChange([])}
-              className="w-full justify-center text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-red hover:bg-red/5 rounded-sm h-8"
+              className="w-full justify-center text-[10px] font-bold uppercase tracking-widest text-text-dim hover:text-red hover:bg-red-faint rounded-sm h-8"
             >
               Limpiar filtros
             </Button>

@@ -45,7 +45,7 @@ const getCommitteeColor = (committee: string) => {
   if (comm.includes('traducción')) return 'bg-amber-500/15 text-amber-600 border-amber-500/20';
   if (comm.includes('transporte')) return 'bg-purple-500/15 text-purple-600 border-purple-500/20';
   if (comm.includes('auxilios')) return 'bg-teal-500/15 text-teal-600 border-teal-500/20';
-  return 'bg-slate-100 text-slate-500 border-slate-200/50';
+  return 'bg-dark3 text-text-dim border-border';
 };
 
 export default function RemindersPage() {
@@ -362,7 +362,7 @@ export default function RemindersPage() {
 
 
       {/* Barra de Filtros Globales (Prioritaria) */}
-      <div className="shrink-0 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-4 md:p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+      <div className="shrink-0 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-4 md:p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
           <DataTableFilter
             title="Comité"
@@ -415,7 +415,7 @@ export default function RemindersPage() {
               variant="outline"
               size="sm"
               onClick={() => setShowTemplate(true)}
-              className="w-full sm:w-auto h-9 px-3 text-xs font-bold border-slate-200 text-slate-500 hover:text-[#0084d1] hover:bg-slate-50 hover:border-[#0084d1]/30 transition-colors shadow-sm rounded-sm flex items-center gap-1.5"
+              className="w-full sm:w-auto h-9 px-3 text-xs font-bold border-border text-text-dim hover:text-[#0084d1] hover:bg-dark3 hover:border-[#0084d1]/30 transition-colors shadow-sm rounded-sm flex items-center gap-1.5"
             >
               <span className="material-symbols-outlined text-[16px]">chat_bubble</span>
               Ver Plantilla
@@ -425,12 +425,12 @@ export default function RemindersPage() {
       </div>
 
       {/* Selector de Turnos Rediseñado en Dos Filas */}
-      <div className="shrink-0 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-4 md:p-5 flex flex-col gap-4 md:gap-5">
+      <div className="shrink-0 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-4 md:p-5 flex flex-col gap-4 md:gap-5">
 
         {/* FILA 1: FECHA */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">FECHA</span>
+            <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase">FECHA</span>
           </div>
           <div className="grid grid-cols-5 sm:grid-cols-8 md:flex md:flex-wrap gap-2">
             {EVENT_DAYS.map((day) => {
@@ -455,14 +455,14 @@ export default function RemindersPage() {
                   }}
                   className={`relative shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto w-full ${isSelected
                       ? 'bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105'
-                      : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
+                      : 'bg-dark2 border-border text-text hover:bg-dark3'
                     }`}
                 >
-                  <span className={`text-[10px] md:text-[9px] font-bold uppercase tracking-widest ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>
+                  <span className={`text-[10px] md:text-[9px] font-bold uppercase tracking-widest ${isSelected ? 'text-white/80' : 'text-text-dim'}`}>
                     {dayInitial}
                   </span>
                   <span className="text-base md:text-sm font-black leading-none">{day.dateNum}</span>
-                  <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? (isSelected ? 'bg-white' : 'bg-accent') : (isSelected ? 'bg-white/30' : 'bg-slate-200')
+                  <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? (isSelected ? 'bg-dark2' : 'bg-accent') : (isSelected ? 'bg-dark2/30' : 'bg-dark3')
                     }`} />
                 </button>
               );
@@ -475,7 +475,7 @@ export default function RemindersPage() {
 
         {/* FILA 2: TURNOS */}
         <div className="space-y-2">
-          <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">TURNOS</span>
+          <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase">TURNOS</span>
           <div className="flex items-center gap-2 flex-wrap">
             {['T1', 'T2', 'T3', 'T4'].map((t) => {
               // Obtener conteo de voluntarios para este turno (si hay día seleccionado, del día; si no, total acumulado de todos los días)
@@ -526,19 +526,19 @@ export default function RemindersPage() {
                 } else {
                   // Estilo neutro vista global
                   if (count > 0) {
-                    buttonClass = "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200/60 hover:text-slate-800 font-bold";
-                    countTextClass = "text-slate-500";
+                    buttonClass = "bg-dark3 border-border text-text hover:bg-dark3 hover:text-text font-bold";
+                    countTextClass = "text-text-dim";
                   } else {
-                    buttonClass = "bg-white border-slate-200 text-slate-500 hover:bg-slate-50";
-                    countTextClass = "text-slate-500/60";
+                    buttonClass = "bg-dark2 border-border text-text-dim hover:bg-dark3";
+                    countTextClass = "text-text-dim";
                   }
                 }
               }
 
               // Si no hay día seleccionado, forzar un estilo atenuado y deshabilitar
               if (!selectedDayKey) {
-                buttonClass = "bg-white border-slate-200 text-slate-500 opacity-60 cursor-not-allowed";
-                countTextClass = "text-slate-500/50";
+                buttonClass = "bg-dark2 border-border text-text-dim opacity-60 cursor-not-allowed";
+                countTextClass = "text-text-dim";
               }
 
               const shiftTimeLabel = SHIFT_TIMES.find(s => `T${s.id}` === t)?.name || "";
@@ -574,10 +574,10 @@ export default function RemindersPage() {
       {/* Panel de Gestión del Turno Seleccionado (Debajo) */}
       <div className="flex-1 min-h-0 flex flex-col">
         {!selectedDayKey || !selectedShiftId ? (
-          <div className="flex-1 bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden p-12 flex flex-col items-center justify-center text-center min-h-[300px]">
-            <span className="material-symbols-outlined text-[64px] text-slate-500/30 mb-4 animate-pulse">calendar_month</span>
-            <h3 className="text-lg font-bold tracking-tight text-slate-800 mb-2">Ningún turno seleccionado</h3>
-            <p className="text-xs font-medium text-slate-500 max-w-sm leading-relaxed">
+          <div className="flex-1 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-12 flex flex-col items-center justify-center text-center min-h-[300px]">
+            <span className="material-symbols-outlined text-[64px] text-text-dim mb-4 animate-pulse">calendar_month</span>
+            <h3 className="text-lg font-bold tracking-tight text-text mb-2">Ningún turno seleccionado</h3>
+            <p className="text-xs font-medium text-text-dim max-w-sm leading-relaxed">
               Selecciona un día y un turno específico (T1 - T4) en el selector superior para comenzar a enviar recordatorios de WhatsApp.
             </p>
           </div>
@@ -586,18 +586,18 @@ export default function RemindersPage() {
             {/* Lista de Voluntarios (Completa) */}
             <div className="flex-1 min-h-0 flex flex-col">
               <div className="flex-1 flex flex-col min-h-0">
-                <div className="bg-white border border-slate-200 rounded-sm shadow-sm flex flex-col flex-1 overflow-hidden">
-                  <div className="overflow-auto bg-white flex-1 relative">
+                <div className="bg-dark2 border border-border rounded-sm shadow-sm flex flex-col flex-1 overflow-hidden">
+                  <div className="overflow-auto bg-dark2 flex-1 relative">
                     {activeVolunteers.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 text-center text-slate-500 h-full">
-                        <span className="material-symbols-outlined text-[48px] text-slate-200 mb-4">group_off</span>
-                        <p className="text-base font-bold text-slate-700">Sin voluntarios asignados</p>
-                        <p className="text-sm max-w-[250px] mt-1 text-slate-400">No hay voluntarios asignados a este turno para los filtros seleccionados.</p>
+                      <div className="flex flex-col items-center justify-center py-16 text-center text-text-dim h-full">
+                        <span className="material-symbols-outlined text-[48px] text-text-dim mb-4">group_off</span>
+                        <p className="text-base font-bold text-text">Sin voluntarios asignados</p>
+                        <p className="text-sm max-w-[250px] mt-1 text-text-dim">No hay voluntarios asignados a este turno para los filtros seleccionados.</p>
                       </div>
                     ) : (
                       <>
                         {/* Vista Mobile/Tablet: Tarjetas Expandibles */}
-                        <div className="lg:hidden flex flex-col bg-slate-50">
+                        <div className="lg:hidden flex flex-col bg-dark3">
                           <div>
                             <AnimatePresence mode="popLayout">
                               {currentVolunteers.map((vol) => {
@@ -620,19 +620,19 @@ export default function RemindersPage() {
                                     animate={{ opacity: 1 }}
                                     exit={{ opacity: 0 }}
                                     className={cn(
-                                      "mb-px bg-white border-b border-slate-100 transition-all duration-200",
+                                      "mb-px bg-dark2 border-b border-border transition-all duration-200",
                                       expandedId === vol.id && "ring-1 ring-[#4d7cfe]/20 shadow-sm z-10",
                                       isConfirmed && "bg-[#6dd230]/5"
                                     )}
                                   >
                                     <div
-                                      className="p-4 flex items-center justify-between cursor-pointer active:bg-slate-50"
+                                      className="p-4 flex items-center justify-between cursor-pointer active:bg-dark3"
                                       onClick={() => setExpandedId(expandedId === vol.id ? null : vol.id)}
                                     >
                                       <div className="flex items-center gap-3 overflow-hidden">
-                                        <div className={`w-2 h-2 rounded-full shrink-0 ${isConfirmed ? 'bg-[#6dd230] shadow-[0_0_8px_rgba(109,210,48,0.3)]' : 'bg-slate-200'}`} />
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${isConfirmed ? 'bg-[#6dd230] shadow-[0_0_8px_rgba(109,210,48,0.3)]' : 'bg-dark3'}`} />
                                         <div className="flex flex-col min-w-0">
-                                          <span className="font-bold text-slate-800 text-[15px] truncate">{vol.name}</span>
+                                          <span className="font-bold text-text text-[15px] truncate">{vol.name}</span>
                                           <div className="flex mt-0.5 items-center gap-2">
                                             <Badge variant="outline" className={cn("font-bold px-1.5 py-0 text-[9px] h-4 uppercase tracking-tighter", getCommitteeColor(vol.committee))}>
                                               {vol.committee}
@@ -648,7 +648,7 @@ export default function RemindersPage() {
                                       <div className="flex items-center gap-3 shrink-0 ml-2">
                                         <motion.span
                                           animate={{ rotate: expandedId === vol.id ? 180 : 0 }}
-                                          className="material-symbols-outlined text-slate-300 text-[20px]"
+                                          className="material-symbols-outlined text-text-dim text-[20px]"
                                         >
                                           expand_more
                                         </motion.span>
@@ -661,19 +661,19 @@ export default function RemindersPage() {
                                           initial={{ height: 0, opacity: 0 }}
                                           animate={{ height: "auto", opacity: 1 }}
                                           exit={{ height: 0, opacity: 0 }}
-                                          className="overflow-hidden border-t border-slate-50"
+                                          className="overflow-hidden border-t border-border"
                                         >
                                           <div className="p-4 pt-2 space-y-4">
-                                            <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-xl">
+                                            <div className="grid grid-cols-2 gap-4 p-3 bg-dark3 rounded-xl">
                                               <div className="space-y-0.5">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Barrio / Estaca</span>
-                                                <p className="text-xs font-bold text-slate-700 leading-tight">
+                                                <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Barrio / Estaca</span>
+                                                <p className="text-xs font-bold text-text leading-tight">
                                                   {vol.ward || '—'} <br />
-                                                  <span className="text-slate-400 font-medium">{vol.stake || '—'}</span>
+                                                  <span className="text-text-dim font-medium">{vol.stake || '—'}</span>
                                                 </p>
                                               </div>
                                               <div className="space-y-0.5">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estado</span>
+                                                <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Estado</span>
                                                 <div className="flex items-center gap-1.5 mt-1">
                                                   {isConfirmed ? (
                                                     <Badge variant="outline" className="bg-[#6dd230]/10 text-[#6dd230] border-[#6dd230]/20 font-bold uppercase text-[10px] tracking-widest px-2">
@@ -691,7 +691,7 @@ export default function RemindersPage() {
                                             <div className="flex flex-col sm:flex-row items-center gap-2">
                                               <Button
                                                 variant="outline"
-                                                className="w-full sm:flex-1 h-11 gap-2 text-[#25D366] hover:bg-[#25D366] hover:text-white border-slate-200 bg-white font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
+                                                className="w-full sm:flex-1 h-11 gap-2 text-[#25D366] hover:bg-[#25D366] hover:text-white border-border bg-dark2 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
                                                 onClick={(e) => {
                                                   e.stopPropagation();
                                                   window.open(link, '_blank');
@@ -704,7 +704,7 @@ export default function RemindersPage() {
                                                 className={cn(
                                                   "w-full sm:flex-1 h-11 gap-2 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all",
                                                   isConfirmed
-                                                    ? "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                                    ? "bg-dark3 text-text-dim hover:bg-dark3"
                                                     : "bg-[#6dd230] text-white hover:bg-[#5bbd24]"
                                                 )}
                                                 onClick={(e) => {
@@ -730,14 +730,14 @@ export default function RemindersPage() {
                         {/* Desktop Table (Hidden on small screens) */}
                         <div className="hidden lg:block">
                           <Table>
-                            <TableHeader className="bg-slate-50 border-b border-slate-200">
+                            <TableHeader className="bg-dark3 border-b border-border">
                               <TableRow className="hover:bg-transparent">
-                            <TableHead className="font-medium text-slate-500 text-center pl-8 w-16">Asist.</TableHead>
-                            <TableHead className="font-medium text-slate-500 text-center w-32">Estado</TableHead>
-                            <TableHead className="font-medium text-slate-500">Nombre y Apellido</TableHead>
-                            <TableHead className="font-medium text-slate-500 text-center">Barrio</TableHead>
-                            <TableHead className="font-medium text-slate-500 text-center">Estaca</TableHead>
-                            <TableHead className="font-medium text-slate-500 text-center pr-8">Comité</TableHead>
+                            <TableHead className="font-medium text-text-dim text-center pl-8 w-16">Asist.</TableHead>
+                            <TableHead className="font-medium text-text-dim text-center w-32">Estado</TableHead>
+                            <TableHead className="font-medium text-text-dim">Nombre y Apellido</TableHead>
+                            <TableHead className="font-medium text-text-dim text-center">Barrio</TableHead>
+                            <TableHead className="font-medium text-text-dim text-center">Estaca</TableHead>
+                            <TableHead className="font-medium text-text-dim text-center pr-8">Comité</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -764,7 +764,7 @@ export default function RemindersPage() {
                                   transition={{ duration: 0.2 }}
                                   onClick={() => toggleConfirmed(vol.id)}
                                   className={cn(
-                                    "border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer",
+                                    "border-border hover:bg-dark3 transition-colors cursor-pointer",
                                     isConfirmed && "bg-[#6dd230]/5 hover:bg-[#6dd230]/10"
                                   )}
                                 >
@@ -775,7 +775,7 @@ export default function RemindersPage() {
                                         "w-6 h-6 rounded-full flex items-center justify-center transition-all active:scale-90 mx-auto",
                                         isConfirmed 
                                           ? "bg-accent text-white shadow-sm shadow-accent/30" 
-                                          : "bg-slate-100 border border-slate-300 text-transparent hover:border-[#4d7cfe] group-hover:border-[#4d7cfe]/50"
+                                          : "bg-dark3 border border-border text-transparent hover:border-[#4d7cfe] group-hover:border-[#4d7cfe]/50"
                                       )}
                                     >
                                       <span className="material-symbols-outlined text-[16px] font-bold">
@@ -794,9 +794,9 @@ export default function RemindersPage() {
                                       </Badge>
                                     )}
                                   </TableCell>
-                                  <TableCell className="font-bold text-slate-800">
+                                  <TableCell className="font-bold text-text">
                                     <div className="flex items-center gap-2">
-                                      <span className={isConfirmed ? "text-slate-900" : "text-slate-800"}>
+                                      <span className={isConfirmed ? "text-text" : "text-text"}>
                                         {vol.name}
                                       </span>
                                       <a 
@@ -804,15 +804,15 @@ export default function RemindersPage() {
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         onClick={(e) => e.stopPropagation()}
-                                        className="inline-flex items-center justify-center h-8 w-8 text-[#25D366] hover:bg-slate-100 transition-all active:scale-90 rounded-sm"
+                                        className="inline-flex items-center justify-center h-8 w-8 text-[#25D366] hover:bg-dark3 transition-all active:scale-90 rounded-sm"
                                         title="Enviar recordatorio WhatsApp"
                                       >
                                         <span className="material-symbols-outlined text-[20px]">send</span>
                                       </a>
                                     </div>
                                   </TableCell>
-                                  <TableCell className="text-slate-800 text-center">{vol.ward}</TableCell>
-                                  <TableCell className="text-slate-500 text-center">{vol.stake}</TableCell>
+                                  <TableCell className="text-text text-center">{vol.ward}</TableCell>
+                                  <TableCell className="text-text-dim text-center">{vol.stake}</TableCell>
                                   <TableCell className="text-center pr-8">
                                     <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
                                       {vol.committee}
@@ -830,8 +830,8 @@ export default function RemindersPage() {
                   </div>
                   
                   {totalPages > 1 && (
-                    <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-                      <p className="text-xs text-slate-500 font-medium text-center sm:text-left">
+                    <div className="bg-dark3 border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                      <p className="text-xs text-text-dim font-medium text-center sm:text-left">
                         Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, activeVolunteers.length)} de {activeVolunteers.length}
                       </p>
                       <div className="flex items-center gap-2">
@@ -844,7 +844,7 @@ export default function RemindersPage() {
                         >
                           Anterior
                         </Button>
-                        <div className="text-xs font-bold text-slate-600 px-2">
+                        <div className="text-xs font-bold text-text-dim px-2">
                           {safeCurrentPage} / {totalPages}
                         </div>
                         <Button
@@ -867,20 +867,20 @@ export default function RemindersPage() {
       </div>
 
       <Sheet open={showTemplate} onOpenChange={setShowTemplate}>
-        <SheetContent side="right" className="w-full sm:w-[540px] bg-white p-0 flex flex-col border-l border-slate-200/60 shadow-2xl">
-          <SheetHeader className="p-6 border-b border-slate-100 bg-slate-50/50">
-            <SheetTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
+        <SheetContent side="right" className="w-full sm:w-[40vw] bg-dark2 p-0 flex flex-col border-l border-border shadow-2xl">
+          <SheetHeader className="p-6 border-b border-border bg-dark3">
+            <SheetTitle className="text-xl font-bold text-text flex items-center gap-2">
               <span className="material-symbols-outlined text-[#0084d1]">chat_bubble</span>
               Mensaje Plantilla
             </SheetTitle>
           </SheetHeader>
-          <div className="p-6 flex-1 flex flex-col gap-6 bg-white overflow-y-auto">
+          <div className="p-6 flex-1 flex flex-col gap-6 bg-dark2 overflow-y-auto">
             <div className="bg-sky-50/80 p-5 rounded-md rounded-tl-none border border-sky-100 shadow-sm text-sm text-sky-950 leading-relaxed whitespace-pre-wrap font-sans relative">
               {previewMessage}
               <div className="absolute top-0 -left-2 w-0 h-0 border-[10px] border-transparent border-r-sky-50 border-t-sky-50" />
             </div>
 
-            <div className="p-4 rounded-sm bg-slate-50 border border-slate-200/60 text-xs text-slate-500 flex items-start gap-2 leading-relaxed">
+            <div className="p-4 rounded-sm bg-dark3 border border-border text-xs text-text-dim flex items-start gap-2 leading-relaxed">
               <span className="material-symbols-outlined text-[18px] text-blue-500 shrink-0 mt-0.5">info</span>
               <span>
                 Este mensaje se genera automáticamente para cada voluntario. 

@@ -379,13 +379,13 @@ export default function UsersPage() {
 
 
       {isInviteOpen && (
-        <div className="bg-white border border-slate-200 rounded-sm shadow-sm animate-in fade-in slide-in-from-top-4 overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="bg-dark2 border border-border rounded-sm shadow-sm animate-in fade-in slide-in-from-top-4 overflow-hidden">
+          <div className="p-6 border-b border-border flex items-center justify-between bg-dark3">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[20px] text-[#4d7cfe]">verified_user</span>
-              <h3 className="font-bold text-slate-800 tracking-tight">Nueva Invitación</h3>
+              <h3 className="font-bold text-text tracking-tight">Nueva Invitación</h3>
             </div>
-            <button onClick={resetInviteForm} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <button onClick={resetInviteForm} className="text-text-dim hover:text-text-dim transition-colors">
               <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
@@ -394,42 +394,42 @@ export default function UsersPage() {
             <form onSubmit={handleInvite} className="p-6 space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">Nombre completo</label>
+                  <label className="text-xs font-semibold text-text">Nombre completo</label>
                   <input 
                     required 
                     value={newName} 
                     onChange={e => setNewName(e.target.value)}
                     placeholder="Ej. Juan Pérez"
-                    className="w-full h-10 px-3 rounded-sm border border-slate-200 bg-white text-sm text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                    className="w-full h-10 px-3 rounded-sm border border-border bg-dark2 text-sm text-text focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">Teléfono WhatsApp</label>
+                  <label className="text-xs font-semibold text-text">Teléfono WhatsApp</label>
                   <input 
                     required 
                     pattern="[0-9]{8}"
                     value={newPhone} 
                     onChange={e => setNewPhone(e.target.value)}
                     placeholder="Ej. 88881111"
-                    className="w-full h-10 px-3 rounded-sm border border-slate-200 bg-white text-sm text-slate-800 font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                    className="w-full h-10 px-3 rounded-sm border border-border bg-dark2 text-sm text-text font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">Rol en la plataforma</label>
+                  <label className="text-xs font-semibold text-text">Rol en la plataforma</label>
                     <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
-                      <SelectTrigger className="w-full h-10 bg-white border-slate-200 text-slate-800 flex items-center justify-between">
+                      <SelectTrigger className="w-full h-10 bg-dark2 border-border text-text flex items-center justify-between">
                         <SelectValue />
                       </SelectTrigger>
-                    <SelectContent className="bg-white border-slate-200 text-slate-800">
+                    <SelectContent className="bg-dark2 border-border text-text">
                       <SelectItem value="Admin">
                         <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[18px] text-slate-400">admin_panel_settings</span>
+                          <span className="material-symbols-outlined text-[18px] text-text-dim">admin_panel_settings</span>
                           <span>Admin</span>
                         </div>
                       </SelectItem>
                       <SelectItem value="Editor">
                         <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[18px] text-slate-400">manage_accounts</span>
+                          <span className="material-symbols-outlined text-[18px] text-text-dim">manage_accounts</span>
                           <span>Editor</span>
                         </div>
                       </SelectItem>
@@ -439,7 +439,7 @@ export default function UsersPage() {
 
                 {newRole === 'Editor' && (
                   <div className="space-y-2 animate-in fade-in zoom-in-95">
-                    <label className="text-xs font-semibold text-slate-700">Comité Asignado</label>
+                    <label className="text-xs font-semibold text-text">Comité Asignado</label>
                     <DataTableFilter
                       title={newCommittee || "Selecciona un comité"}
                       options={committeesList.map(c => c.name)}
@@ -448,7 +448,7 @@ export default function UsersPage() {
                       hideClearButton
                       hideCountBadge
                       isCommitteeFilter
-                      className="w-full bg-white justify-between h-10 border-slate-200"
+                      className="w-full bg-dark2 justify-between h-10 border-border"
                       onChange={(vals) => {
                         if (vals.length === 0) {
                           setNewCommittee("");
@@ -469,7 +469,7 @@ export default function UsersPage() {
               )}
 
               <div className="pt-5 flex justify-end gap-3">
-                <Button type="button" variant="ghost" onClick={resetInviteForm} className="text-slate-500 hover:text-slate-800">
+                <Button type="button" variant="ghost" onClick={resetInviteForm} className="text-text-dim hover:text-text">
                   Cancelar
                 </Button>
                 <Button type="submit" className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold shadow-sm">
@@ -483,19 +483,19 @@ export default function UsersPage() {
                 <span className="material-symbols-outlined text-[24px]">check_circle</span>
               </div>
               <div>
-                <h4 className="font-bold text-slate-800">Enlace Generado Exitosamente</h4>
-                <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
-                  Envía este enlace único a <span className="font-semibold text-slate-800">{generatedInvite.name}</span>. Al ingresar, validará su número y creará su PIN de acceso de 4 dígitos.
+                <h4 className="font-bold text-text">Enlace Generado Exitosamente</h4>
+                <p className="text-sm text-text-dim mt-1 max-w-md mx-auto">
+                  Envía este enlace único a <span className="font-semibold text-text">{generatedInvite.name}</span>. Al ingresar, validará su número y creará su PIN de acceso de 4 dígitos.
                 </p>
               </div>
 
-              <div className="w-full max-w-md bg-slate-50 border border-slate-200 rounded-sm p-3 flex items-center justify-between gap-3 mt-4">
-                <code className="text-xs text-slate-800 font-mono truncate">{generatedInvite.inviteLink}</code>
+              <div className="w-full max-w-md bg-dark3 border border-border rounded-sm p-3 flex items-center justify-between gap-3 mt-4">
+                <code className="text-xs text-text font-mono truncate">{generatedInvite.inviteLink}</code>
                 <button 
                   onClick={() => copyToClipboard(generatedInvite.inviteLink!)}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white hover:bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-600 transition-colors shadow-sm"
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-dark2 hover:bg-dark3 border border-border text-xs font-semibold text-text-dim transition-colors shadow-sm"
                 >
-                  {copied ? <span className="material-symbols-outlined text-[16px] text-accent">check_circle</span> : <span className="material-symbols-outlined text-[16px] text-slate-400">content_copy</span>}
+                  {copied ? <span className="material-symbols-outlined text-[16px] text-accent">check_circle</span> : <span className="material-symbols-outlined text-[16px] text-text-dim">content_copy</span>}
                   {copied ? 'Copiado' : 'Copiar'}
                 </button>
               </div>
@@ -515,8 +515,8 @@ export default function UsersPage() {
       )}
 
       {/* Users Table */}
-      <div className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
+      <div className="bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+        <div className="p-4 border-b border-border bg-dark3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
           <Button 
             onClick={() => setIsInviteOpen(true)}
             className="w-full sm:w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97]"
@@ -525,15 +525,15 @@ export default function UsersPage() {
             Invitar Usuario
           </Button>
           <div className="flex gap-2 w-full sm:w-auto sm:ml-auto justify-end">
-            <Badge variant="outline" className="bg-white text-slate-600 border-slate-200 font-medium">
+            <Badge variant="outline" className="bg-dark2 text-text-dim border-border font-medium">
               {filteredUsers.length} usuarios
             </Badge>
           </div>
         </div>
 
-        <div className="overflow-auto bg-white flex-1 relative [&>div]:h-full" ref={tableContainerRef}>
+        <div className="overflow-auto bg-dark2 flex-1 relative [&>div]:h-full" ref={tableContainerRef}>
           <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50/80 sticky top-0 z-10 backdrop-blur-md border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-border text-[10px] font-bold text-text-dim uppercase tracking-wider">
               <tr>
                 <th className="px-5 py-3">Usuario</th>
                 <th className="px-5 py-3">Teléfono</th>
@@ -542,26 +542,26 @@ export default function UsersPage() {
                 <th className="px-5 py-3 text-center">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-8 text-center text-slate-500">
+                  <td colSpan={5} className="px-5 py-8 text-center text-text-dim">
                     Cargando usuarios...
                   </td>
                 </tr>
               ) : currentUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-8 text-center text-slate-500">
+                  <td colSpan={5} className="px-5 py-8 text-center text-text-dim">
                     No se encontraron usuarios.
                   </td>
                 </tr>
               ) : (
                 currentUsers.map(user => (
-                  <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
+                  <tr key={user.id} className="hover:bg-dark3 transition-colors group">
                     <td className="px-5 py-3.5">
-                    <p className="font-semibold text-slate-800">{user.name}</p>
+                    <p className="font-semibold text-text">{user.name}</p>
                   </td>
-                  <td className="px-5 py-3.5 font-mono text-xs text-slate-500">
+                  <td className="px-5 py-3.5 font-mono text-xs text-text-dim">
                     {user.phone}
                   </td>
                   <td className="px-5 py-3.5">
@@ -572,8 +572,8 @@ export default function UsersPage() {
                         {user.role}
                       </Badge>
                       {user.committee && (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
-                          <span className="material-symbols-outlined text-[16px] text-slate-400">corporate_fare</span>
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-text-dim">
+                          <span className="material-symbols-outlined text-[16px] text-text-dim">corporate_fare</span>
                           {user.committee}
                         </span>
                       )}
@@ -585,8 +585,8 @@ export default function UsersPage() {
                         <span className="w-1.5 h-1.5 rounded-full bg-accent" /> Activo
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-bold" title="No ha ingresado su PIN">
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Pendiente
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dark3 border border-border text-text-dim text-[11px] font-bold" title="No ha ingresado su PIN">
+                        <span className="w-1.5 h-1.5 rounded-full bg-text-dim" /> Pendiente
                       </span>
                     )}
                   </td>
@@ -594,17 +594,17 @@ export default function UsersPage() {
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         render={
-                          <button className="p-1.5 rounded-sm hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+                          <button className="p-1.5 rounded-sm hover:bg-dark3 text-text-dim hover:text-text transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
                             <span className="material-symbols-outlined text-[18px]">more_vert</span>
                           </button>
                         }
                       />
-                      <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[140px] p-1 rounded-sm shadow-md">
-                        <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-2" onClick={() => handleEditClick(user)}>
+                      <DropdownMenuContent align="end" className="bg-dark2 border-border text-text min-w-[140px] p-1 rounded-sm shadow-md">
+                        <DropdownMenuItem className="cursor-pointer hover:bg-dark3 rounded-sm focus:bg-dark3 focus:text-text transition-colors flex items-center gap-2" onClick={() => handleEditClick(user)}>
                           <span className="material-symbols-outlined text-[18px]">edit</span>
                           Editar Perfil
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-2" onClick={() => handleResetPin(user)}>
+                        <DropdownMenuItem className="cursor-pointer hover:bg-dark3 rounded-sm focus:bg-dark3 focus:text-text transition-colors flex items-center gap-2" onClick={() => handleResetPin(user)}>
                           <span className="material-symbols-outlined text-[18px]">lock_reset</span>
                           Resetear PIN
                         </DropdownMenuItem>
@@ -621,8 +621,8 @@ export default function UsersPage() {
           </table>
         </div>
         {totalPages > 1 && (
-          <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-            <p className="text-xs text-slate-500 font-medium text-center sm:text-left">
+          <div className="bg-dark3 border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+            <p className="text-xs text-text-dim font-medium text-center sm:text-left">
               Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, filteredUsers.length)} de {filteredUsers.length}
             </p>
             <div className="flex items-center gap-2">
@@ -635,7 +635,7 @@ export default function UsersPage() {
               >
                 Anterior
               </Button>
-              <div className="text-xs font-bold text-slate-600 px-2">
+              <div className="text-xs font-bold text-text-dim px-2">
                 {safeCurrentPage} / {totalPages}
               </div>
               <Button
@@ -656,42 +656,42 @@ export default function UsersPage() {
       <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
         <SheetContent
           side="right"
-          className="bg-white text-slate-800 border-l border-slate-200 p-0 overflow-y-auto w-full sm:w-[450px] sm:max-w-[95vw]"
+          className="bg-dark2 text-text border-l border-border p-0 overflow-y-auto w-full sm:w-[40vw] sm:max-w-[95vw]"
         >
           <div className="p-7 space-y-7">
             <div>
-              <h2 className="font-bold text-slate-800 tracking-tight leading-none mb-2">Editar Perfil</h2>
-              <p className="text-sm text-slate-500">Modifica los datos de acceso y el rol del usuario en la plataforma.</p>
+              <h2 className="font-bold text-text tracking-tight leading-none mb-2">Editar Perfil</h2>
+              <p className="text-sm text-text-dim">Modifica los datos de acceso y el rol del usuario en la plataforma.</p>
             </div>
 
             <form onSubmit={handleUpdateUser} className="space-y-6">
               <div className="space-y-5">
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">Nombre completo</label>
+                  <label className="text-xs font-semibold text-text">Nombre completo</label>
                   <input 
                     required 
                     value={newName} 
                     onChange={e => setNewName(e.target.value)}
-                    className="w-full h-10 px-3 rounded-sm border border-slate-200 bg-white text-sm text-slate-800 focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] outline-none transition-all"
+                    className="w-full h-10 px-3 rounded-sm border border-border bg-dark2 text-sm text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] outline-none transition-all"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">Teléfono WhatsApp</label>
+                  <label className="text-xs font-semibold text-text">Teléfono WhatsApp</label>
                   <input 
                     required 
                     pattern="[0-9]{8}"
                     value={newPhone} 
                     onChange={e => setNewPhone(e.target.value)}
-                    className="w-full h-10 px-3 rounded-sm border border-slate-200 bg-white text-sm text-slate-800 font-mono focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] outline-none transition-all"
+                    className="w-full h-10 px-3 rounded-sm border border-border bg-dark2 text-sm text-text font-mono focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] outline-none transition-all"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">Rol en la plataforma</label>
+                  <label className="text-xs font-semibold text-text">Rol en la plataforma</label>
                     <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
-                      <SelectTrigger className="w-full h-10 bg-white border-slate-200 text-slate-800 flex items-center justify-between">
+                      <SelectTrigger className="w-full h-10 bg-dark2 border-border text-text flex items-center justify-between">
                         <SelectValue />
                       </SelectTrigger>
-                    <SelectContent className="bg-white border-slate-200 text-slate-800">
+                    <SelectContent className="bg-dark2 border-border text-text">
                       <SelectItem value="Admin">Admin (Acceso total)</SelectItem>
                       <SelectItem value="Editor">Editor (Coordinador de comité)</SelectItem>
                     </SelectContent>
@@ -700,12 +700,12 @@ export default function UsersPage() {
 
                 {newRole === 'Editor' && (
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-slate-700">Comité Asignado</label>
+                    <label className="text-xs font-semibold text-text">Comité Asignado</label>
                     <Select value={newCommittee} onValueChange={(v) => v && setNewCommittee(v)}>
-                      <SelectTrigger className="w-full h-10 bg-white border-slate-200 text-slate-800 flex items-center justify-between">
+                      <SelectTrigger className="w-full h-10 bg-dark2 border-border text-text flex items-center justify-between">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="bg-white border-slate-200 text-slate-800">
+                      <SelectContent className="bg-dark2 border-border text-text">
                         {committeesList.map(c => (
                           <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
                         ))}
@@ -715,13 +715,13 @@ export default function UsersPage() {
                 )}
 
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">PIN de Acceso Actual</label>
+                  <label className="text-xs font-semibold text-text">PIN de Acceso Actual</label>
                   <div className="flex gap-2">
                     <input 
                       readOnly
                       type="password"
                       value={editingUser?.pin ? '****' : ''} 
-                      className="flex-1 h-10 px-3 rounded-sm border border-slate-200 bg-slate-50 text-sm text-slate-500 font-mono outline-none"
+                      className="flex-1 h-10 px-3 rounded-sm border border-border bg-dark3 text-sm text-text-dim font-mono outline-none"
                     />
                     <Button 
                       type="button" 
@@ -732,7 +732,7 @@ export default function UsersPage() {
                       <span className="material-symbols-outlined text-[18px]">lock_reset</span>
                     </Button>
                   </div>
-                  <p className="text-[10px] text-slate-400 italic">El PIN por defecto tras un reseteo es '1234'.</p>
+                  <p className="text-[10px] text-text-dim italic">El PIN por defecto tras un reseteo es '1234'.</p>
                 </div>
               </div>
 
@@ -742,8 +742,8 @@ export default function UsersPage() {
                 </div>
               )}
 
-              <div className="pt-8 border-t border-slate-100 flex items-center justify-end gap-3">
-                <Button type="button" variant="ghost" onClick={() => setIsEditSheetOpen(false)} className="text-slate-500 hover:text-slate-800">
+              <div className="pt-8 border-t border-border flex items-center justify-end gap-3">
+                <Button type="button" variant="ghost" onClick={() => setIsEditSheetOpen(false)} className="text-text-dim hover:text-text">
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={isUpdating} className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold shadow-sm px-6">

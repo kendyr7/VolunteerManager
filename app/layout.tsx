@@ -1,10 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { Public_Sans } from "next/font/google";
+import { Dela_Gothic_One, Inter } from "next/font/google";
 import "material-symbols/outlined.css";
 import "./globals.css";
 
-const publicSans = Public_Sans({
+const delaGothic = Dela_Gothic_One({
+  weight: "400",
   variable: "--font-sans",
+  subsets: ["latin"],
+});
+
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -39,7 +45,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${publicSans.variable} h-full antialiased`}
+      className={`${delaGothic.variable} ${inter.variable} h-full antialiased`}
     >
       <head>
         <link rel="apple-touch-icon" href="/app-icon-192.png" />

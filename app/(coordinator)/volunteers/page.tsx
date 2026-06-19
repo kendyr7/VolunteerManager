@@ -58,13 +58,13 @@ type VolunteerType = {
 
 const getCommitteeColor = (committee: string) => {
   const comm = committee.toLowerCase();
-  if (comm.includes('seguridad')) return 'bg-[#fe4d97]/15 text-[#fe4d97] border-[#fe4d97]/20';
-  if (comm.includes('guía')) return 'bg-[#6dd230]/15 text-[#6dd230] border-[#6dd230]/20';
-  if (comm.includes('historia')) return 'bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20';
-  if (comm.includes('traducción')) return 'bg-amber-500/15 text-amber-600 border-amber-500/20';
-  if (comm.includes('transporte')) return 'bg-purple-500/15 text-purple-600 border-purple-500/20';
-  if (comm.includes('auxilios')) return 'bg-teal-500/15 text-teal-600 border-teal-500/20';
-  return 'bg-slate-100 text-slate-600 border-slate-200';
+  if (comm.includes('seguridad')) return 'bg-red-faint text-red border-red/20';
+  if (comm.includes('guía')) return 'bg-accent-faint text-accent border-accent/20';
+  if (comm.includes('historia')) return 'bg-gold-faint text-gold border-gold/20';
+  if (comm.includes('traducción')) return 'bg-amber-500/15 text-amber-500 border-amber-500/20';
+  if (comm.includes('transporte')) return 'bg-purple-500/15 text-purple-500 border-purple-500/20';
+  if (comm.includes('auxilios')) return 'bg-teal-500/15 text-teal-500 border-teal-500/20';
+  return 'bg-dark3 text-text-dim border-border';
 };
 
 export default function VolunteersPage() {
@@ -479,9 +479,9 @@ export default function VolunteersPage() {
     >
 
 
-      <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-sm shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+      <motion.div variants={itemVariants} className="bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
         {/* Barra de Filtros */}
-        <div className="p-4 md:p-5 border-b border-slate-200 bg-slate-50 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shrink-0">
+        <div className="p-4 md:p-5 border-b border-border bg-dark3 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shrink-0">
           <div className="flex flex-col w-full lg:w-auto gap-3">
             <div className="grid grid-cols-2 lg:flex lg:items-center gap-2 w-full lg:w-auto">
               <button
@@ -490,14 +490,14 @@ export default function VolunteersPage() {
                   "flex items-center justify-center gap-2 px-4 h-10 rounded-sm text-sm font-bold transition-all active:scale-[0.97] border w-full lg:w-auto lg:min-w-[140px]",
                   showArchived
                     ? "bg-[#fe4d97]/10 text-[#fe4d97] border-[#fe4d97]/20"
-                    : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-800"
+                    : "bg-dark2 text-text-dim border-border hover:bg-dark3 hover:text-text"
                 )}
               >
                 <span className="material-symbols-outlined text-[20px]">{showArchived ? 'inventory_2' : 'archive'}</span>
                 {showArchived ? 'Activos' : 'Archivados'}
               </button>
 
-              <div className="hidden lg:block w-px h-6 bg-slate-200 mx-2" />
+              <div className="hidden lg:block w-px h-6 bg-border mx-2" />
 
               {currentRole === 'Admin' && (
                 <DataTableFilter
@@ -535,7 +535,7 @@ export default function VolunteersPage() {
                     setSelectedStakes([]);
                     setSelectedWards([]);
                   }}
-                  className="h-8 px-0 text-slate-400 hover:text-red hover:bg-transparent rounded-sm font-bold text-[10px] uppercase tracking-widest flex items-center gap-2"
+                  className="h-8 px-0 text-text-dim hover:text-red hover:bg-transparent rounded-sm font-bold text-[10px] uppercase tracking-widest flex items-center gap-2"
                 >
                   <span className="material-symbols-outlined text-[16px]">close</span>
                   Limpiar filtros
@@ -553,7 +553,7 @@ export default function VolunteersPage() {
                   setSelectedStakes([]);
                   setSelectedWards([]);
                 }}
-                className="hidden lg:flex h-10 px-3 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-sm font-bold text-xs uppercase tracking-widest"
+                className="hidden lg:flex h-10 px-3 text-text-dim hover:text-text hover:bg-dark3 rounded-sm font-bold text-xs uppercase tracking-widest"
               >
                 Limpiar todo
               </Button>
@@ -569,20 +569,20 @@ export default function VolunteersPage() {
         </div>
 
         {/* Contenedor de Datos */}
-        <div className="overflow-auto bg-white flex-1 relative" ref={tableContainerRef}>
+        <div className="overflow-auto bg-dark2 flex-1 relative" ref={tableContainerRef}>
           {/* Vista Desktop: Tabla */}
           <div className="hidden lg:block h-full">
             <Table className={cn(currentVolunteers.length === itemsPerPage && "h-full")}>
-              <TableHeader className="bg-slate-50 border-b border-slate-200">
+              <TableHeader className="bg-dark3 border-b border-border">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="font-medium text-slate-500 pl-8">Nombre y Apellido</TableHead>
-                  <TableHead className="font-medium text-slate-500 text-center">Barrio</TableHead>
-                  <TableHead className="font-medium text-slate-500 text-center">Estaca</TableHead>
-                  <TableHead className="font-medium text-slate-500 text-center">Comité</TableHead>
-                  <TableHead className="font-medium text-slate-500 text-center">Turnos</TableHead>
-                  <TableHead className="font-medium text-slate-500 text-center">Confiabilidad</TableHead>
-                  <TableHead className="font-medium text-slate-500 text-center">Contacto</TableHead>
-                  <TableHead className="font-medium text-slate-500 text-center w-12 pr-8">Acciones</TableHead>
+                  <TableHead className="font-medium text-text-dim pl-8">Nombre y Apellido</TableHead>
+                  <TableHead className="font-medium text-text-dim text-center">Barrio</TableHead>
+                  <TableHead className="font-medium text-text-dim text-center">Estaca</TableHead>
+                  <TableHead className="font-medium text-text-dim text-center">Comité</TableHead>
+                  <TableHead className="font-medium text-text-dim text-center">Turnos</TableHead>
+                  <TableHead className="font-medium text-text-dim text-center">Confiabilidad</TableHead>
+                  <TableHead className="font-medium text-text-dim text-center">Contacto</TableHead>
+                  <TableHead className="font-medium text-text-dim text-center w-12 pr-8">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -596,28 +596,28 @@ export default function VolunteersPage() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="border-slate-200 hover:bg-slate-50 transition-colors"
+                        className="border-border hover:bg-dark3 transition-colors"
                       >
-                        <TableCell className="font-bold text-slate-800 pl-8">{vol.name}</TableCell>
-                        <TableCell className="text-slate-800 text-center">{vol.ward}</TableCell>
-                        <TableCell className="text-slate-500 text-center">{vol.stake}</TableCell>
+                        <TableCell className="font-bold text-text pl-8">{vol.name}</TableCell>
+                        <TableCell className="text-text text-center">{vol.ward}</TableCell>
+                        <TableCell className="text-text-dim text-center">{vol.stake}</TableCell>
                         <TableCell className="text-center">
-                          <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
+                          <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5 border", getCommitteeColor(vol.committee))}>
                             {vol.committee}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
-                          <Badge variant="secondary" className="bg-slate-100 text-slate-800 border-slate-200 font-medium">
+                          <Badge variant="secondary" className="bg-dark3 text-text border-none font-medium">
                             {vol.shifts} {vol.shifts === 1 ? 'turno' : 'turnos'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
                           {vol.shifts === 0 ? (
-                            <span className="text-sm text-slate-500">N/A</span>
+                            <span className="text-sm text-text-dim">N/A</span>
                           ) : (
                             <div className="flex items-center justify-center gap-2">
-                              <div className={`w-1.5 h-1.5 rounded-full ${vol.reliability >= 80 ? 'bg-[#6dd230]' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
-                              <span className="text-sm font-bold text-slate-700 tabular-nums">{vol.reliability}%</span>
+                              <div className={`w-1.5 h-1.5 rounded-full ${vol.reliability >= 80 ? 'bg-accent' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
+                              <span className="text-sm font-bold text-text tabular-nums">{vol.reliability}%</span>
                             </div>
                           )}
                         </TableCell>
@@ -626,7 +626,7 @@ export default function VolunteersPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-[#4d7cfe] hover:bg-slate-100 hover:text-[#4d7cfe] transition-all active:scale-90"
+                              className="h-8 w-8 text-[#4d7cfe] hover:bg-dark3 hover:text-[#4d7cfe] transition-all active:scale-90"
                               title="WhatsApp"
                               onClick={() => window.open(`https://wa.me/${vol.phone.replace(/\s+/g, '')}`, '_blank')}
                             >
@@ -635,7 +635,7 @@ export default function VolunteersPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-[#4d7cfe] hover:bg-slate-100 hover:text-[#4d7cfe] transition-all active:scale-90"
+                              className="h-8 w-8 text-[#4d7cfe] hover:bg-dark3 hover:text-[#4d7cfe] transition-all active:scale-90"
                               title="Llamar"
                               onClick={() => window.location.href = `tel:${vol.phone.replace(/\s+/g, '')}`}
                             >
@@ -647,29 +647,29 @@ export default function VolunteersPage() {
                           <DropdownMenu>
                             <DropdownMenuTrigger
                               render={
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-0 transition-all active:scale-90">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-text-dim hover:bg-dark3 hover:text-text focus-visible:ring-0 transition-all active:scale-90">
                                   <MoreHorizontal className="h-4 w-4" />
                                 </Button>
                               }
                             />
-                            <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[140px] p-1 rounded-sm shadow-md">
-                              <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-2" onClick={() => handleEditClick(vol)}>
-                                <span className="material-symbols-outlined text-[18px]">edit</span>
-                                Editar Perfil
+                            <DropdownMenuContent align="end" className="bg-dark3 border-border text-text min-w-[160px] p-1 rounded-sm shadow-md">
+                              <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleEditClick(vol)}>
+                                <span className="material-symbols-outlined text-[20px] text-text-dim">edit</span>
+                                <span className="font-medium">Editar Perfil</span>
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-2" onClick={() => handleResetPin(vol)}>
-                                <span className="material-symbols-outlined text-[18px]">lock_reset</span>
-                                Resetear PIN
+                              <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleResetPin(vol)}>
+                                <span className="material-symbols-outlined text-[20px] text-text-dim">lock_reset</span>
+                                <span className="font-medium">Resetear PIN</span>
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                className="cursor-pointer text-red hover:bg-red-50 hover:text-red rounded-sm focus:bg-red-50 focus:text-red transition-colors flex items-center gap-2"
+                                className="py-2.5 cursor-pointer text-red hover:bg-red-faint hover:text-red rounded-sm focus:bg-red-faint focus:text-red transition-colors flex items-center gap-3"
                                 onClick={() => {
                                   setVolunteerToArchive(vol);
                                   setIsArchiveModalOpen(true);
                                 }}
                               >
-                                <span className="material-symbols-outlined text-[18px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
-                                {vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
+                                <span className="material-symbols-outlined text-[20px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
+                                <span className="font-medium">{vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}</span>
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -678,7 +678,7 @@ export default function VolunteersPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={8} className="h-32 text-center text-slate-500">
+                      <TableCell colSpan={8} className="h-32 text-center text-text-dim">
                         No se encontraron voluntarios con esos términos.
                       </TableCell>
                     </TableRow>
@@ -689,7 +689,7 @@ export default function VolunteersPage() {
           </div>
 
           {/* Vista Mobile/Tablet: Tarjetas Expandibles */}
-          <div className="lg:hidden h-full flex flex-col bg-slate-50">
+          <div className="lg:hidden h-full flex flex-col bg-dark3">
             <div className="flex-1 overflow-y-auto">
               <AnimatePresence mode="popLayout">
                 {currentVolunteers.length > 0 ? (
@@ -701,32 +701,32 @@ export default function VolunteersPage() {
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       className={cn(
-                        "mb-px bg-white border-b border-slate-100 transition-all duration-200",
+                        "mb-px bg-dark2 border-b border-border transition-all duration-200",
                         expandedId === vol.id && "ring-1 ring-[#4d7cfe]/20 shadow-sm z-10"
                       )}
                     >
                       <div
-                        className="p-4 flex items-center justify-between cursor-pointer active:bg-slate-50"
+                        className="p-4 flex items-center justify-between cursor-pointer active:bg-dark3"
                         onClick={() => setExpandedId(expandedId === vol.id ? null : vol.id)}
                       >
                         <div className="flex items-center gap-3 overflow-hidden">
-                          <div className={`w-2 h-2 rounded-full shrink-0 ${vol.reliability >= 80 ? 'bg-[#6dd230]' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${vol.reliability >= 80 ? 'bg-accent' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
                           <div className="flex flex-col min-w-0">
-                            <span className="font-bold text-slate-800 text-[15px] truncate">{vol.name}</span>
+                            <span className="font-bold text-text text-[15px] truncate">{vol.name}</span>
                             <div className="flex mt-0.5">
-                              <Badge variant="outline" className={cn("font-bold px-1.5 py-0 text-[9px] h-4 uppercase tracking-tighter", getCommitteeColor(vol.committee))}>
+                              <Badge variant="outline" className={cn("font-bold px-1.5 py-0 text-[9px] h-4 uppercase tracking-tighter border", getCommitteeColor(vol.committee))}>
                                 {vol.committee}
                               </Badge>
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0 ml-2">
-                          <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none font-bold text-[10px] px-1.5 py-0.5">
+                          <Badge variant="secondary" className="bg-dark3 text-text-dim border-none font-bold text-[10px] px-1.5 py-0.5">
                             {vol.shifts} {vol.shifts === 1 ? 'T' : 'Ts'}
                           </Badge>
                           <motion.span
                             animate={{ rotate: expandedId === vol.id ? 180 : 0 }}
-                            className="material-symbols-outlined text-slate-300 text-[20px]"
+                            className="material-symbols-outlined text-text-dim text-[20px]"
                           >
                             expand_more
                           </motion.span>
@@ -739,22 +739,22 @@ export default function VolunteersPage() {
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: "auto", opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
-                            className="overflow-hidden border-t border-slate-50"
+                            className="overflow-hidden border-t border-border"
                           >
                             <div className="p-4 pt-2 space-y-4">
-                              <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-xl">
+                              <div className="grid grid-cols-2 gap-4 p-3 bg-dark3 rounded-xl">
                                 <div className="space-y-0.5">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Barrio / Estaca</span>
-                                  <p className="text-xs font-bold text-slate-700 leading-tight">
+                                  <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Barrio / Estaca</span>
+                                  <p className="text-xs font-bold text-text leading-tight">
                                     {vol.ward || '—'} <br />
-                                    <span className="text-slate-400 font-medium">{vol.stake || '—'}</span>
+                                    <span className="text-text-dim font-medium">{vol.stake || '—'}</span>
                                   </p>
                                 </div>
                                 <div className="space-y-0.5">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Confiabilidad</span>
+                                  <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Confiabilidad</span>
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-sm font-bold text-slate-800">{vol.reliability}%</span>
-                                    <span className="text-[10px] text-slate-400 font-medium">del puntaje</span>
+                                    <span className="text-sm font-bold text-text">{vol.reliability}%</span>
+                                    <span className="text-[10px] text-text-dim font-medium">del puntaje</span>
                                   </div>
                                 </div>
                               </div>
@@ -762,7 +762,7 @@ export default function VolunteersPage() {
                               <div className="flex items-center gap-2">
                                 <Button
                                   variant="outline"
-                                  className="flex-1 h-11 gap-2 text-[#4d7cfe] border-slate-200 bg-white font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
+                                  className="flex-1 h-11 gap-2 text-[#4d7cfe] border-border bg-dark2 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     window.open(`https://wa.me/${vol.phone.replace(/\s+/g, '')}`, '_blank');
@@ -773,7 +773,7 @@ export default function VolunteersPage() {
                                 </Button>
                                 <Button
                                   variant="outline"
-                                  className="flex-1 h-11 gap-2 text-[#4d7cfe] border-slate-200 bg-white font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
+                                  className="flex-1 h-11 gap-2 text-[#4d7cfe] border-border bg-dark2 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     window.location.href = `tel:${vol.phone.replace(/\s+/g, '')}`;
@@ -785,22 +785,22 @@ export default function VolunteersPage() {
                                 <DropdownMenu>
                                   <DropdownMenuTrigger
                                     render={
-                                      <Button variant="ghost" size="icon" className="h-11 w-11 bg-slate-100 text-slate-600 rounded-xl shrink-0">
+                                      <Button variant="ghost" size="icon" className="h-11 w-11 bg-dark3 text-text-dim hover:text-text rounded-xl shrink-0 border border-border">
                                         <MoreHorizontal className="h-4 w-4" />
                                       </Button>
                                     }
                                   />
-                                  <DropdownMenuContent align="end" className="bg-white border-slate-200 text-slate-800 min-w-[160px] p-1 rounded-sm shadow-md">
-                                    <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-3" onClick={() => handleEditClick(vol)}>
-                                      <span className="material-symbols-outlined text-[20px] text-slate-400">edit</span>
+                                  <DropdownMenuContent align="end" className="bg-dark3 border-border text-text min-w-[160px] p-1 rounded-sm shadow-md">
+                                    <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleEditClick(vol)}>
+                                      <span className="material-symbols-outlined text-[20px] text-text-dim">edit</span>
                                       <span className="font-medium">Editar Perfil</span>
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-slate-100 rounded-sm focus:bg-slate-100 focus:text-slate-800 transition-colors flex items-center gap-3" onClick={() => handleResetPin(vol)}>
-                                      <span className="material-symbols-outlined text-[20px] text-slate-400">lock_reset</span>
+                                    <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleResetPin(vol)}>
+                                      <span className="material-symbols-outlined text-[20px] text-text-dim">lock_reset</span>
                                       <span className="font-medium">Resetear PIN</span>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
-                                      className="py-2.5 cursor-pointer text-red hover:bg-red-50 hover:text-red rounded-sm focus:bg-red-50 focus:text-red transition-colors flex items-center gap-3"
+                                      className="py-2.5 cursor-pointer text-red hover:bg-red-faint hover:text-red rounded-sm focus:bg-red-faint focus:text-red transition-colors flex items-center gap-3"
                                       onClick={() => {
                                         setVolunteerToArchive(vol);
                                         setIsArchiveModalOpen(true);
@@ -820,11 +820,11 @@ export default function VolunteersPage() {
                   ))
                 ) : (
                   <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-300">
+                    <div className="w-16 h-16 bg-dark3 border border-border rounded-full flex items-center justify-center mb-4 text-text-dim">
                       <span className="material-symbols-outlined text-[32px]">person_off</span>
                     </div>
-                    <h3 className="font-bold text-slate-800 mb-1">No se encontraron voluntarios</h3>
-                    <p className="text-sm text-slate-400">Prueba ajustando los filtros o el término de búsqueda.</p>
+                    <h3 className="font-bold text-text mb-1">No se encontraron voluntarios</h3>
+                    <p className="text-sm text-text-dim">Prueba ajustando los filtros o el término de búsqueda.</p>
                   </div>
                 )}
               </AnimatePresence>
@@ -832,8 +832,8 @@ export default function VolunteersPage() {
           </div>
         </div>
         {totalPages > 1 && (
-          <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-            <p className="text-xs text-slate-500 font-medium text-center sm:text-left">
+          <div className="bg-dark3 border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+            <p className="text-xs text-text-dim font-medium text-center sm:text-left">
               Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, filteredVolunteers.length)} de {filteredVolunteers.length}
             </p>
             <div className="flex items-center gap-2">
@@ -842,11 +842,11 @@ export default function VolunteersPage() {
                 size="sm"
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={safeCurrentPage === 1}
-                className="h-8 text-xs font-bold"
+                className="h-8 text-xs font-bold border-border text-text hover:bg-dark2"
               >
                 Anterior
               </Button>
-              <div className="text-xs font-bold text-slate-600 px-2">
+              <div className="text-xs font-bold text-text-dim px-2">
                 {safeCurrentPage} / {totalPages}
               </div>
               <Button
@@ -854,7 +854,7 @@ export default function VolunteersPage() {
                 size="sm"
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={safeCurrentPage === totalPages}
-                className="h-8 text-xs font-bold"
+                className="h-8 text-xs font-bold border-border text-text hover:bg-dark2"
               >
                 Siguiente
               </Button>
@@ -867,12 +867,12 @@ export default function VolunteersPage() {
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetContent
           side="right"
-          className="bg-white text-slate-800 border-l border-slate-200 p-0 overflow-y-auto w-full sm:w-[620px] sm:max-w-[95vw]"
+          className="bg-dark2 text-text border-l border-border p-0 overflow-y-auto w-full sm:w-[40vw] sm:max-w-[95vw]"
         >
           {editingVolunteer && (
             <div className="p-0 space-y-0">
               {/* Identity Header (High End) */}
-              <div className="bg-slate-900 px-8 py-10 text-white relative overflow-hidden">
+              <div className="bg-dark2 px-8 py-10 text-white relative overflow-hidden">
                 <div className="relative z-10">
                   <div className="flex items-center gap-3 mb-6">
                     <div className="w-12 h-12 bg-[#4d7cfe] rounded-2xl flex items-center justify-center shadow-lg shadow-[#4d7cfe]/30">
@@ -882,13 +882,13 @@ export default function VolunteersPage() {
                   <h2 className="tracking-tight text-white mb-2">{editingVolunteer.name}</h2>
                   <div className="flex items-center gap-6 mt-4">
                     <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[18px] text-slate-400">corporate_fare</span>
-                      <span className="text-sm font-medium text-slate-300">{editingVolunteer.committee}</span>
+                      <span className="material-symbols-outlined text-[18px] text-text-dim">corporate_fare</span>
+                      <span className="text-sm font-medium text-text-dim">{editingVolunteer.committee}</span>
                     </div>
-                    <div className="w-px h-4 bg-white/10" />
+                    <div className="w-px h-4 bg-dark2/10" />
                     <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[18px] text-slate-400">call</span>
-                      <span className="text-sm font-medium text-slate-300">{editingVolunteer.phone}</span>
+                      <span className="material-symbols-outlined text-[18px] text-text-dim">call</span>
+                      <span className="text-sm font-medium text-text-dim">{editingVolunteer.phone}</span>
                     </div>
                   </div>
                 </div>
@@ -898,18 +898,18 @@ export default function VolunteersPage() {
 
               <div className="p-8 space-y-10">
                 {/* Metadata Grid */}
-                <div className="grid grid-cols-3 gap-4 p-6 bg-slate-50 border border-slate-200 rounded-3xl">
+                <div className="grid grid-cols-3 gap-4 p-6 bg-dark3 border border-border rounded-3xl">
                   <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Barrio</p>
-                    <span className="text-sm font-bold text-slate-800 truncate block" title={editingVolunteer.ward}>{editingVolunteer.ward || '—'}</span>
+                    <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Barrio</p>
+                    <span className="text-sm font-bold text-text truncate block" title={editingVolunteer.ward}>{editingVolunteer.ward || '—'}</span>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estaca</p>
-                    <span className="text-sm font-bold text-slate-800 truncate block" title={editingVolunteer.stake}>{editingVolunteer.stake || '—'}</span>
+                    <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Estaca</p>
+                    <span className="text-sm font-bold text-text truncate block" title={editingVolunteer.stake}>{editingVolunteer.stake || '—'}</span>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Edad</p>
-                    <span className="text-sm font-bold text-slate-800">{editingVolunteer.age ? `${editingVolunteer.age} años` : '—'}</span>
+                    <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Edad</p>
+                    <span className="text-sm font-bold text-text">{editingVolunteer.age ? `${editingVolunteer.age} años` : '—'}</span>
                   </div>
                 </div>
 
@@ -917,8 +917,8 @@ export default function VolunteersPage() {
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
-                      <h3 className="font-bold text-slate-900 leading-none">Cronograma de Servicio</h3>
-                      <p className="text-sm font-medium text-slate-400">Gestión de disponibilidad y asignaciones.</p>
+                      <h3 className="font-bold text-text leading-none">Cronograma de Servicio</h3>
+                      <p className="text-sm font-medium text-text-dim">Gestión de disponibilidad y asignaciones.</p>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -928,7 +928,7 @@ export default function VolunteersPage() {
                           Confirmar Cambios
                         </Button>
                       ) : (
-                        <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} variant="outline" className="h-10 border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl font-bold transition-all active:scale-[0.97]">
+                        <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} variant="outline" className="h-10 border-border hover:bg-dark3 text-text rounded-xl font-bold transition-all active:scale-[0.97]">
                           Ajustar Turnos
                         </Button>
                       )}
@@ -941,17 +941,17 @@ export default function VolunteersPage() {
                     const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
                     return (
                       <div className="grid grid-cols-3 gap-4">
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                          <p className="text-2xl font-bold text-slate-900 tabular-nums leading-none mb-1">{totalTurnos}</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Turnos</p>
+                        <div className="bg-dark2 border border-border rounded-2xl p-5 shadow-sm">
+                          <p className="text-2xl font-bold text-text tabular-nums leading-none mb-1">{totalTurnos}</p>
+                          <p className="text-[10px] text-text-dim font-bold uppercase tracking-widest">Turnos</p>
                         </div>
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                          <p className="text-2xl font-bold text-slate-900 tabular-nums leading-none mb-1">{diasCubiertos}</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Días</p>
+                        <div className="bg-dark2 border border-border rounded-2xl p-5 shadow-sm">
+                          <p className="text-2xl font-bold text-text tabular-nums leading-none mb-1">{diasCubiertos}</p>
+                          <p className="text-[10px] text-text-dim font-bold uppercase tracking-widest">Días</p>
                         </div>
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm border-b-2 border-b-accent">
+                        <div className="bg-dark2 border border-border rounded-2xl p-5 shadow-sm border-b-2 border-b-accent">
                           <p className="text-2xl font-bold text-accent tabular-nums leading-none mb-1">{editingVolunteer.reliability}%</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Confiab.</p>
+                          <p className="text-[10px] text-text-dim font-bold uppercase tracking-widest">Confiab.</p>
                         </div>
                       </div>
                     );
@@ -970,18 +970,18 @@ export default function VolunteersPage() {
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1 + idx * 0.03 }}
                           className={`group border rounded-3xl overflow-hidden transition-all duration-300 ${hasShifts || isEditingShifts
-                              ? 'border-slate-200 bg-white shadow-sm'
-                              : 'border-slate-100 bg-slate-50/50 opacity-40 grayscale-[0.5]'
+                              ? 'border-border bg-dark2 shadow-sm'
+                              : 'border-border bg-dark3 opacity-40 grayscale-[0.5]'
                             }`}
                         >
                           <div className="flex flex-col sm:flex-row sm:items-stretch">
                             {/* Date Panel */}
-                            <div className={`shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-4 px-4 border-b sm:border-b-0 sm:border-r transition-colors ${hasShifts ? 'bg-[#4d7cfe]/5 border-[#4d7cfe]/10' : 'bg-slate-50 border-slate-100'
+                            <div className={`shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-4 px-4 border-b sm:border-b-0 sm:border-r transition-colors ${hasShifts ? 'bg-[#4d7cfe]/5 border-[#4d7cfe]/10' : 'bg-dark3 border-border'
                               }`}>
-                              <p className={`text-[10px] font-bold uppercase tracking-widest leading-none mb-1 ${hasShifts ? 'text-[#4d7cfe]' : 'text-slate-400'}`}>
+                              <p className={`text-[10px] font-bold uppercase tracking-widest leading-none mb-1 ${hasShifts ? 'text-[#4d7cfe]' : 'text-text-dim'}`}>
                                 {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
                               </p>
-                              <p className="text-2xl font-bold text-slate-900 leading-tight">{d.dateNum}</p>
+                              <p className="text-2xl font-bold text-text leading-tight">{d.dateNum}</p>
                             </div>
 
                             {/* Shifts Grid (The Shells) */}
@@ -997,12 +997,12 @@ export default function VolunteersPage() {
                                     onClick={() => toggleShift(d.key, t)}
                                     className={`relative flex flex-col items-center justify-center py-2.5 rounded-xl border transition-all ${active
                                         ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md shadow-blue-500/20'
-                                        : 'bg-white border-slate-100 text-slate-300 hover:border-slate-300'
+                                        : 'bg-dark2 border-border text-text-dim hover:border-border'
                                       } ${isEditingShifts ? 'cursor-pointer active:scale-[0.92]' : 'cursor-default'
                                       }`}
                                   >
                                     <span className="text-xs font-bold">{t}</span>
-                                    <span className={`text-[8px] font-bold uppercase tracking-tighter mt-0.5 ${active ? 'text-white/80' : 'text-slate-300'}`}>
+                                    <span className={`text-[8px] font-bold uppercase tracking-tighter mt-0.5 ${active ? 'text-white/80' : 'text-text-dim'}`}>
                                       {shiftInfo?.time.split(' - ')[0]}
                                     </span>
                                   </button>
@@ -1025,10 +1025,10 @@ export default function VolunteersPage() {
       <Sheet open={isAddSheetOpen} onOpenChange={setIsAddSheetOpen}>
         <SheetContent
           side="right"
-          className="bg-white text-slate-800 border-l border-slate-200 overflow-hidden w-full sm:w-[500px] sm:max-w-[95vw] p-0 flex flex-col"
+          className="bg-dark2 text-text border-l border-border overflow-hidden w-full sm:w-[40vw] sm:max-w-[95vw] p-0 flex flex-col"
         >
           <SheetHeader className="p-6 pb-2 shrink-0">
-            <SheetTitle className="text-xl font-bold text-slate-800">Añadir Voluntario</SheetTitle>
+            <SheetTitle className="text-xl font-bold text-text">Añadir Voluntario</SheetTitle>
           </SheetHeader>
           <form
             id="add-volunteer-form"
@@ -1036,19 +1036,19 @@ export default function VolunteersPage() {
             className="flex-1 overflow-y-auto px-6 space-y-6 pb-24"
           >
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-slate-800">Nombre y Apellido</label>
+              <label className="text-sm font-medium text-text">Nombre y Apellido</label>
               <Input
                 required
                 minLength={3}
-                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint"
+                className="h-10 bg-dark3 border-border focus:ring-gold-faint"
                 placeholder="Ej. Juan Pérez"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
               />
-              <p className="text-[11px] text-slate-500">Asegúrate de incluir ambos apellidos si es posible.</p>
+              <p className="text-[11px] text-text-dim">Asegúrate de incluir ambos apellidos si es posible.</p>
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-slate-800">Celular</label>
+              <label className="text-sm font-medium text-text">Celular</label>
               <Input
                 required
                 type="tel"
@@ -1057,35 +1057,35 @@ export default function VolunteersPage() {
                 onKeyPress={(e) => {
                   if (!/[0-9]/.test(e.key)) e.preventDefault();
                 }}
-                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint"
+                className="h-10 bg-dark3 border-border focus:ring-gold-faint"
                 placeholder="Ej. 88888888"
                 value={newPhone}
                 onChange={(e) => setNewPhone(e.target.value)}
               />
-              <p className="text-[11px] text-slate-500">Solo 8 dígitos, sin código de país o espacios.</p>
+              <p className="text-[11px] text-text-dim">Solo 8 dígitos, sin código de país o espacios.</p>
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-slate-800">Estaca</label>
+              <label className="text-sm font-medium text-text">Estaca</label>
               <Input
                 required
-                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint"
+                className="h-10 bg-dark3 border-border focus:ring-gold-faint"
                 placeholder="Ej. Managua Sur"
                 value={newStake}
                 onChange={(e) => setNewStake(e.target.value)}
               />
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-slate-800">Barrio</label>
+              <label className="text-sm font-medium text-text">Barrio</label>
               <Input
                 required
-                className="h-10 bg-slate-50 border-slate-200 focus:ring-gold-faint"
+                className="h-10 bg-dark3 border-border focus:ring-gold-faint"
                 placeholder="Ej. Barrio 1"
                 value={newWard}
                 onChange={(e) => setNewWard(e.target.value)}
               />
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-slate-800">Comité</label>
+              <label className="text-sm font-medium text-text">Comité</label>
               <DataTableFilter
                 title={newCommitteeId ? (committeesList.find(c => c.id === newCommitteeId)?.name || "Comité") : "Selecciona un comité"}
                 options={committeesList.map(c => c.name)}
@@ -1094,7 +1094,7 @@ export default function VolunteersPage() {
                 hideClearButton
                 hideCountBadge
                 isCommitteeFilter
-                className="w-full bg-slate-50 justify-between h-10"
+                className="w-full bg-dark3 justify-between h-10"
                 onChange={(vals) => {
                   if (vals.length === 0) {
                     setNewCommitteeId("");
@@ -1110,8 +1110,8 @@ export default function VolunteersPage() {
           </form>
 
           {/* Footer fijo en la parte inferior */}
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }} className="bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-end gap-3">
-            <Button type="button" variant="outline" className="border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100" onClick={() => setIsAddSheetOpen(false)}>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }} className="bg-dark2 border-t border-border px-6 py-4 flex items-center justify-end gap-3">
+            <Button type="button" variant="outline" className="border-border text-text-dim hover:text-text hover:bg-dark3" onClick={() => setIsAddSheetOpen(false)}>
               Cancelar
             </Button>
             <Button type="submit" form="add-volunteer-form" className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white">
