@@ -109,6 +109,36 @@ const getCommitteeColor = (committee: string) => {
   return 'bg-dark3 text-text-dim border-border';
 };
 
+const getProfileBg = (committee: string) => {
+  if (!committee) return 'bg-[#4fa752]';
+  const comm = committee.toLowerCase();
+  if (comm.includes('seguridad')) return 'bg-[#e94582]';
+  if (comm.includes('guía')) return 'bg-[#4fa752]'; // Match reference image
+  if (comm.includes('historia')) return 'bg-[#3b82f6]';
+  if (comm.includes('traducción')) return 'bg-[#f59e0b]';
+  if (comm.includes('transporte')) return 'bg-[#8b5cf6]';
+  if (comm.includes('auxilios')) return 'bg-[#14b8a6]';
+  return 'bg-[#4fa752]';
+};
+
+// ─── helper: highlight search term ─────────────────────────────────────────
+function HighlightText({ text, term }: { text: string; term: string }) {
+  if (!term.trim()) return <span>{text}</span>;
+  const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts = text.split(regex);
+  return (
+    <span>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <span key={i} style={{ backgroundColor: '#fde047', color: '#111827', borderRadius: '6px', padding: '0 4px', display: 'inline', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone' }}>{part}</span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </span>
+  );
+}
+
 // ─── página ───────────────────────────────────────────────────────────────────
 export default function ShiftsPage() {
   const EVENT_DAYS_RAW = getActiveEventDays();
@@ -501,7 +531,8 @@ export default function ShiftsPage() {
       return null;
     }
 
-    const isOpen = !!expanded[key] || (isFiltering && totalVolsOnDay > 0);
+    // Only open via explicit tap — never auto-open on search
+    const isOpen = !!expanded[key];
 
     const dayIndex = EVENT_DAYS.findIndex(d => d.key === key);
     const bgColors = [
@@ -535,7 +566,7 @@ export default function ShiftsPage() {
                const count = shiftData[t].length;
                
                return (
-                 <div key={t} className={`flex flex-col items-center justify-center px-3 sm:px-4 ${i !== 0 ? 'border-l border-white/20' : ''}`}>
+                 <div key={t} className={`flex flex-col items-center justify-center w-12 sm:w-16 ${i !== 0 ? 'border-l border-white/20' : ''}`}>
                    <span className="text-[16px] font-semibold text-white drop-shadow-sm leading-none">{count}</span>
                    <span className="font-inter text-[10px] font-bold text-white/80 uppercase mt-1 tracking-widest">{t}</span>
                  </div>
@@ -710,21 +741,21 @@ export default function ShiftsPage() {
                 >
                   {/* Header (Like "Finished" and "Match 3...") */}
                   <div className="text-center mt-4 mb-8">
-                    <h3 className="text-[15px] font-medium text-white mb-1 tracking-tight uppercase">
+                    <h3 className="text-drawer-title text-white mb-1">
                       {format(date, "EEEE", { locale: es })} {dateNum} {format(date, "MMM", { locale: es }).replace('.', '')}
                     </h3>
-                    <p className="text-[13px] font-normal text-white/80">Volunteer Manager</p>
+                    <p className="text-drawer-subtitle text-white/80">Volunteer Manager</p>
                   </div>
 
                   {/* Big Scores (1 vs 1) -> Total Vols vs Required */}
-                  <div className="flex items-center justify-between px-4 mb-8">
-                    <div className="flex flex-col items-center">
-                      <span className="text-4xl font-normal text-white tracking-tighter drop-shadow-md">{totalVolsOnDay}</span>
-                      <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest mt-2">Cubiertos</span>
+                  <div className="flex items-center w-full px-4 mb-8">
+                    <div className="flex flex-col items-center flex-1">
+                      <span className="text-drawer-kpi-value text-white drop-shadow-md">{totalVolsOnDay}</span>
+                      <span className="text-drawer-kpi-label text-white/70 mt-2">Cubiertos</span>
                     </div>
-                    <div className="text-xl font-black text-white/40 mb-4">-</div>
-                    <div className="flex flex-col items-center">
-                      <span className="text-4xl font-normal text-white tracking-tighter drop-shadow-md">
+                    <div className="text-xl font-black text-white/40 mb-4 px-2">-</div>
+                    <div className="flex flex-col items-center flex-1">
+                      <span className="text-drawer-kpi-value text-white drop-shadow-md">
                         {(['T1', 'T2', 'T3', 'T4'] as const).reduce((acc, t) => {
                           let minReq = 0;
                           if (activeCommittee) minReq = committeeRequirements[activeCommittee]?.[t] ?? 0;
@@ -732,7 +763,7 @@ export default function ShiftsPage() {
                           return acc + minReq;
                         }, 0)}
                       </span>
-                      <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest mt-2">Requeridos</span>
+                      <span className="text-drawer-kpi-label text-white/70 mt-2">Requeridos</span>
                     </div>
                   </div>
 
@@ -781,7 +812,7 @@ export default function ShiftsPage() {
                                   {/* Turno Header */}
                                   <div className="flex items-start justify-between mb-2 border-b border-white/10 pb-1.5">
                                     <div className="min-w-0 pr-1">
-                                      <p className="text-[11px] font-bold text-white uppercase tracking-widest leading-none mb-1">{t}</p>
+                                      <p className="text-drawer-label text-white mb-1">{t}</p>
                                       <p className="font-inter text-[8px] text-white/60 font-medium tracking-tight whitespace-nowrap truncate">{info?.time}</p>
                                     </div>
                                     <span className="font-inter text-[10px] font-medium text-white bg-white/10 px-1.5 py-0.5 rounded-md leading-none flex items-center justify-center shrink-0">
@@ -790,20 +821,25 @@ export default function ShiftsPage() {
                                   </div>
                                   
                                   {/* Vols List */}
-                                  <div className={`flex flex-col flex-1 gap-[3px] max-h-[120px] ${isShiftExpanded ? 'overflow-y-auto scrollbar-hide pr-1' : 'overflow-hidden'}`}>
+                                  <div className="flex flex-col flex-1 gap-[3px]">
                                     {vols.length === 0 ? (
                                       <p className="text-[10px] text-white/40 italic py-1 text-center">Sin asignaciones</p>
                                     ) : (
-                                      vols.map(vol => (
-                                        <div 
-                                          key={vol.id} 
-                                          className="flex items-center gap-1.5 cursor-pointer hover:bg-white/10 p-1 -mx-1 rounded-md transition-colors" 
-                                          onClick={(e) => { e.stopPropagation(); toggleDay(key); handleEditClick(vol); }}
-                                        >
-                                          <div className="w-1.5 h-1.5 bg-white/60 rounded-full shrink-0" />
-                                          <span className="volunteer-name-text text-white/90 truncate">{vol.name}</span>
-                                        </div>
-                                      ))
+                                        (isShiftExpanded ? vols : vols.slice(0, limit)).map(vol => {
+                                          const isMatch = searchTerm.trim() !== '' && vol.name.toLowerCase().includes(searchTerm.toLowerCase());
+                                          return (
+                                            <div 
+                                              key={vol.id} 
+                                              className={`flex items-center gap-1.5 cursor-pointer p-1.5 rounded-xl transition-colors ${isMatch ? 'bg-yellow-400/20 ring-1 ring-yellow-300/40 hover:bg-yellow-400/30' : 'hover:bg-white/10'}`}
+                                              onClick={(e) => { e.stopPropagation(); toggleDay(key); handleEditClick(vol); }}
+                                            >
+                                              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMatch ? 'bg-yellow-300' : 'bg-white/60'}`} />
+                                              <span className="volunteer-name-text text-white/90 min-w-0 flex-1" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                <HighlightText text={vol.name} term={searchTerm} />
+                                              </span>
+                                            </div>
+                                          );
+                                        })
                                     )}
                                   </div>
 
@@ -854,7 +890,7 @@ export default function ShiftsPage() {
     >
 
       {/* Sticky Header matching image design */}
-      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4">
+      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto">
         <motion.div variants={itemVariants} className="w-full flex items-center justify-between">
           <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight">Turnos</h1>
           <div className="flex bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10">
@@ -864,7 +900,7 @@ export default function ShiftsPage() {
         </motion.div>
 
         {/* Search Input matching image */}
-        <motion.div variants={itemVariants} className="w-full">
+        <motion.div variants={itemVariants} className="w-full relative z-10">
           <div className="relative w-full">
             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
               <span className="material-symbols-outlined text-white/70 text-[20px]">search</span>
@@ -872,10 +908,19 @@ export default function ShiftsPage() {
             <input
               type="text"
               placeholder="Buscar turnos o grupos"
-              className="w-full bg-[#fff6] border border-black/10 dark:border-white/10 text-white placeholder:text-white/70 rounded-full pl-12 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
+              className="w-full bg-[#fff6] border border-black/10 dark:border-white/10 text-white placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              autoComplete="off"
             />
+            {searchTerm.trim() !== '' && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-white/60 hover:text-white transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            )}
           </div>
         </motion.div>
       </div>
@@ -892,164 +937,186 @@ export default function ShiftsPage() {
         })}
       </div>
 
-      {/* Editor Lateral */}
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent
-          side="right"
-          style={{ width: '620px', maxWidth: '95vw' }}
-          className="bg-dark2 text-text border-l border-border p-0 overflow-y-auto"
+      {/* Profile Bottom Drawer */}
+      <div className={`md:hidden fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${isSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        {/* Backdrop */}
+        <div 
+          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isSheetOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setIsSheetOpen(false)}
+        />
+
+        {/* Drawer Content */}
+        <div 
+          id="drawer-profile"
+          className={`relative w-full h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
+          style={{ willChange: 'transform' }}
         >
-          {editingVolunteer && (
-            <div className="p-0 space-y-0">
-              {/* Identity Header (High End) */}
-              <div className="bg-dark2 px-8 py-10 text-white relative overflow-hidden">
-                <div className="relative z-10">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-12 h-12 bg-[#4d7cfe] rounded-2xl flex items-center justify-center shadow-lg shadow-[#4d7cfe]/30">
-                      <span className="material-symbols-outlined text-[24px]">person</span>
-                    </div>
-                  </div>
-                  <h2 className="tracking-tight text-white mb-2">{editingVolunteer.name}</h2>
-                  <div className="flex items-center gap-6 mt-4">
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[18px] text-text-dim">corporate_fare</span>
-                      <span className="text-sm font-medium text-text-dim">{editingVolunteer.committee}</span>
-                    </div>
-                    <div className="w-px h-4 bg-dark2/10" />
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[18px] text-text-dim">call</span>
-                      <span className="text-sm font-medium text-text-dim">{editingVolunteer.phone}</span>
-                    </div>
-                  </div>
+          {/* Handle */}
+          <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+          
+          <div 
+            className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
+            onTouchStart={(e) => {
+              const drawer = document.getElementById('drawer-profile');
+              if (!drawer) return;
+              drawer.dataset.startY = e.touches[0].clientY.toString();
+              drawer.style.transition = 'none';
+            }}
+            onTouchMove={(e) => {
+              const drawer = document.getElementById('drawer-profile');
+              if (!drawer) return;
+              const startY = parseFloat(drawer.dataset.startY || '0');
+              const currentY = e.touches[0].clientY;
+              const deltaY = currentY - startY;
+
+              if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
+                drawer.style.transform = `translateY(${deltaY}px)`;
+                drawer.dataset.swiping = 'true';
+              }
+            }}
+            onTouchEnd={(e) => {
+              const drawer = document.getElementById('drawer-profile');
+              if (!drawer) return;
+              
+              drawer.style.transition = 'transform 0.3s ease-out';
+              
+              if (drawer.dataset.swiping === 'true') {
+                const startY = parseFloat(drawer.dataset.startY || '0');
+                const deltaY = e.changedTouches[0].clientY - startY;
+                
+                drawer.dataset.swiping = 'false';
+                
+                if (deltaY > 150) {
+                  setIsSheetOpen(false);
+                  setTimeout(() => { drawer.style.transform = ''; }, 300);
+                } else {
+                  drawer.style.transform = `translateY(0)`;
+                }
+              } else {
+                drawer.style.transform = '';
+              }
+            }}
+          >
+            {editingVolunteer && (
+              <>
+                {/* Header Profile Info */}
+                <div className="text-center mt-4 mb-8 px-4">
+                  <h3 className="text-drawer-title text-white mb-1">
+                    {editingVolunteer.name}
+                  </h3>
+                  <p className="text-drawer-subtitle text-white/80">
+                    {editingVolunteer.committee} • {editingVolunteer.ward}
+                  </p>
                 </div>
-                {/* Decoration */}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-[#4d7cfe]/10 rounded-full blur-[80px] -mr-32 -mt-32" />
-              </div>
 
-              <div className="p-8 space-y-10">
-                {/* Metadata Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-6 bg-dark3 border border-border rounded-3xl">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Barrio</p>
-                    <span className="text-sm font-bold text-text truncate block" title={editingVolunteer.ward}>{editingVolunteer.ward || '—'}</span>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Estaca</p>
-                    <span className="text-sm font-bold text-text truncate block" title={editingVolunteer.stake}>{editingVolunteer.stake || '—'}</span>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Edad</p>
-                    <span className="text-sm font-bold text-text">{editingVolunteer.age ? `${editingVolunteer.age} años` : '—'}</span>
-                  </div>
-                </div>
-
-                {/* Resumen de Turnos Section */}
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <h3 className="font-bold text-text leading-none">Cronograma de Servicio</h3>
-                      <p className="text-sm font-medium text-text-dim">Gestión de disponibilidad y asignaciones.</p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      {saved && <span className="text-[11px] text-accent font-bold animate-pulse">✓ Guardado</span>}
-                      {isEditingShifts ? (
-                        <Button onClick={handleSaveShifts} className="h-10 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-xl shadow-lg shadow-blue-500/15 font-bold transition-all active:scale-[0.97]">
-                          Confirmar Cambios
-                        </Button>
-                      ) : (
-                        <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} variant="outline" className="h-10 border-border hover:bg-dark3 text-text rounded-xl font-bold transition-all active:scale-[0.97]">
-                          Ajustar Turnos
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Stats Bento */}
+                {/* Top Stats Row (Points/Wins/Losses/Draws equivalent) */}
+                <div className="flex items-center mb-8 -mx-4">
                   {(() => {
                     const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
                     const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
                     return (
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="bg-dark2 border border-border rounded-2xl p-5 shadow-sm">
-                          <p className="text-2xl font-bold text-text tabular-nums leading-none mb-1">{totalTurnos}</p>
-                          <p className="text-[10px] text-text-dim font-bold uppercase tracking-widest">Turnos</p>
+                      <>
+                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{totalTurnos}</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Turnos</span>
                         </div>
-                        <div className="bg-dark2 border border-border rounded-2xl p-5 shadow-sm">
-                          <p className="text-2xl font-bold text-text tabular-nums leading-none mb-1">{diasCubiertos}</p>
-                          <p className="text-[10px] text-text-dim font-bold uppercase tracking-widest">Días</p>
+                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{diasCubiertos}</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Días</span>
                         </div>
-                        <div className="bg-dark2 border border-border rounded-2xl p-5 shadow-sm border-b-2 border-b-accent">
-                          <p className="text-2xl font-bold text-accent tabular-nums leading-none mb-1">{editingVolunteer.reliability}%</p>
-                          <p className="text-[10px] text-text-dim font-bold uppercase tracking-widest">Confiab.</p>
+                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">
+                            {editingVolunteer.reliability}
+                            <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>
+                          </span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Confia.</span>
                         </div>
-                      </div>
+                        <div className="flex flex-col items-center flex-1">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{editingVolunteer.age || '-'}</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Edad</span>
+                        </div>
+                      </>
                     );
                   })()}
+                </div>
 
-                  {/* Timeline with Shells */}
-                  <div className="space-y-4">
-                    {EVENT_DAYS.map((d, idx) => {
+                {/* Squad/Schedule / Day Cards List */}
+                <div className="w-full">
+                  <div className="flex items-center justify-between px-2 mb-4">
+                    <p className="text-drawer-label text-white">Cronograma</p>
+                    
+                    <div className="flex items-center gap-3">
+                      {saved && <span className="text-[11px] text-green-300 font-bold animate-pulse">✓ Listo</span>}
+                      {isEditingShifts ? (
+                        <button onClick={handleSaveShifts} className="h-7 px-4 bg-white hover:bg-white/90 text-black rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
+                          Guardar
+                        </button>
+                      ) : (
+                        <button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-7 px-4 bg-black/20 backdrop-blur-sm border border-white/10 hover:bg-black/30 text-white rounded-full font-bold text-[11px] transition-all active:scale-[0.97]">
+                          Editar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Shifts Content as Day Cards */}
+                  <div className="flex flex-col gap-2 pb-12">
+                    {EVENT_DAYS.map((d, index) => {
                       const dayShifts = shiftsByDay[d.key] || [];
-                      const hasShifts = dayShifts.length > 0;
+                      const bgColors = [
+                        'bg-[#10a562]',
+                        'bg-[#4aa9df]',
+                        'bg-[#f1c130]',
+                        'bg-[#d54134]',
+                        'bg-[#981e32]',
+                        'bg-[#2c44c2]',
+                        'bg-[#f1c130]',
+                        'bg-[#ed1b24]'
+                      ];
+                      const cardBg = bgColors[index % bgColors.length];
 
                       return (
-                        <motion.div
-                          key={d.key}
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.1 + idx * 0.03 }}
-                          className={`group border rounded-3xl overflow-hidden transition-all duration-300 ${hasShifts || isEditingShifts
-                              ? 'border-border bg-dark2 shadow-sm'
-                              : 'border-border bg-dark3 opacity-40 grayscale-[0.5]'
-                            }`}
-                        >
-                          <div className="flex flex-col sm:flex-row sm:items-stretch">
-                            {/* Date Panel */}
-                            <div className={`shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-4 px-4 border-b sm:border-b-0 sm:border-r transition-colors ${hasShifts ? 'bg-[#4d7cfe]/5 border-[#4d7cfe]/10' : 'bg-dark3 border-border'
-                              }`}>
-                              <p className={`text-[10px] font-bold uppercase tracking-widest leading-none mb-1 ${hasShifts ? 'text-[#4d7cfe]' : 'text-text-dim'}`}>
-                                {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
+                        <div key={d.key} className={`${cardBg} rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01]`}>
+                          <div className="w-full flex items-center justify-between px-5 sm:px-6 py-4">
+                            {/* Left: Date */}
+                            <div className="flex-1 min-w-0 pr-4 flex items-center">
+                              <p className="font-inter font-bold text-white text-[13px] drop-shadow-sm truncate capitalize">
+                                {format(d.date, "EEEE d", { locale: es })}
                               </p>
-                              <p className="text-2xl font-bold text-text leading-tight">{d.dateNum}</p>
                             </div>
 
-                            {/* Shifts Grid (The Shells) */}
-                            <div className="flex-1 p-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                              {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                            {/* Right: 4 Columns (T1 to T4) */}
+                            <div className="flex items-center shrink-0 ml-auto">
+                              {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
                                 const active = dayShifts.includes(t);
-                                const shiftInfo = SHIFT_TIMES[parseInt(t[1]) - 1];
-
                                 return (
-                                  <button
+                                  <button 
                                     key={t}
                                     disabled={!isEditingShifts}
                                     onClick={() => toggleShift(d.key, t)}
-                                    className={`relative flex flex-col items-center justify-center py-2.5 rounded-xl border transition-all ${active
-                                        ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md shadow-blue-500/20'
-                                        : 'bg-dark2 border-border text-text-dim hover:border-border'
-                                      } ${isEditingShifts ? 'cursor-pointer active:scale-[0.92]' : 'cursor-default'
-                                      }`}
+                                    className={`flex flex-col items-center justify-center w-12 sm:w-16 h-full ${i !== 0 ? 'border-l border-white/20' : ''} transition-colors ${isEditingShifts ? 'hover:bg-white/20 rounded-lg' : ''} ${active ? 'opacity-100' : 'opacity-50'}`}
                                   >
-                                    <span className="text-xs font-bold">{t}</span>
-                                    <span className={`text-[8px] font-bold uppercase tracking-tighter mt-0.5 ${active ? 'text-white/80' : 'text-text-dim'}`}>
-                                      {shiftInfo?.time.split(' - ')[0]}
+                                    <span className={`text-[16px] font-semibold drop-shadow-sm leading-none ${active ? 'text-white' : 'text-white'}`}>
+                                      {active ? '✓' : '-'}
+                                    </span>
+                                    <span className={`font-inter text-[10px] font-bold uppercase mt-1 tracking-widest ${active ? 'text-white/90' : 'text-white/70'}`}>
+                                      {t}
                                     </span>
                                   </button>
                                 );
                               })}
                             </div>
                           </div>
-                        </motion.div>
+                        </div>
                       );
                     })}
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
 
       <Toast
         message={toast.message}
