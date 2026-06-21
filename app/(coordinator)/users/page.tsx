@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,49 @@ const itemVariants = {
       damping: 30
     }
   }
+};
+
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split("");
+
+const AlphabetScrubber = ({ isMobile }: { isMobile: boolean }) => {
+  const handleDrag = (e: React.TouchEvent | React.MouseEvent) => {
+    e.preventDefault();
+    const y = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    const x = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const elem = document.elementFromPoint(x, y);
+    const letter = elem?.getAttribute('data-letter');
+    if (letter) {
+      const targetId = isMobile ? `letter-mobile-${letter}` : `letter-${letter}`;
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'auto', block: 'center' });
+      }
+    }
+  };
+
+  return (
+    <div 
+      className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center py-2 px-0.5 sm:px-1 bg-dark2/80 backdrop-blur-md rounded-l-xl border-y border-l border-white/10 shadow-xl touch-none"
+      onTouchStart={handleDrag}
+      onTouchMove={handleDrag}
+      onMouseDown={handleDrag}
+      onMouseMove={(e) => e.buttons === 1 && handleDrag(e)}
+    >
+      {ALPHABET.map(letter => (
+        <div 
+          key={letter}
+          data-letter={letter}
+          className="text-[9px] sm:text-[10px] font-bold text-text-dim hover:text-[#4d7cfe] px-1 sm:px-1.5 py-[1px] sm:py-0.5 cursor-pointer select-none transition-colors"
+          onClick={() => {
+            const targetId = isMobile ? `letter-mobile-${letter}` : `letter-${letter}`;
+            document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }}
+        >
+          {letter}
+        </div>
+      ))}
+    </div>
+  );
 };
 
 const COMMITTEES = ['Historia', 'Seguridad', 'Guía', 'Traducción', 'Transporte', 'Primeros Auxilios'];
@@ -82,6 +125,16 @@ interface PlatformUser {
   inviteLink?: string;
   pin?: string;
 }
+
+export const USER_TABLE_STYLES = {
+  name: "font-sans font-normal text-text text-[13px] tracking-wide drop-shadow-sm truncate",
+  phone: "font-mono text-xs text-text-dim",
+  badgeBase: "font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full shrink-0 flex items-center justify-center inline-flex",
+  roleAdmin: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  roleEditor: "bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20",
+  statusActive: "bg-accent/10 border-accent/20 text-accent",
+  statusPending: "bg-white/5 border-white/10 text-text-dim",
+};
 
 const SwipeableUserCard = ({ 
   user, 
@@ -157,28 +210,24 @@ const SwipeableUserCard = ({
         className="relative z-10 p-4 bg-dark2 hover:bg-white/[0.02] active:bg-white/[0.04] transition-colors cursor-pointer border-b border-white/5 flex flex-col gap-1.5 touch-pan-y"
       >
         {/* Name */}
-        <p className="font-sans font-normal text-text text-[13px] tracking-wide drop-shadow-sm truncate">
+        <p className={USER_TABLE_STYLES.name}>
           <HighlightText text={user.name} term={searchTerm} />
         </p>
 
         {/* Phone & Badges Line */}
         <div className="flex items-center justify-between w-full gap-2">
-          <p className="font-mono text-xs text-text-dim shrink-0">{user.phone}</p>
+          <p className={cn(USER_TABLE_STYLES.phone, "shrink-0")}>{user.phone}</p>
           
           <div className="flex items-center gap-1.5 shrink">
-            <Badge variant="outline" className={`font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full shrink-0 ${
-              user.role === 'Admin' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20'
-            }`}>
+            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.role === 'Admin' ? USER_TABLE_STYLES.roleAdmin : USER_TABLE_STYLES.roleEditor)}>
               {user.role}
             </Badge>
             {user.committee && (
-              <Badge variant="outline" className={`font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full shrink-0 ${getCommitteeColor(user.committee)}`}>
+              <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(user.committee))}>
                 {user.committee}
               </Badge>
             )}
-            <Badge variant="outline" className={`font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full shrink-0 ${
-              user.status === 'active' ? 'bg-accent/10 border-accent/20 text-accent' : 'bg-white/5 border-white/10 text-text-dim'
-            }`}>
+            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)}>
               {user.status === 'active' ? 'Activo' : 'Pendiente'}
             </Badge>
           </div>
@@ -198,6 +247,14 @@ export default function UsersPage() {
   const { searchTerm, setSearchTerm } = useSearch();
 
   const [isMobile, setIsMobile] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState<string>('');
+  const [currentUserCommittee, setCurrentUserCommittee] = useState<string>('');
+
+  useEffect(() => {
+    setCurrentUserRole(localStorage.getItem('mock_role') || 'Admin');
+    setCurrentUserCommittee(localStorage.getItem('mock_committee') || '');
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -208,29 +265,7 @@ export default function UsersPage() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(15);
-  const observerRef = useRef<ResizeObserver | null>(null);
-
-  const tableContainerRef = useCallback((node: HTMLDivElement | null) => {
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-    }
-    if (node) {
-      observerRef.current = new ResizeObserver((entries) => {
-        const height = entries[0].contentRect.height;
-        if (height > 42) {
-          const calc = Math.floor((height - 42) / 49); // 42px header, ~49px row
-          setItemsPerPage((prev) => {
-            const next = Math.max(1, calc);
-            return prev !== next ? next : prev;
-          });
-        }
-      });
-      observerRef.current.observe(node);
-    }
-  }, []);
+  // No pagination state needed for infinite scroll
 
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({
     message: '',
@@ -505,16 +540,20 @@ export default function UsersPage() {
       !searchTerm || 
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
       user.phone.includes(searchTerm)
-    );
+    ).sort((a, b) => a.name.localeCompare(b.name));
   }, [users, searchTerm]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filteredUsers.length]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const currentUsers = filteredUsers.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage);
+  const groupedUsers = useMemo(() => {
+    const groups: Record<string, PlatformUser[]> = {};
+    filteredUsers.forEach(u => {
+      let letter = u.name.charAt(0).toUpperCase();
+      if (!/^[A-Z]$/.test(letter)) letter = '#';
+      if (!groups[letter]) groups[letter] = [];
+      groups[letter].push(u);
+    });
+    return groups;
+  }, [filteredUsers]);
+  const sortedLetters = Object.keys(groupedUsers).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
 
   return (
     <motion.div 
@@ -712,8 +751,10 @@ export default function UsersPage() {
           variants={itemVariants} 
           className="bg-dark2 border border-white/10 rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full"
         >
+          <AlphabetScrubber isMobile={isMobile} />
+
           {/* Table view for Desktop (md and up) */}
-          <div className="hidden md:block overflow-auto bg-dark2 flex-1 relative [&>div]:h-full" ref={tableContainerRef}>
+          <div className="hidden md:block overflow-auto bg-dark2 flex-1 relative max-h-[calc(100vh-220px)]">
             <table className="w-full text-sm text-left">
               <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
                 <tr>
@@ -731,75 +772,76 @@ export default function UsersPage() {
                       Cargando usuarios...
                     </td>
                   </tr>
-                ) : currentUsers.length === 0 ? (
+                ) : filteredUsers.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-5 py-8 text-center text-text-dim">
                       No se encontraron usuarios.
                     </td>
                   </tr>
                 ) : (
-                  currentUsers.map(user => (
-                    <tr key={user.id} className="hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-5 py-4">
-                        <p className="font-sans font-normal text-text text-[13px] tracking-wide drop-shadow-sm truncate">
-                          <HighlightText text={user.name} term={searchTerm} />
-                        </p>
-                      </td>
-                      <td className="px-5 py-4 font-mono text-xs text-text-dim">
-                        {user.phone}
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className={`font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border ${
-                            user.role === 'Admin' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20'
-                          }`}>
-                            {user.role}
-                          </Badge>
-                          {user.committee && (
-                            <Badge variant="outline" className={`font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-md ${getCommitteeColor(user.committee)}`}>
-                              {user.committee}
+                  sortedLetters.map(letter => (
+                    <Fragment key={letter}>
+                      {groupedUsers[letter].map((user, index) => (
+                        <tr 
+                          key={user.id} 
+                          id={index === 0 ? `letter-${letter}` : undefined}
+                          className="hover:bg-white/[0.02] transition-colors group"
+                        >
+                          <td className="px-5 py-4">
+                            <p className={USER_TABLE_STYLES.name}>
+                              <HighlightText text={user.name} term={searchTerm} />
+                            </p>
+                          </td>
+                          <td className={cn("px-5 py-4", USER_TABLE_STYLES.phone)}>
+                            {user.phone}
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.role === 'Admin' ? USER_TABLE_STYLES.roleAdmin : USER_TABLE_STYLES.roleEditor)}>
+                                {user.role}
+                              </Badge>
+                              {user.committee && (
+                                <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(user.committee))}>
+                                  {user.committee}
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)} title={user.status !== 'active' ? "No ha ingresado su PIN" : undefined}>
+                              {user.status === 'active' ? 'Activo' : 'Pendiente'}
                             </Badge>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 text-center">
-                        {user.status === 'active' ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-[9px] font-bold font-inter leading-none">
-                            Activo
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-text-dim text-[9px] font-bold font-inter leading-none" title="No ha ingresado su PIN">
-                            Pendiente
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-5 py-4 text-center">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
-                              <button className="p-1.5 rounded-full hover:bg-white/10 text-text-dim hover:text-text transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
-                                <span className="material-symbols-outlined text-[18px]">more_vert</span>
-                              </button>
-                            }
-                          />
-                          <DropdownMenuContent align="end" className="bg-dark2 border-white/10 text-text min-w-[140px] p-1 rounded-[12px] shadow-md">
-                            <DropdownMenuItem className="cursor-pointer hover:bg-white/5 rounded-[8px] focus:bg-white/5 focus:text-text transition-colors flex items-center gap-2" onClick={() => handleEditClick(user)}>
-                              <span className="material-symbols-outlined text-[18px]">edit</span>
-                              Editar Perfil
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="cursor-pointer hover:bg-white/5 rounded-[8px] focus:bg-white/5 focus:text-text transition-colors flex items-center gap-2" onClick={() => handleResetPin(user)}>
-                              <span className="material-symbols-outlined text-[18px]">lock_reset</span>
-                              Resetear PIN
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="cursor-pointer text-red hover:bg-red-500/10 hover:text-red rounded-[8px] focus:bg-red-500/10 focus:text-red transition-colors flex items-center gap-2" onClick={() => handleDeleteUser(user)}>
-                              <span className="material-symbols-outlined text-[18px]">delete</span>
-                              Eliminar
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  )))}
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <button className="p-1.5 rounded-full hover:bg-white/10 text-text-dim hover:text-text transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+                                    <span className="material-symbols-outlined text-[18px]">more_vert</span>
+                                  </button>
+                                }
+                              />
+                              <DropdownMenuContent align="end" className="bg-dark2 border-white/10 text-text min-w-[140px] p-1 rounded-[12px] shadow-md">
+                                <DropdownMenuItem className="cursor-pointer hover:bg-white/5 rounded-[8px] focus:bg-white/5 focus:text-text transition-colors flex items-center gap-2" onClick={() => handleEditClick(user)}>
+                                  <span className="material-symbols-outlined text-[18px]">edit</span>
+                                  Editar Perfil
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="cursor-pointer hover:bg-white/5 rounded-[8px] focus:bg-white/5 focus:text-text transition-colors flex items-center gap-2" onClick={() => handleResetPin(user)}>
+                                  <span className="material-symbols-outlined text-[18px]">lock_reset</span>
+                                  Resetear PIN
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="cursor-pointer text-red hover:bg-red-500/10 hover:text-red rounded-[8px] focus:bg-red-500/10 focus:text-red transition-colors flex items-center gap-2" onClick={() => handleDeleteUser(user)}>
+                                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                                  Eliminar
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -810,53 +852,28 @@ export default function UsersPage() {
               <div className="px-5 py-8 text-center text-text-dim">
                 Cargando usuarios...
               </div>
-            ) : currentUsers.length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <div className="px-5 py-8 text-center text-text-dim">
                 No se encontraron usuarios.
               </div>
             ) : (
-              currentUsers.map(user => (
-                <SwipeableUserCard
-                  key={user.id}
-                  user={user}
-                  onEdit={handleEditClick}
-                  onReset={handleResetPin}
-                  onDelete={handleDeleteUser}
-                  searchTerm={searchTerm}
-                />
+              sortedLetters.map(letter => (
+                <Fragment key={letter}>
+                  {groupedUsers[letter].map((user, index) => (
+                    <div key={user.id} id={index === 0 ? `letter-mobile-${letter}` : undefined}>
+                      <SwipeableUserCard
+                        user={user}
+                        onEdit={handleEditClick}
+                        onReset={handleResetPin}
+                        onDelete={handleDeleteUser}
+                        searchTerm={searchTerm}
+                      />
+                    </div>
+                  ))}
+                </Fragment>
               ))
             )}
           </div>
-          {totalPages > 1 && (
-            <div className="bg-dark3 border-t border-white/10 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-              <p className="text-xs text-text-dim font-medium text-center sm:text-left">
-                Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, filteredUsers.length)} de {filteredUsers.length}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={safeCurrentPage === 1}
-                  className="h-8 text-xs font-bold rounded-full"
-                >
-                  Anterior
-                </Button>
-                <div className="text-xs font-bold text-text-dim px-2">
-                  {safeCurrentPage} / {totalPages}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={safeCurrentPage === totalPages}
-                  className="h-8 text-xs font-bold rounded-full"
-                >
-Siguiente
-                </Button>
-              </div>
-            </div>
-          )}
         </motion.div>
       </div>
 
@@ -865,30 +882,33 @@ Siguiente
         <SheetContent
           side={isMobile ? "bottom" : "right"}
           className={cn(
+            "flex flex-col gap-0 p-0",
             isMobile 
-              ? "h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col border-0 overflow-hidden" 
-              : "bg-dark2 text-text border-l border-white/10 sm:w-[40vw] sm:max-w-[95vw] h-full overflow-y-auto"
+              ? "h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl border-0 overflow-hidden" 
+              : "bg-dark2 text-text border-l border-white/10 sm:w-[40vw] sm:max-w-[95vw] h-full overflow-hidden"
           )}
         >
           {isMobile && (
             <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
           )}
-          <div className={cn(isMobile ? "flex-1 overflow-y-auto scrollbar-hide px-6 pb-8 pt-4 text-white" : "p-7 space-y-7")}>
-            <div className={cn(isMobile ? "mb-6" : "")}>
-              <h2 className={cn("font-bold tracking-tight leading-none mb-2", isMobile ? "text-white text-lg" : "text-text")}>Editar Perfil</h2>
-              <p className={cn("text-sm", isMobile ? "text-white/80" : "text-text-dim")}>Modifica los datos de acceso y el rol del usuario en la plataforma.</p>
-            </div>
 
-            <form onSubmit={handleUpdateUser} className="space-y-6">
-              <div className="space-y-5">
+          <form onSubmit={handleUpdateUser} className="flex-1 flex flex-col overflow-hidden">
+            <div className={cn("flex-1 overflow-y-auto scrollbar-hide", isMobile ? "px-6 pb-6 pt-4 text-white font-light" : "p-7 space-y-7")}>
+              <div className={cn(isMobile ? "mb-6" : "")}>
+                <h2 className={cn("font-medium tracking-tight leading-none mb-2", isMobile ? "text-white text-lg" : "text-text")}>Editar Perfil</h2>
+                <p className={cn("text-sm font-inter font-bold", isMobile ? "text-white/80" : "text-text-dim")}>Modifica los datos de acceso y el rol del usuario en la plataforma.</p>
+              </div>
+
+              <div className="space-y-6 pb-6">
+                <div className="space-y-5">
                 <div className="space-y-2">
-                  <label className={cn("text-xs font-semibold", isMobile ? "text-white/90" : "text-text")}>Nombre completo</label>
+                  <label className={cn("text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Nombre completo</label>
                   <input 
                     required 
                     value={newName} 
                     onChange={e => setNewName(e.target.value)}
                     className={cn(
-                      "w-full h-10 px-3 rounded-sm border text-sm outline-none transition-all", 
+                      "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
                       isMobile 
                         ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
                         : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
@@ -896,14 +916,14 @@ Siguiente
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className={cn("text-xs font-semibold", isMobile ? "text-white/90" : "text-text")}>Teléfono WhatsApp</label>
+                  <label className={cn("text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Teléfono WhatsApp</label>
                   <input 
                     required 
                     pattern="[0-9]{8}"
                     value={newPhone} 
                     onChange={e => setNewPhone(e.target.value)}
                     className={cn(
-                      "w-full h-10 px-3 rounded-sm border text-sm font-mono outline-none transition-all", 
+                      "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
                       isMobile 
                         ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
                         : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
@@ -911,10 +931,10 @@ Siguiente
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className={cn("text-xs font-semibold", isMobile ? "text-white/90" : "text-text")}>Rol en la plataforma</label>
+                  <label className={cn("text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Rol en la plataforma</label>
                   <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
                     <SelectTrigger className={cn(
-                      "w-full h-10 border text-text flex items-center justify-between",
+                      "w-full h-10 border text-text font-inter font-bold flex items-center justify-between",
                       isMobile ? "border-white/20 bg-white/10 text-white" : "bg-dark2 border-border"
                     )}>
                       <SelectValue />
@@ -929,10 +949,10 @@ Siguiente
 
                 {newRole === 'Editor' && (
                   <div className="space-y-2">
-                    <label className={cn("text-xs font-semibold", isMobile ? "text-white/90" : "text-text")}>Comité Asignado</label>
+                    <label className={cn("text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Comité Asignado</label>
                     <Select value={newCommittee} onValueChange={(v) => v && setNewCommittee(v)}>
                       <SelectTrigger className={cn(
-                        "w-full h-10 border text-text flex items-center justify-between",
+                        "w-full h-10 border text-text font-inter font-bold flex items-center justify-between",
                         isMobile ? "border-white/20 bg-white/10 text-white" : "bg-dark2 border-border"
                       )}>
                         <SelectValue />
@@ -947,27 +967,48 @@ Siguiente
                 )}
 
                 <div className="space-y-2">
-                  <label className={cn("text-xs font-semibold", isMobile ? "text-white/90" : "text-text")}>PIN de Acceso Actual</label>
+                  <label className={cn("text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>PIN de Acceso Actual</label>
                   <div className="flex gap-2">
-                    <input 
-                      readOnly
-                      type="password"
-                      value={editingUser?.pin ? '****' : ''} 
-                      className={cn(
-                        "flex-1 h-10 px-3 rounded-sm border text-sm font-mono outline-none",
-                        isMobile ? "border-white/20 bg-white/5 text-white/70" : "border-border bg-dark3 text-text-dim"
+                    <div className="relative w-32 shrink-0">
+                      <input 
+                        readOnly
+                        type={showPin ? "text" : "password"}
+                        value={
+                          editingUser?.pin 
+                            ? ((currentUserRole?.toLowerCase() === 'admin' || (currentUserRole?.toLowerCase() === 'editor' && editingUser.committee === currentUserCommittee))
+                                ? editingUser.pin : '****')
+                            : ''
+                        } 
+                        className={cn(
+                          "w-full h-10 pl-3 pr-8 rounded-sm border text-sm font-inter font-bold outline-none tracking-widest text-left",
+                          isMobile ? "border-white/20 bg-white/5 text-white/70" : "border-border bg-dark3 text-text-dim"
+                        )}
+                      />
+                      {(currentUserRole?.toLowerCase() === 'admin' || (currentUserRole?.toLowerCase() === 'editor' && editingUser?.committee === currentUserCommittee)) && editingUser?.pin && (
+                        <button
+                          type="button"
+                          onClick={() => setShowPin(!showPin)}
+                          className={cn("absolute right-2 top-1/2 -translate-y-1/2 p-0.5 transition-colors flex items-center justify-center",
+                            isMobile ? "text-white/50 hover:text-white" : "text-text-dim hover:text-text"
+                          )}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">
+                            {showPin ? 'visibility_off' : 'visibility'}
+                          </span>
+                        </button>
                       )}
-                    />
+                    </div>
                     <Button 
                       type="button" 
                       variant="outline" 
                       onClick={() => handleResetPin(editingUser!)}
                       className={cn(
-                        "h-10 w-10 p-0 flex items-center justify-center border rounded-sm shrink-0",
+                        "flex-1 h-10 px-4 p-0 flex items-center justify-center gap-2 border rounded-sm",
                         isMobile ? "text-white border-white/20 bg-white/10 hover:bg-white/25" : "text-[#4d7cfe] border-[#4d7cfe] hover:bg-[#4d7cfe]/10"
                       )}
                     >
                       <span className="material-symbols-outlined text-[18px]">lock_reset</span>
+                      <span className="font-bold font-inter text-sm">Resetear PIN</span>
                     </Button>
                   </div>
                   <p className={cn("text-[10px] italic", isMobile ? "text-white/70" : "text-text-dim")}>El PIN por defecto tras un reseteo es '1234'.</p>
@@ -983,31 +1024,34 @@ Siguiente
                 </div>
               )}
 
-              <div className={cn(
-                "pt-8 flex items-center justify-end gap-3",
-                isMobile ? "border-t border-white/10" : "border-t border-border"
-              )}>
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  onClick={() => setIsEditSheetOpen(false)} 
-                  className={cn(isMobile ? "text-white/80 hover:text-white hover:bg-white/10" : "text-text-dim hover:text-text")}
-                >
-                  Cancelar
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={isUpdating} 
-                  className={cn(
-                    "font-bold shadow-sm px-6",
-                    isMobile ? "bg-white text-[#4d7cfe] hover:bg-white/90" : "bg-[#4d7cfe] hover:bg-[#3b66e0] text-white"
-                  )}
-                >
-                  {isUpdating ? 'Actualizando...' : 'Guardar Cambios'}
-                </Button>
               </div>
-            </form>
-          </div>
+            </div>
+
+            <div className="flex flex-row w-full mt-auto">
+              <Button 
+                type="button" 
+                variant="ghost"
+                onClick={() => setIsEditSheetOpen(false)} 
+                className="btn-cancel flex-1 h-[52px] rounded-none rounded-tl-[24px] shadow-none font-inter font-bold text-base border-r border-black/5 dark:border-white/5"
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={isUpdating} 
+                className="btn-action flex-1 h-[52px] rounded-none rounded-tr-[24px] shadow-none font-inter font-bold text-base"
+              >
+                {isUpdating ? (
+                  <>
+                    <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+                    Actualizando...
+                  </>
+                ) : (
+                  'Guardar Cambios'
+                )}
+              </Button>
+            </div>
+          </form>
         </SheetContent>
       </Sheet>
 
