@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,9 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { useSearch } from "@/lib/search-context";
+import { USER_TABLE_STYLES } from "../users/page";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -41,6 +42,49 @@ const itemVariants = {
   }
 };
 
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split("");
+
+const AlphabetScrubber = ({ isMobile }: { isMobile: boolean }) => {
+  const handleDrag = (e: React.TouchEvent | React.MouseEvent) => {
+    e.preventDefault();
+    const y = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    const x = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const elem = document.elementFromPoint(x, y);
+    const letter = elem?.getAttribute('data-letter');
+    if (letter) {
+      const targetId = isMobile ? `letter-mobile-${letter}` : `letter-${letter}`;
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'auto', block: 'center' });
+      }
+    }
+  };
+
+  return (
+    <div 
+      className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center py-2 px-0.5 sm:px-1 bg-dark2/80 backdrop-blur-md rounded-l-xl border-y border-l border-white/10 shadow-xl touch-none"
+      onTouchStart={handleDrag}
+      onTouchMove={handleDrag}
+      onMouseDown={handleDrag}
+      onMouseMove={(e) => e.buttons === 1 && handleDrag(e)}
+    >
+      {ALPHABET.map(letter => (
+        <div 
+          key={letter}
+          data-letter={letter}
+          className="text-[9px] sm:text-[10px] font-bold text-text-dim hover:text-[#4d7cfe] px-1 sm:px-1.5 py-[1px] sm:py-0.5 cursor-pointer select-none transition-colors"
+          onClick={() => {
+            const targetId = isMobile ? `letter-mobile-${letter}` : `letter-${letter}`;
+            document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }}
+        >
+          {letter}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // Interfaz para tipo
 type VolunteerType = {
   id: string; // UUID de Supabase
@@ -58,13 +102,120 @@ type VolunteerType = {
 
 const getCommitteeColor = (committee: string) => {
   const comm = committee.toLowerCase();
-  if (comm.includes('seguridad')) return 'bg-red-faint text-red border-red/20';
-  if (comm.includes('guía')) return 'bg-accent-faint text-accent border-accent/20';
-  if (comm.includes('historia')) return 'bg-gold-faint text-gold border-gold/20';
+  if (comm.includes('seguridad')) return 'bg-[#fe4d97]/15 text-[#fe4d97] border-[#fe4d97]/20';
+  if (comm.includes('guía')) return 'bg-[#6dd230]/15 text-[#6dd230] border-[#6dd230]/20';
+  if (comm.includes('historia')) return 'bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20';
   if (comm.includes('traducción')) return 'bg-amber-500/15 text-amber-500 border-amber-500/20';
   if (comm.includes('transporte')) return 'bg-purple-500/15 text-purple-500 border-purple-500/20';
   if (comm.includes('auxilios')) return 'bg-teal-500/15 text-teal-500 border-teal-500/20';
   return 'bg-dark3 text-text-dim border-border';
+};
+
+function HighlightText({ text, term }: { text: string; term: string }) {
+  if (!term.trim()) return <span>{text}</span>;
+  const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts = text.split(regex);
+  return (
+    <span>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <span key={i} style={{ backgroundColor: '#fde047', color: '#111827', borderRadius: '6px', padding: '0 4px', display: 'inline', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone' }}>{part}</span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </span>
+  );
+}
+
+const SwipeableVolunteerCard = ({ 
+  vol, 
+  onEdit, 
+  onArchive, 
+  searchTerm
+}: { 
+  vol: VolunteerType; 
+  onEdit: (vol: VolunteerType) => void; 
+  onArchive: (vol: VolunteerType) => void; 
+  searchTerm: string;
+}) => {
+  const x = useMotionValue(0);
+  
+  const background = useTransform(
+    x,
+    [-150, 0, 150],
+    ["rgba(254, 77, 151, 0.2)", "rgba(0, 0, 0, 0)", "rgba(77, 124, 254, 0.2)"]
+  );
+
+  const opacityLeft = useTransform(x, [-100, -10, 0], [1, 0, 0]);
+  const opacityRight = useTransform(x, [0, 10, 100], [0, 0, 1]);
+
+  const scaleLeft = useTransform(x, [-100, -20], [1, 0.8]);
+  const scaleRight = useTransform(x, [20, 100], [0.8, 1]);
+
+  const handleDragEnd = (event: any, info: any) => {
+    const swipeThreshold = 80;
+    if (info.offset.x > swipeThreshold) {
+      window.open(`https://wa.me/${vol.phone.replace(/\s+/g, '')}`, '_blank');
+    } else if (info.offset.x < -swipeThreshold) {
+      onArchive(vol);
+    }
+  };
+
+  return (
+    <div className="relative overflow-hidden w-full bg-dark2 select-none border-b border-white/5">
+      <motion.div 
+        style={{ background }}
+        className="absolute inset-0 flex items-center justify-between px-5 pointer-events-none"
+      >
+        <motion.div 
+          style={{ opacity: opacityRight, scale: scaleRight }}
+          className="flex items-center gap-1.5 text-[#4d7cfe] font-bold text-[10px] font-inter uppercase tracking-wider"
+        >
+          <span className="material-symbols-outlined text-[18px]">chat</span>
+          <span>WhatsApp</span>
+        </motion.div>
+
+        <motion.div 
+          style={{ opacity: opacityLeft, scale: scaleLeft }}
+          className="flex items-center gap-1.5 text-red font-bold text-[10px] font-inter uppercase tracking-wider"
+        >
+          <span>{vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}</span>
+          <span className="material-symbols-outlined text-[18px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
+        </motion.div>
+      </motion.div>
+
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={{ left: 0.5, right: 0.5 }}
+        dragDirectionLock
+        style={{ x }}
+        onDragEnd={handleDragEnd}
+        onClick={() => onEdit(vol)}
+        className="relative z-10 p-4 bg-dark2 hover:bg-white/[0.02] active:bg-white/[0.04] transition-colors cursor-pointer flex flex-col gap-1.5 touch-pan-y"
+      >
+        <p className={USER_TABLE_STYLES.name}>
+          <HighlightText text={vol.name} term={searchTerm} />
+        </p>
+
+        <div className="flex items-center justify-between w-full gap-2">
+          <p className={cn(USER_TABLE_STYLES.phone, "shrink-0")}>{vol.phone || 'Sin teléfono'}</p>
+          
+          <div className="flex items-center gap-1.5 shrink">
+            {vol.committee && (
+              <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
+                {vol.committee}
+              </Badge>
+            )}
+            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, vol.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)}>
+              {vol.status === 'active' ? 'Activo' : 'Archivado'}
+            </Badge>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
 };
 
 export default function VolunteersPage() {
@@ -122,34 +273,15 @@ export default function VolunteersPage() {
   const [volunteerToArchive, setVolunteerToArchive] = useState<VolunteerType | null>(null);
   const [isEditingShifts, setIsEditingShifts] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(15);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const observerRef = useRef<ResizeObserver | null>(null);
-
-  const tableContainerRef = useCallback((node: HTMLDivElement | null) => {
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-    }
-    if (node) {
-      observerRef.current = new ResizeObserver((entries) => {
-        if (window.innerWidth < 1024) {
-          setItemsPerPage(10);
-          return;
-        }
-        const height = entries[0].contentRect.height;
-        if (height > 42) {
-          const calc = Math.floor((height - 42) / 49); // 42px header, ~49px row
-          setItemsPerPage((prev) => {
-            const next = Math.max(1, calc);
-            return prev !== next ? next : prev;
-          });
-        }
-      });
-      observerRef.current.observe(node);
-    }
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
@@ -443,14 +575,17 @@ export default function VolunteersPage() {
     return result;
   }, [volunteers, searchTerm, selectedCommittees, selectedStakes, selectedWards, showArchived, currentRole, currentCommittee]);
 
-  // Reset page on filter change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filteredVolunteers.length]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredVolunteers.length / itemsPerPage));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const currentVolunteers = filteredVolunteers.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage);
+  const groupedVolunteers = useMemo(() => {
+    const groups: Record<string, VolunteerType[]> = {};
+    filteredVolunteers.forEach(v => {
+      let letter = v.name.charAt(0).toUpperCase();
+      if (!/^[A-Z]$/.test(letter)) letter = '#';
+      if (!groups[letter]) groups[letter] = [];
+      groups[letter].push(v);
+    });
+    return groups;
+  }, [filteredVolunteers]);
+  const sortedLetters = Object.keys(groupedVolunteers).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
 
   const handleEditClick = (vol: VolunteerType) => {
     setEditingVolunteer(vol);
@@ -475,551 +610,409 @@ export default function VolunteersPage() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-4 md:space-y-6 w-full flex flex-col h-[calc(100dvh-10rem)] md:h-[calc(100dvh-8rem)]"
+      className="w-full mx-auto pb-12"
     >
 
+      {/* Sticky Header matching users design */}
+      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto shrink-0">
+        <motion.div variants={itemVariants} className="w-full flex items-center justify-between">
+          <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
+            Voluntarios 
+            <span className="text-xs font-bold text-[#4d7cfe] bg-[#4d7cfe]/10 px-2.5 py-1 rounded-full border border-[#4d7cfe]/20">
+              {filteredVolunteers.length}
+            </span>
+          </h1>
+          <Button 
+            onClick={() => setIsAddSheetOpen(true)}
+            className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5"
+          >
+            <span className="material-symbols-outlined text-[16px]">person_add</span>
+            <span>Añadir</span>
+          </Button>
+        </motion.div>
 
-      <motion.div variants={itemVariants} className="bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
-        {/* Barra de Filtros */}
-        <div className="p-4 md:p-5 border-b border-border bg-dark3 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shrink-0">
-          <div className="flex flex-col w-full lg:w-auto gap-3">
-            <div className="grid grid-cols-2 lg:flex lg:items-center gap-2 w-full lg:w-auto">
-              <button
-                onClick={() => setShowArchived(!showArchived)}
-                className={cn(
-                  "flex items-center justify-center gap-2 px-4 h-10 rounded-sm text-sm font-bold transition-all active:scale-[0.97] border w-full lg:w-auto lg:min-w-[140px]",
-                  showArchived
-                    ? "bg-[#fe4d97]/10 text-[#fe4d97] border-[#fe4d97]/20"
-                    : "bg-dark2 text-text-dim border-border hover:bg-dark3 hover:text-text"
-                )}
-              >
-                <span className="material-symbols-outlined text-[20px]">{showArchived ? 'inventory_2' : 'archive'}</span>
-                {showArchived ? 'Activos' : 'Archivados'}
-              </button>
-
-              <div className="hidden lg:block w-px h-6 bg-border mx-2" />
-
-              {currentRole === 'Admin' && (
-                <DataTableFilter
-                  title="Comité"
-                  options={committees}
-                  value={selectedCommittees}
-                  onChange={setSelectedCommittees}
-                  className="w-full lg:w-auto"
-                />
-              )}
-              <DataTableFilter
-                title="Estaca"
-                options={stakes}
-                value={selectedStakes}
-                onChange={setSelectedStakes}
-                showSearch
-                className="w-full lg:w-auto"
-              />
-              <DataTableFilter
-                title="Barrio"
-                options={wards}
-                value={selectedWards}
-                onChange={setSelectedWards}
-                showSearch
-                className="w-full lg:w-auto"
-              />
+        {/* Search Input matching users design */}
+        <motion.div variants={itemVariants} className="w-full relative z-10">
+          <div className="relative w-full">
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+              <span className="material-symbols-outlined text-white/70 text-[20px]">search</span>
             </div>
-            
-            {(selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0) && (
-              <div className="flex lg:hidden">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setSelectedCommittees([]);
-                    setSelectedStakes([]);
-                    setSelectedWards([]);
-                  }}
-                  className="h-8 px-0 text-text-dim hover:text-red hover:bg-transparent rounded-sm font-bold text-[10px] uppercase tracking-widest flex items-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-[16px]">close</span>
-                  Limpiar filtros
-                </Button>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3 w-full lg:w-auto">
-            {(selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0) && (
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setSelectedCommittees([]);
-                  setSelectedStakes([]);
-                  setSelectedWards([]);
-                }}
-                className="hidden lg:flex h-10 px-3 text-text-dim hover:text-text hover:bg-dark3 rounded-sm font-bold text-xs uppercase tracking-widest"
+            <input
+              type="text"
+              placeholder="Buscar voluntarios por nombre, estaca o barrio..."
+              className="w-full bg-[#fff6] border border-black/10 dark:border-white/10 text-white placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              autoComplete="off"
+            />
+            {searchTerm.trim() !== '' && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-white/60 hover:text-white transition-colors"
               >
-                Limpiar todo
-              </Button>
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
             )}
-            <Button
-              onClick={() => setIsAddSheetOpen(true)}
-              className="flex-1 lg:flex-none bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm shadow-lg shadow-blue-500/10 h-10 px-5 font-bold transition-all active:scale-[0.97] shrink-0"
-            >
-              <UserPlus className="mr-2 h-4 w-4" />
-              Añadir Voluntario
-            </Button>
           </div>
-        </div>
+        </motion.div>
+      </div>
 
-        {/* Contenedor de Datos */}
-        <div className="overflow-auto bg-dark2 flex-1 relative" ref={tableContainerRef}>
-          {/* Vista Desktop: Tabla */}
-          <div className="hidden lg:block h-full">
-            <Table className={cn(currentVolunteers.length === itemsPerPage && "h-full")}>
-              <TableHeader className="bg-dark3 border-b border-border">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="font-medium text-text-dim pl-8">Nombre y Apellido</TableHead>
-                  <TableHead className="font-medium text-text-dim text-center">Barrio</TableHead>
-                  <TableHead className="font-medium text-text-dim text-center">Estaca</TableHead>
-                  <TableHead className="font-medium text-text-dim text-center">Comité</TableHead>
-                  <TableHead className="font-medium text-text-dim text-center">Turnos</TableHead>
-                  <TableHead className="font-medium text-text-dim text-center">Confiabilidad</TableHead>
-                  <TableHead className="font-medium text-text-dim text-center">Contacto</TableHead>
-                  <TableHead className="font-medium text-text-dim text-center w-12 pr-8">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <AnimatePresence mode="popLayout">
-                  {currentVolunteers.length > 0 ? (
-                    currentVolunteers.map((vol) => (
-                      <motion.tr
-                        key={vol.id}
-                        layout
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="border-border hover:bg-dark3 transition-colors"
-                      >
-                        <TableCell className="font-bold text-text pl-8">{vol.name}</TableCell>
-                        <TableCell className="text-text text-center">{vol.ward}</TableCell>
-                        <TableCell className="text-text-dim text-center">{vol.stake}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5 border", getCommitteeColor(vol.committee))}>
-                            {vol.committee}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="secondary" className="bg-dark3 text-text border-none font-medium">
-                            {vol.shifts} {vol.shifts === 1 ? 'turno' : 'turnos'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {vol.shifts === 0 ? (
-                            <span className="text-sm text-text-dim">N/A</span>
-                          ) : (
-                            <div className="flex items-center justify-center gap-2">
-                              <div className={`w-1.5 h-1.5 rounded-full ${vol.reliability >= 80 ? 'bg-accent' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
-                              <span className="text-sm font-bold text-text tabular-nums">{vol.reliability}%</span>
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-[#4d7cfe] hover:bg-dark3 hover:text-[#4d7cfe] transition-all active:scale-90"
-                              title="WhatsApp"
-                              onClick={() => window.open(`https://wa.me/${vol.phone.replace(/\s+/g, '')}`, '_blank')}
-                            >
-                              <span className="material-symbols-outlined text-[20px]">message</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-[#4d7cfe] hover:bg-dark3 hover:text-[#4d7cfe] transition-all active:scale-90"
-                              title="Llamar"
-                              onClick={() => window.location.href = `tel:${vol.phone.replace(/\s+/g, '')}`}
-                            >
-                              <span className="material-symbols-outlined text-[20px]">call</span>
-                            </Button>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center pr-8">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-text-dim hover:bg-dark3 hover:text-text focus-visible:ring-0 transition-all active:scale-90">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              }
-                            />
-                            <DropdownMenuContent align="end" className="bg-dark3 border-border text-text min-w-[160px] p-1 rounded-sm shadow-md">
-                              <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleEditClick(vol)}>
-                                <span className="material-symbols-outlined text-[20px] text-text-dim">edit</span>
-                                <span className="font-medium">Editar Perfil</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleResetPin(vol)}>
-                                <span className="material-symbols-outlined text-[20px] text-text-dim">lock_reset</span>
-                                <span className="font-medium">Resetear PIN</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="py-2.5 cursor-pointer text-red hover:bg-red-faint hover:text-red rounded-sm focus:bg-red-faint focus:text-red transition-colors flex items-center gap-3"
-                                onClick={() => {
-                                  setVolunteerToArchive(vol);
-                                  setIsArchiveModalOpen(true);
-                                }}
+      <div className="flex flex-col gap-4 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
+        <motion.div variants={itemVariants} className="bg-dark2 border border-white/10 rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full">
+          <AlphabetScrubber isMobile={isMobile} />
+          {/* Contenedor de Datos */}
+          <div className="hidden lg:block overflow-auto bg-dark2 flex-1 relative max-h-[calc(100vh-220px)]">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
+                <tr>
+                  <th className="px-5 py-4">Nombre y Apellido</th>
+                  <th className="px-5 py-4 text-center">Barrio</th>
+                  <th className="px-5 py-4 text-center">Estaca</th>
+                  <th className="px-5 py-4 text-center">Comité</th>
+                  <th className="px-5 py-4 text-center">Turnos</th>
+                  <th className="px-5 py-4 text-center">Confiabilidad</th>
+                  <th className="px-5 py-4 text-center">Contacto</th>
+                  <th className="px-5 py-4 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {filteredVolunteers.length > 0 ? (
+                  sortedLetters.map(letter => (
+                    <Fragment key={letter}>
+                      {groupedVolunteers[letter].map((vol, index) => (
+                        <tr
+                          key={vol.id}
+                          id={index === 0 ? `letter-${letter}` : undefined}
+                          className="hover:bg-white/[0.02] transition-colors group"
+                        >
+                          <td className="px-5 py-4">
+                            <p className={USER_TABLE_STYLES.name}>
+                              <HighlightText text={vol.name} term={searchTerm} />
+                            </p>
+                          </td>
+                          <td className="px-5 py-4 text-center font-inter font-bold text-[13px] text-text-dim">{vol.ward}</td>
+                          <td className="px-5 py-4 text-center font-inter font-bold text-[13px] text-text-dim opacity-70">{vol.stake}</td>
+                          <td className="px-5 py-4 text-center">
+                            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
+                              {vol.committee}
+                            </Badge>
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            <Badge variant="secondary" className="bg-dark3 text-text border-none font-inter font-bold text-[10px] px-1.5 py-0.5">
+                              {vol.shifts} {vol.shifts === 1 ? 'turno' : 'turnos'}
+                            </Badge>
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            {vol.shifts === 0 ? (
+                              <span className="text-sm text-text-dim">N/A</span>
+                            ) : (
+                              <div className="flex items-center justify-center gap-2">
+                                <div className={`w-1.5 h-1.5 rounded-full ${vol.reliability >= 80 ? 'bg-accent' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
+                                <span className="text-sm font-bold text-text tabular-nums">{vol.reliability}%</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-[#4d7cfe] hover:bg-dark3 hover:text-[#4d7cfe] transition-all active:scale-90"
+                                title="WhatsApp"
+                                onClick={() => window.open(`https://wa.me/${vol.phone.replace(/\s+/g, '')}`, '_blank')}
                               >
-                                <span className="material-symbols-outlined text-[20px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
-                                <span className="font-medium">{vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}</span>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </motion.tr>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={8} className="h-32 text-center text-text-dim">
-                        No se encontraron voluntarios con esos términos.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </AnimatePresence>
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Vista Mobile/Tablet: Tarjetas Expandibles */}
-          <div className="lg:hidden h-full flex flex-col bg-dark3">
-            <div className="flex-1 overflow-y-auto">
-              <AnimatePresence mode="popLayout">
-                {currentVolunteers.length > 0 ? (
-                  currentVolunteers.map((vol) => (
-                    <motion.div
-                      key={vol.id}
-                      layout
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className={cn(
-                        "mb-px bg-dark2 border-b border-border transition-all duration-200",
-                        expandedId === vol.id && "ring-1 ring-[#4d7cfe]/20 shadow-sm z-10"
-                      )}
-                    >
-                      <div
-                        className="p-4 flex items-center justify-between cursor-pointer active:bg-dark3"
-                        onClick={() => setExpandedId(expandedId === vol.id ? null : vol.id)}
-                      >
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <div className={`w-2 h-2 rounded-full shrink-0 ${vol.reliability >= 80 ? 'bg-accent' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-bold text-text text-[15px] truncate">{vol.name}</span>
-                            <div className="flex mt-0.5">
-                              <Badge variant="outline" className={cn("font-bold px-1.5 py-0 text-[9px] h-4 uppercase tracking-tighter border", getCommitteeColor(vol.committee))}>
-                                {vol.committee}
-                              </Badge>
+                                <span className="material-symbols-outlined text-[20px]">message</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-[#4d7cfe] hover:bg-dark3 hover:text-[#4d7cfe] transition-all active:scale-90"
+                                title="Llamar"
+                                onClick={() => window.location.href = `tel:${vol.phone.replace(/\s+/g, '')}`}
+                              >
+                                <span className="material-symbols-outlined text-[20px]">call</span>
+                              </Button>
                             </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0 ml-2">
-                          <Badge variant="secondary" className="bg-dark3 text-text-dim border-none font-bold text-[10px] px-1.5 py-0.5">
-                            {vol.shifts} {vol.shifts === 1 ? 'T' : 'Ts'}
-                          </Badge>
-                          <motion.span
-                            animate={{ rotate: expandedId === vol.id ? 180 : 0 }}
-                            className="material-symbols-outlined text-text-dim text-[20px]"
-                          >
-                            expand_more
-                          </motion.span>
-                        </div>
-                      </div>
-
-                      <AnimatePresence>
-                        {expandedId === vol.id && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="overflow-hidden border-t border-border"
-                          >
-                            <div className="p-4 pt-2 space-y-4">
-                              <div className="grid grid-cols-2 gap-4 p-3 bg-dark3 rounded-xl">
-                                <div className="space-y-0.5">
-                                  <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Barrio / Estaca</span>
-                                  <p className="text-xs font-bold text-text leading-tight">
-                                    {vol.ward || '—'} <br />
-                                    <span className="text-text-dim font-medium">{vol.stake || '—'}</span>
-                                  </p>
-                                </div>
-                                <div className="space-y-0.5">
-                                  <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Confiabilidad</span>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-sm font-bold text-text">{vol.reliability}%</span>
-                                    <span className="text-[10px] text-text-dim font-medium">del puntaje</span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  className="flex-1 h-11 gap-2 text-[#4d7cfe] border-border bg-dark2 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    window.open(`https://wa.me/${vol.phone.replace(/\s+/g, '')}`, '_blank');
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <button className="p-1.5 rounded-full hover:bg-white/10 text-text-dim hover:text-text transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+                                    <span className="material-symbols-outlined text-[18px]">more_vert</span>
+                                  </button>
+                                }
+                              />
+                              <DropdownMenuContent align="end" className="bg-dark3 border-border text-text min-w-[160px] p-1 rounded-sm shadow-md">
+                                <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleEditClick(vol)}>
+                                  <span className="material-symbols-outlined text-[20px] text-text-dim">edit</span>
+                                  <span className="font-medium">Editar Perfil</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleResetPin(vol)}>
+                                  <span className="material-symbols-outlined text-[20px] text-text-dim">lock_reset</span>
+                                  <span className="font-medium">Resetear PIN</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="py-2.5 cursor-pointer text-red hover:bg-red-faint hover:text-red rounded-sm focus:bg-red-faint focus:text-red transition-colors flex items-center gap-3"
+                                  onClick={() => {
+                                    setVolunteerToArchive(vol);
+                                    setIsArchiveModalOpen(true);
                                   }}
                                 >
-                                  <span className="material-symbols-outlined text-[20px]">message</span>
-                                  WHATSAPP
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  className="flex-1 h-11 gap-2 text-[#4d7cfe] border-border bg-dark2 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    window.location.href = `tel:${vol.phone.replace(/\s+/g, '')}`;
-                                  }}
-                                >
-                                  <span className="material-symbols-outlined text-[20px]">call</span>
-                                  LLAMAR
-                                </Button>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger
-                                    render={
-                                      <Button variant="ghost" size="icon" className="h-11 w-11 bg-dark3 text-text-dim hover:text-text rounded-xl shrink-0 border border-border">
-                                        <MoreHorizontal className="h-4 w-4" />
-                                      </Button>
-                                    }
-                                  />
-                                  <DropdownMenuContent align="end" className="bg-dark3 border-border text-text min-w-[160px] p-1 rounded-sm shadow-md">
-                                    <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleEditClick(vol)}>
-                                      <span className="material-symbols-outlined text-[20px] text-text-dim">edit</span>
-                                      <span className="font-medium">Editar Perfil</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleResetPin(vol)}>
-                                      <span className="material-symbols-outlined text-[20px] text-text-dim">lock_reset</span>
-                                      <span className="font-medium">Resetear PIN</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="py-2.5 cursor-pointer text-red hover:bg-red-faint hover:text-red rounded-sm focus:bg-red-faint focus:text-red transition-colors flex items-center gap-3"
-                                      onClick={() => {
-                                        setVolunteerToArchive(vol);
-                                        setIsArchiveModalOpen(true);
-                                      }}
-                                    >
-                                      <span className="material-symbols-outlined text-[20px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
-                                      <span className="font-medium">{vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}</span>
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </motion.div>
+                                  <span className="material-symbols-outlined text-[20px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
+                                  <span className="font-medium">{vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-                    <div className="w-16 h-16 bg-dark3 border border-border rounded-full flex items-center justify-center mb-4 text-text-dim">
-                      <span className="material-symbols-outlined text-[32px]">person_off</span>
-                    </div>
-                    <h3 className="font-bold text-text mb-1">No se encontraron voluntarios</h3>
-                    <p className="text-sm text-text-dim">Prueba ajustando los filtros o el término de búsqueda.</p>
-                  </div>
+                  <tr>
+                    <td colSpan={8} className="px-5 py-8 text-center text-text-dim">
+                      No se encontraron voluntarios con esos términos.
+                    </td>
+                  </tr>
                 )}
-              </AnimatePresence>
-            </div>
+              </tbody>
+            </table>
           </div>
-        </div>
-        {totalPages > 1 && (
-          <div className="bg-dark3 border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-            <p className="text-xs text-text-dim font-medium text-center sm:text-left">
-              Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, filteredVolunteers.length)} de {filteredVolunteers.length}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={safeCurrentPage === 1}
-                className="h-8 text-xs font-bold border-border text-text hover:bg-dark2"
-              >
-                Anterior
-              </Button>
-              <div className="text-xs font-bold text-text-dim px-2">
-                {safeCurrentPage} / {totalPages}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={safeCurrentPage === totalPages}
-                className="h-8 text-xs font-bold border-border text-text hover:bg-dark2"
-              >
-                Siguiente
-              </Button>
-            </div>
-          </div>
-        )}
-      </motion.div>
 
-      {/* Editor Lateral */}
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent
-          side="right"
-          className="bg-dark2 text-text border-l border-border p-0 overflow-y-auto w-full sm:w-[40vw] sm:max-w-[95vw]"
+          {/* Cards view for Mobile (under lg) */}
+          <div className="block lg:hidden divide-y divide-white/5 bg-dark2">
+            {filteredVolunteers.length > 0 ? (
+              sortedLetters.map(letter => (
+                <Fragment key={letter}>
+                  {groupedVolunteers[letter].map((vol, index) => (
+                    <div key={vol.id} id={index === 0 ? `letter-mobile-${letter}` : undefined}>
+                      <SwipeableVolunteerCard 
+                        vol={vol} 
+                        onEdit={handleEditClick} 
+                        onArchive={() => {
+                          setVolunteerToArchive(vol);
+                          setIsArchiveModalOpen(true);
+                        }}
+                        searchTerm={searchTerm}
+                      />
+                    </div>
+                  ))}
+                </Fragment>
+              ))
+            ) : (
+              <div className="px-5 py-8 text-center flex flex-col items-center">
+                <div className="w-16 h-16 bg-dark3 border border-border rounded-full flex items-center justify-center mb-4 text-text-dim">
+                  <span className="material-symbols-outlined text-[32px]">person_off</span>
+                </div>
+                <h3 className="font-bold text-text mb-1">No se encontraron voluntarios</h3>
+                <p className="text-sm text-text-dim">Prueba ajustando los filtros o el término de búsqueda.</p>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Editor Drawer (from Shifts) */}
+      <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${isSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        {/* Backdrop */}
+        <div 
+          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isSheetOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setIsSheetOpen(false)}
+        />
+
+        {/* Drawer Content */}
+        <div 
+          id="drawer-profile"
+          className={`relative w-full md:w-[500px] md:mx-auto h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
+          style={{ willChange: 'transform' }}
         >
-          {editingVolunteer && (
-            <div className="p-0 space-y-0">
-              {/* Identity Header (High End) */}
-              <div className="bg-dark2 px-8 py-10 text-white relative overflow-hidden">
-                <div className="relative z-10">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-12 h-12 bg-[#4d7cfe] rounded-2xl flex items-center justify-center shadow-lg shadow-[#4d7cfe]/30">
-                      <span className="material-symbols-outlined text-[24px]">person</span>
-                    </div>
-                  </div>
-                  <h2 className="tracking-tight text-white mb-2">{editingVolunteer.name}</h2>
-                  <div className="flex items-center gap-6 mt-4">
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[18px] text-text-dim">corporate_fare</span>
-                      <span className="text-sm font-medium text-text-dim">{editingVolunteer.committee}</span>
-                    </div>
-                    <div className="w-px h-4 bg-dark2/10" />
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[18px] text-text-dim">call</span>
-                      <span className="text-sm font-medium text-text-dim">{editingVolunteer.phone}</span>
-                    </div>
-                  </div>
+          {/* Handle */}
+          <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+          
+          <div 
+            className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
+            onTouchStart={(e) => {
+              const drawer = document.getElementById('drawer-profile');
+              if (!drawer) return;
+              drawer.dataset.startY = e.touches[0].clientY.toString();
+              drawer.style.transition = 'none';
+            }}
+            onTouchMove={(e) => {
+              const drawer = document.getElementById('drawer-profile');
+              if (!drawer) return;
+              const startY = parseFloat(drawer.dataset.startY || '0');
+              const currentY = e.touches[0].clientY;
+              const deltaY = currentY - startY;
+
+              if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
+                drawer.style.transform = `translateY(${deltaY}px)`;
+                drawer.dataset.swiping = 'true';
+              }
+            }}
+            onTouchEnd={(e) => {
+              const drawer = document.getElementById('drawer-profile');
+              if (!drawer) return;
+              
+              drawer.style.transition = 'transform 0.3s ease-out';
+              
+              if (drawer.dataset.swiping === 'true') {
+                const startY = parseFloat(drawer.dataset.startY || '0');
+                const deltaY = e.changedTouches[0].clientY - startY;
+                
+                drawer.dataset.swiping = 'false';
+                
+                if (deltaY > 150) {
+                  setIsSheetOpen(false);
+                  setTimeout(() => { drawer.style.transform = ''; }, 300);
+                } else {
+                  drawer.style.transform = `translateY(0)`;
+                }
+              } else {
+                drawer.style.transform = '';
+              }
+            }}
+          >
+            {editingVolunteer && (
+              <>
+                {/* Header Profile Info */}
+                <div className="text-center mt-4 mb-8 px-4">
+                  <h3 className="text-drawer-title text-white mb-1">
+                    {editingVolunteer.name}
+                  </h3>
+                  <p className="text-drawer-subtitle text-white/80">
+                    {editingVolunteer.committee} • {editingVolunteer.ward}
+                  </p>
                 </div>
-                {/* Decoration */}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-[#4d7cfe]/10 rounded-full blur-[80px] -mr-32 -mt-32" />
-              </div>
 
-              <div className="p-8 space-y-10">
-                {/* Metadata Grid */}
-                <div className="grid grid-cols-3 gap-4 p-6 bg-dark3 border border-border rounded-3xl">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Barrio</p>
-                    <span className="text-sm font-bold text-text truncate block" title={editingVolunteer.ward}>{editingVolunteer.ward || '—'}</span>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Estaca</p>
-                    <span className="text-sm font-bold text-text truncate block" title={editingVolunteer.stake}>{editingVolunteer.stake || '—'}</span>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Edad</p>
-                    <span className="text-sm font-bold text-text">{editingVolunteer.age ? `${editingVolunteer.age} años` : '—'}</span>
-                  </div>
-                </div>
-
-                {/* Resumen de Turnos Section */}
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <h3 className="font-bold text-text leading-none">Cronograma de Servicio</h3>
-                      <p className="text-sm font-medium text-text-dim">Gestión de disponibilidad y asignaciones.</p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      {saved && <span className="text-[11px] text-accent font-bold animate-pulse">✓ Guardado</span>}
-                      {isEditingShifts ? (
-                        <Button onClick={handleSaveShifts} className="h-10 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-xl shadow-lg shadow-blue-500/15 font-bold transition-all active:scale-[0.97]">
-                          Confirmar Cambios
-                        </Button>
-                      ) : (
-                        <Button onClick={() => { setIsEditingShifts(true); setSaved(false); }} variant="outline" className="h-10 border-border hover:bg-dark3 text-text rounded-xl font-bold transition-all active:scale-[0.97]">
-                          Ajustar Turnos
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Stats Bento */}
+                {/* Top Stats Row */}
+                <div className="flex items-center mb-8 -mx-4">
                   {(() => {
                     const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
                     const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
                     return (
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="bg-dark2 border border-border rounded-2xl p-5 shadow-sm">
-                          <p className="text-2xl font-bold text-text tabular-nums leading-none mb-1">{totalTurnos}</p>
-                          <p className="text-[10px] text-text-dim font-bold uppercase tracking-widest">Turnos</p>
+                      <>
+                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{totalTurnos}</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Turnos</span>
                         </div>
-                        <div className="bg-dark2 border border-border rounded-2xl p-5 shadow-sm">
-                          <p className="text-2xl font-bold text-text tabular-nums leading-none mb-1">{diasCubiertos}</p>
-                          <p className="text-[10px] text-text-dim font-bold uppercase tracking-widest">Días</p>
+                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{diasCubiertos}</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Días</span>
                         </div>
-                        <div className="bg-dark2 border border-border rounded-2xl p-5 shadow-sm border-b-2 border-b-accent">
-                          <p className="text-2xl font-bold text-accent tabular-nums leading-none mb-1">{editingVolunteer.reliability}%</p>
-                          <p className="text-[10px] text-text-dim font-bold uppercase tracking-widest">Confiab.</p>
+                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">
+                            {editingVolunteer.reliability}
+                            <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>
+                          </span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Confia.</span>
                         </div>
-                      </div>
+                        <div className="flex flex-col items-center flex-1">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{editingVolunteer.age || '-'}</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Edad</span>
+                        </div>
+                      </>
                     );
                   })()}
+                </div>
 
-                  {/* Timeline with Shells */}
-                  <div className="space-y-4">
-                    {EVENT_DAYS.map((d, idx) => {
+                {/* Acciones de Contacto */}
+                <div className="grid grid-cols-2 gap-4 px-2 mb-8">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-11 gap-2 text-white border-white/20 bg-white/10 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20"
+                    onClick={() => window.open(`https://wa.me/${editingVolunteer.phone.replace(/\s+/g, '')}`, '_blank')}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">message</span>
+                    WHATSAPP
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-11 gap-2 text-white border-white/20 bg-white/10 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20"
+                    onClick={() => window.location.href = `tel:${editingVolunteer.phone.replace(/\s+/g, '')}`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">call</span>
+                    LLAMAR
+                  </Button>
+                </div>
+
+                {/* Squad/Schedule / Day Cards List */}
+                <div className="w-full">
+                  <div className="flex items-center justify-between px-2 mb-4">
+                    <p className="text-drawer-label text-white">Cronograma</p>
+                    
+                    <div className="flex items-center gap-3">
+                      {saved && <span className="text-[11px] text-green-300 font-bold animate-pulse">✓ Listo</span>}
+                      {isEditingShifts ? (
+                        <button onClick={handleSaveShifts} className="h-7 px-4 bg-white hover:bg-white/90 text-black rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
+                          Guardar
+                        </button>
+                      ) : (
+                        <button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-7 px-4 bg-black/20 backdrop-blur-sm border border-white/10 hover:bg-black/30 text-white rounded-full font-bold text-[11px] transition-all active:scale-[0.97]">
+                          Editar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Shifts Content as Day Cards */}
+                  <div className="flex flex-col gap-2 pb-12">
+                    {EVENT_DAYS.map((d, index) => {
                       const dayShifts = shiftsByDay[d.key] || [];
-                      const hasShifts = dayShifts.length > 0;
+                      const bgColors = [
+                        'bg-[#10a562]',
+                        'bg-[#4aa9df]',
+                        'bg-[#f1c130]',
+                        'bg-[#d54134]',
+                        'bg-[#981e32]',
+                        'bg-[#2c44c2]',
+                        'bg-[#f1c130]',
+                        'bg-[#ed1b24]'
+                      ];
+                      const cardBg = bgColors[index % bgColors.length];
 
                       return (
-                        <motion.div
-                          key={d.key}
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.1 + idx * 0.03 }}
-                          className={`group border rounded-3xl overflow-hidden transition-all duration-300 ${hasShifts || isEditingShifts
-                              ? 'border-border bg-dark2 shadow-sm'
-                              : 'border-border bg-dark3 opacity-40 grayscale-[0.5]'
-                            }`}
-                        >
-                          <div className="flex flex-col sm:flex-row sm:items-stretch">
-                            {/* Date Panel */}
-                            <div className={`shrink-0 sm:w-20 flex sm:flex-col items-center justify-center py-4 px-4 border-b sm:border-b-0 sm:border-r transition-colors ${hasShifts ? 'bg-[#4d7cfe]/5 border-[#4d7cfe]/10' : 'bg-dark3 border-border'
-                              }`}>
-                              <p className={`text-[10px] font-bold uppercase tracking-widest leading-none mb-1 ${hasShifts ? 'text-[#4d7cfe]' : 'text-text-dim'}`}>
-                                {d.label.charAt(0).toUpperCase() + d.label.slice(1, 3)}
+                        <div key={d.key} className={`${cardBg} rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01]`}>
+                          <div className="w-full flex items-center justify-between px-5 sm:px-6 py-4">
+                            {/* Left: Date */}
+                            <div className="flex-1 min-w-0 pr-4 flex items-center">
+                              <p className="font-inter font-bold text-white text-[13px] drop-shadow-sm truncate capitalize">
+                                {d.label} {d.dateNum}
                               </p>
-                              <p className="text-2xl font-bold text-text leading-tight">{d.dateNum}</p>
                             </div>
 
-                            {/* Shifts Grid (The Shells) */}
-                            <div className="flex-1 p-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                              {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                            {/* Right: 4 Columns (T1 to T4) */}
+                            <div className="flex items-center shrink-0 ml-auto">
+                              {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
                                 const active = dayShifts.includes(t);
-                                const shiftInfo = SHIFT_TIMES[parseInt(t[1]) - 1];
-
                                 return (
-                                  <button
+                                  <button 
                                     key={t}
                                     disabled={!isEditingShifts}
                                     onClick={() => toggleShift(d.key, t)}
-                                    className={`relative flex flex-col items-center justify-center py-2.5 rounded-xl border transition-all ${active
-                                        ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md shadow-blue-500/20'
-                                        : 'bg-dark2 border-border text-text-dim hover:border-border'
-                                      } ${isEditingShifts ? 'cursor-pointer active:scale-[0.92]' : 'cursor-default'
-                                      }`}
+                                    className={`flex flex-col items-center justify-center w-12 sm:w-16 h-full ${i !== 0 ? 'border-l border-white/20' : ''} transition-colors ${isEditingShifts ? 'hover:bg-white/20 rounded-lg' : ''} ${active ? 'opacity-100' : 'opacity-50'}`}
                                   >
-                                    <span className="text-xs font-bold">{t}</span>
-                                    <span className={`text-[8px] font-bold uppercase tracking-tighter mt-0.5 ${active ? 'text-white/80' : 'text-text-dim'}`}>
-                                      {shiftInfo?.time.split(' - ')[0]}
+                                    <span className={`text-[16px] font-semibold drop-shadow-sm leading-none ${active ? 'text-white' : 'text-white'}`}>
+                                      {active ? '✓' : '-'}
+                                    </span>
+                                    <span className={`font-inter text-[10px] font-bold uppercase mt-1 tracking-widest ${active ? 'text-white/90' : 'text-white/70'}`}>
+                                      {t}
                                     </span>
                                   </button>
                                 );
                               })}
                             </div>
                           </div>
-                        </motion.div>
+                        </div>
                       );
                     })}
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Editor Lateral (Añadir) */}
       <Sheet open={isAddSheetOpen} onOpenChange={setIsAddSheetOpen}>
