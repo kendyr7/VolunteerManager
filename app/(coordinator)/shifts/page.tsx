@@ -886,7 +886,7 @@ export default function ShiftsPage() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="w-full mx-auto pb-12"
+      className="w-full mx-auto pb-32 md:pb-12"
     >
 
       {/* Sticky Header matching image design */}

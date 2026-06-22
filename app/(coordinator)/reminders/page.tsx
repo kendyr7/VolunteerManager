@@ -23,6 +23,8 @@ import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
 import { useSearch } from "@/lib/search-context";
 import { motion, AnimatePresence } from "framer-motion";
+import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
+import { USER_TABLE_STYLES } from "@/app/(coordinator)/users/page";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -35,6 +37,7 @@ type VolunteerType = {
   reliability: number;
   committee: string;
   committee_id?: string;
+  age?: number;
 };
 
 const getCommitteeColor = (committee: string) => {
@@ -174,7 +177,8 @@ export default function RemindersPage() {
         shifts: sCounts[v.id] || 0,
         reliability: v.reliability_score || 100,
         committee: v.committees?.name || 'Sin comité',
-        committee_id: v.committee_id
+        committee_id: v.committee_id,
+        age: v.age
       }));
       setVolunteers(mapped);
     }
@@ -185,9 +189,79 @@ export default function RemindersPage() {
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
+  // Drawer states
+  const [editingVolunteer, setEditingVolunteer] = useState<VolunteerType | null>(null);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isEditingShifts, setIsEditingShifts] = useState(false);
+  const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>({});
+  const [saved, setSaved] = useState(false);
+
+  const handleEditClick = (vol: VolunteerType) => {
+    setEditingVolunteer(vol);
+    setIsSheetOpen(true);
+    setIsEditingShifts(false);
+    setSaved(false);
+
+    const volShifts = globalShifts[vol.id] || Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
+    setShiftsByDay(volShifts);
+  };
+
+  const toggleShift = (day: string, turno: string) => {
+    if (!isEditingShifts) return;
+    setShiftsByDay(prev => {
+      const current = prev[day] ?? [];
+      return {
+        ...prev,
+        [day]: current.includes(turno)
+          ? current.filter(t => t !== turno)
+          : [...current, turno],
+      };
+    });
+  };
+
+  const handleSaveShifts = async () => {
+    setIsEditingShifts(false);
+    if (!editingVolunteer) return;
+
+    const { error: delErr } = await supabase
+      .from('shifts')
+      .delete()
+      .eq('volunteer_id', editingVolunteer.id);
+
+    if (delErr) {
+      console.error("Error deleting shifts:", delErr);
+      return;
+    }
+
+    const insertRows = [];
+    for (const [dayKey, shiftKeys] of Object.entries(shiftsByDay)) {
+      for (const shiftKey of shiftKeys) {
+        insertRows.push({
+          volunteer_id: editingVolunteer.id,
+          day_key: dayKey,
+          shift_key: shiftKey
+        });
+      }
+    }
+
+    if (insertRows.length > 0) {
+      const { error: insErr } = await supabase
+        .from('shifts')
+        .insert(insertRows);
+
+      if (insErr) {
+        console.error("Error inserting shifts:", insErr);
+        showToast("Error al guardar turnos", "error");
+        return;
+      }
+    }
+
+    setSaved(true);
+    showToast("Turnos actualizados");
+    setTimeout(() => setSaved(false), 2500);
+    await loadData();
+  };
+
 
   // Estado de los filtros y visualización de plantilla
   const { searchTerm } = useSearch();
@@ -284,14 +358,7 @@ export default function RemindersPage() {
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [volunteers, globalShifts, selectedDayKey, selectedShiftId, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
 
-  // Reset page when data changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeVolunteers.length, selectedDayKey, selectedShiftId]);
-
-  const totalPages = Math.max(1, Math.ceil(activeVolunteers.length / itemsPerPage));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const currentVolunteers = activeVolunteers.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage);
+  const currentVolunteers = activeVolunteers;
 
   // Detalles del turno seleccionado
   const selectedShiftDetails = SHIFT_TIMES.find(s => `T${s.id}` === selectedShiftId);
@@ -358,74 +425,29 @@ export default function RemindersPage() {
   }
 
   return (
-    <div className="w-full space-y-4 md:space-y-6 flex flex-col min-h-[calc(100dvh-10rem)] md:h-[calc(100dvh-8rem)]">
+    <div className="w-full mx-auto pb-32 md:pb-12 flex flex-col min-h-[calc(100dvh-10rem)] md:h-[calc(100dvh-8rem)]">
 
 
-      {/* Barra de Filtros Globales (Prioritaria) */}
-      <div className="shrink-0 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-4 md:p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-        <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
-          <DataTableFilter
-            title="Comité"
-            options={committees}
-            value={selectedCommittees}
-            onChange={setSelectedCommittees}
-          />
-          <DataTableFilter
-            title="Estaca"
-            options={stakes}
-            value={selectedStakes}
-            onChange={setSelectedStakes}
-            showSearch
-          />
-          <DataTableFilter
-            title="Barrio"
-            options={wards}
-            value={selectedWards}
-            onChange={setSelectedWards}
-            showSearch
-          />
-          {(selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0 || searchTerm) && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setSelectedCommittees([]);
-                setSelectedStakes([]);
-                setSelectedWards([]);
-              }}
-              className="h-9 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-sm"
-            >
-              Limpiar Filtros
-            </Button>
-          )}
-          {selectedDayKey && (
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSelectedDayKey("");
-                setSelectedShiftId("");
-              }}
-              className="h-9 px-3 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-250 hover:bg-rose-100 hover:text-rose-750 transition-colors shadow-sm rounded-sm ml-2"
-            >
-              Limpiar Selección
-            </Button>
-          )}
-          
-          <div className="w-full lg:w-auto flex items-center justify-end mt-2 lg:mt-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowTemplate(true)}
-              className="w-full sm:w-auto h-9 px-3 text-xs font-bold border-border text-text-dim hover:text-[#0084d1] hover:bg-dark3 hover:border-[#0084d1]/30 transition-colors shadow-sm rounded-sm flex items-center gap-1.5"
-            >
-              <span className="material-symbols-outlined text-[16px]">chat_bubble</span>
-              Ver Plantilla
-            </Button>
-          </div>
+      {/* Sticky Header matching users design */}
+      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto shrink-0">
+        <div className="w-full flex items-center justify-between">
+          <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
+            Avisos
+          </h1>
+          <Button 
+            onClick={() => setShowTemplate(true)}
+            className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5"
+          >
+            <span className="material-symbols-outlined text-[16px]">chat_bubble</span>
+            <span>Ver Plantilla</span>
+          </Button>
         </div>
       </div>
 
-      {/* Selector de Turnos Rediseñado en Dos Filas */}
-      <div className="shrink-0 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-4 md:p-5 flex flex-col gap-4 md:gap-5">
+      {/* Content wrapper with mobile padding */}
+      <div className="flex flex-col gap-4 md:gap-6 flex-1 px-4 sm:px-6 lg:px-0">
+        {/* Selector de Turnos Rediseñado en Dos Filas */}
+        <div className="shrink-0 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-4 md:p-5 flex flex-col gap-4 md:gap-5">
 
         {/* FILA 1: FECHA */}
         <div className="space-y-2">
@@ -437,8 +459,8 @@ export default function RemindersPage() {
               const dayCounts = shiftCounts[day.key] || { T1: 0, T2: 0, T3: 0, T4: 0 };
               const totalVolunteersOnDay = Object.values(dayCounts).reduce((acc, count) => acc + count, 0);
               const isSelected = selectedDayKey === day.key;
-              const dayInitial = day.label.charAt(0).toUpperCase(); // e.g. 'J', 'V', 'S', 'D'
-
+              const dayAbbr = day.label.substring(0, 3); // e.g. 'jue', 'vie', 'sáb'
+              
               return (
                 <button
                   key={day.key}
@@ -458,8 +480,8 @@ export default function RemindersPage() {
                       : 'bg-dark2 border-border text-text hover:bg-dark3'
                     }`}
                 >
-                  <span className={`text-[10px] md:text-[9px] font-bold uppercase tracking-widest ${isSelected ? 'text-white/80' : 'text-text-dim'}`}>
-                    {dayInitial}
+                  <span className={`font-inter font-bold text-[10px] md:text-[9px] uppercase tracking-widest ${isSelected ? 'text-white/80' : 'text-text-dim'}`}>
+                    {dayAbbr}
                   </span>
                   <span className="text-base md:text-sm font-black leading-none">{day.dateNum}</span>
                   <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? (isSelected ? 'bg-dark2' : 'bg-accent') : (isSelected ? 'bg-dark2/30' : 'bg-dark3')
@@ -476,7 +498,7 @@ export default function RemindersPage() {
         {/* FILA 2: TURNOS */}
         <div className="space-y-2">
           <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase">TURNOS</span>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="grid grid-cols-4 md:flex md:flex-wrap gap-2">
             {['T1', 'T2', 'T3', 'T4'].map((t) => {
               // Obtener conteo de voluntarios para este turno (si hay día seleccionado, del día; si no, total acumulado de todos los días)
               let count = 0;
@@ -557,12 +579,12 @@ export default function RemindersPage() {
                     }
                   }}
                   title={!selectedDayKey ? "Por favor selecciona una fecha primero" : `Seleccionar ${shiftTimeLabel}`}
-                  className={`shrink-0 inline-flex items-center gap-2.5 px-4.5 py-2.5 rounded-sm border text-xs transition-all ${buttonClass}`}
+                  className={`shrink-0 flex items-center justify-center gap-1.5 px-2 md:px-4.5 py-2.5 rounded-sm border text-xs transition-all w-full md:w-auto ${buttonClass}`}
                 >
                   <span className="font-bold">{t}</span>
                   <span className="text-[10px] opacity-30">|</span>
-                  <span className={`font-bold ${countTextClass}`}>
-                    {count} {count === 1 ? 'voluntario' : 'voluntarios'}
+                  <span className={`font-inter font-bold ${countTextClass}`}>
+                    {count}
                   </span>
                 </button>
               );
@@ -596,269 +618,164 @@ export default function RemindersPage() {
                       </div>
                     ) : (
                       <>
-                        {/* Vista Mobile/Tablet: Tarjetas Expandibles */}
-                        <div className="lg:hidden flex flex-col bg-dark3">
-                          <div>
-                            <AnimatePresence mode="popLayout">
-                              {currentVolunteers.map((vol) => {
-                                const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
-                                const msg = generateReminderMessage(
-                                  vol.name,
-                                  dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
-                                  selectedShiftDetails?.name || "",
-                                  selectedShiftDetails?.time || "",
-                                  vol.committee,
-                                  isSelectedHoliday
-                                );
-                                const link = generateWaMeLink(vol.phone, msg);
+                        {/* Vista Mobile/Tablet: Tarjetas Deslizables */}
+                        <div className="block lg:hidden divide-y divide-white/5 bg-dark2">
+                          {currentVolunteers.map((vol) => {
+                            const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
+                            const msg = generateReminderMessage(
+                              vol.name,
+                              dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
+                              selectedShiftDetails?.name || "",
+                              selectedShiftDetails?.time || "",
+                              vol.committee,
+                              isSelectedHoliday
+                            );
 
-                                return (
-                                  <motion.div
-                                    key={vol.id}
-                                    layout
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className={cn(
-                                      "mb-px bg-dark2 border-b border-border transition-all duration-200",
-                                      expandedId === vol.id && "ring-1 ring-[#4d7cfe]/20 shadow-sm z-10",
-                                      isConfirmed && "bg-[#6dd230]/5"
-                                    )}
-                                  >
-                                    <div
-                                      className="p-4 flex items-center justify-between cursor-pointer active:bg-dark3"
-                                      onClick={() => setExpandedId(expandedId === vol.id ? null : vol.id)}
-                                    >
-                                      <div className="flex items-center gap-3 overflow-hidden">
-                                        <div className={`w-2 h-2 rounded-full shrink-0 ${isConfirmed ? 'bg-[#6dd230] shadow-[0_0_8px_rgba(109,210,48,0.3)]' : 'bg-dark3'}`} />
-                                        <div className="flex flex-col min-w-0">
-                                          <span className="font-bold text-text text-[15px] truncate">{vol.name}</span>
-                                          <div className="flex mt-0.5 items-center gap-2">
-                                            <Badge variant="outline" className={cn("font-bold px-1.5 py-0 text-[9px] h-4 uppercase tracking-tighter", getCommitteeColor(vol.committee))}>
-                                              {vol.committee}
-                                            </Badge>
-                                            {isConfirmed && (
-                                              <Badge variant="secondary" className="bg-accent/10 text-accent font-bold px-1.5 py-0 text-[9px] h-4 uppercase tracking-tighter border-none">
-                                                Confirmado
-                                              </Badge>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-3 shrink-0 ml-2">
-                                        <motion.span
-                                          animate={{ rotate: expandedId === vol.id ? 180 : 0 }}
-                                          className="material-symbols-outlined text-text-dim text-[20px]"
-                                        >
-                                          expand_more
-                                        </motion.span>
-                                      </div>
-                                    </div>
-
-                                    <AnimatePresence>
-                                      {expandedId === vol.id && (
-                                        <motion.div
-                                          initial={{ height: 0, opacity: 0 }}
-                                          animate={{ height: "auto", opacity: 1 }}
-                                          exit={{ height: 0, opacity: 0 }}
-                                          className="overflow-hidden border-t border-border"
-                                        >
-                                          <div className="p-4 pt-2 space-y-4">
-                                            <div className="grid grid-cols-2 gap-4 p-3 bg-dark3 rounded-xl">
-                                              <div className="space-y-0.5">
-                                                <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Barrio / Estaca</span>
-                                                <p className="text-xs font-bold text-text leading-tight">
-                                                  {vol.ward || '—'} <br />
-                                                  <span className="text-text-dim font-medium">{vol.stake || '—'}</span>
-                                                </p>
-                                              </div>
-                                              <div className="space-y-0.5">
-                                                <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Estado</span>
-                                                <div className="flex items-center gap-1.5 mt-1">
-                                                  {isConfirmed ? (
-                                                    <Badge variant="outline" className="bg-[#6dd230]/10 text-[#6dd230] border-[#6dd230]/20 font-bold uppercase text-[10px] tracking-widest px-2">
-                                                      Confirmado
-                                                    </Badge>
-                                                  ) : (
-                                                    <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold uppercase text-[10px] tracking-widest px-2">
-                                                      Pendiente
-                                                    </Badge>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            </div>
-
-                                            <div className="flex flex-col sm:flex-row items-center gap-2">
-                                              <Button
-                                                variant="outline"
-                                                className="w-full sm:flex-1 h-11 gap-2 text-[#25D366] hover:bg-[#25D366] hover:text-white border-border bg-dark2 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  window.open(link, '_blank');
-                                                }}
-                                              >
-                                                <span className="material-symbols-outlined text-[20px]">send</span>
-                                                WHATSAPP
-                                              </Button>
-                                              <Button
-                                                className={cn(
-                                                  "w-full sm:flex-1 h-11 gap-2 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all",
-                                                  isConfirmed
-                                                    ? "bg-dark3 text-text-dim hover:bg-dark3"
-                                                    : "bg-[#6dd230] text-white hover:bg-[#5bbd24]"
-                                                )}
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  toggleConfirmed(vol.id);
-                                                }}
-                                              >
-                                                <span className="material-symbols-outlined text-[20px]">{isConfirmed ? 'close' : 'check'}</span>
-                                                {isConfirmed ? 'DESMARCAR' : 'CONFIRMAR ASISTENCIA'}
-                                              </Button>
-                                            </div>
-                                          </div>
-                                        </motion.div>
+                            return (
+                              <div key={vol.id} className={cn(
+                                "transition-colors",
+                                isConfirmed && "bg-[#6dd230]/5"
+                              )}>
+                                <SwipeableMobileCard 
+                                  name={vol.name}
+                                  phone={vol.phone}
+                                  searchTerm={searchTerm}
+                                  onEdit={() => handleEditClick(vol)}
+                                  
+                                  onSwipeRight={() => {
+                                    const link = generateWaMeLink(vol.phone, msg);
+                                    window.open(link, '_blank');
+                                  }}
+                                  swipeRightIcon="send"
+                                  swipeRightText="WhatsApp"
+                                  swipeRightColorClass="text-[#25D366]"
+                                  swipeRightBgColor="rgba(37, 211, 102, 0.2)"
+                                  
+                                  onSwipeLeft={() => toggleConfirmed(vol.id)}
+                                  swipeLeftIcon={isConfirmed ? "close" : "check"}
+                                  swipeLeftText={isConfirmed ? "Desmarcar" : "Confirmar"}
+                                  swipeLeftColorClass={isConfirmed ? "text-text-dim" : "text-[#6dd230]"}
+                                  swipeLeftBgColor={isConfirmed ? "rgba(255, 255, 255, 0.1)" : "rgba(109, 210, 48, 0.2)"}
+                                  
+                                  badges={
+                                    <>
+                                      {vol.committee && (
+                                        <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
+                                          {vol.committee}
+                                        </Badge>
                                       )}
-                                    </AnimatePresence>
-                                  </motion.div>
-                                );
-                              })}
-                            </AnimatePresence>
-                          </div>
+                                      <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, isConfirmed ? "bg-accent/10 text-accent border-accent/20" : "bg-amber-50 text-amber-600 border-amber-200")}>
+                                        {isConfirmed ? 'Confirmado' : 'Pendiente'}
+                                      </Badge>
+                                    </>
+                                  }
+                                />
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {/* Desktop Table (Hidden on small screens) */}
-                        <div className="hidden lg:block">
-                          <Table>
-                            <TableHeader className="bg-dark3 border-b border-border">
-                              <TableRow className="hover:bg-transparent">
-                            <TableHead className="font-medium text-text-dim text-center pl-8 w-16">Asist.</TableHead>
-                            <TableHead className="font-medium text-text-dim text-center w-32">Estado</TableHead>
-                            <TableHead className="font-medium text-text-dim">Nombre y Apellido</TableHead>
-                            <TableHead className="font-medium text-text-dim text-center">Barrio</TableHead>
-                            <TableHead className="font-medium text-text-dim text-center">Estaca</TableHead>
-                            <TableHead className="font-medium text-text-dim text-center pr-8">Comité</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <AnimatePresence mode="popLayout">
-                            {currentVolunteers.map((vol) => {
-                              const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
-                              const msg = generateReminderMessage(
-                                vol.name,
-                                dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
-                                selectedShiftDetails?.name || "",
-                                selectedShiftDetails?.time || "",
-                                vol.committee,
-                                isSelectedHoliday
-                              );
-                              const link = generateWaMeLink(vol.phone, msg);
+                        <div className="hidden lg:block overflow-auto bg-dark2 flex-1 relative max-h-[calc(100vh-220px)]">
+                          <table className="w-full text-sm text-left">
+                            <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
+                              <tr>
+                                <th className="px-5 py-4 text-center w-24">Asistencia</th>
+                                <th className="px-5 py-4 text-center w-32">Estado</th>
+                                <th className="px-5 py-4">Nombre y Apellido</th>
+                                <th className="px-5 py-4 text-center">Barrio</th>
+                                <th className="px-5 py-4 text-center">Estaca</th>
+                                <th className="px-5 py-4 text-center">Comité</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              <AnimatePresence mode="popLayout">
+                                {currentVolunteers.map((vol) => {
+                                  const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
+                                  const msg = generateReminderMessage(
+                                    vol.name,
+                                    dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
+                                    selectedShiftDetails?.name || "",
+                                    selectedShiftDetails?.time || "",
+                                    vol.committee,
+                                    isSelectedHoliday
+                                  );
+                                  const link = generateWaMeLink(vol.phone, msg);
 
-                              return (
-                                <motion.tr 
-                                  key={vol.id}
-                                  layout
-                                  initial={{ opacity: 0 }}
-                                  animate={{ opacity: 1 }}
-                                  exit={{ opacity: 0 }}
-                                  transition={{ duration: 0.2 }}
-                                  onClick={() => toggleConfirmed(vol.id)}
-                                  className={cn(
-                                    "border-border hover:bg-dark3 transition-colors cursor-pointer",
-                                    isConfirmed && "bg-[#6dd230]/5 hover:bg-[#6dd230]/10"
-                                  )}
-                                >
-                                  <TableCell className="pl-8 text-center">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); toggleConfirmed(vol.id); }}
+                                  return (
+                                    <motion.tr 
+                                      key={vol.id}
+                                      layout
+                                      initial={{ opacity: 0 }}
+                                      animate={{ opacity: 1 }}
+                                      exit={{ opacity: 0 }}
+                                      transition={{ duration: 0.2 }}
+                                      onClick={() => handleEditClick(vol)}
                                       className={cn(
-                                        "w-6 h-6 rounded-full flex items-center justify-center transition-all active:scale-90 mx-auto",
-                                        isConfirmed 
-                                          ? "bg-accent text-white shadow-sm shadow-accent/30" 
-                                          : "bg-dark3 border border-border text-transparent hover:border-[#4d7cfe] group-hover:border-[#4d7cfe]/50"
+                                        "group hover:bg-white/[0.02] transition-colors cursor-pointer",
+                                        isConfirmed && "bg-[#6dd230]/5 hover:bg-[#6dd230]/10"
                                       )}
                                     >
-                                      <span className="material-symbols-outlined text-[16px] font-bold">
-                                        check
-                                      </span>
-                                    </button>
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    {!isConfirmed ? (
-                                      <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
-                                        Pendiente
-                                      </Badge>
-                                    ) : (
-                                      <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
-                                        Confirmado
-                                      </Badge>
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="font-bold text-text">
-                                    <div className="flex items-center gap-2">
-                                      <span className={isConfirmed ? "text-text" : "text-text"}>
-                                        {vol.name}
-                                      </span>
-                                      <a 
-                                        href={link}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="inline-flex items-center justify-center h-8 w-8 text-[#25D366] hover:bg-dark3 transition-all active:scale-90 rounded-sm"
-                                        title="Enviar recordatorio WhatsApp"
-                                      >
-                                        <span className="material-symbols-outlined text-[20px]">send</span>
-                                      </a>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-text text-center">{vol.ward}</TableCell>
-                                  <TableCell className="text-text-dim text-center">{vol.stake}</TableCell>
-                                  <TableCell className="text-center pr-8">
-                                    <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
-                                      {vol.committee}
-                                    </Badge>
-                                  </TableCell>
-                                </motion.tr>
-                              );
-                            })}
-                          </AnimatePresence>
-                        </TableBody>
-                      </Table>
-                    </div>
+                                      <td className="px-5 py-4 text-center">
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); toggleConfirmed(vol.id); }}
+                                          className={cn(
+                                            "w-6 h-6 rounded-full flex items-center justify-center transition-all active:scale-90 mx-auto",
+                                            isConfirmed 
+                                              ? "bg-accent text-white shadow-sm shadow-accent/30" 
+                                              : "bg-dark3 border border-border text-transparent hover:border-[#4d7cfe] group-hover:border-[#4d7cfe]/50"
+                                          )}
+                                        >
+                                          <span className="material-symbols-outlined text-[16px] font-bold">
+                                            check
+                                          </span>
+                                        </button>
+                                      </td>
+                                      <td className="px-5 py-4 text-center">
+                                        {!isConfirmed ? (
+                                          <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
+                                            Pendiente
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
+                                            Confirmado
+                                          </Badge>
+                                        )}
+                                      </td>
+                                      <td className="px-5 py-4 font-bold text-text">
+                                        <div className="flex items-center gap-2">
+                                          <span>{vol.name}</span>
+                                          <a 
+                                            href={link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="inline-flex items-center justify-center h-8 w-8 text-[#25D366] hover:bg-dark3 transition-all active:scale-90 rounded-sm"
+                                            title="Enviar recordatorio WhatsApp"
+                                          >
+                                            <span className="material-symbols-outlined text-[20px]">send</span>
+                                          </a>
+                                        </div>
+                                      </td>
+                                      <td className="px-5 py-4 text-text text-center">{vol.ward || '—'}</td>
+                                      <td className="px-5 py-4 text-text-dim text-center">{vol.stake || '—'}</td>
+                                      <td className="px-5 py-4 text-center">
+                                        <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
+                                          {vol.committee}
+                                        </Badge>
+                                      </td>
+                                    </motion.tr>
+                                  );
+                                })}
+                              </AnimatePresence>
+                            </tbody>
+                          </table>
+                        </div>
                   </>
                 )}
                   </div>
                   
-                  {totalPages > 1 && (
-                    <div className="bg-dark3 border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-                      <p className="text-xs text-text-dim font-medium text-center sm:text-left">
-                        Mostrando {(safeCurrentPage - 1) * itemsPerPage + 1} - {Math.min(safeCurrentPage * itemsPerPage, activeVolunteers.length)} de {activeVolunteers.length}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                          disabled={safeCurrentPage === 1}
-                          className="h-8 text-xs font-bold"
-                        >
-                          Anterior
-                        </Button>
-                        <div className="text-xs font-bold text-text-dim px-2">
-                          {safeCurrentPage} / {totalPages}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                          disabled={safeCurrentPage === totalPages}
-                          className="h-8 text-xs font-bold"
-                        >
-                          Siguiente
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+
                 </div>
               </div>
             </div>
@@ -866,31 +783,293 @@ export default function RemindersPage() {
         )}
       </div>
 
-      <Sheet open={showTemplate} onOpenChange={setShowTemplate}>
-        <SheetContent side="right" className="w-full sm:w-[40vw] bg-dark2 p-0 flex flex-col border-l border-border shadow-2xl">
-          <SheetHeader className="p-6 border-b border-border bg-dark3">
-            <SheetTitle className="text-xl font-bold text-text flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#0084d1]">chat_bubble</span>
-              Mensaje Plantilla
-            </SheetTitle>
-          </SheetHeader>
-          <div className="p-6 flex-1 flex flex-col gap-6 bg-dark2 overflow-y-auto">
-            <div className="bg-sky-50/80 p-5 rounded-md rounded-tl-none border border-sky-100 shadow-sm text-sm text-sky-950 leading-relaxed whitespace-pre-wrap font-sans relative">
-              {previewMessage}
-              <div className="absolute top-0 -left-2 w-0 h-0 border-[10px] border-transparent border-r-sky-50 border-t-sky-50" />
+      {/* Ver Plantilla Drawer */}
+      <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${showTemplate ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        {/* Backdrop */}
+        <div 
+          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${showTemplate ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setShowTemplate(false)}
+        />
+
+        {/* Drawer Content */}
+        <div 
+          id="drawer-template"
+          className={`relative w-full md:w-[500px] md:mx-auto h-[80vh] md:h-[94vh] bg-dark2 border border-white/10 rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${showTemplate ? 'translate-y-0' : 'translate-y-full'}`}
+          style={{ willChange: 'transform' }}
+        >
+          {/* Handle */}
+          <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+          
+          <div 
+            className="flex-1 overflow-y-auto scrollbar-hide px-6 pb-6 pt-2 overscroll-contain"
+            onTouchStart={(e) => {
+              const drawer = document.getElementById('drawer-template');
+              if (!drawer) return;
+              drawer.dataset.startY = e.touches[0].clientY.toString();
+              drawer.style.transition = 'none';
+            }}
+            onTouchMove={(e) => {
+              const drawer = document.getElementById('drawer-template');
+              if (!drawer) return;
+              const startY = parseFloat(drawer.dataset.startY || '0');
+              const currentY = e.touches[0].clientY;
+              const deltaY = currentY - startY;
+
+              if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
+                drawer.style.transform = `translateY(${deltaY}px)`;
+                drawer.dataset.swiping = 'true';
+              }
+            }}
+            onTouchEnd={(e) => {
+              const drawer = document.getElementById('drawer-template');
+              if (!drawer) return;
+              
+              drawer.style.transition = 'transform 0.3s ease-out';
+              
+              if (drawer.dataset.swiping === 'true') {
+                const startY = parseFloat(drawer.dataset.startY || '0');
+                const deltaY = e.changedTouches[0].clientY - startY;
+                
+                drawer.dataset.swiping = 'false';
+                
+                if (deltaY > 150) {
+                  setShowTemplate(false);
+                  setTimeout(() => { drawer.style.transform = ''; }, 300);
+                } else {
+                  drawer.style.transform = `translateY(0)`;
+                }
+              } else {
+                drawer.style.transform = '';
+              }
+            }}
+          >
+            {/* Header Drawer Info */}
+            <div className="text-center mt-2 mb-8 px-4">
+              <h3 className="text-xl font-bold text-text flex items-center justify-center gap-2 mb-2">
+                <span className="material-symbols-outlined text-[#0084d1]">chat_bubble</span>
+                Mensaje Plantilla
+              </h3>
             </div>
 
-            <div className="p-4 rounded-sm bg-dark3 border border-border text-xs text-text-dim flex items-start gap-2 leading-relaxed">
-              <span className="material-symbols-outlined text-[18px] text-blue-500 shrink-0 mt-0.5">info</span>
-              <span>
-                Este mensaje se genera automáticamente para cada voluntario. 
-                Los datos como el nombre, la fecha y la hora del turno se rellenan automáticamente 
-                al hacer clic en enviar WhatsApp.
-              </span>
+            <div className="flex-1 flex flex-col gap-6">
+              <div className="bg-sky-50/80 p-5 rounded-md rounded-tl-none border border-sky-100 shadow-sm text-sm text-sky-950 leading-relaxed whitespace-pre-wrap font-sans relative">
+                {previewMessage}
+                <div className="absolute top-0 -left-2 w-0 h-0 border-[10px] border-transparent border-r-sky-50 border-t-sky-50" />
+              </div>
+
+              <div className="p-4 rounded-sm bg-dark3 border border-border text-xs text-text-dim flex items-start gap-2 leading-relaxed">
+                <span className="material-symbols-outlined text-[18px] text-blue-500 shrink-0 mt-0.5">info</span>
+                <span>
+                  Este mensaje se genera automáticamente para cada voluntario. 
+                  Los datos como el nombre, la fecha y la hora del turno se rellenan automáticamente 
+                  al hacer clic en enviar WhatsApp.
+                </span>
+              </div>
             </div>
           </div>
-        </SheetContent>
-      </Sheet>
+        </div>
+      </div>
+
+      {/* Editor Drawer (from Shifts/Volunteers) */}
+      <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${isSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        {/* Backdrop */}
+        <div 
+          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isSheetOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setIsSheetOpen(false)}
+        />
+
+        {/* Drawer Content */}
+        <div 
+          id="drawer-profile"
+          className={`relative w-full md:w-[500px] md:mx-auto h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
+          style={{ willChange: 'transform' }}
+        >
+          {/* Handle */}
+          <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+          
+          <div 
+            className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
+            onTouchStart={(e) => {
+              const drawer = document.getElementById('drawer-profile');
+              if (!drawer) return;
+              drawer.dataset.startY = e.touches[0].clientY.toString();
+              drawer.style.transition = 'none';
+            }}
+            onTouchMove={(e) => {
+              const drawer = document.getElementById('drawer-profile');
+              if (!drawer) return;
+              const startY = parseFloat(drawer.dataset.startY || '0');
+              const currentY = e.touches[0].clientY;
+              const deltaY = currentY - startY;
+
+              if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
+                drawer.style.transform = `translateY(${deltaY}px)`;
+                drawer.dataset.swiping = 'true';
+              }
+            }}
+            onTouchEnd={(e) => {
+              const drawer = document.getElementById('drawer-profile');
+              if (!drawer) return;
+              
+              drawer.style.transition = 'transform 0.3s ease-out';
+              
+              if (drawer.dataset.swiping === 'true') {
+                const startY = parseFloat(drawer.dataset.startY || '0');
+                const deltaY = e.changedTouches[0].clientY - startY;
+                
+                drawer.dataset.swiping = 'false';
+                
+                if (deltaY > 150) {
+                  setIsSheetOpen(false);
+                  setTimeout(() => { drawer.style.transform = ''; }, 300);
+                } else {
+                  drawer.style.transform = `translateY(0)`;
+                }
+              } else {
+                drawer.style.transform = '';
+              }
+            }}
+          >
+            {editingVolunteer && (
+              <>
+                {/* Header Profile Info */}
+                <div className="text-center mt-4 mb-8 px-4">
+                  <h3 className="text-drawer-title text-white mb-1">
+                    {editingVolunteer.name}
+                  </h3>
+                  <p className="text-drawer-subtitle text-white/80">
+                    {editingVolunteer.committee} • {editingVolunteer.ward}
+                  </p>
+                </div>
+
+                {/* Top Stats Row */}
+                <div className="flex items-center mb-8 -mx-4">
+                  {(() => {
+                    const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
+                    const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
+                    return (
+                      <>
+                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{totalTurnos}</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Turnos</span>
+                        </div>
+                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{diasCubiertos}</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Días</span>
+                        </div>
+                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">
+                            {editingVolunteer.reliability}
+                            <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>
+                          </span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Confia.</span>
+                        </div>
+                        <div className="flex flex-col items-center flex-1">
+                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{editingVolunteer.age || '-'}</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2">Edad</span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* Acciones de Contacto */}
+                <div className="grid grid-cols-2 gap-4 px-2 mb-8">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-11 gap-2 text-white border-white/20 bg-white/10 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20"
+                    onClick={() => window.open(`https://wa.me/${editingVolunteer.phone.replace(/\s+/g, '')}`, '_blank')}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">message</span>
+                    WHATSAPP
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-11 gap-2 text-white border-white/20 bg-white/10 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20"
+                    onClick={() => window.location.href = `tel:${editingVolunteer.phone.replace(/\s+/g, '')}`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">call</span>
+                    LLAMAR
+                  </Button>
+                </div>
+
+                {/* Squad/Schedule / Day Cards List */}
+                <div className="w-full">
+                  <div className="flex items-center justify-between px-2 mb-4">
+                    <p className="text-drawer-label text-white">Cronograma</p>
+                    
+                    <div className="flex items-center gap-3">
+                      {saved && <span className="text-[11px] text-green-300 font-bold animate-pulse">✓ Listo</span>}
+                      {isEditingShifts ? (
+                        <button onClick={handleSaveShifts} className="h-7 px-4 bg-white hover:bg-white/90 text-black rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
+                          Guardar
+                        </button>
+                      ) : (
+                        <button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-7 px-4 bg-black/20 backdrop-blur-sm border border-white/10 hover:bg-black/30 text-white rounded-full font-bold text-[11px] transition-all active:scale-[0.97]">
+                          Editar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Shifts Content as Day Cards */}
+                  <div className="flex flex-col gap-2 pb-12">
+                    {EVENT_DAYS.map((d, index) => {
+                      const dayShifts = shiftsByDay[d.key] || [];
+                      const bgColors = [
+                        'bg-[#10a562]',
+                        'bg-[#4aa9df]',
+                        'bg-[#f1c130]',
+                        'bg-[#d54134]',
+                        'bg-[#981e32]',
+                        'bg-[#2c44c2]',
+                        'bg-[#f1c130]',
+                        'bg-[#ed1b24]'
+                      ];
+                      const cardBg = bgColors[index % bgColors.length];
+
+                      return (
+                        <div key={d.key} className={`${cardBg} rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01]`}>
+                          <div className="w-full flex items-center justify-between px-5 sm:px-6 py-4">
+                            {/* Left: Date */}
+                            <div className="flex-1 min-w-0 pr-4 flex items-center">
+                              <p className="font-inter font-bold text-white text-[13px] drop-shadow-sm truncate capitalize">
+                                {d.label} {d.dateNum}
+                              </p>
+                            </div>
+
+                            {/* Right: 4 Columns (T1 to T4) */}
+                            <div className="flex items-center shrink-0 ml-auto">
+                              {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
+                                const active = dayShifts.includes(t);
+                                return (
+                                  <button 
+                                    key={t}
+                                    disabled={!isEditingShifts}
+                                    onClick={() => toggleShift(d.key, t)}
+                                    className={`flex flex-col items-center justify-center w-12 sm:w-16 h-full ${i !== 0 ? 'border-l border-white/20' : ''} transition-colors ${isEditingShifts ? 'hover:bg-white/20 rounded-lg' : ''} ${active ? 'opacity-100' : 'opacity-50'}`}
+                                  >
+                                    <span className={`text-[16px] font-semibold drop-shadow-sm leading-none ${active ? 'text-white' : 'text-white'}`}>
+                                      {active ? '✓' : '-'}
+                                    </span>
+                                    <span className={`font-inter text-[10px] font-bold uppercase mt-1 tracking-widest ${active ? 'text-white/90' : 'text-white/70'}`}>
+                                      {t}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
 
       <Toast
         message={toast.message}
@@ -898,6 +1077,7 @@ export default function RemindersPage() {
         isVisible={toast.isVisible}
         onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
       />
+      </div>
     </div>
   );
 }

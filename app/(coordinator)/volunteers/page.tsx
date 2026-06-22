@@ -18,6 +18,8 @@ import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { useSearch } from "@/lib/search-context";
 import { USER_TABLE_STYLES } from "../users/page";
+import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
+import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -42,48 +44,7 @@ const itemVariants = {
   }
 };
 
-const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split("");
 
-const AlphabetScrubber = ({ isMobile }: { isMobile: boolean }) => {
-  const handleDrag = (e: React.TouchEvent | React.MouseEvent) => {
-    e.preventDefault();
-    const y = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-    const x = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-    const elem = document.elementFromPoint(x, y);
-    const letter = elem?.getAttribute('data-letter');
-    if (letter) {
-      const targetId = isMobile ? `letter-mobile-${letter}` : `letter-${letter}`;
-      const el = document.getElementById(targetId);
-      if (el) {
-        el.scrollIntoView({ behavior: 'auto', block: 'center' });
-      }
-    }
-  };
-
-  return (
-    <div 
-      className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center py-2 px-0.5 sm:px-1 bg-dark2/80 backdrop-blur-md rounded-l-xl border-y border-l border-white/10 shadow-xl touch-none"
-      onTouchStart={handleDrag}
-      onTouchMove={handleDrag}
-      onMouseDown={handleDrag}
-      onMouseMove={(e) => e.buttons === 1 && handleDrag(e)}
-    >
-      {ALPHABET.map(letter => (
-        <div 
-          key={letter}
-          data-letter={letter}
-          className="text-[9px] sm:text-[10px] font-bold text-text-dim hover:text-[#4d7cfe] px-1 sm:px-1.5 py-[1px] sm:py-0.5 cursor-pointer select-none transition-colors"
-          onClick={() => {
-            const targetId = isMobile ? `letter-mobile-${letter}` : `letter-${letter}`;
-            document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }}
-        >
-          {letter}
-        </div>
-      ))}
-    </div>
-  );
-};
 
 // Interfaz para tipo
 type VolunteerType = {
@@ -128,95 +89,7 @@ function HighlightText({ text, term }: { text: string; term: string }) {
   );
 }
 
-const SwipeableVolunteerCard = ({ 
-  vol, 
-  onEdit, 
-  onArchive, 
-  searchTerm
-}: { 
-  vol: VolunteerType; 
-  onEdit: (vol: VolunteerType) => void; 
-  onArchive: (vol: VolunteerType) => void; 
-  searchTerm: string;
-}) => {
-  const x = useMotionValue(0);
-  
-  const background = useTransform(
-    x,
-    [-150, 0, 150],
-    ["rgba(254, 77, 151, 0.2)", "rgba(0, 0, 0, 0)", "rgba(77, 124, 254, 0.2)"]
-  );
 
-  const opacityLeft = useTransform(x, [-100, -10, 0], [1, 0, 0]);
-  const opacityRight = useTransform(x, [0, 10, 100], [0, 0, 1]);
-
-  const scaleLeft = useTransform(x, [-100, -20], [1, 0.8]);
-  const scaleRight = useTransform(x, [20, 100], [0.8, 1]);
-
-  const handleDragEnd = (event: any, info: any) => {
-    const swipeThreshold = 80;
-    if (info.offset.x > swipeThreshold) {
-      window.open(`https://wa.me/${vol.phone.replace(/\s+/g, '')}`, '_blank');
-    } else if (info.offset.x < -swipeThreshold) {
-      onArchive(vol);
-    }
-  };
-
-  return (
-    <div className="relative overflow-hidden w-full bg-dark2 select-none border-b border-white/5">
-      <motion.div 
-        style={{ background }}
-        className="absolute inset-0 flex items-center justify-between px-5 pointer-events-none"
-      >
-        <motion.div 
-          style={{ opacity: opacityRight, scale: scaleRight }}
-          className="flex items-center gap-1.5 text-[#4d7cfe] font-bold text-[10px] font-inter uppercase tracking-wider"
-        >
-          <span className="material-symbols-outlined text-[18px]">chat</span>
-          <span>WhatsApp</span>
-        </motion.div>
-
-        <motion.div 
-          style={{ opacity: opacityLeft, scale: scaleLeft }}
-          className="flex items-center gap-1.5 text-red font-bold text-[10px] font-inter uppercase tracking-wider"
-        >
-          <span>{vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}</span>
-          <span className="material-symbols-outlined text-[18px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
-        </motion.div>
-      </motion.div>
-
-      <motion.div
-        drag="x"
-        dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={{ left: 0.5, right: 0.5 }}
-        dragDirectionLock
-        style={{ x }}
-        onDragEnd={handleDragEnd}
-        onClick={() => onEdit(vol)}
-        className="relative z-10 p-4 bg-dark2 hover:bg-white/[0.02] active:bg-white/[0.04] transition-colors cursor-pointer flex flex-col gap-1.5 touch-pan-y"
-      >
-        <p className={USER_TABLE_STYLES.name}>
-          <HighlightText text={vol.name} term={searchTerm} />
-        </p>
-
-        <div className="flex items-center justify-between w-full gap-2">
-          <p className={cn(USER_TABLE_STYLES.phone, "shrink-0")}>{vol.phone || 'Sin teléfono'}</p>
-          
-          <div className="flex items-center gap-1.5 shrink">
-            {vol.committee && (
-              <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
-                {vol.committee}
-              </Badge>
-            )}
-            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, vol.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)}>
-              {vol.status === 'active' ? 'Activo' : 'Archivado'}
-            </Badge>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
 
 export default function VolunteersPage() {
   const supabase = createClient();
@@ -610,7 +483,7 @@ export default function VolunteersPage() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="w-full mx-auto pb-12"
+      className="w-full mx-auto pb-32 lg:pb-12"
     >
 
       {/* Sticky Header matching users design */}
@@ -787,14 +660,39 @@ export default function VolunteersPage() {
                 <Fragment key={letter}>
                   {groupedVolunteers[letter].map((vol, index) => (
                     <div key={vol.id} id={index === 0 ? `letter-mobile-${letter}` : undefined}>
-                      <SwipeableVolunteerCard 
-                        vol={vol} 
-                        onEdit={handleEditClick} 
-                        onArchive={() => {
+                      <SwipeableMobileCard 
+                        name={vol.name}
+                        phone={vol.phone}
+                        searchTerm={searchTerm}
+                        onEdit={() => handleEditClick(vol)}
+                        
+                        onSwipeRight={() => handleResetPin(vol)}
+                        swipeRightIcon="lock_reset"
+                        swipeRightText="Reset PIN"
+                        swipeRightColorClass="text-amber-500"
+                        swipeRightBgColor="rgba(245, 158, 11, 0.2)"
+                        
+                        onSwipeLeft={() => {
                           setVolunteerToArchive(vol);
                           setIsArchiveModalOpen(true);
                         }}
-                        searchTerm={searchTerm}
+                        swipeLeftIcon={vol.status === 'archived' ? 'unarchive' : 'archive'}
+                        swipeLeftText={vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
+                        swipeLeftColorClass="text-red"
+                        swipeLeftBgColor="rgba(254, 77, 151, 0.2)"
+                        
+                        badges={
+                          <>
+                            {vol.committee && (
+                              <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
+                                {vol.committee}
+                              </Badge>
+                            )}
+                            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, vol.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)}>
+                              {vol.status === 'active' ? 'Activo' : 'Archivado'}
+                            </Badge>
+                          </>
+                        }
                       />
                     </div>
                   ))}
@@ -1017,100 +915,202 @@ export default function VolunteersPage() {
       {/* Editor Lateral (Añadir) */}
       <Sheet open={isAddSheetOpen} onOpenChange={setIsAddSheetOpen}>
         <SheetContent
-          side="right"
-          className="bg-dark2 text-text border-l border-border overflow-hidden w-full sm:w-[40vw] sm:max-w-[95vw] p-0 flex flex-col"
+          id="add-volunteer-drawer"
+          side={isMobile ? "bottom" : "right"}
+          className={cn(
+            "flex flex-col gap-0 p-0",
+            isMobile 
+              ? "h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl border-0 overflow-hidden" 
+              : "bg-dark2 text-text border-l border-white/10 sm:w-[40vw] sm:max-w-[95vw] h-full overflow-hidden"
+          )}
         >
-          <SheetHeader className="p-6 pb-2 shrink-0">
-            <SheetTitle className="text-xl font-bold text-text">Añadir Voluntario</SheetTitle>
-          </SheetHeader>
+          {isMobile && (
+            <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+          )}
+
           <form
             id="add-volunteer-form"
             onSubmit={handleAddVolunteer}
-            className="flex-1 overflow-y-auto px-6 space-y-6 pb-24"
+            className="flex-1 flex flex-col overflow-hidden"
           >
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-text">Nombre y Apellido</label>
-              <Input
-                required
-                minLength={3}
-                className="h-10 bg-dark3 border-border focus:ring-gold-faint"
-                placeholder="Ej. Juan Pérez"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-              />
-              <p className="text-[11px] text-text-dim">Asegúrate de incluir ambos apellidos si es posible.</p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-text">Celular</label>
-              <Input
-                required
-                type="tel"
-                pattern="[0-9]{8}"
-                maxLength={8}
-                onKeyPress={(e) => {
-                  if (!/[0-9]/.test(e.key)) e.preventDefault();
-                }}
-                className="h-10 bg-dark3 border-border focus:ring-gold-faint"
-                placeholder="Ej. 88888888"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-              />
-              <p className="text-[11px] text-text-dim">Solo 8 dígitos, sin código de país o espacios.</p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-text">Estaca</label>
-              <Input
-                required
-                className="h-10 bg-dark3 border-border focus:ring-gold-faint"
-                placeholder="Ej. Managua Sur"
-                value={newStake}
-                onChange={(e) => setNewStake(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-text">Barrio</label>
-              <Input
-                required
-                className="h-10 bg-dark3 border-border focus:ring-gold-faint"
-                placeholder="Ej. Barrio 1"
-                value={newWard}
-                onChange={(e) => setNewWard(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-text">Comité</label>
-              <DataTableFilter
-                title={newCommitteeId ? (committeesList.find(c => c.id === newCommitteeId)?.name || "Comité") : "Selecciona un comité"}
-                options={committeesList.map(c => c.name)}
-                value={newCommitteeId ? [committeesList.find(c => c.id === newCommitteeId)?.name || ""] : []}
-                dropdownLabel="Comités disponibles"
-                hideClearButton
-                hideCountBadge
-                isCommitteeFilter
-                className="w-full bg-dark3 justify-between h-10"
-                onChange={(vals) => {
-                  if (vals.length === 0) {
-                    setNewCommitteeId("");
-                    return;
+            <div 
+              className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4 text-white font-light" : "p-7 space-y-7")}
+              onTouchStart={(e) => {
+                if (!isMobile) return;
+                const drawer = document.getElementById("add-volunteer-drawer");
+                if (!drawer) return;
+                drawer.dataset.startY = e.touches[0].clientY.toString();
+                drawer.style.transition = 'none';
+              }}
+              onTouchMove={(e) => {
+                if (!isMobile) return;
+                const drawer = document.getElementById("add-volunteer-drawer");
+                if (!drawer) return;
+                const startY = parseFloat(drawer.dataset.startY || '0');
+                const currentY = e.touches[0].clientY;
+                const deltaY = currentY - startY;
+
+                if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
+                  drawer.style.transform = `translateY(${deltaY}px)`;
+                  drawer.dataset.swiping = 'true';
+                }
+              }}
+              onTouchEnd={(e) => {
+                if (!isMobile) return;
+                const drawer = document.getElementById("add-volunteer-drawer");
+                if (!drawer) return;
+                
+                drawer.style.transition = 'transform 0.3s ease-out';
+                
+                if (drawer.dataset.swiping === 'true') {
+                  const startY = parseFloat(drawer.dataset.startY || '0');
+                  const deltaY = e.changedTouches[0].clientY - startY;
+                  
+                  drawer.dataset.swiping = 'false';
+                  
+                  if (deltaY > 150) {
+                    drawer.style.transform = `translateY(100%)`;
+                    setTimeout(() => {
+                      drawer.style.transform = '';
+                      setIsAddSheetOpen(false);
+                    }, 300);
+                  } else {
+                    drawer.style.transform = `translateY(0)`;
                   }
-                  const currentName = committeesList.find(c => c.id === newCommitteeId)?.name;
-                  const newName = vals.find(v => v !== currentName) || vals[0];
-                  const comm = committeesList.find(c => c.name === newName);
-                  setNewCommitteeId(comm ? comm.id : "");
-                }}
-              />
+                } else {
+                  drawer.style.transform = '';
+                }
+              }}
+            >
+              <div className={cn(isMobile ? "mb-6" : "")}>
+                <h2 className={cn("font-medium tracking-tight leading-none mb-2", isMobile ? "text-white text-lg" : "text-text")}>Añadir Voluntario</h2>
+                <p className={cn("text-sm font-inter font-bold", isMobile ? "text-white/80" : "text-text-dim")}>Registra un nuevo voluntario en el sistema.</p>
+              </div>
+
+              <div className="space-y-6 pb-6">
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Nombre y Apellido</label>
+                    <Input
+                      required
+                      minLength={3}
+                      className={cn(
+                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
+                        isMobile 
+                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
+                          : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
+                      )}
+                      placeholder="Ej. Juan Pérez"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                    />
+                    <p className={cn("text-[11px] italic font-inter", isMobile ? "text-white/70" : "text-text-dim")}>Asegúrate de incluir ambos apellidos si es posible.</p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Celular</label>
+                    <Input
+                      required
+                      type="tel"
+                      pattern="[0-9]{8}"
+                      maxLength={8}
+                      onKeyPress={(e) => {
+                        if (!/[0-9]/.test(e.key)) e.preventDefault();
+                      }}
+                      className={cn(
+                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
+                        isMobile 
+                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
+                          : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
+                      )}
+                      placeholder="Ej. 88888888"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value)}
+                    />
+                    <p className={cn("text-[11px] italic font-inter", isMobile ? "text-white/70" : "text-text-dim")}>Solo 8 dígitos, sin código de país o espacios.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Estaca</label>
+                    <Input
+                      required
+                      className={cn(
+                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
+                        isMobile 
+                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
+                          : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
+                      )}
+                      placeholder="Ej. Managua Sur"
+                      value={newStake}
+                      onChange={(e) => setNewStake(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Barrio</label>
+                    <Input
+                      required
+                      className={cn(
+                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
+                        isMobile 
+                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
+                          : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
+                      )}
+                      placeholder="Ej. Barrio 1"
+                      value={newWard}
+                      onChange={(e) => setNewWard(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Comité</label>
+                    <DataTableFilter
+                      title={newCommitteeId ? (committeesList.find(c => c.id === newCommitteeId)?.name || "Comité") : "Selecciona un comité"}
+                      options={committeesList.map(c => c.name)}
+                      value={newCommitteeId ? [committeesList.find(c => c.id === newCommitteeId)?.name || ""] : []}
+                      dropdownLabel="Comités disponibles"
+                      hideClearButton
+                      hideCountBadge
+                      isCommitteeFilter
+                      className={cn(
+                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all justify-between", 
+                        isMobile 
+                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
+                          : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
+                      )}
+                      onChange={(vals) => {
+                        if (vals.length === 0) {
+                          setNewCommitteeId("");
+                          return;
+                        }
+                        const currentName = committeesList.find(c => c.id === newCommitteeId)?.name;
+                        const newName = vals.find(v => v !== currentName) || vals[0];
+                        const comm = committeesList.find(c => c.name === newName);
+                        setNewCommitteeId(comm ? comm.id : "");
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-row w-full mt-auto shrink-0">
+              <Button 
+                type="button" 
+                variant="ghost"
+                onClick={() => setIsAddSheetOpen(false)} 
+                className="btn-cancel flex-1 h-[52px] rounded-none rounded-tl-[24px] shadow-none font-inter font-bold text-base border-r border-black/5 dark:border-white/5"
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="submit" 
+                className="btn-action flex-1 h-[52px] rounded-none rounded-tr-[24px] shadow-none font-inter font-bold text-base"
+              >
+                Añadir
+              </Button>
             </div>
           </form>
-
-          {/* Footer fijo en la parte inferior */}
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }} className="bg-dark2 border-t border-border px-6 py-4 flex items-center justify-end gap-3">
-            <Button type="button" variant="outline" className="border-border text-text-dim hover:text-text hover:bg-dark3" onClick={() => setIsAddSheetOpen(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" form="add-volunteer-form" className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white">
-              Guardar Voluntario
-            </Button>
-          </div>
         </SheetContent>
       </Sheet>
 

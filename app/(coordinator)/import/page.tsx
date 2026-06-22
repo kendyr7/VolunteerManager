@@ -69,14 +69,19 @@ export default function ImportPage() {
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
     const data = lines.map(line => {
       const parts = line.split(',');
+      const fullName = parts[0]?.trim() || '';
+      const nameParts = fullName.split(' ');
+      const firstName = nameParts.length > 0 ? nameParts[0] : '';
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+      
       return {
-        firstName: parts[0]?.trim() || '',
-        lastName: parts[1]?.trim() || '',
-        age: parts[2]?.trim() || '',
-        ward: parts[3]?.trim() || '',
-        stake: parts[4]?.trim() || '',
-        phone: parts[5]?.trim() || '',
-        committeeName: parts[6]?.trim() || ''
+        firstName: firstName,
+        lastName: lastName,
+        age: parts[1]?.trim() || '',
+        ward: parts[2]?.trim() || '',
+        stake: parts[3]?.trim() || '',
+        phone: parts[4]?.trim() || '',
+        committeeName: parts[5]?.trim() || ''
       };
     }).filter(v => v.firstName && v.phone);
 
@@ -166,24 +171,39 @@ export default function ImportPage() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="w-full mx-auto space-y-6 md:space-y-10 pb-20"
+      className="w-full mx-auto pb-32 lg:pb-12 flex flex-col"
     >
+      {/* Sticky Header matching users design */}
+      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto shrink-0">
+        <motion.div variants={itemVariants} className="w-full flex items-center justify-between">
+          <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
+            Importación
+          </h1>
+        </motion.div>
+      </div>
+
+      <div className="flex flex-col gap-6 md:gap-10 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
       {step === 1 && (
-        <motion.div variants={itemVariants}>
-          <Card className="border border-border bg-dark2 rounded-3xl shadow-sm overflow-hidden">
+        <motion.div variants={itemVariants} className="w-full">
+          <Card className="border border-white/10 bg-dark2 rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full">
             <CardHeader className="bg-dark3 border-b border-border p-6 sm:p-8">
               <CardTitle className="font-bold text-text text-lg">1. Pegar datos CSV</CardTitle>
-              <CardDescription className="text-text-dim font-medium mt-3 flex flex-wrap gap-2 items-center">
-                <span className="text-xs font-bold mr-1">Formato:</span>
-                {['Nombre', 'Apellido', 'Edad', 'Barrio', 'Estaca', 'Teléfono', 'Comité'].map(f => (
-                  <Badge key={f} variant="secondary" className="bg-dark2 border border-border text-text-dim font-bold px-2 py-0.5 text-[10px] uppercase tracking-wider">{f}</Badge>
-                ))}
+              <CardDescription className="text-text-dim mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <span className="text-xs font-inter font-bold text-text-dim/80">Formato:</span>
+                <div className="flex flex-wrap gap-2 items-center">
+                  {['Nombres y Apellidos', 'Edad', 'Barrio', 'Estaca', 'Teléfono', 'Comité'].map((f, i) => (
+                    <div key={f} className="flex items-center gap-0.5">
+                      <Badge variant="secondary" className="bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 text-[#4d7cfe] font-inter font-bold px-2 py-0.5 text-[11px] shadow-none">{f}</Badge>
+                      {i < 5 && <span className="text-white/30 font-inter font-bold">,</span>}
+                    </div>
+                  ))}
+                </div>
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-8">
               <textarea
-                className="w-full h-64 sm:h-80 p-4 sm:p-6 rounded-2xl border border-border bg-dark3 font-mono text-sm focus:ring-4 focus:ring-[#4d7cfe]/10 focus:border-[#4d7cfe] outline-none transition-all resize-none text-text"
-                placeholder="Juan, Pérez, 35, Las Colinas, Managua Sur, 88881111, Seguridad&#10;María, García, 28, El Dorado, Managua Este, 88882222, Guía"
+                className="w-full h-64 sm:h-80 p-4 sm:p-6 rounded-2xl border border-white/10 bg-dark3 font-inter font-bold text-sm focus:ring-4 focus:ring-[#4d7cfe]/10 focus:border-[#4d7cfe] outline-none transition-all resize-none text-text placeholder:text-white/30"
+                placeholder="Juan Pérez, 35, Las Colinas, Managua Sur, 88881111, Seguridad"
                 value={csvText}
                 onChange={(e) => setCsvText(e.target.value)}
               />
@@ -199,8 +219,8 @@ export default function ImportPage() {
       )}
 
       {step === 2 && (
-        <motion.div variants={itemVariants}>
-          <Card className="border border-border bg-dark2 rounded-3xl shadow-sm overflow-hidden">
+        <motion.div variants={itemVariants} className="w-full">
+          <Card className="border border-white/10 bg-dark2 rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full">
             <CardHeader className="bg-dark3 border-b border-border p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <CardTitle className="font-bold text-text flex items-center gap-3 text-lg">
@@ -303,8 +323,8 @@ export default function ImportPage() {
       )}
 
       {step === 3 && (
-        <motion.div variants={itemVariants}>
-          <Card className="border border-accent/20 bg-dark2 shadow-xl shadow-accent/5 rounded-3xl overflow-hidden">
+        <motion.div variants={itemVariants} className="w-full">
+          <Card className="border border-white/10 bg-dark2 rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full">
             <CardHeader className="bg-accent/5 p-8 sm:p-10 text-center border-b border-accent/10">
               <div className="w-16 h-16 sm:w-20 sm:h-20 bg-accent rounded-full flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-accent/30">
                 <span className="material-symbols-outlined text-[32px] sm:text-[40px]">task_alt</span>
@@ -357,6 +377,7 @@ export default function ImportPage() {
         isVisible={toast.isVisible} 
         onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
       />
+      </div>
     </motion.div>
   );
 }

@@ -14,6 +14,8 @@ import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-mo
 import { useSearch } from "@/lib/search-context";
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { cn } from "@/lib/utils";
+import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
+import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -38,48 +40,7 @@ const itemVariants = {
   }
 };
 
-const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split("");
 
-const AlphabetScrubber = ({ isMobile }: { isMobile: boolean }) => {
-  const handleDrag = (e: React.TouchEvent | React.MouseEvent) => {
-    e.preventDefault();
-    const y = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-    const x = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-    const elem = document.elementFromPoint(x, y);
-    const letter = elem?.getAttribute('data-letter');
-    if (letter) {
-      const targetId = isMobile ? `letter-mobile-${letter}` : `letter-${letter}`;
-      const el = document.getElementById(targetId);
-      if (el) {
-        el.scrollIntoView({ behavior: 'auto', block: 'center' });
-      }
-    }
-  };
-
-  return (
-    <div 
-      className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center py-2 px-0.5 sm:px-1 bg-dark2/80 backdrop-blur-md rounded-l-xl border-y border-l border-white/10 shadow-xl touch-none"
-      onTouchStart={handleDrag}
-      onTouchMove={handleDrag}
-      onMouseDown={handleDrag}
-      onMouseMove={(e) => e.buttons === 1 && handleDrag(e)}
-    >
-      {ALPHABET.map(letter => (
-        <div 
-          key={letter}
-          data-letter={letter}
-          className="text-[9px] sm:text-[10px] font-bold text-text-dim hover:text-[#4d7cfe] px-1 sm:px-1.5 py-[1px] sm:py-0.5 cursor-pointer select-none transition-colors"
-          onClick={() => {
-            const targetId = isMobile ? `letter-mobile-${letter}` : `letter-${letter}`;
-            document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }}
-        >
-          {letter}
-        </div>
-      ))}
-    </div>
-  );
-};
 
 const COMMITTEES = ['Historia', 'Seguridad', 'Guía', 'Traducción', 'Transporte', 'Primeros Auxilios'];
 
@@ -136,106 +97,7 @@ export const USER_TABLE_STYLES = {
   statusPending: "bg-white/5 border-white/10 text-text-dim",
 };
 
-const SwipeableUserCard = ({ 
-  user, 
-  onEdit, 
-  onReset, 
-  onDelete,
-  searchTerm
-}: { 
-  user: PlatformUser; 
-  onEdit: (user: PlatformUser) => void; 
-  onReset: (user: PlatformUser) => void; 
-  onDelete: (user: PlatformUser) => void; 
-  searchTerm: string;
-}) => {
-  const x = useMotionValue(0);
-  
-  const background = useTransform(
-    x,
-    [-150, 0, 150],
-    ["rgba(239, 68, 68, 0.2)", "rgba(0, 0, 0, 0)", "rgba(245, 158, 11, 0.2)"]
-  );
 
-  const opacityLeft = useTransform(x, [-100, -10, 0], [1, 0, 0]);
-  const opacityRight = useTransform(x, [0, 10, 100], [0, 0, 1]);
-
-  const scaleLeft = useTransform(x, [-100, -20], [1, 0.8]);
-  const scaleRight = useTransform(x, [20, 100], [0.8, 1]);
-
-  const handleDragEnd = (event: any, info: any) => {
-    const swipeThreshold = 80;
-    if (info.offset.x > swipeThreshold) {
-      onReset(user);
-    } else if (info.offset.x < -swipeThreshold) {
-      onDelete(user);
-    }
-  };
-
-  return (
-    <div className="relative overflow-hidden w-full bg-dark2 select-none">
-      {/* Background action layer underneath */}
-      <motion.div 
-        style={{ background }}
-        className="absolute inset-0 flex items-center justify-between px-5 pointer-events-none"
-      >
-        {/* Left Side: Dragged Right (Reset PIN) */}
-        <motion.div 
-          style={{ opacity: opacityRight, scale: scaleRight }}
-          className="flex items-center gap-1.5 text-amber-500 font-bold text-[10px] font-inter uppercase tracking-wider"
-        >
-          <span className="material-symbols-outlined text-[18px]">lock_reset</span>
-          <span>Reset PIN</span>
-        </motion.div>
-
-        {/* Right Side: Dragged Left (Delete) */}
-        <motion.div 
-          style={{ opacity: opacityLeft, scale: scaleLeft }}
-          className="flex items-center gap-1.5 text-red font-bold text-[10px] font-inter uppercase tracking-wider"
-        >
-          <span>Eliminar</span>
-          <span className="material-symbols-outlined text-[18px]">delete</span>
-        </motion.div>
-      </motion.div>
-
-      {/* Foreground card */}
-      <motion.div
-        drag="x"
-        dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={{ left: 0.5, right: 0.5 }}
-        dragDirectionLock
-        style={{ x }}
-        onDragEnd={handleDragEnd}
-        onClick={() => onEdit(user)}
-        className="relative z-10 p-4 bg-dark2 hover:bg-white/[0.02] active:bg-white/[0.04] transition-colors cursor-pointer border-b border-white/5 flex flex-col gap-1.5 touch-pan-y"
-      >
-        {/* Name */}
-        <p className={USER_TABLE_STYLES.name}>
-          <HighlightText text={user.name} term={searchTerm} />
-        </p>
-
-        {/* Phone & Badges Line */}
-        <div className="flex items-center justify-between w-full gap-2">
-          <p className={cn(USER_TABLE_STYLES.phone, "shrink-0")}>{user.phone}</p>
-          
-          <div className="flex items-center gap-1.5 shrink">
-            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.role === 'Admin' ? USER_TABLE_STYLES.roleAdmin : USER_TABLE_STYLES.roleEditor)}>
-              {user.role}
-            </Badge>
-            {user.committee && (
-              <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(user.committee))}>
-                {user.committee}
-              </Badge>
-            )}
-            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)}>
-              {user.status === 'active' ? 'Activo' : 'Pendiente'}
-            </Badge>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
 
 export default function UsersPage() {
   const [users, setUsers] = useState<PlatformUser[]>([]);
@@ -560,7 +422,7 @@ export default function UsersPage() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="w-full mx-auto pb-12"
+      className="w-full mx-auto pb-32 md:pb-12"
     >
       {/* Sticky Header matching shifts design */}
       <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto">
@@ -626,7 +488,7 @@ export default function UsersPage() {
               <form onSubmit={handleInvite} className="p-6 space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-text">Nombre completo</label>
+                    <label className="block mb-2 text-xs font-semibold text-text">Nombre completo</label>
                     <input 
                       required 
                       value={newName} 
@@ -636,7 +498,7 @@ export default function UsersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-text">Teléfono WhatsApp</label>
+                    <label className="block mb-2 text-xs font-semibold text-text">Teléfono WhatsApp</label>
                     <input 
                       required 
                       pattern="[0-9]{8}"
@@ -647,7 +509,7 @@ export default function UsersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-text">Rol en la plataforma</label>
+                    <label className="block mb-2 text-xs font-semibold text-text">Rol en la plataforma</label>
                     <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
                       <SelectTrigger className="w-full h-10 bg-dark2 border-white/10 text-text flex items-center justify-between rounded-[10px]">
                         <SelectValue />
@@ -671,7 +533,7 @@ export default function UsersPage() {
 
                   {newRole === 'Editor' && (
                     <div className="space-y-2 animate-in fade-in zoom-in-95">
-                      <label className="text-xs font-semibold text-text">Comité Asignado</label>
+                      <label className="block mb-2 text-xs font-semibold text-text">Comité Asignado</label>
                       <DataTableFilter
                         title={newCommittee || "Selecciona un comité"}
                         options={committeesList.map(c => c.name)}
@@ -861,12 +723,39 @@ export default function UsersPage() {
                 <Fragment key={letter}>
                   {groupedUsers[letter].map((user, index) => (
                     <div key={user.id} id={index === 0 ? `letter-mobile-${letter}` : undefined}>
-                      <SwipeableUserCard
-                        user={user}
-                        onEdit={handleEditClick}
-                        onReset={handleResetPin}
-                        onDelete={handleDeleteUser}
+                      <SwipeableMobileCard 
+                        name={user.name}
+                        phone={user.phone}
                         searchTerm={searchTerm}
+                        onEdit={() => handleEditClick(user)}
+                        
+                        onSwipeRight={() => handleResetPin(user)}
+                        swipeRightIcon="lock_reset"
+                        swipeRightText="Reset PIN"
+                        swipeRightColorClass="text-amber-500"
+                        swipeRightBgColor="rgba(245, 158, 11, 0.2)"
+                        
+                        onSwipeLeft={() => handleDeleteUser(user)}
+                        swipeLeftIcon="delete"
+                        swipeLeftText="Eliminar"
+                        swipeLeftColorClass="text-red"
+                        swipeLeftBgColor="rgba(239, 68, 68, 0.2)"
+                        
+                        badges={
+                          <>
+                            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.role === 'Admin' ? USER_TABLE_STYLES.roleAdmin : USER_TABLE_STYLES.roleEditor)}>
+                              {user.role}
+                            </Badge>
+                            {user.committee && (
+                              <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(user.committee))}>
+                                {user.committee}
+                              </Badge>
+                            )}
+                            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)}>
+                              {user.status === 'active' ? 'Activo' : 'Pendiente'}
+                            </Badge>
+                          </>
+                        }
                       />
                     </div>
                   ))}
@@ -880,6 +769,7 @@ export default function UsersPage() {
       {/* Sheet de Edición */}
       <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
         <SheetContent
+          id="edit-user-drawer"
           side={isMobile ? "bottom" : "right"}
           className={cn(
             "flex flex-col gap-0 p-0",
@@ -893,7 +783,55 @@ export default function UsersPage() {
           )}
 
           <form onSubmit={handleUpdateUser} className="flex-1 flex flex-col overflow-hidden">
-            <div className={cn("flex-1 overflow-y-auto scrollbar-hide", isMobile ? "px-6 pb-6 pt-4 text-white font-light" : "p-7 space-y-7")}>
+            <div 
+              className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4 text-white font-light" : "p-7 space-y-7")}
+              onTouchStart={(e) => {
+                if (!isMobile) return;
+                const drawer = document.getElementById("edit-user-drawer");
+                if (!drawer) return;
+                drawer.dataset.startY = e.touches[0].clientY.toString();
+                drawer.style.transition = 'none';
+              }}
+              onTouchMove={(e) => {
+                if (!isMobile) return;
+                const drawer = document.getElementById("edit-user-drawer");
+                if (!drawer) return;
+                const startY = parseFloat(drawer.dataset.startY || '0');
+                const currentY = e.touches[0].clientY;
+                const deltaY = currentY - startY;
+
+                if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
+                  drawer.style.transform = `translateY(${deltaY}px)`;
+                  drawer.dataset.swiping = 'true';
+                }
+              }}
+              onTouchEnd={(e) => {
+                if (!isMobile) return;
+                const drawer = document.getElementById("edit-user-drawer");
+                if (!drawer) return;
+                
+                drawer.style.transition = 'transform 0.3s ease-out';
+                
+                if (drawer.dataset.swiping === 'true') {
+                  const startY = parseFloat(drawer.dataset.startY || '0');
+                  const deltaY = e.changedTouches[0].clientY - startY;
+                  
+                  drawer.dataset.swiping = 'false';
+                  
+                  if (deltaY > 150) {
+                    drawer.style.transform = `translateY(100%)`;
+                    setTimeout(() => {
+                      drawer.style.transform = '';
+                      setIsEditSheetOpen(false);
+                    }, 300);
+                  } else {
+                    drawer.style.transform = `translateY(0)`;
+                  }
+                } else {
+                  drawer.style.transform = '';
+                }
+              }}
+            >
               <div className={cn(isMobile ? "mb-6" : "")}>
                 <h2 className={cn("font-medium tracking-tight leading-none mb-2", isMobile ? "text-white text-lg" : "text-text")}>Editar Perfil</h2>
                 <p className={cn("text-sm font-inter font-bold", isMobile ? "text-white/80" : "text-text-dim")}>Modifica los datos de acceso y el rol del usuario en la plataforma.</p>
@@ -902,7 +840,7 @@ export default function UsersPage() {
               <div className="space-y-6 pb-6">
                 <div className="space-y-5">
                 <div className="space-y-2">
-                  <label className={cn("text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Nombre completo</label>
+                  <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Nombre completo</label>
                   <input 
                     required 
                     value={newName} 
@@ -916,7 +854,7 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className={cn("text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Teléfono WhatsApp</label>
+                  <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Teléfono WhatsApp</label>
                   <input 
                     required 
                     pattern="[0-9]{8}"
@@ -931,7 +869,7 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className={cn("text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Rol en la plataforma</label>
+                  <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Rol en la plataforma</label>
                   <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
                     <SelectTrigger className={cn(
                       "w-full h-10 border text-text font-inter font-bold flex items-center justify-between",
@@ -949,7 +887,7 @@ export default function UsersPage() {
 
                 {newRole === 'Editor' && (
                   <div className="space-y-2">
-                    <label className={cn("text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Comité Asignado</label>
+                    <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Comité Asignado</label>
                     <Select value={newCommittee} onValueChange={(v) => v && setNewCommittee(v)}>
                       <SelectTrigger className={cn(
                         "w-full h-10 border text-text font-inter font-bold flex items-center justify-between",
@@ -967,7 +905,7 @@ export default function UsersPage() {
                 )}
 
                 <div className="space-y-2">
-                  <label className={cn("text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>PIN de Acceso Actual</label>
+                  <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>PIN de Acceso Actual</label>
                   <div className="flex gap-2">
                     <div className="relative w-32 shrink-0">
                       <input 
@@ -1011,7 +949,7 @@ export default function UsersPage() {
                       <span className="font-bold font-inter text-sm">Resetear PIN</span>
                     </Button>
                   </div>
-                  <p className={cn("text-[10px] italic", isMobile ? "text-white/70" : "text-text-dim")}>El PIN por defecto tras un reseteo es '1234'.</p>
+                  <p className={cn("text-[10px] italic font-inter", isMobile ? "text-white/70" : "text-text-dim")}>El PIN por defecto tras un reseteo es '1234'.</p>
                 </div>
               </div>
 

@@ -104,7 +104,7 @@ function CoordinatorLayoutInner({
 
   const activeItem = [...NAV_ITEMS, ...BOTTOM_ITEMS].find(item => pathname === item.href);
   const currentTitle = activeItem ? activeItem.name : "Dashboard";
-  const hideMobileHeader = pathname === '/shifts' || pathname === '/users' || pathname === '/volunteers';
+  const hideMobileHeader = pathname === '/shifts' || pathname === '/users' || pathname === '/volunteers' || pathname === '/import' || pathname === '/reminders';
 
   const ITEMS_PER_PAGE = 4;
   const totalNavPages = Math.ceil(allMobileNavItems.length / ITEMS_PER_PAGE);
