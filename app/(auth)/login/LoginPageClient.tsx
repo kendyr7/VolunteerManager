@@ -78,6 +78,13 @@ export function LoginPageClient() {
         </div>
 
         <div className="md:w-1/2 lg:w-3/5 relative overflow-hidden bg-black">
+          <Image
+            src="/templodark.jpg"
+            alt="Templo de Managua"
+            fill
+            className="object-cover"
+            priority
+          />
           <div className="absolute inset-0 bg-[#0084d1]/10 z-10" />
           <div className="absolute bottom-12 left-12 right-12 z-20 text-white">
             <div className="backdrop-blur-md bg-black/20 p-8 rounded-sm border border-white/20 shadow-2xl">
@@ -114,7 +121,7 @@ export function LoginPageClient() {
           {/* ── Page 0 — Hero image + quote ── */}
           <div className="relative h-full w-1/2 shrink-0 bg-black">
             <Image
-              src="/templo.jpg"
+              src="/templodark.jpg"
               alt="Templo de Managua"
               fill
               className="object-cover"

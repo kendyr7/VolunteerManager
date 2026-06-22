@@ -977,26 +977,39 @@ export default function RemindersPage() {
                   {(() => {
                     const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
                     const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
+                    
+                    let totalAssigned = 0;
+                    let totalConfirmed = 0;
+                    for (const [day, shifts] of Object.entries(shiftsByDay)) {
+                      for (const shift of shifts) {
+                        totalAssigned++;
+                        if (confirmedReminders[`${editingVolunteer.id}-${day}-${shift}`]) {
+                          totalConfirmed++;
+                        }
+                      }
+                    }
+                    const dynamicReliability = totalAssigned === 0 ? '-' : Math.round((totalConfirmed / totalAssigned) * 100);
+
                     return (
                       <>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
                           <span className="text-drawer-kpi-value text-white drop-shadow-md">{totalTurnos}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2">Turnos</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Turnos</span>
                         </div>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
                           <span className="text-drawer-kpi-value text-white drop-shadow-md">{diasCubiertos}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2">Días</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Días</span>
                         </div>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
                           <span className="text-drawer-kpi-value text-white drop-shadow-md">
-                            {editingVolunteer.reliability}
-                            <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>
+                            {dynamicReliability}
+                            {dynamicReliability !== '-' && <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>}
                           </span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2">Confia.</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Confia.</span>
                         </div>
                         <div className="flex flex-col items-center flex-1">
                           <span className="text-drawer-kpi-value text-white drop-shadow-md">{editingVolunteer.age || '-'}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2">Edad</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Edad</span>
                         </div>
                       </>
                     );

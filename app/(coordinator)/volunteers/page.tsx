@@ -56,6 +56,7 @@ type VolunteerType = {
   phone: string;
   shifts: number;
   reliability: number;
+  computedReliability?: number | string;
   committee: string;
   committee_id?: string;
   status?: string;
@@ -148,6 +149,27 @@ export default function VolunteersPage() {
   const [isEditingShifts, setIsEditingShifts] = useState(false);
   const [saved, setSaved] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const loadConfirmations = () => {
+      const stored = localStorage.getItem("confirmed_reminders");
+      if (stored) {
+        try {
+          setConfirmedReminders(JSON.parse(stored));
+        } catch (e) {
+          console.error("Error loading confirmations", e);
+        }
+      }
+    };
+    loadConfirmations();
+    window.addEventListener("storage", loadConfirmations);
+    window.addEventListener("focus", loadConfirmations);
+    return () => {
+      window.removeEventListener("storage", loadConfirmations);
+      window.removeEventListener("focus", loadConfirmations);
+    };
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -425,8 +447,28 @@ export default function VolunteersPage() {
     if (currentRole === 'Lector') return false; // Lector doesn't see directory
     return false;
   });
+  const augmentedVolunteers = useMemo(() => {
+    return volunteers.map(vol => {
+      let totalAssigned = 0;
+      let totalConfirmed = 0;
+      const volShifts = globalShifts[vol.id] || {};
+      for (const [day, shifts] of Object.entries(volShifts)) {
+        for (const shift of shifts) {
+          totalAssigned++;
+          if (confirmedReminders[`${vol.id}-${day}-${shift}`]) {
+            totalConfirmed++;
+          }
+        }
+      }
+      return {
+        ...vol,
+        computedReliability: totalAssigned === 0 ? '-' : Math.round((totalConfirmed / totalAssigned) * 100)
+      };
+    });
+  }, [volunteers, globalShifts, confirmedReminders]);
+
   const filteredVolunteers = useMemo(() => {
-    const result = volunteers.filter(v => {
+    const result = augmentedVolunteers.filter(v => {
       // 1. Role-based isolation: Editors only see their committee
       if (currentRole === 'Editor' && v.committee !== currentCommittee) return false;
       if (currentRole === 'Lector') return false;
@@ -456,7 +498,7 @@ export default function VolunteersPage() {
       return matchesSearch && matchesCommittee && matchesStake && matchesWard;
     });
     return result;
-  }, [volunteers, searchTerm, selectedCommittees, selectedStakes, selectedWards, showArchived, currentRole, currentCommittee]);
+  }, [augmentedVolunteers, searchTerm, selectedCommittees, selectedStakes, selectedWards, showArchived, currentRole, currentCommittee]);
 
   const groupedVolunteers = useMemo(() => {
     const groups: Record<string, VolunteerType[]> = {};
@@ -586,12 +628,12 @@ export default function VolunteersPage() {
                             </Badge>
                           </td>
                           <td className="px-5 py-4 text-center">
-                            {vol.shifts === 0 ? (
+                            {vol.computedReliability === '-' ? (
                               <span className="text-sm text-text-dim">N/A</span>
                             ) : (
                               <div className="flex items-center justify-center gap-2">
-                                <div className={`w-1.5 h-1.5 rounded-full ${vol.reliability >= 80 ? 'bg-accent' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
-                                <span className="text-sm font-bold text-text tabular-nums">{vol.reliability}%</span>
+                                <div className={`w-1.5 h-1.5 rounded-full ${Number(vol.computedReliability || 0) >= 80 ? 'bg-accent' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
+                                <span className="text-sm font-bold text-text tabular-nums">{vol.computedReliability}%</span>
                               </div>
                             )}
                           </td>
@@ -798,6 +840,18 @@ export default function VolunteersPage() {
                   {(() => {
                     const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
                     const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
+                    let totalAssigned = 0;
+                    let totalConfirmed = 0;
+                    for (const [day, shifts] of Object.entries(shiftsByDay)) {
+                      for (const shift of shifts) {
+                        totalAssigned++;
+                        if (confirmedReminders[`${editingVolunteer.id}-${day}-${shift}`]) {
+                          totalConfirmed++;
+                        }
+                      }
+                    }
+                    const dynamicReliability = totalAssigned === 0 ? '-' : Math.round((totalConfirmed / totalAssigned) * 100);
+
                     return (
                       <>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
@@ -810,8 +864,8 @@ export default function VolunteersPage() {
                         </div>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
                           <span className="text-drawer-kpi-value text-white drop-shadow-md">
-                            {editingVolunteer.reliability}
-                            <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>
+                            {dynamicReliability}
+                            {dynamicReliability !== '-' && <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>}
                           </span>
                           <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Confia.</span>
                         </div>
@@ -1104,20 +1158,25 @@ export default function VolunteersPage() {
               </div>
             </div>
 
-            <div className="flex flex-row w-full mt-auto shrink-0">
+            <div className={cn("flex flex-row w-full mt-auto shrink-0 gap-3", isMobile ? "px-6 pb-6 pt-2" : "p-7 pt-4 border-t border-white/5")}>
               <Button 
                 type="button" 
-                variant="ghost"
+                variant="outline"
                 onClick={() => setIsAddSheetOpen(false)} 
-                className="btn-cancel flex-1 h-[52px] rounded-none rounded-tl-[24px] shadow-none font-inter font-bold text-base border-r border-black/5 dark:border-white/5"
+                className={cn(
+                  "flex-1 rounded-full shadow-lg h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97]",
+                  isMobile 
+                    ? "bg-white/10 hover:bg-white/20 text-white border-white/20" 
+                    : "bg-dark2 hover:bg-dark3 text-text border-white/10"
+                )}
               >
                 Cancelar
               </Button>
               <Button 
                 type="submit" 
-                className="btn-action flex-1 h-[52px] rounded-none rounded-tr-[24px] shadow-none font-inter font-bold text-base"
+                className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97]"
               >
-                Añadir
+                Añadir Voluntario
               </Button>
             </div>
           </form>

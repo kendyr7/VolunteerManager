@@ -128,6 +128,28 @@ export default function CoordinatorDashboard() {
     }
   };
 
+  const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const loadConfirmations = () => {
+      const stored = localStorage.getItem("confirmed_reminders");
+      if (stored) {
+        try {
+          setConfirmedReminders(JSON.parse(stored));
+        } catch (e) {
+          console.error("Error loading confirmations", e);
+        }
+      }
+    };
+    loadConfirmations();
+    window.addEventListener("storage", loadConfirmations);
+    window.addEventListener("focus", loadConfirmations);
+    return () => {
+      window.removeEventListener("storage", loadConfirmations);
+      window.removeEventListener("focus", loadConfirmations);
+    };
+  }, []);
+
   useEffect(() => {
     const role = localStorage.getItem('mock_role') || 'Admin';
     const phone = localStorage.getItem('volunteer_phone');
@@ -228,7 +250,21 @@ export default function CoordinatorDashboard() {
     });
 
     const globalCoveragePercentage = totalRequired > 0 ? Math.round((totalAssignedInRequired / totalRequired) * 100) : 100;
-    const averageReliability = 98;
+    
+    let totalGlobalAssigned = 0;
+    let totalGlobalConfirmed = 0;
+    Object.entries(globalShifts).forEach(([volId, days]) => {
+      Object.entries(days).forEach(([day, shifts]) => {
+        shifts.forEach(shift => {
+          totalGlobalAssigned++;
+          if (confirmedReminders[`${volId}-${day}-${shift}`]) {
+            totalGlobalConfirmed++;
+          }
+        });
+      });
+    });
+    
+    const averageReliability = totalGlobalAssigned > 0 ? Math.round((totalGlobalConfirmed / totalGlobalAssigned) * 100) : 0;
 
     return {
       totalRecruited,
@@ -238,7 +274,7 @@ export default function CoordinatorDashboard() {
       criticalAlerts,
       averageReliability
     };
-  }, [volunteers, committeesList, globalShifts, committeeRequirements]);
+  }, [volunteers, committeesList, globalShifts, committeeRequirements, confirmedReminders]);
 
   const committeeStatus = useMemo(() => {
     return committeesList.map((c, index) => {
