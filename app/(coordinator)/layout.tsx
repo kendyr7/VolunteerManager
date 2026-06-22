@@ -104,8 +104,6 @@ function CoordinatorLayoutInner({
 
   const activeItem = [...NAV_ITEMS, ...BOTTOM_ITEMS].find(item => pathname === item.href);
   const currentTitle = activeItem ? activeItem.name : "Dashboard";
-  const hideMobileHeader = pathname === '/shifts' || pathname === '/users' || pathname === '/volunteers' || pathname === '/import' || pathname === '/reminders';
-
   const ITEMS_PER_PAGE = 4;
   const totalNavPages = Math.ceil(allMobileNavItems.length / ITEMS_PER_PAGE);
 
@@ -135,92 +133,35 @@ function CoordinatorLayoutInner({
   return (
     <div className="h-screen bg-dark flex flex-col font-sans text-text overflow-hidden">
       
-      {/* Desktop Top Navbar */}
-      <header className="hidden lg:flex h-16 bg-dark2 border-b border-border shrink-0 sticky top-0 z-50">
-        {/* Left Logo Section — collapses with sidebar */}
-        <div
-          className="flex items-center px-6 border-r border-border shrink-0 overflow-hidden transition-all duration-300"
-          style={{ width: sidebarOpen ? 280 : 72 }}
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <Image
-              src="/icon-192.png"
-              alt="Templo Managua"
-              width={28}
-              height={28}
-              className="rounded-sm object-contain shrink-0"
-            />
-            <span
-              className="font-bold text-lg text-text tracking-tight whitespace-nowrap transition-all duration-300 overflow-hidden"
-              style={{ opacity: sidebarOpen ? 1 : 0, maxWidth: sidebarOpen ? 200 : 0 }}
-            >
-              Templo Managua
-            </span>
-          </div>
-        </div>
-        
-        {/* Right Action Section */}
-        <div className="flex-1 flex items-center justify-between px-6">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setSidebarOpen(prev => !prev)}
-              className="text-text-dim hover:text-text transition-colors flex items-center justify-center"
-              title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            >
-              <Icon name="sort" size={24} />
-            </button>
-            <span className="font-semibold text-[17px] text-text">{currentTitle}</span>
-          </div>
-          
-          <div className="flex items-center gap-6">
-            {/* Contextual Search Input */}
-            <div className="relative hidden lg:flex items-center">
-              <Icon name="search" size={18} className="absolute left-3 text-text-dim pointer-events-none" />
-              <input
-                ref={inputRef}
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={
-                  pathname === '/volunteers' ? 'Buscar voluntario...' :
-                  pathname === '/shifts' ? 'Buscar voluntario en turnos...' :
-                  pathname === '/reminders' ? 'Buscar en avisos...' :
-                  pathname === '/users' ? 'Buscar usuario...' :
-                  'Buscar...'
-                }
-                className="pl-9 pr-4 h-9 w-56 xl:w-72 text-[13px] font-medium bg-dark3 border border-border rounded-sm text-text placeholder:text-text-dim focus:outline-none focus:ring-2 focus:ring-[#4d7cfe]/30 focus:border-[#4d7cfe]/50 transition-all"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 text-text-dim hover:text-text"
-                >
-                  <Icon name="close" size={16} />
-                </button>
-              )}
-            </div>
-            
-            <div className="flex items-center gap-4 ml-4">
-              <button 
-                onClick={toggleTheme}
-                className="text-text-dim hover:text-text transition-colors hidden lg:block"
-                title="Cambiar tema"
-              >
-                <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={22} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+
 
       {/* Main Layout Area */}
       <div className="flex flex-1 min-h-0 overflow-hidden lg:pb-0">
         
         {/* Desktop Sidebar */}
         <aside
-          className="hidden lg:flex flex-col border-r border-border bg-dark2 shrink-0 overflow-hidden transition-all duration-300"
+          className="hidden lg:flex flex-col border-r border-border bg-dark2 shrink-0 overflow-hidden transition-all duration-300 relative z-50"
           style={{ width: sidebarOpen ? 280 : 72 }}
         >
+          {/* Logo Section inside Sidebar */}
+          <div className="h-16 flex items-center px-6 border-b border-border shrink-0 min-w-0 mb-2 mt-4 lg:mt-0">
+            <div className="flex items-center gap-3 min-w-0 cursor-pointer" onClick={() => setSidebarOpen(prev => !prev)} title={sidebarOpen ? 'Ocultar menú' : 'Expandir menú'}>
+              <Image
+                src="/icon-192.png"
+                alt="Templo Managua"
+                width={28}
+                height={28}
+                className="rounded-sm object-contain shrink-0"
+              />
+              <span
+                className="font-bold text-lg text-text tracking-tight whitespace-nowrap transition-all duration-300 overflow-hidden"
+                style={{ opacity: sidebarOpen ? 1 : 0, maxWidth: sidebarOpen ? 200 : 0 }}
+              >
+                Templo Managua
+              </span>
+            </div>
+          </div>
+
           {/* Scrollable nav content */}
           <div className={cn("flex-1 overflow-y-auto overflow-x-hidden py-6 space-y-6 min-h-0 transition-all duration-300", sidebarOpen ? "px-4" : "px-2")}>
             {/* Navigation Section */}
@@ -275,6 +216,17 @@ function CoordinatorLayoutInner({
               </Link>
             ))}
             <button
+              onClick={toggleTheme}
+              title={!sidebarOpen ? "Cambiar tema" : undefined}
+              className={cn(
+                "flex w-full items-center rounded-sm transition-all duration-200 text-[14px] font-medium text-text hover:bg-dark3 hover:text-text",
+                sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5"
+              )}
+            >
+              <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={20} className="text-text-dim shrink-0" />
+              {sidebarOpen && <span className="truncate">Cambiar Tema</span>}
+            </button>
+            <button
               onClick={handleLogout}
               title={!sidebarOpen ? "Cerrar Sesión" : undefined}
               className={cn(
@@ -289,111 +241,8 @@ function CoordinatorLayoutInner({
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto min-w-0 bg-dark relative">
-          {/* Mobile Header (Only visible on small screens) */}
-          {!hideMobileHeader && (
-            <header className="lg:hidden bg-dark2 border-b border-border px-4 py-3 sticky top-0 z-40 shadow-sm flex items-center justify-between min-h-[57px]">
-            {isMobileSearchOpen ? (
-              <div className="flex w-full items-center gap-2 animate-in fade-in slide-in-from-right-4 duration-200">
-                <button
-                  onClick={() => {
-                    setIsMobileSearchOpen(false);
-                    setSearchTerm('');
-                  }}
-                  className="p-1 text-text-dim hover:text-text transition-colors shrink-0"
-                >
-                  <Icon name="arrow_back" size={20} />
-                </button>
-                <div className="relative flex-1 flex items-center">
-                  <Icon name="search" size={18} className="absolute left-3 text-text-dim pointer-events-none" />
-                  <input
-                    autoFocus
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder={
-                      pathname === '/volunteers' ? 'Buscar voluntario...' :
-                      pathname === '/shifts' ? 'Buscar voluntario...' :
-                      pathname === '/reminders' ? 'Buscar avisos...' :
-                      pathname === '/users' ? 'Buscar usuario...' :
-                      'Buscar...'
-                    }
-                    className="w-full pl-9 pr-4 h-9 text-[13px] font-medium bg-dark3 border border-border rounded-sm text-text placeholder:text-text-dim focus:outline-none focus:ring-2 focus:ring-[#4d7cfe]/30 focus:border-[#4d7cfe]/50 transition-all"
-                  />
-                  {searchTerm && (
-                    <button
-                      onClick={() => setSearchTerm('')}
-                      className="absolute right-2.5 text-text-dim hover:text-text"
-                    >
-                      <Icon name="close" size={16} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center">
-                  <Image 
-                    src="/icon-192.png" 
-                    alt="Templo Managua" 
-                    width={32} 
-                    height={32} 
-                    className="rounded-sm object-contain"
-                  />
-                </div>
-                <div className="flex items-center gap-1 relative">
-                  <button
-                    onClick={() => setIsMobileSearchOpen(true)}
-                    className="p-2 text-text-dim hover:text-gold transition-colors"
-                    title="Buscar"
-                  >
-                    <Icon name="search" size={24} />
-                  </button>
-                  <button
-                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    className="p-2 text-text-dim hover:text-text transition-colors"
-                    title="Más opciones"
-                  >
-                    <Icon name="more_vert" size={24} />
-                  </button>
-                  
-                  {isMobileMenuOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setIsMobileMenuOpen(false)} />
-                      <div className="absolute top-12 right-0 w-48 bg-dark2 border border-border shadow-lg rounded-sm py-1 z-50 animate-in fade-in slide-in-from-top-2">
-                        <button 
-                          onClick={() => { toggleTheme(); setIsMobileMenuOpen(false); }}
-                          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-text hover:bg-dark3 transition-colors text-left"
-                        >
-                          <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={20} className="text-text-dim" />
-                          Tema
-                        </button>
-                        <Link 
-                          href="/settings" 
-                          onClick={() => setIsMobileMenuOpen(false)}
-                          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-text hover:bg-dark3 transition-colors"
-                        >
-                          <Icon name="settings" size={20} className="text-text-dim" />
-                          Ajustes
-                        </Link>
-                        <div className="h-[1px] bg-border my-1" />
-                        <button 
-                          onClick={handleLogout}
-                          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-faint transition-colors text-left font-medium"
-                        >
-                          <Icon name="logout" size={20} className="text-red-400" />
-                          Cerrar Sesión
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </header>
-          )}
-
-          <div className={cn(hideMobileHeader ? "p-0 lg:p-8" : "p-4 lg:p-8")}>
+        <main className="flex-1 overflow-y-auto min-w-0 bg-dark relative pb-24 lg:pb-0">
+          <div className="w-full h-full">
             {children}
           </div>
         </main>

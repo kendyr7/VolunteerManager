@@ -190,69 +190,79 @@ export default function SettingsPage() {
   if (loading) return null;
 
   return (
-    <motion.div 
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="max-w-4xl mx-auto space-y-10 pb-20"
-    >
+    <div className="w-full mx-auto pb-32 md:pb-12 flex flex-col min-h-[calc(100dvh-10rem)] md:h-[calc(100dvh-8rem)]">
+      {/* Sticky Header matching users design */}
+      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 pointer-events-auto shrink-0">
+        <div className="w-full flex items-center justify-between">
+          <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
+            Ajustes
+          </h1>
+        </div>
+      </div>
+
+      <motion.div 
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="max-w-4xl w-full mx-auto space-y-6 lg:space-y-10 pb-20 px-4 sm:px-6 lg:px-8 pt-4"
+      >
 
 
       {/* Profile Card */}
-      <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+      <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden">
+        <div className="p-6 md:p-8 border-b border-white/5 flex items-center justify-between bg-dark3">
           <div>
-            <h3 className="font-bold text-slate-900 tracking-tight leading-none mb-2">Información Personal</h3>
-            <p className="text-sm font-medium text-slate-400">Datos registrados de tu cuenta.</p>
+            <h3 className="font-bold text-text tracking-tight leading-none mb-2">Información Personal</h3>
+            <p className="text-xs md:text-sm font-medium text-text-dim">Datos registrados de tu cuenta.</p>
           </div>
-          <Badge className="bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20 font-bold uppercase tracking-widest px-3 py-1">
+          <Badge className="bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20 font-bold uppercase tracking-widest px-3 py-1 text-[10px] md:text-xs">
             {currentRole}
           </Badge>
         </div>
         
-        <form onSubmit={handleUpdateProfile} className="p-8 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <form onSubmit={handleUpdateProfile} className="p-6 md:p-8 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Nombre Completo</label>
+              <label className="text-[10px] md:text-xs font-bold text-text-dim uppercase tracking-widest">Nombre Completo</label>
               <input 
                 readOnly={currentRole === 'Lector'}
                 value={editName}
                 onChange={e => setEditName(e.target.value)}
-                className={`w-full h-10 px-3 rounded-sm border transition-all outline-none ${
+                className={`w-full h-10 md:h-11 px-4 rounded-sm border transition-all outline-none font-medium ${
                   currentRole === 'Lector' 
-                    ? 'bg-slate-50 border-slate-100 text-slate-400 cursor-not-allowed' 
-                    : 'bg-white border-slate-200 text-slate-900 focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
+                    ? 'bg-dark/50 border-white/5 text-text-dim cursor-not-allowed' 
+                    : 'bg-dark3 border-white/10 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
                 }`}
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Teléfono WhatsApp</label>
+              <label className="text-[10px] md:text-xs font-bold text-text-dim uppercase tracking-widest">Teléfono WhatsApp</label>
               <input 
                 readOnly={currentRole === 'Lector'}
                 value={editPhone}
                 onChange={e => setEditPhone(e.target.value)}
-                className={`w-full h-10 px-3 rounded-sm border transition-all outline-none font-mono ${
+                className={`w-full h-10 md:h-11 px-4 rounded-sm border transition-all outline-none font-mono text-sm md:text-base ${
                   currentRole === 'Lector' 
-                    ? 'bg-slate-50 border-slate-100 text-slate-400 cursor-not-allowed' 
-                    : 'bg-white border-slate-200 text-slate-900 focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
+                    ? 'bg-dark/50 border-white/5 text-text-dim cursor-not-allowed' 
+                    : 'bg-dark3 border-white/10 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
                 }`}
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Comité Asignado</label>
+            <div className="space-y-2 md:col-span-2 lg:col-span-1">
+              <label className="text-[10px] md:text-xs font-bold text-text-dim uppercase tracking-widest">Comité Asignado</label>
               {currentRole === 'Admin' ? (
                 <Select value={editCommittee} onValueChange={(v) => v && setEditCommittee(v)}>
-                  <SelectTrigger className="w-full h-10 bg-white border-slate-200 text-slate-800">
+                  <SelectTrigger className="w-full h-10 md:h-11 bg-dark3 border-white/10 text-text font-medium">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-dark2 border-white/10 text-text">
                     {committees.map(c => (
-                      <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                      <SelectItem key={c.id} value={c.name} className="focus:bg-dark3 focus:text-text">{c.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
-                <div className="h-10 px-3 flex items-center bg-slate-50 border border-slate-100 rounded-sm text-slate-400 font-medium">
+                <div className="h-10 md:h-11 px-4 flex items-center bg-dark/50 border border-white/5 rounded-sm text-text-dim font-medium">
                   {editCommittee || 'Sin comité'}
                 </div>
               )}
@@ -260,8 +270,8 @@ export default function SettingsPage() {
           </div>
 
           {currentRole !== 'Lector' && (
-            <div className="pt-8 border-t border-slate-100 flex justify-end">
-              <Button type="submit" disabled={isUpdating} className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-8 h-10 shadow-lg shadow-blue-500/15 transition-all active:scale-[0.97]">
+            <div className="pt-6 md:pt-8 border-t border-white/5 flex justify-end">
+              <Button type="submit" disabled={isUpdating} className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-8 h-10 shadow-lg shadow-blue-500/15 transition-all active:scale-[0.97] rounded-full text-xs">
                 {isUpdating ? 'Actualizando...' : 'Guardar Cambios'}
               </Button>
             </div>
@@ -270,24 +280,24 @@ export default function SettingsPage() {
       </motion.div>
 
       {/* Permissions Section (Toggles) */}
-      <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-          <h3 className="font-bold text-slate-900 tracking-tight leading-none mb-2">Configuración de Privilegios</h3>
-          <p className="text-sm font-medium text-slate-400">Funcionalidades habilitadas para el rol de {currentRole}.</p>
+      <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden">
+        <div className="p-6 md:p-8 border-b border-white/5 bg-dark3">
+          <h3 className="font-bold text-text tracking-tight leading-none mb-2">Configuración de Privilegios</h3>
+          <p className="text-xs md:text-sm font-medium text-text-dim">Funcionalidades habilitadas para el rol de {currentRole}.</p>
         </div>
-        <div className="p-8">
-          <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-slate-50/30">
+        <div className="p-4 md:p-8">
+          <div className="divide-y divide-white/5 border border-white/5 rounded-2xl overflow-hidden bg-dark3">
             {ALL_PERMISSIONS.map(perm => {
               const isOn = ROLE_PERMISSIONS[currentRole].includes(perm);
               const isLocked = currentRole !== 'Admin';
               
               return (
-                <div key={perm} className="flex items-center justify-between p-5 bg-white/50 hover:bg-white transition-colors group">
+                <div key={perm} className="flex items-center justify-between p-4 md:p-5 bg-dark2/50 hover:bg-dark2 transition-colors group">
                   <div className="flex items-center gap-4">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                      isOn ? 'bg-[#4d7cfe]/10 text-[#4d7cfe]' : 'bg-slate-100 text-slate-300'
+                      isOn ? 'bg-[#4d7cfe]/10 text-[#4d7cfe]' : 'bg-white/5 text-text-dim'
                     }`}>
-                      <span className="material-symbols-outlined text-[22px]">
+                      <span className="material-symbols-outlined text-[20px] md:text-[22px]">
                         {perm === 'Ver voluntarios' ? 'group' :
                          perm === 'Editar turnos' ? 'edit_calendar' :
                          perm === 'Enviar mensajes' ? 'send_to_mobile' :
@@ -296,8 +306,8 @@ export default function SettingsPage() {
                       </span>
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-slate-800">{perm}</p>
-                      <p className="text-xs text-slate-400 font-medium">{isOn ? 'Habilitado' : 'Restringido'}</p>
+                      <p className="text-xs md:text-sm font-bold text-text">{perm}</p>
+                      <p className="text-[10px] md:text-xs text-text-dim font-medium">{isOn ? 'Habilitado' : 'Restringido'}</p>
                     </div>
                   </div>
 
@@ -305,8 +315,8 @@ export default function SettingsPage() {
                     type="button"
                     disabled={isLocked}
                     className={`w-10 h-6 rounded-full transition-all relative flex-shrink-0 ${
-                      isOn ? 'bg-[#4d7cfe]' : 'bg-slate-300'
-                    } ${isLocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-105'}`}
+                      isOn ? 'bg-[#4d7cfe]' : 'bg-white/10'
+                    } ${isLocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
                   >
                     <motion.span 
                       initial={false}
@@ -321,8 +331,8 @@ export default function SettingsPage() {
           </div>
           
           {currentRole === 'Admin' && (
-            <div className="mt-8 flex justify-end">
-              <p className="text-[11px] text-slate-400 italic">Como Administrador, gestionas los permisos globales del sistema.</p>
+            <div className="mt-6 md:mt-8 flex justify-end">
+              <p className="text-[10px] md:text-[11px] text-text-dim italic">Como Administrador, gestionas los permisos globales del sistema.</p>
             </div>
           )}
         </div>
@@ -330,15 +340,15 @@ export default function SettingsPage() {
 
       {/* Committee Requirements Section (Role-based) */}
       {(currentRole === 'Admin' || currentRole === 'Editor') && (
-        <motion.div variants={itemVariants} className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-          <div className="p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-50/50">
+        <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden mb-8">
+          <div className="p-6 md:p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-dark3">
             <div>
-              <h3 className="font-bold text-slate-900 tracking-tight leading-none mb-2">Requerimientos por Turno</h3>
-              <p className="text-sm font-medium text-slate-400">Define el personal mínimo necesario para cada horario.</p>
+              <h3 className="font-bold text-text tracking-tight leading-none mb-2">Requerimientos por Turno</h3>
+              <p className="text-xs md:text-sm font-medium text-text-dim">Define el personal mínimo necesario para cada horario.</p>
             </div>
             
             {currentRole === 'Admin' ? (
-              <div className="max-w-sm">
+              <div className="w-full md:max-w-sm">
                 <DataTableFilter
                   title={selectedConfigCommittees.length === 1 ? selectedConfigCommittees[0] : "Comités seleccionados"}
                   options={committees.map(c => c.name)}
@@ -347,7 +357,7 @@ export default function SettingsPage() {
                   hideClearButton
                   hideCountBadge={selectedConfigCommittees.length === 1}
                   isCommitteeFilter
-                  className="bg-white border-slate-200 justify-between min-w-[200px]"
+                  className="bg-dark border-white/10 justify-between w-full min-w-[200px]"
                   onChange={(vals) => {
                     if (vals.length > 0) {
                       setSelectedConfigCommittees(vals);
@@ -362,48 +372,48 @@ export default function SettingsPage() {
             )}
           </div>
 
-          <div className="p-8">
-            <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="p-4 md:p-8">
+            <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
               {([
                 { id: 'T1', label: 'Turno 1', time: '8:00 AM' },
                 { id: 'T2', label: 'Turno 2', time: '11:00 AM' },
                 { id: 'T3', label: 'Turno 3', time: '2:00 PM' },
                 { id: 'T4', label: 'Turno 4', time: '5:00 PM' }
               ] as const).map(({ id, label, time }) => (
-                <div key={id} className="p-5 rounded-2xl border border-slate-200 bg-slate-50/30 space-y-4">
+                <div key={id} className="p-5 rounded-2xl border border-white/5 bg-dark3 space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800">{label}</span>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">{time}</span>
+                    <span className="text-xs font-bold text-text">{label}</span>
+                    <span className="text-[10px] font-bold text-text-dim uppercase">{time}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <button 
                       type="button"
                       onClick={() => updateCapacity(id, -1)}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-slate-800 hover:border-slate-300 transition-all active:scale-90 shadow-sm"
+                      className="w-10 h-10 flex items-center justify-center rounded-xl bg-dark2 border border-white/10 text-text-dim hover:text-text hover:border-white/20 transition-all active:scale-90 shadow-sm"
                     >
-                      <span className="material-symbols-outlined text-[18px]">remove</span>
+                      <span className="material-symbols-outlined text-[20px]">remove</span>
                     </button>
-                    <span className="text-2xl font-bold text-slate-900 tabular-nums">{(capacities as any)[id]}</span>
+                    <span className="text-3xl font-bold text-text tabular-nums font-inter">{(capacities as any)[id]}</span>
                     <button 
                       type="button"
                       onClick={() => updateCapacity(id, 1)}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-slate-800 hover:border-slate-300 transition-all active:scale-90 shadow-sm"
+                      className="w-10 h-10 flex items-center justify-center rounded-xl bg-dark2 border border-white/10 text-text-dim hover:text-text hover:border-white/20 transition-all active:scale-90 shadow-sm"
                     >
-                      <span className="material-symbols-outlined text-[18px]">add</span>
+                      <span className="material-symbols-outlined text-[20px]">add</span>
                     </button>
                   </div>
                 </div>
               ))}
               
               {/* Sync Button (Centered in the 2x2 grid, visible only on sm screens and larger) */}
-              <div className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center bg-white rounded-full p-2 shadow-sm border border-slate-100 z-10">
+              <div className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center bg-dark2 rounded-full p-2 shadow-md border border-white/5 z-10">
                 <button
                   onClick={() => setIsSyncEnabled(!isSyncEnabled)}
                   title={isSyncEnabled ? "Sincronización activada" : "Sincronización desactivada"}
-                  className={`flex items-center justify-center w-10 h-10 rounded-full transition-all shadow-md ${
+                  className={`flex items-center justify-center w-10 h-10 rounded-full transition-all shadow-sm ${
                     isSyncEnabled 
                       ? 'bg-[#4d7cfe] text-white shadow-blue-500/20' 
-                      : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
+                      : 'bg-dark3 text-text-dim hover:bg-white/5 hover:text-text'
                   }`}
                 >
                   <span className="material-symbols-outlined text-[20px]">link</span>
@@ -411,14 +421,14 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="mt-10 pt-8 border-t border-slate-100 flex items-center justify-between">
-              <p className="text-[11px] text-slate-400 italic max-w-md">
+            <div className="mt-6 md:mt-10 pt-6 md:pt-8 border-t border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <p className="text-[10px] md:text-[11px] text-text-dim italic max-w-md">
                 Estos valores determinan los estados de alerta (Déficit/Crítico) en los tableros de gestión global.
               </p>
               <Button 
                 onClick={handleSaveRequirements} 
                 disabled={isSavingConfig}
-                className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-8 h-10 shadow-lg shadow-blue-500/15 transition-all active:scale-[0.97]"
+                className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-8 h-10 shadow-lg shadow-blue-500/15 transition-all active:scale-[0.97] rounded-full text-xs w-full sm:w-auto"
               >
                 {isSavingConfig ? 'Guardando...' : 'Guardar Requerimientos'}
               </Button>
@@ -433,6 +443,7 @@ export default function SettingsPage() {
         isVisible={toast.isVisible} 
         onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
       />
-    </motion.div>
+      </motion.div>
+    </div>
   );
 }
