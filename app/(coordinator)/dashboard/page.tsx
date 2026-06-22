@@ -1,8 +1,9 @@
 'use client';
 
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -321,12 +322,12 @@ export default function CoordinatorDashboard() {
       const shiftsData = ['T1', 'T2', 'T3', 'T4'].map(shiftId => {
         let totalReq = 0;
         let totalAssigned = 0;
-        Object.keys(committeeRequirements).forEach(commId => {
-          const reqs = committeeRequirements[commId];
+        Object.keys(committeeRequirements).forEach(commName => {
+          const reqs = committeeRequirements[commName];
           if (reqs && reqs[shiftId] > 0) {
             totalReq += reqs[shiftId];
             const assigned = volunteers.filter(v => {
-              if (v.committee_id !== commId) return false;
+              if (v.committee !== commName) return false;
               const vShifts = globalShifts[v.id];
               return vShifts && vShifts[day.key] && vShifts[day.key].includes(shiftId);
             }).length;
@@ -370,12 +371,8 @@ export default function CoordinatorDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-          className="rounded-full h-8 w-8 border-b-2 border-[#0084d1]"
-        />
+      <div className="absolute inset-0 flex items-center justify-center z-50">
+        <AnimatedLogo isLooping className="w-16 h-16 md:w-20 md:h-20 text-text" />
       </div>
     );
   }
@@ -395,17 +392,18 @@ export default function CoordinatorDashboard() {
           </div>
 
           <div className="flex flex-row items-center gap-2 sm:gap-4 shrink-0 relative z-10 w-full lg:w-auto">
-            <Link href="/settings" className="flex-1 sm:flex-none">
-              <Button variant="outline" size="lg" className="w-full sm:w-auto rounded-sm font-bold border-white/10 bg-dark2 hover:bg-dark3 text-text shadow-sm transition-all active:scale-[0.96] px-2 sm:px-6">
+            <Link href="/settings" className="flex-none">
+              <Button variant="outline" className="w-auto bg-dark2 hover:bg-dark3 text-text border-white/10 rounded-full shadow-lg h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5 justify-center">
+                <span className="material-symbols-outlined text-[16px]">settings</span>
                 <span className="sm:hidden">Ajustes</span>
                 <span className="hidden sm:inline">Ajustes Globales</span>
               </Button>
             </Link>
-            <Link href="/shifts" className="flex-1 sm:flex-none">
-              <Button size="lg" className="w-full sm:w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold transition-all active:scale-[0.96] group px-2 sm:px-6">
+            <Link href="/shifts" className="flex-none">
+              <Button className="w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5 justify-center group">
+                <span className="material-symbols-outlined text-[16px]">calendar_month</span>
                 <span className="sm:hidden">Turnos</span>
                 <span className="hidden sm:inline">Gestionar Turnos</span>
-                <span className="material-symbols-outlined text-[18px] ml-1 sm:ml-2 opacity-70 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform">north_east</span>
               </Button>
             </Link>
           </div>
@@ -475,7 +473,7 @@ export default function CoordinatorDashboard() {
           </div>
 
           {/* Card 3 */}
-          <div className={`bg-dark2 p-4 sm:p-7 group transition-all duration-300 ${globalStats.criticalAlerts > 0 ? 'bg-red-faint' : 'hover:bg-dark3'}`}>
+          <div className="bg-dark2 p-4 sm:p-7 group transition-all duration-300 hover:bg-dark3">
             <div className="flex items-start justify-between mb-3 sm:mb-6">
               <div className={`p-3 rounded-sm transition-colors duration-300 ${globalStats.criticalAlerts > 0 ? 'bg-red/20 text-red group-hover:bg-red group-hover:text-white' : 'bg-dark3 text-text-dim group-hover:bg-white/10 group-hover:text-white'}`}>
                 <span className="material-symbols-outlined text-[20px]">security</span>
@@ -493,7 +491,7 @@ export default function CoordinatorDashboard() {
               </h3>
               <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Alertas Críticas</p>
             </div>
-            <p className={`text-[10px] mt-3 sm:mt-6 font-inter font-bold uppercase tracking-[0.1em] ${globalStats.criticalAlerts > 0 ? 'text-red animate-pulse' : 'text-text-dim'}`}>
+            <p className="text-[10px] mt-3 sm:mt-6 font-inter font-bold uppercase tracking-[0.1em] text-text-dim">
               {globalStats.criticalAlerts > 0 ? 'Turnos bajo el mínimo' : 'Estabilidad operativa'}
             </p>
           </div>

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { LoginForm } from "./LoginForm";
 import { motion, useAnimation } from "framer-motion";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
+import { AnimatedLogo } from "@/components/ui/animated-logo";
 
 export function LoginPageClient() {
   const [page, setPage] = useState(0);
@@ -54,13 +55,7 @@ export function LoginPageClient() {
         <div className="flex-1 flex items-center justify-center p-6 md:p-12 lg:p-16 z-10 relative">
           <div className="w-full max-w-sm">
             <div className="mb-10 flex flex-col">
-              <Image
-                src="/icon-192.png"
-                alt="Templo Managua"
-                width={48}
-                height={48}
-                className="object-contain mb-5"
-              />
+              <AnimatedLogo className="w-12 h-12 mb-5" />
               <div className="text-[18px] tracking-wider text-white mb-2 uppercase whitespace-nowrap font-bold">
                 Bienvenido de nuevo
               </div>
@@ -148,13 +143,7 @@ export function LoginPageClient() {
             <div className="relative z-10 flex min-h-full flex-col justify-center px-6 py-12">
               <div className="mx-auto w-full max-w-sm">
                 <div className="mb-10 flex flex-col">
-                  <Image
-                    src="/icon-192.png"
-                    alt="Templo Managua"
-                    width={40}
-                    height={40}
-                    className="object-contain mb-4"
-                  />
+                  <AnimatedLogo className="w-10 h-10 mb-4" />
                   <div className="text-[16px] tracking-wider text-white mb-1 uppercase whitespace-nowrap font-bold">
                     Bienvenido de nuevo
                   </div>

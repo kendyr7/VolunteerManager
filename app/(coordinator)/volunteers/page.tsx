@@ -12,7 +12,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
+import { cn, normalizeSearch } from "@/lib/utils";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
@@ -20,6 +20,7 @@ import { useSearch } from "@/lib/search-context";
 import { USER_TABLE_STYLES } from "../users/page";
 import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
+import { AnimatedLogo } from "@/components/ui/animated-logo";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -435,9 +436,18 @@ export default function VolunteersPage() {
       if (!matchesStatus) return false;
 
       // 3. User search and dynamic filters
-      const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.ward.toLowerCase().includes(searchTerm.toLowerCase());
+      const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+      const normName = normalizeSearch(v.name);
+      const normCommittee = normalizeSearch(v.committee);
+      const normStake = normalizeSearch(v.stake);
+      const normWard = normalizeSearch(v.ward);
+      
+      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term => 
+        normName.includes(term) ||
+        normCommittee.includes(term) ||
+        normStake.includes(term) ||
+        normWard.includes(term)
+      );
 
       const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(v.committee);
       const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(v.stake);
@@ -472,8 +482,8 @@ export default function VolunteersPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4d7cfe]"></div>
+      <div className="absolute inset-0 flex items-center justify-center z-50">
+        <AnimatedLogo isLooping className="w-16 h-16 md:w-20 md:h-20 text-text" />
       </div>
     );
   }
@@ -792,22 +802,22 @@ export default function VolunteersPage() {
                       <>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
                           <span className="text-drawer-kpi-value text-white drop-shadow-md">{totalTurnos}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2">Turnos</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Turnos</span>
                         </div>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
                           <span className="text-drawer-kpi-value text-white drop-shadow-md">{diasCubiertos}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2">Días</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Días</span>
                         </div>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
                           <span className="text-drawer-kpi-value text-white drop-shadow-md">
                             {editingVolunteer.reliability}
                             <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>
                           </span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2">Confia.</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Confia.</span>
                         </div>
                         <div className="flex flex-col items-center flex-1">
                           <span className="text-drawer-kpi-value text-white drop-shadow-md">{editingVolunteer.age || '-'}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2">Edad</span>
+                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Edad</span>
                         </div>
                       </>
                     );

@@ -14,6 +14,8 @@ import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearch } from "@/lib/search-context";
+import { AnimatedLogo } from "@/components/ui/animated-logo";
+import { normalizeSearch } from "@/lib/utils";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -494,9 +496,18 @@ export default function ShiftsPage() {
       const userCommittee = localStorage.getItem('mock_committee');
       if (currentRole === 'Editor' && v.committee !== userCommittee) return false;
 
-      const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.ward.toLowerCase().includes(searchTerm.toLowerCase());
+      const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+      const normName = normalizeSearch(v.name);
+      const normCommittee = normalizeSearch(v.committee);
+      const normStake = normalizeSearch(v.stake);
+      const normWard = normalizeSearch(v.ward);
+      
+      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term => 
+        normName.includes(term) ||
+        normCommittee.includes(term) ||
+        normStake.includes(term) ||
+        normWard.includes(term)
+      );
 
       const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(v.committee);
       const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(v.stake);
@@ -875,8 +886,8 @@ export default function ShiftsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4d7cfe]"></div>
+      <div className="absolute inset-0 flex items-center justify-center z-50">
+        <AnimatedLogo isLooping className="w-16 h-16 md:w-20 md:h-20 text-text" />
       </div>
     );
   }

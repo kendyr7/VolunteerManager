@@ -6,6 +6,8 @@ import { loginWithPin } from "@/app/actions/auth";
 import { updateInitialPin } from "@/app/actions/update-pin";
 import { Label } from "@/components/ui/label";
 import { motion, AnimatePresence } from "framer-motion";
+import { AnimatedLogo } from "@/components/ui/animated-logo";
+import { createPortal } from "react-dom";
 
 export function LoginForm() {
   const router = useRouter();
@@ -39,11 +41,12 @@ export function LoginForm() {
     }
 
     startTransition(async () => {
+      const minDelay = new Promise(resolve => setTimeout(resolve, 2500));
       const formData = new FormData();
       formData.append("phone", phone);
       formData.append("pin", pin);
 
-      const result = await loginWithPin({}, formData);
+      const [result] = await Promise.all([loginWithPin({}, formData), minDelay]);
 
       if (result.error) {
         setError(result.error);
@@ -77,7 +80,8 @@ export function LoginForm() {
     }
 
     startTransition(async () => {
-      const result = await updateInitialPin(userData!.id, userData!.type, newPin);
+      const minDelay = new Promise(resolve => setTimeout(resolve, 2500));
+      const [result] = await Promise.all([updateInitialPin(userData!.id, userData!.type, newPin), minDelay]);
 
       if (result.error) {
         setError(result.error);
@@ -99,7 +103,14 @@ export function LoginForm() {
   };
 
   return (
-    <div className="w-full">
+    <div className="relative">
+      {isPending && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-[#050a15]/90 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-300">
+          <AnimatedLogo className="w-24 h-24" isLooping={true} />
+        </div>,
+        document.body
+      )}
+
       <AnimatePresence mode="wait">
         {!needsNewPin ? (
           <motion.form 
@@ -166,7 +177,6 @@ export function LoginForm() {
             >
               {isPending ? (
                 <>
-                  <span className="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
                   <span>Verificando...</span>
                 </>
               ) : (
@@ -256,7 +266,6 @@ export function LoginForm() {
             >
               {isPending ? (
                 <>
-                  <span className="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
                   <span>Guardando...</span>
                 </>
               ) : (

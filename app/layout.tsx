@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Dela_Gothic_One, Inter } from "next/font/google";
 import "material-symbols/outlined.css";
 import "./globals.css";
+import Script from "next/script";
 
 const delaGothic = Dela_Gothic_One({
   weight: "400",
@@ -52,7 +53,9 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col font-sans bg-dark text-text tracking-[-0.01em]">
         {children}
-        <script
+        <Script
+          id="service-worker-registration"
+          strategy="afterInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {

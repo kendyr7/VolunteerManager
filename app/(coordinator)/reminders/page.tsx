@@ -25,6 +25,8 @@ import { useSearch } from "@/lib/search-context";
 import { motion, AnimatePresence } from "framer-motion";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { USER_TABLE_STYLES } from "@/app/(coordinator)/users/page";
+import { AnimatedLogo } from "@/components/ui/animated-logo";
+import { normalizeSearch } from "@/lib/utils";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -312,10 +314,18 @@ export default function RemindersPage() {
       counts[day.key] = { T1: 0, T2: 0, T3: 0, T4: 0 };
       volunteers.forEach(vol => {
         // Filtrado multicriterio
-        const matchesSearch = !searchTerm ||
-          vol.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          vol.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          vol.ward.toLowerCase().includes(searchTerm.toLowerCase());
+        const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+        const normName = normalizeSearch(vol.name);
+        const normCommittee = normalizeSearch(vol.committee);
+        const normStake = normalizeSearch(vol.stake);
+        const normWard = normalizeSearch(vol.ward);
+        
+        const matchesSearch = searchTerms.length === 0 || searchTerms.every(term => 
+          normName.includes(term) ||
+          normCommittee.includes(term) ||
+          normStake.includes(term) ||
+          normWard.includes(term)
+        );
         const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(vol.committee);
         const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(vol.stake);
         const matchesWard = selectedWards.length === 0 || selectedWards.includes(vol.ward);
@@ -341,10 +351,18 @@ export default function RemindersPage() {
   const activeVolunteers = useMemo(() => {
     if (!selectedDayKey || !selectedShiftId) return [];
     return volunteers.filter(vol => {
-      const matchesSearch = !searchTerm ||
-        vol.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        vol.stake.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        vol.ward.toLowerCase().includes(searchTerm.toLowerCase());
+      const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+      const normName = normalizeSearch(vol.name);
+      const normCommittee = normalizeSearch(vol.committee);
+      const normStake = normalizeSearch(vol.stake);
+      const normWard = normalizeSearch(vol.ward);
+      
+      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term => 
+        normName.includes(term) ||
+        normCommittee.includes(term) ||
+        normStake.includes(term) ||
+        normWard.includes(term)
+      );
       const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(vol.committee);
       const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(vol.stake);
       const matchesWard = selectedWards.length === 0 || selectedWards.includes(vol.ward);
@@ -418,8 +436,8 @@ export default function RemindersPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0084d1]"></div>
+      <div className="absolute inset-0 flex items-center justify-center z-50">
+        <AnimatedLogo isLooping className="w-16 h-16 md:w-20 md:h-20 text-text" />
       </div>
     );
   }
@@ -455,11 +473,23 @@ export default function RemindersPage() {
             <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase">FECHA</span>
           </div>
           <div className="grid grid-cols-5 sm:grid-cols-8 md:flex md:flex-wrap gap-2">
-            {EVENT_DAYS.map((day) => {
+            {EVENT_DAYS.map((day, index) => {
               const dayCounts = shiftCounts[day.key] || { T1: 0, T2: 0, T3: 0, T4: 0 };
               const totalVolunteersOnDay = Object.values(dayCounts).reduce((acc, count) => acc + count, 0);
               const isSelected = selectedDayKey === day.key;
               const dayAbbr = day.label.substring(0, 3); // e.g. 'jue', 'vie', 'sáb'
+              
+              const bgColors = [
+                'bg-[#10a562]',
+                'bg-[#4aa9df]',
+                'bg-[#f1c130]',
+                'bg-[#d54134]',
+                'bg-[#981e32]',
+                'bg-[#2c44c2]',
+                'bg-[#f1c130]',
+                'bg-[#ed1b24]'
+              ];
+              const cardBg = bgColors[index % bgColors.length];
               
               return (
                 <button
@@ -475,16 +505,16 @@ export default function RemindersPage() {
                       }
                     }
                   }}
-                  className={`relative shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto w-full ${isSelected
-                      ? 'bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105'
-                      : 'bg-dark2 border-border text-text hover:bg-dark3'
+                  className={`relative shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto w-full text-white ${cardBg} ${isSelected
+                      ? 'border-white/50 shadow-sm scale-105 brightness-110'
+                      : 'border-transparent opacity-80 hover:opacity-100 hover:scale-[1.02]'
                     }`}
                 >
-                  <span className={`font-inter font-bold text-[10px] md:text-[9px] uppercase tracking-widest ${isSelected ? 'text-white/80' : 'text-text-dim'}`}>
+                  <span className={`font-inter font-bold text-[10px] md:text-[9px] uppercase tracking-widest ${isSelected ? 'text-white/90' : 'text-white/70'}`}>
                     {dayAbbr}
                   </span>
-                  <span className="text-base md:text-sm font-black leading-none">{day.dateNum}</span>
-                  <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? (isSelected ? 'bg-dark2' : 'bg-accent') : (isSelected ? 'bg-dark2/30' : 'bg-dark3')
+                  <span className="text-base md:text-sm font-black leading-none drop-shadow-sm">{day.dateNum}</span>
+                  <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? (isSelected ? 'bg-white' : 'bg-white/70') : 'bg-black/20'
                     }`} />
                 </button>
               );
@@ -599,7 +629,7 @@ export default function RemindersPage() {
           <div className="flex-1 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-12 flex flex-col items-center justify-center text-center min-h-[300px]">
             <span className="material-symbols-outlined text-[64px] text-text-dim mb-4 animate-pulse">calendar_month</span>
             <h3 className="text-lg font-bold tracking-tight text-text mb-2">Ningún turno seleccionado</h3>
-            <p className="text-xs font-medium text-text-dim max-w-sm leading-relaxed">
+            <p className="text-xs font-inter font-bold text-text-dim max-w-sm leading-relaxed">
               Selecciona un día y un turno específico (T1 - T4) en el selector superior para comenzar a enviar recordatorios de WhatsApp.
             </p>
           </div>
