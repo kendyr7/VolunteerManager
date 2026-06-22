@@ -105,8 +105,8 @@ export function LoginForm() {
   return (
     <div className="relative">
       {isPending && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] bg-[#050a15]/90 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-300">
-          <AnimatedLogo className="w-24 h-24" isLooping={true} />
+        <div className="fixed inset-0 z-[9999] bg-dark flex items-center justify-center animate-in fade-in duration-300">
+          <AnimatedLogo className="w-16 h-16 md:w-20 md:h-20 text-text" isLooping={true} />
         </div>,
         document.body
       )}

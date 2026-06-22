@@ -46,7 +46,8 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${delaGothic.variable} ${inter.variable} h-full antialiased`}
+      className={`${delaGothic.variable} ${inter.variable} h-full antialiased dark`}
+      style={{ colorScheme: 'dark', backgroundColor: '#050505' }}
     >
       <head>
         <link rel="apple-touch-icon" href="/app-icon-192.png" />
