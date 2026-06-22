@@ -356,6 +356,10 @@
     font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   }
   
+  .font-dela {
+    font-family: var(--font-dela), system-ui, -apple-system, sans-serif;
+  }
+  
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }

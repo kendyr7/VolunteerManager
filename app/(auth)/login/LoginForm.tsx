@@ -111,7 +111,7 @@ export function LoginForm() {
             className="space-y-5"
           >
             <div className="space-y-2">
-              <Label htmlFor="phone" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">
+              <Label htmlFor="phone" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
                 Número de Teléfono
               </Label>
               <div className="relative group">
@@ -123,14 +123,14 @@ export function LoginForm() {
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full h-12 bg-slate-50 border border-slate-200 rounded-sm pl-12 pr-4 text-slate-900 font-semibold focus:bg-white focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/10 outline-none transition-all"
+                  className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all placeholder:text-slate-500"
                   disabled={isPending}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="pin" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">
+              <Label htmlFor="pin" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
                 PIN de Acceso
               </Label>
               <div className="relative group">
@@ -146,7 +146,7 @@ export function LoginForm() {
                     required
                     value={pin}
                     onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-full h-12 bg-slate-50 border border-slate-200 rounded-sm pl-12 pr-4 text-slate-900 text-lg focus:bg-white focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/10 outline-none transition-all leading-normal"
+                    className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
                     disabled={isPending}
                   />
               </div>
@@ -197,7 +197,7 @@ export function LoginForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="newPin" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">
+              <Label htmlFor="newPin" className="text-xs font-inter font-bold uppercase tracking-wider text-slate-400 ml-1">
                 Nuevo PIN Personal
               </Label>
               <div className="relative group">
@@ -213,14 +213,14 @@ export function LoginForm() {
                   required
                   value={newPin}
                   onChange={(e) => setNewNewPin(e.target.value.replace(/[^0-9]/g, ''))}
-                  className="w-full h-12 bg-slate-50 border border-slate-200 rounded-sm pl-12 pr-4 text-slate-900 text-lg focus:bg-white focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/10 outline-none transition-all leading-normal"
+                  className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
                   disabled={isPending}
                 />
                 </div>
                 </div>
 
                 <div className="space-y-2">
-                <Label htmlFor="confirmPin" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">
+                <Label htmlFor="confirmPin" className="text-xs font-inter font-bold uppercase tracking-wider text-slate-400 ml-1">
                 Confirmar Nuevo PIN
                 </Label>
                 <div className="relative group">
@@ -236,7 +236,7 @@ export function LoginForm() {
                   required
                   value={confirmPin}
                   onChange={(e) => setConfirmPin(e.target.value.replace(/[^0-9]/g, ''))}
-                  className="w-full h-12 bg-slate-50 border border-slate-200 rounded-sm pl-12 pr-4 text-slate-900 text-lg focus:bg-white focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/10 outline-none transition-all leading-normal"
+                  className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
                   disabled={isPending}
                 />
               </div>
