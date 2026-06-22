@@ -43,6 +43,7 @@ export default function SettingsPage() {
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editCommittee, setEditCommittee] = useState('');
+  const [editRole, setEditRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
 
   // Committee Requirements State
   const [selectedConfigCommittees, setSelectedConfigCommittees] = useState<string[]>([]);
@@ -82,6 +83,7 @@ export default function SettingsPage() {
       setUserProfile(user);
       setEditName(fullName);
       setEditPhone(user.phone);
+      setEditRole(role);
       const userComm = user.committees?.name || '';
       setEditCommittee(userComm);
       
@@ -164,6 +166,7 @@ export default function SettingsPage() {
       .update({
         full_name: editName,
         phone: editPhone,
+        role: editRole,
         committee_id: committeeId
       })
       .eq('id', userProfile.id);
@@ -173,7 +176,9 @@ export default function SettingsPage() {
     } else {
       showToast("Perfil actualizado");
       localStorage.setItem('volunteer_phone', editPhone);
-      if (currentRole === 'Admin') localStorage.setItem('mock_committee', editCommittee);
+      localStorage.setItem('mock_role', editRole);
+      if (editRole === 'Admin' || editRole === 'Editor') localStorage.setItem('mock_committee', editCommittee);
+      setCurrentRole(editRole);
       await loadData();
     }
     setIsUpdating(false);
@@ -213,60 +218,80 @@ export default function SettingsPage() {
         <div className="p-6 md:p-8 border-b border-white/5 flex items-center justify-between bg-dark3">
           <div>
             <h3 className="font-bold text-text tracking-tight leading-none mb-2">Información Personal</h3>
-            <p className="text-xs md:text-sm font-medium text-text-dim">Datos registrados de tu cuenta.</p>
+            <p className="text-xs md:text-sm font-inter font-bold text-text-dim">Datos registrados de tu cuenta.</p>
           </div>
-          <Badge className="bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20 font-bold uppercase tracking-widest px-3 py-1 text-[10px] md:text-xs">
-            {currentRole}
-          </Badge>
         </div>
         
         <form onSubmit={handleUpdateProfile} className="p-6 md:p-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
             <div className="space-y-2">
-              <label className="text-[10px] md:text-xs font-bold text-text-dim uppercase tracking-widest">Nombre Completo</label>
+              <label className="block mb-2 text-xs font-normal text-text">Nombre completo</label>
               <input 
                 readOnly={currentRole === 'Lector'}
                 value={editName}
                 onChange={e => setEditName(e.target.value)}
-                className={`w-full h-10 md:h-11 px-4 rounded-sm border transition-all outline-none font-medium ${
+                className={`w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all ${
                   currentRole === 'Lector' 
-                    ? 'bg-dark/50 border-white/5 text-text-dim cursor-not-allowed' 
-                    : 'bg-dark3 border-white/10 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
+                    ? 'border-white/5 bg-dark/50 text-text-dim cursor-not-allowed' 
+                    : 'border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
                 }`}
               />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] md:text-xs font-bold text-text-dim uppercase tracking-widest">Teléfono WhatsApp</label>
+              <label className="block mb-2 text-xs font-normal text-text">Teléfono WhatsApp</label>
               <input 
                 readOnly={currentRole === 'Lector'}
                 value={editPhone}
                 onChange={e => setEditPhone(e.target.value)}
-                className={`w-full h-10 md:h-11 px-4 rounded-sm border transition-all outline-none font-mono text-sm md:text-base ${
+                className={`w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all ${
                   currentRole === 'Lector' 
-                    ? 'bg-dark/50 border-white/5 text-text-dim cursor-not-allowed' 
-                    : 'bg-dark3 border-white/10 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
+                    ? 'border-white/5 bg-dark/50 text-text-dim cursor-not-allowed' 
+                    : 'border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
                 }`}
               />
             </div>
-            <div className="space-y-2 md:col-span-2 lg:col-span-1">
-              <label className="text-[10px] md:text-xs font-bold text-text-dim uppercase tracking-widest">Comité Asignado</label>
+            
+            <div className="space-y-2">
+              <label className="block mb-2 text-xs font-normal text-text">Rol en la plataforma</label>
               {currentRole === 'Admin' ? (
-                <Select value={editCommittee} onValueChange={(v) => v && setEditCommittee(v)}>
-                  <SelectTrigger className="w-full h-10 md:h-11 bg-dark3 border-white/10 text-text font-medium">
+                <Select value={editRole} onValueChange={(v) => setEditRole(v as 'Admin' | 'Editor' | 'Lector')}>
+                  <SelectTrigger className="w-full h-10 px-3 border text-text font-inter font-bold flex items-center justify-between bg-dark2 border-border rounded-sm">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-dark2 border-white/10 text-text">
-                    {committees.map(c => (
-                      <SelectItem key={c.id} value={c.name} className="focus:bg-dark3 focus:text-text">{c.name}</SelectItem>
-                    ))}
+                  <SelectContent className="bg-dark2 border-border text-text font-inter font-bold">
+                    <SelectItem value="Admin">Admin (Acceso total)</SelectItem>
+                    <SelectItem value="Editor">Editor (Coordinador de comité)</SelectItem>
+                    <SelectItem value="Lector">Lector (Solo lectura)</SelectItem>
                   </SelectContent>
                 </Select>
               ) : (
-                <div className="h-10 md:h-11 px-4 flex items-center bg-dark/50 border border-white/5 rounded-sm text-text-dim font-medium">
-                  {editCommittee || 'Sin comité'}
+                <div className="w-full h-10 px-3 rounded-sm border border-white/5 bg-dark/50 text-text-dim text-sm font-inter font-bold flex items-center cursor-not-allowed">
+                  {editRole}
                 </div>
               )}
             </div>
+
+            {editRole === 'Editor' && (
+              <div className="space-y-2">
+                <label className="block mb-2 text-xs font-normal text-text">Comité Asignado</label>
+                {currentRole === 'Admin' ? (
+                  <Select value={editCommittee} onValueChange={(v) => v && setEditCommittee(v)}>
+                    <SelectTrigger className="w-full h-10 px-3 border text-text font-inter font-bold flex items-center justify-between bg-dark2 border-border rounded-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-dark2 border-border text-text font-inter font-bold">
+                      {committees.map(c => (
+                        <SelectItem key={c.id} value={c.name} className="focus:bg-dark3 focus:text-text">{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="w-full h-10 px-3 rounded-sm border border-white/5 bg-dark/50 text-text-dim text-sm font-inter font-bold flex items-center cursor-not-allowed">
+                    {editCommittee || 'Sin comité'}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {currentRole !== 'Lector' && (
@@ -282,13 +307,13 @@ export default function SettingsPage() {
       {/* Permissions Section (Toggles) */}
       <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden">
         <div className="p-6 md:p-8 border-b border-white/5 bg-dark3">
-          <h3 className="font-bold text-text tracking-tight leading-none mb-2">Configuración de Privilegios</h3>
-          <p className="text-xs md:text-sm font-medium text-text-dim">Funcionalidades habilitadas para el rol de {currentRole}.</p>
+          <h3 className="font-bold text-text tracking-tight leading-none mb-2">Permisos</h3>
+          <p className="text-xs md:text-sm font-inter font-bold text-text-dim">Funcionalidades habilitadas para el rol de {editRole}.</p>
         </div>
         <div className="p-4 md:p-8">
           <div className="divide-y divide-white/5 border border-white/5 rounded-2xl overflow-hidden bg-dark3">
             {ALL_PERMISSIONS.map(perm => {
-              const isOn = ROLE_PERMISSIONS[currentRole].includes(perm);
+              const isOn = ROLE_PERMISSIONS[editRole].includes(perm);
               const isLocked = currentRole !== 'Admin';
               
               return (
@@ -344,7 +369,7 @@ export default function SettingsPage() {
           <div className="p-6 md:p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-dark3">
             <div>
               <h3 className="font-bold text-text tracking-tight leading-none mb-2">Requerimientos por Turno</h3>
-              <p className="text-xs md:text-sm font-medium text-text-dim">Define el personal mínimo necesario para cada horario.</p>
+              <p className="text-xs md:text-sm font-inter font-bold text-text-dim">Define el personal mínimo necesario para cada horario.</p>
             </div>
             
             {currentRole === 'Admin' ? (
@@ -357,7 +382,7 @@ export default function SettingsPage() {
                   hideClearButton
                   hideCountBadge={selectedConfigCommittees.length === 1}
                   isCommitteeFilter
-                  className="bg-dark border-white/10 justify-between w-full min-w-[200px]"
+                  className="bg-dark border-white/10 justify-between w-full min-w-[200px] font-inter font-bold text-sm"
                   onChange={(vals) => {
                     if (vals.length > 0) {
                       setSelectedConfigCommittees(vals);
@@ -366,24 +391,24 @@ export default function SettingsPage() {
                 />
               </div>
             ) : (
-              <Badge className="bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20 font-bold uppercase tracking-widest px-3 py-1">
+              <Badge className="bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20 font-inter font-bold uppercase tracking-widest px-3 py-1">
                 Comité: {selectedConfigCommittees[0]}
               </Badge>
             )}
           </div>
 
           <div className="p-4 md:p-8">
-            <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+            <div className="relative grid grid-cols-2 gap-3 md:gap-6">
               {([
-                { id: 'T1', label: 'Turno 1', time: '8:00 AM' },
-                { id: 'T2', label: 'Turno 2', time: '11:00 AM' },
-                { id: 'T3', label: 'Turno 3', time: '2:00 PM' },
-                { id: 'T4', label: 'Turno 4', time: '5:00 PM' }
+                { id: 'T1', label: 'Turno 1', time: '8:00 AM - 12:00 PM' },
+                { id: 'T2', label: 'Turno 2', time: '11:00 AM - 3:00 PM' },
+                { id: 'T3', label: 'Turno 3', time: '2:00 PM - 6:00 PM' },
+                { id: 'T4', label: 'Turno 4', time: '5:00 PM - 10:00 PM' }
               ] as const).map(({ id, label, time }) => (
                 <div key={id} className="p-5 rounded-2xl border border-white/5 bg-dark3 space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-0.5">
                     <span className="text-xs font-bold text-text">{label}</span>
-                    <span className="text-[10px] font-bold text-text-dim uppercase">{time}</span>
+                    <span className="text-[10px] font-inter font-bold text-text-dim uppercase">{time}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <button 
@@ -405,8 +430,8 @@ export default function SettingsPage() {
                 </div>
               ))}
               
-              {/* Sync Button (Centered in the 2x2 grid, visible only on sm screens and larger) */}
-              <div className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center bg-dark2 rounded-full p-2 shadow-md border border-white/5 z-10">
+              {/* Sync Button (Centered in the 2x2 grid, visible on all screens) */}
+              <div className="flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center bg-dark2 rounded-full p-1.5 md:p-2 shadow-md border border-white/5 z-10">
                 <button
                   onClick={() => setIsSyncEnabled(!isSyncEnabled)}
                   title={isSyncEnabled ? "Sincronización activada" : "Sincronización desactivada"}
@@ -422,16 +447,18 @@ export default function SettingsPage() {
             </div>
 
             <div className="mt-6 md:mt-10 pt-6 md:pt-8 border-t border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <p className="text-[10px] md:text-[11px] text-text-dim italic max-w-md">
+              <p className="text-[10px] md:text-[11px] text-text-dim max-w-md">
                 Estos valores determinan los estados de alerta (Déficit/Crítico) en los tableros de gestión global.
               </p>
-              <Button 
-                onClick={handleSaveRequirements} 
-                disabled={isSavingConfig}
-                className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-8 h-10 shadow-lg shadow-blue-500/15 transition-all active:scale-[0.97] rounded-full text-xs w-full sm:w-auto"
-              >
-                {isSavingConfig ? 'Guardando...' : 'Guardar Requerimientos'}
-              </Button>
+              <div className="flex justify-end w-full sm:w-auto">
+                <Button 
+                  onClick={handleSaveRequirements} 
+                  disabled={isSavingConfig}
+                  className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-8 h-10 shadow-lg shadow-blue-500/15 transition-all active:scale-[0.97] rounded-full text-xs"
+                >
+                  {isSavingConfig ? 'Guardando...' : 'Guardar Cambios'}
+                </Button>
+              </div>
             </div>
           </div>
         </motion.div>
