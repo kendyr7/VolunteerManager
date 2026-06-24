@@ -154,10 +154,10 @@ function CoordinatorLayoutInner({
                 className="rounded-sm object-contain shrink-0"
               />
               <span
-                className="font-bold text-lg text-text tracking-tight whitespace-nowrap transition-all duration-300 overflow-hidden"
+                className="font-inter font-bold text-lg text-text tracking-tight whitespace-nowrap transition-all duration-300 overflow-hidden"
                 style={{ opacity: sidebarOpen ? 1 : 0, maxWidth: sidebarOpen ? 200 : 0 }}
               >
-                Templo Managua
+                Volunteer Manager
               </span>
             </div>
           </div>
@@ -184,8 +184,8 @@ function CoordinatorLayoutInner({
                       "group flex items-center h-[42px] rounded-md transition-all duration-200 relative",
                       sidebarOpen ? "gap-3 px-3" : "justify-center px-0",
                       isActive
-                        ? "bg-dark3 text-gold font-semibold"
-                        : "text-text-dim hover:bg-dark3 hover:text-text font-medium"
+                        ? "bg-dark3 text-gold font-inter font-bold"
+                        : "text-text-dim hover:bg-dark3 hover:text-text font-inter font-bold"
                     )}
                   >
                     <Icon name={item.icon} size={20} className={cn("shrink-0", isActive ? "text-[#4d7cfe]" : "text-text-dim")} />
@@ -207,7 +207,7 @@ function CoordinatorLayoutInner({
                 href={item.href}
                 title={!sidebarOpen ? item.name : undefined}
                 className={cn(
-                  "flex items-center rounded-sm transition-all duration-200 text-[14px] font-medium text-text hover:bg-dark3 hover:text-text",
+                  "flex items-center rounded-sm transition-all duration-200 text-[14px] font-inter font-bold text-text hover:bg-dark3 hover:text-text",
                   sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5"
                 )}
               >
@@ -219,7 +219,7 @@ function CoordinatorLayoutInner({
               onClick={toggleTheme}
               title={!sidebarOpen ? "Cambiar tema" : undefined}
               className={cn(
-                "flex w-full items-center rounded-sm transition-all duration-200 text-[14px] font-medium text-text hover:bg-dark3 hover:text-text",
+                "flex w-full items-center rounded-sm transition-all duration-200 text-[14px] font-inter font-bold text-text hover:bg-dark3 hover:text-text",
                 sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5"
               )}
             >
@@ -230,7 +230,7 @@ function CoordinatorLayoutInner({
               onClick={handleLogout}
               title={!sidebarOpen ? "Cerrar Sesión" : undefined}
               className={cn(
-                "flex w-full items-center rounded-sm transition-all duration-200 text-[14px] font-medium text-text hover:bg-dark3 hover:text-text",
+                "flex w-full items-center rounded-sm transition-all duration-200 text-[14px] font-inter font-bold text-text hover:bg-dark3 hover:text-text",
                 sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5"
               )}
             >

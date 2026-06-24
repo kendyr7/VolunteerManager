@@ -658,14 +658,14 @@ export default function UsersPage() {
         {/* Users Table Card */}
         <motion.div 
           variants={itemVariants} 
-          className="bg-dark2 border border-white/10 rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full"
+          className="overflow-clip flex flex-col w-full bg-dark2 border border-white/10 rounded-[20px] shadow-lg"
         >
           <AlphabetScrubber isMobile={isMobile} />
 
           {/* Table view for Desktop (md and up) */}
-          <div className="hidden md:block overflow-auto bg-dark2 flex-1 relative max-h-[calc(100vh-220px)]">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
+          <div className="hidden md:block bg-dark2 flex-1 relative w-full pb-10">
+            <table className="w-full text-sm text-left border-separate border-spacing-0">
+              <thead className="bg-dark3/80 sticky top-[140px] z-10 backdrop-blur-md text-[10px] font-bold text-text-dim uppercase tracking-wider">
                 <tr>
                   <th className="px-5 py-4 w-full">Usuario</th>
                   <th className="px-3 py-4 w-px whitespace-nowrap">Teléfono</th>

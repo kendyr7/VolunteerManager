@@ -584,12 +584,12 @@ export default function VolunteersPage() {
       </div>
 
       <div className="flex flex-col gap-4 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
-        <motion.div variants={itemVariants} className="bg-dark2 border border-white/10 rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full">
+        <motion.div variants={itemVariants} className="bg-dark2 border border-white/10 rounded-[20px] shadow-lg overflow-clip flex flex-col w-full">
           <AlphabetScrubber isMobile={isMobile} />
           {/* Contenedor de Datos */}
-          <div className="hidden lg:block overflow-auto bg-dark2 flex-1 relative max-h-[calc(100vh-220px)]">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
+          <div className="hidden lg:block bg-dark2 flex-1 relative w-full pb-10">
+            <table className="w-full text-sm text-left border-separate border-spacing-0">
+              <thead className="bg-dark3/80 sticky top-[140px] z-10 backdrop-blur-md text-[10px] font-bold text-text-dim uppercase tracking-wider">
                 <tr>
                   <th className="px-5 py-4 w-full">Nombre y Apellido</th>
                   <th className="px-3 py-4 text-center w-px whitespace-nowrap">Barrio</th>
