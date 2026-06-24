@@ -255,7 +255,7 @@ function CoordinatorLayoutInner({
           {navPage > 0 && (
             <button
               onPointerDown={(e) => { e.preventDefault(); goToNavPage(navPage - 1); }}
-              className="absolute -left-3 z-20 w-7 h-7 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center shadow-md border border-white/20 text-white transition-all"
+              className="absolute -left-3 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-white/55 text-black shadow-md transition-all backdrop-blur-xl backdrop-saturate-150 border border-black/10 supports-[backdrop-filter]:bg-white/42 dark:border-white/15 dark:bg-black/40 dark:text-white dark:supports-[backdrop-filter]:bg-black/28"
               style={{ top: '50%', transform: 'translateY(-50%)' }}
             >
               <Icon name="chevron_left" size={18} />
@@ -263,10 +263,18 @@ function CoordinatorLayoutInner({
           )}
 
           {/* Clip: clips left/right, contains items */}
-          <div className="w-full overflow-hidden rounded-full">
+          <div className="relative w-full overflow-hidden rounded-full">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 rounded-full border border-black/10 bg-white/58 shadow-[0_12px_40px_rgba(15,23,42,0.14)] backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/42 dark:border-white/10 dark:bg-black/34 dark:shadow-[0_12px_40px_rgba(0,0,0,0.5)] dark:supports-[backdrop-filter]:bg-black/22"
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-4 top-px h-1/2 rounded-full bg-white/25 dark:bg-white/6"
+            />
             <div
               ref={navScrollRef}
-              className="flex overflow-x-auto bg-black/30 backdrop-blur-xl rounded-full p-1 shadow-2xl"
+              className="relative z-10 flex overflow-x-auto rounded-full bg-transparent p-1"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', scrollSnapType: 'x mandatory' }}
             >
               {allMobileNavItems.map((item, index) => {
@@ -276,7 +284,7 @@ function CoordinatorLayoutInner({
                 const sharedStyle = { width: 'calc((100vw - 32px) / 4)', scrollSnapAlign: isPageStart ? 'start' as const : undefined };
                 const sharedClass = cn(
                   "flex flex-col items-center justify-center py-2 rounded-full transition-all duration-200 shrink-0",
-                  isActive ? "bg-white/25 text-white shadow-sm" : "text-white/60 hover:text-white"
+                  isActive ? "bg-black/10 dark:bg-white/25 text-black dark:text-white shadow-sm" : "text-black/50 dark:text-white/60 hover:text-black dark:hover:text-white"
                 );
                 if (isLogout) {
                   return (
@@ -298,7 +306,7 @@ function CoordinatorLayoutInner({
                     style={sharedStyle}
                     className={sharedClass}
                   >
-                    <Icon name={item.icon} size={20} className={cn("mb-1", isActive ? "text-white" : "text-white/60")} />
+                    <Icon name={item.icon} size={20} className={cn("mb-1", isActive ? "text-black dark:text-white" : "text-black/50 dark:text-white/60")} />
                     <span className="font-inter text-[10px] font-semibold whitespace-nowrap">{item.name}</span>
                   </Link>
                 );
@@ -310,7 +318,7 @@ function CoordinatorLayoutInner({
           {navPage < totalNavPages - 1 && (
             <button
               onPointerDown={(e) => { e.preventDefault(); goToNavPage(navPage + 1); }}
-              className="absolute -right-3 z-20 w-7 h-7 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center shadow-md border border-white/20 text-white transition-all"
+              className="absolute -right-3 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-white/55 text-black shadow-md transition-all backdrop-blur-xl backdrop-saturate-150 border border-black/10 supports-[backdrop-filter]:bg-white/42 dark:border-white/15 dark:bg-black/40 dark:text-white dark:supports-[backdrop-filter]:bg-black/28"
               style={{ top: '50%', transform: 'translateY(-50%)' }}
             >
               <Icon name="chevron_right" size={18} />

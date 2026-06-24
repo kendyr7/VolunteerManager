@@ -88,8 +88,8 @@ interface PlatformUser {
 }
 
 export const USER_TABLE_STYLES = {
-  name: "font-sans font-normal text-text text-[13px] tracking-wide drop-shadow-sm truncate",
-  phone: "font-mono text-xs text-text-dim",
+  name: "font-inter font-bold text-text text-[13px] tracking-wide drop-shadow-sm truncate",
+  phone: "font-inter font-bold text-xs text-text-dim",
   badgeBase: "font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full shrink-0 flex items-center justify-center inline-flex",
   roleAdmin: "bg-amber-500/10 text-amber-400 border-amber-500/20",
   roleEditor: "bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20",
@@ -667,10 +667,10 @@ export default function UsersPage() {
             <table className="w-full text-sm text-left">
               <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
                 <tr>
-                  <th className="px-5 py-4">Usuario</th>
-                  <th className="px-5 py-4">Teléfono</th>
-                  <th className="px-5 py-4">Rol y Acceso</th>
-                  <th className="px-5 py-4 text-center">Acciones</th>
+                  <th className="px-5 py-4 w-full">Usuario</th>
+                  <th className="px-3 py-4 w-px whitespace-nowrap">Teléfono</th>
+                  <th className="px-3 py-4 w-px whitespace-nowrap">Rol y Acceso</th>
+                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -693,17 +693,18 @@ export default function UsersPage() {
                         <tr 
                           key={user.id} 
                           id={index === 0 ? `letter-${letter}` : undefined}
-                          className="hover:bg-white/[0.02] transition-colors group"
+                          className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
+                          onClick={() => handleEditClick(user)}
                         >
-                          <td className="px-5 py-4">
+                          <td className="px-5 py-4 w-full">
                             <p className={USER_TABLE_STYLES.name}>
                               <HighlightText text={user.name} term={searchTerm} />
                             </p>
                           </td>
-                          <td className={cn("px-5 py-4", USER_TABLE_STYLES.phone)}>
+                          <td className={cn("px-3 py-4 w-px whitespace-nowrap", USER_TABLE_STYLES.phone)}>
                             {user.phone}
                           </td>
-                          <td className="px-5 py-4">
+                          <td className="px-3 py-4 w-px whitespace-nowrap">
                             <div className="flex items-center gap-2">
                               <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.role === 'Admin' ? USER_TABLE_STYLES.roleAdmin : USER_TABLE_STYLES.roleEditor)}>
                                 {user.role}
@@ -715,30 +716,36 @@ export default function UsersPage() {
                               )}
                             </div>
                           </td>
-                          <td className="px-5 py-4 text-center">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger
-                                render={
-                                  <button className="p-1.5 rounded-full hover:bg-white/10 text-text-dim hover:text-text transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
-                                    <span className="material-symbols-outlined text-[18px]">more_vert</span>
-                                  </button>
-                                }
-                              />
-                              <DropdownMenuContent align="end" className="bg-dark2 border-white/10 text-text min-w-[140px] p-1 rounded-[12px] shadow-md">
-                                <DropdownMenuItem className="cursor-pointer hover:bg-white/5 rounded-[8px] focus:bg-white/5 focus:text-text transition-colors flex items-center gap-2" onClick={() => handleEditClick(user)}>
-                                  <span className="material-symbols-outlined text-[18px]">edit</span>
-                                  Editar Perfil
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="cursor-pointer hover:bg-white/5 rounded-[8px] focus:bg-white/5 focus:text-text transition-colors flex items-center gap-2" onClick={() => handleResetPin(user)}>
-                                  <span className="material-symbols-outlined text-[18px]">lock_reset</span>
-                                  Resetear PIN
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="cursor-pointer text-amber-500 hover:bg-amber-500/10 hover:text-amber-500 rounded-[8px] focus:bg-amber-500/10 focus:text-amber-500 transition-colors flex items-center gap-2" onClick={() => handleArchiveUser(user)}>
-                                  <span className="material-symbols-outlined text-[18px]">archive</span>
-                                  Archivar
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                          <td className="px-3 py-4 text-center w-px whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90"
+                                title="Editar Perfil"
+                                onClick={(e) => { e.stopPropagation(); handleEditClick(user); }}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">edit</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90"
+                                title="Resetear PIN"
+                                onClick={(e) => { e.stopPropagation(); handleResetPin(user); }}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">lock_reset</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-amber-500/70 hover:bg-amber-500/10 hover:text-amber-500 transition-all active:scale-90"
+                                title="Archivar"
+                                onClick={(e) => { e.stopPropagation(); handleArchiveUser(user); }}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">archive</span>
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -805,7 +812,7 @@ export default function UsersPage() {
       </div>
 
       {/* Drawer de Edición — custom fixed drawer (sin Sheet de Base UI para evitar scroll lock) */}
-      <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${isEditSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+      <div className={cn("fixed inset-0 z-[100] flex transition-all duration-300", isMobile ? "flex-col justify-end" : "justify-end", isEditSheetOpen ? "pointer-events-auto" : "pointer-events-none")}>
         {/* Backdrop */}
         <div
           className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isEditSheetOpen ? 'opacity-100' : 'opacity-0'}`}
@@ -815,7 +822,12 @@ export default function UsersPage() {
         {/* Drawer Content */}
         <div
           id="edit-user-drawer"
-          className={`relative w-full md:w-[500px] md:mx-auto max-h-[94dvh] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isEditSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
+          className={cn(
+            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-[#0a101d]",
+            isMobile
+              ? `w-full max-h-[94dvh] rounded-t-[40px] shadow-2xl ${isEditSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
+              : `w-[400px] h-full shadow-2xl border-l border-white/10 ${isEditSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
+          )}
           style={{ willChange: 'transform' }}
         >
           {/* Fondo animado (Tema Claro) */}
@@ -828,12 +840,14 @@ export default function UsersPage() {
           </div>
 
           <div className="relative z-10 flex flex-col h-full w-full">
-            {/* Handle */}
-            <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+            {/* Handle solo en móvil */}
+            {isMobile && (
+              <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+            )}
 
             <form onSubmit={handleUpdateUser} className="flex-1 flex flex-col overflow-hidden">
               <div
-                className="flex-1 overflow-y-auto scrollbar-hide px-6 pb-6 pt-4 text-white font-light overscroll-contain"
+                className={cn("flex-1 overflow-y-auto scrollbar-hide text-white font-light overscroll-contain", isMobile ? "px-6 pb-6 pt-4" : "p-8 space-y-7 pt-12")}
                 onTouchStart={(e) => {
                   const drawer = document.getElementById("edit-user-drawer");
                   if (!drawer) return;

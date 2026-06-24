@@ -21,6 +21,7 @@ import { USER_TABLE_STYLES } from "../users/page";
 import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
+import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -590,14 +591,13 @@ export default function VolunteersPage() {
             <table className="w-full text-sm text-left">
               <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
                 <tr>
-                  <th className="px-5 py-4">Nombre y Apellido</th>
-                  <th className="px-5 py-4 text-center">Barrio</th>
-                  <th className="px-5 py-4 text-center">Estaca</th>
-                  <th className="px-5 py-4 text-center">Comité</th>
-                  <th className="px-5 py-4 text-center">Turnos</th>
-                  <th className="px-5 py-4 text-center">Confiabilidad</th>
-                  <th className="px-5 py-4 text-center">Contacto</th>
-                  <th className="px-5 py-4 text-center">Acciones</th>
+                  <th className="px-5 py-4 w-full">Nombre y Apellido</th>
+                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Barrio</th>
+                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Estaca</th>
+                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Comité</th>
+                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Turnos</th>
+                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Confiabilidad</th>
+                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -608,87 +608,70 @@ export default function VolunteersPage() {
                         <tr
                           key={vol.id}
                           id={index === 0 ? `letter-${letter}` : undefined}
-                          className="hover:bg-white/[0.02] transition-colors group"
+                          className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
+                          onClick={() => handleEditClick(vol)}
                         >
-                          <td className="px-5 py-4">
+                          <td className="px-5 py-4 w-full">
                             <p className={USER_TABLE_STYLES.name}>
                               <HighlightText text={vol.name} term={searchTerm} />
                             </p>
                           </td>
-                          <td className="px-5 py-4 text-center font-inter font-bold text-[13px] text-text-dim">{vol.ward}</td>
-                          <td className="px-5 py-4 text-center font-inter font-bold text-[13px] text-text-dim opacity-70">{vol.stake}</td>
-                          <td className="px-5 py-4 text-center">
+                          <td className="px-3 py-4 text-center font-inter font-bold text-[13px] text-text-dim w-px whitespace-nowrap">{vol.ward}</td>
+                          <td className="px-3 py-4 text-center font-inter font-bold text-[13px] text-text-dim opacity-70 w-px whitespace-nowrap">{vol.stake}</td>
+                          <td className="px-3 py-4 text-center w-px whitespace-nowrap">
                             <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
                               {vol.committee}
                             </Badge>
                           </td>
-                          <td className="px-5 py-4 text-center">
+                          <td className="px-3 py-4 text-center w-px whitespace-nowrap">
                             <Badge variant="secondary" className="bg-dark3 text-text border-none font-inter font-bold text-[10px] px-1.5 py-0.5">
                               {vol.shifts} {vol.shifts === 1 ? 'turno' : 'turnos'}
                             </Badge>
                           </td>
-                          <td className="px-5 py-4 text-center">
+                          <td className="px-3 py-4 text-center w-px whitespace-nowrap">
                             {vol.computedReliability === '-' ? (
-                              <span className="text-sm text-text-dim">N/A</span>
+                              <span className="font-inter font-bold text-sm text-text-dim">N/A</span>
                             ) : (
                               <div className="flex items-center justify-center gap-2">
                                 <div className={`w-1.5 h-1.5 rounded-full ${Number(vol.computedReliability || 0) >= 80 ? 'bg-accent' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
-                                <span className="text-sm font-bold text-text tabular-nums">{vol.computedReliability}%</span>
+                                <span className="font-inter font-bold text-[13px] text-text tabular-nums">{vol.computedReliability}%</span>
                               </div>
                             )}
                           </td>
-                          <td className="px-5 py-4 text-center">
+                          <td className="px-3 py-4 text-center w-px whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1">
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-[#4d7cfe] hover:bg-dark3 hover:text-[#4d7cfe] transition-all active:scale-90"
-                                title="WhatsApp"
-                                onClick={() => window.open(`https://wa.me/${vol.phone.replace(/\s+/g, '')}`, '_blank')}
+                                className="h-8 w-8 text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90"
+                                title="Editar Perfil"
+                                onClick={(e) => { e.stopPropagation(); handleEditClick(vol); }}
                               >
-                                <span className="material-symbols-outlined text-[20px]">message</span>
+                                <span className="material-symbols-outlined text-[18px]">edit</span>
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-[#4d7cfe] hover:bg-dark3 hover:text-[#4d7cfe] transition-all active:scale-90"
-                                title="Llamar"
-                                onClick={() => window.location.href = `tel:${vol.phone.replace(/\s+/g, '')}`}
+                                className="h-8 w-8 text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90"
+                                title="Resetear PIN"
+                                onClick={(e) => { e.stopPropagation(); handleResetPin(vol); }}
                               >
-                                <span className="material-symbols-outlined text-[20px]">call</span>
+                                <span className="material-symbols-outlined text-[18px]">lock_reset</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-amber-500/70 hover:bg-amber-500/10 hover:text-amber-500 transition-all active:scale-90"
+                                title={vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setVolunteerToArchive(vol);
+                                  setIsArchiveModalOpen(true);
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
                               </Button>
                             </div>
-                          </td>
-                          <td className="px-5 py-4 text-center">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger
-                                render={
-                                  <button className="p-1.5 rounded-full hover:bg-white/10 text-text-dim hover:text-text transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
-                                    <span className="material-symbols-outlined text-[18px]">more_vert</span>
-                                  </button>
-                                }
-                              />
-                              <DropdownMenuContent align="end" className="bg-dark3 border-border text-text min-w-[160px] p-1 rounded-sm shadow-md">
-                                <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleEditClick(vol)}>
-                                  <span className="material-symbols-outlined text-[20px] text-text-dim">edit</span>
-                                  <span className="font-medium">Editar Perfil</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="py-2.5 cursor-pointer hover:bg-dark2 rounded-sm focus:bg-dark2 focus:text-text transition-colors flex items-center gap-3" onClick={() => handleResetPin(vol)}>
-                                  <span className="material-symbols-outlined text-[20px] text-text-dim">lock_reset</span>
-                                  <span className="font-medium">Resetear PIN</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="py-2.5 cursor-pointer text-red hover:bg-red-faint hover:text-red rounded-sm focus:bg-red-faint focus:text-red transition-colors flex items-center gap-3"
-                                  onClick={() => {
-                                    setVolunteerToArchive(vol);
-                                    setIsArchiveModalOpen(true);
-                                  }}
-                                >
-                                  <span className="material-symbols-outlined text-[20px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
-                                  <span className="font-medium">{vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}</span>
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
                           </td>
                         </tr>
                       ))}
@@ -764,7 +747,7 @@ export default function VolunteersPage() {
       </div>
 
       {/* Editor Drawer (from Shifts) */}
-      <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${isSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+      <div className={cn("fixed inset-0 z-[100] flex transition-all duration-300", isMobile ? "flex-col justify-end" : "justify-end", isSheetOpen ? "pointer-events-auto" : "pointer-events-none")}>
         {/* Backdrop */}
         <div
           className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isSheetOpen ? 'opacity-100' : 'opacity-0'}`}
@@ -774,21 +757,40 @@ export default function VolunteersPage() {
         {/* Drawer Content */}
         <div
           id="drawer-profile"
-          className={`relative w-full md:w-[500px] md:mx-auto h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
+          className={cn(
+            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-[#0a101d]",
+            isMobile
+              ? `w-full h-[94dvh] rounded-t-[40px] shadow-2xl ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
+              : `w-[450px] h-full shadow-2xl border-l border-white/10 ${isSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
+          )}
           style={{ willChange: 'transform' }}
         >
-          {/* Handle */}
-          <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+          {/* Fondo animado (Tema Claro) */}
+          <div className="absolute inset-0 z-0 dark:hidden">
+            <MeshGradientBackground colors={["#60a5fa", "#3b82f6", "#93c5fd", "#4d7cfe"]} backgroundColor="#1e3a8a" />
+          </div>
+          {/* Fondo animado (Tema Oscuro) */}
+          <div className="absolute inset-0 z-0 hidden dark:block">
+            <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
+          </div>
+
+          <div className="relative z-10 flex flex-col h-full w-full">
+            {/* Handle */}
+            {isMobile && (
+              <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+            )}
 
           <div
-            className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
+            className={cn("flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain", !isMobile && "pt-12 px-6")}
             onTouchStart={(e) => {
+              if (!isMobile) return;
               const drawer = document.getElementById('drawer-profile');
               if (!drawer) return;
               drawer.dataset.startY = e.touches[0].clientY.toString();
               drawer.style.transition = 'none';
             }}
             onTouchMove={(e) => {
+              if (!isMobile) return;
               const drawer = document.getElementById('drawer-profile');
               if (!drawer) return;
               const startY = parseFloat(drawer.dataset.startY || '0');
@@ -801,6 +803,7 @@ export default function VolunteersPage() {
               }
             }}
             onTouchEnd={(e) => {
+              if (!isMobile) return;
               const drawer = document.getElementById('drawer-profile');
               if (!drawer) return;
 
@@ -972,29 +975,47 @@ export default function VolunteersPage() {
                 </div>
               </>
             )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Editor Lateral (Añadir) */}
-      <Sheet open={isAddSheetOpen} onOpenChange={setIsAddSheetOpen}>
-        <SheetContent
-          id="add-volunteer-drawer"
-          side={isMobile ? "bottom" : "right"}
-          className={cn(
-            "flex flex-col gap-0 p-0",
-            isMobile
-              ? "h-[94dvh] bg-gradient-to-br from-[#1d4ed8] to-[#3b82f6] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl border-0 overflow-hidden"
-              : "bg-dark2 text-text border-l border-white/10 sm:w-[40vw] sm:max-w-[95vw] h-full overflow-hidden"
-          )}
-        >
-          {isMobile && (
-            <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
-          )}
+      {/* Editor Lateral (Añadir) - Custom Fixed Drawer */}
+      <div className={cn("fixed inset-0 z-[100] flex transition-all duration-300", isMobile ? "flex-col justify-end" : "justify-end", isAddSheetOpen ? "pointer-events-auto" : "pointer-events-none")}>
+        {/* Backdrop */}
+        <div
+          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isAddSheetOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setIsAddSheetOpen(false)}
+        />
 
-          <form
-            id="add-volunteer-form"
-            onSubmit={handleAddVolunteer}
+        {/* Drawer Content */}
+        <div
+          id="add-volunteer-drawer"
+          className={cn(
+            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-[#0a101d]",
+            isMobile
+              ? `w-full h-[94dvh] rounded-t-[40px] shadow-2xl border-0 ${isAddSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
+              : `border-l border-white/10 w-[450px] h-full ${isAddSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
+          )}
+          style={{ willChange: 'transform' }}
+        >
+          {/* Fondo animado (Tema Claro) */}
+          <div className="absolute inset-0 z-0 dark:hidden">
+            <MeshGradientBackground colors={["#60a5fa", "#3b82f6", "#93c5fd", "#4d7cfe"]} backgroundColor="#1e3a8a" />
+          </div>
+          {/* Fondo animado (Tema Oscuro) */}
+          <div className="absolute inset-0 z-0 hidden dark:block">
+            <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
+          </div>
+
+          <div className="relative z-10 flex flex-col h-full w-full">
+            {isMobile && (
+              <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+            )}
+
+            <form
+              id="add-volunteer-form"
+              onSubmit={handleAddVolunteer}
             className="flex-1 flex flex-col overflow-hidden"
           >
             <div
@@ -1181,10 +1202,11 @@ export default function VolunteersPage() {
               >
                 Añadir Voluntario
               </Button>
-            </div>
-          </form>
-        </SheetContent>
-      </Sheet>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
 
       <Toast
         message={toast.message}
