@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />
+  return <SheetPrimitive.Root data-slot="sheet" modal={false} {...props} />
 }
 
 function SheetTrigger({ ...props }: SheetPrimitive.Trigger.Props) {

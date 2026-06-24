@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "rea
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
@@ -16,6 +15,7 @@ import { DataTableFilter } from "@/components/DataTableFilter";
 import { cn } from "@/lib/utils";
 import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
+import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -127,6 +127,28 @@ export default function UsersPage() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
+  // Lock <main> scroll when mobile drawer is open so the table doesn't jump
+  useEffect(() => {
+    if (!isMobile) return;
+    const main = document.querySelector('main') as HTMLElement | null;
+    if (!main) return;
+    if (isEditSheetOpen) {
+      const scrollY = main.scrollTop;
+      main.style.overflow = 'hidden';
+      main.style.top = `-${scrollY}px`;
+      main.dataset.scrollY = String(scrollY);
+    } else {
+      const scrollY = parseFloat(main.dataset.scrollY || '0');
+      main.style.overflow = '';
+      main.style.top = '';
+      main.scrollTop = scrollY;
+    }
+    return () => {
+      main.style.overflow = '';
+      main.style.top = '';
+    };
+  }, [isEditSheetOpen, isMobile]);
+
   // No pagination state needed for infinite scroll
 
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({
@@ -170,7 +192,7 @@ export default function UsersPage() {
     setLoading(true);
     const supabase = createClient();
     
-    // Fetch users
+    // Fetch users (ignoring archived ones locally to prevent DB schema errors)
     const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
       .select('*, committees(name)')
@@ -185,15 +207,19 @@ export default function UsersPage() {
     if (commsError) console.error("Error loading committees:", commsError);
 
     if (profilesData) {
-      setUsers(profilesData.map(p => ({
-        id: p.id,
-        name: p.full_name,
-        phone: p.phone || '',
-        role: p.role as Role,
-        committee: p.committees?.name,
-        status: p.pin ? 'active' : 'pending',
-        pin: p.pin || ''
-      })));
+      setUsers(
+        profilesData
+          .filter(p => p.status !== 'archived')
+          .map(p => ({
+            id: p.id,
+            name: p.full_name,
+            phone: p.phone || '',
+            role: p.role as Role,
+            committee: p.committees?.name,
+            status: p.pin ? 'active' : 'pending',
+            pin: p.pin || ''
+          }))
+      );
     }
 
     if (commsData) {
@@ -350,25 +376,25 @@ export default function UsersPage() {
     });
   };
 
-  const handleDeleteUser = async (user: PlatformUser) => {
+  const handleArchiveUser = async (user: PlatformUser) => {
     setConfirmModal({
       isOpen: true,
-      title: 'Eliminar Usuario',
-      message: `¿Estás seguro de que deseas eliminar a ${user.name}? Esta acción es permanente y no se puede deshacer.`,
-      confirmText: 'Eliminar permanentemente',
+      title: 'Archivar Usuario',
+      message: `¿Estás seguro de que deseas archivar a ${user.name}? Podrás gestionarlo más adelante desde Ajustes.`,
+      confirmText: 'Archivar',
       type: 'danger',
       onConfirm: async () => {
         const supabase = createClient();
         const { error } = await supabase
           .from('profiles')
-          .delete()
+          .update({ status: 'archived' })
           .eq('id', user.id);
 
         if (error) {
-          console.error("Error deleting user:", error);
-          showToast("Error al eliminar el usuario", "error");
+          console.error("Error archiving user:", error);
+          showToast("Error al archivar el usuario", "error");
         } else {
-          showToast(`Usuario ${user.name} eliminado`);
+          showToast(`${user.name} archivado correctamente`, "success");
           loadData();
         }
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -398,11 +424,32 @@ export default function UsersPage() {
   };
 
   const filteredUsers = useMemo(() => {
-    return users.filter(user => 
-      !searchTerm || 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      user.phone.includes(searchTerm)
-    ).sort((a, b) => a.name.localeCompare(b.name));
+    if (!searchTerm.trim()) {
+      return users.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    const normalizeSearch = (str: string | undefined | null) => {
+      if (!str) return '';
+      return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    };
+
+    const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+
+    return users.filter(user => {
+      const normName = normalizeSearch(user.name);
+      const normPhone = normalizeSearch(user.phone);
+      const normRole = normalizeSearch(user.role);
+      const normCommittee = normalizeSearch(user.committee);
+      const normStatus = normalizeSearch(user.status === 'active' ? 'activo' : 'pendiente');
+
+      return searchTerms.every(term => 
+        normName.includes(term) || 
+        normPhone.includes(term) ||
+        normRole.includes(term) ||
+        normCommittee.includes(term) ||
+        normStatus.includes(term)
+      );
+    }).sort((a, b) => a.name.localeCompare(b.name));
   }, [users, searchTerm]);
 
   const groupedUsers = useMemo(() => {
@@ -446,12 +493,12 @@ export default function UsersPage() {
         <motion.div variants={itemVariants} className="w-full relative z-10">
           <div className="relative w-full">
             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-              <span className="material-symbols-outlined text-white/70 text-[20px]">search</span>
+              <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
             </div>
             <input
               type="text"
-              placeholder="Buscar usuarios por nombre o teléfono..."
-              className="w-full bg-[#fff6] border border-black/10 dark:border-white/10 text-white placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
+              placeholder="Buscar por nombre, teléfono, rol o comité..."
+              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               autoComplete="off"
@@ -459,7 +506,7 @@ export default function UsersPage() {
             {searchTerm.trim() !== '' && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-white/60 hover:text-white transition-colors"
+                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-black/40 hover:text-black dark:text-white/60 dark:hover:text-white transition-colors"
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
@@ -623,20 +670,19 @@ export default function UsersPage() {
                   <th className="px-5 py-4">Usuario</th>
                   <th className="px-5 py-4">Teléfono</th>
                   <th className="px-5 py-4">Rol y Acceso</th>
-                  <th className="px-5 py-4 text-center">Estado</th>
                   <th className="px-5 py-4 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-text-dim">
+                    <td colSpan={4} className="px-5 py-8 text-center text-text-dim">
                       Cargando usuarios...
                     </td>
                   </tr>
                 ) : filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-text-dim">
+                    <td colSpan={4} className="px-5 py-8 text-center text-text-dim">
                       No se encontraron usuarios.
                     </td>
                   </tr>
@@ -670,11 +716,6 @@ export default function UsersPage() {
                             </div>
                           </td>
                           <td className="px-5 py-4 text-center">
-                            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)} title={user.status !== 'active' ? "No ha ingresado su PIN" : undefined}>
-                              {user.status === 'active' ? 'Activo' : 'Pendiente'}
-                            </Badge>
-                          </td>
-                          <td className="px-5 py-4 text-center">
                             <DropdownMenu>
                               <DropdownMenuTrigger
                                 render={
@@ -692,9 +733,9 @@ export default function UsersPage() {
                                   <span className="material-symbols-outlined text-[18px]">lock_reset</span>
                                   Resetear PIN
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="cursor-pointer text-red hover:bg-red-500/10 hover:text-red rounded-[8px] focus:bg-red-500/10 focus:text-red transition-colors flex items-center gap-2" onClick={() => handleDeleteUser(user)}>
-                                  <span className="material-symbols-outlined text-[18px]">delete</span>
-                                  Eliminar
+                                <DropdownMenuItem className="cursor-pointer text-amber-500 hover:bg-amber-500/10 hover:text-amber-500 rounded-[8px] focus:bg-amber-500/10 focus:text-amber-500 transition-colors flex items-center gap-2" onClick={() => handleArchiveUser(user)}>
+                                  <span className="material-symbols-outlined text-[18px]">archive</span>
+                                  Archivar
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -735,11 +776,11 @@ export default function UsersPage() {
                         swipeRightColorClass="text-amber-500"
                         swipeRightBgColor="rgba(245, 158, 11, 0.2)"
                         
-                        onSwipeLeft={() => handleDeleteUser(user)}
-                        swipeLeftIcon="delete"
-                        swipeLeftText="Eliminar"
-                        swipeLeftColorClass="text-red"
-                        swipeLeftBgColor="rgba(239, 68, 68, 0.2)"
+                        onSwipeLeft={() => handleArchiveUser(user)}
+                        swipeLeftIcon="archive"
+                        swipeLeftText="Archivar"
+                        swipeLeftColorClass="text-amber-500"
+                        swipeLeftBgColor="rgba(245, 158, 11, 0.2)"
                         
                         badges={
                           <>
@@ -751,9 +792,6 @@ export default function UsersPage() {
                                 {user.committee}
                               </Badge>
                             )}
-                            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)}>
-                              {user.status === 'active' ? 'Activo' : 'Pendiente'}
-                            </Badge>
                           </>
                         }
                       />
@@ -766,232 +804,209 @@ export default function UsersPage() {
         </motion.div>
       </div>
 
-      {/* Sheet de Edición */}
-      <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
-        <SheetContent
+      {/* Drawer de Edición — custom fixed drawer (sin Sheet de Base UI para evitar scroll lock) */}
+      <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${isEditSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        {/* Backdrop */}
+        <div
+          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isEditSheetOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setIsEditSheetOpen(false)}
+        />
+
+        {/* Drawer Content */}
+        <div
           id="edit-user-drawer"
-          side={isMobile ? "bottom" : "right"}
-          className={cn(
-            "flex flex-col gap-0 p-0",
-            isMobile 
-              ? "h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl border-0 overflow-hidden" 
-              : "bg-dark2 text-text border-l border-white/10 sm:w-[40vw] sm:max-w-[95vw] h-full overflow-hidden"
-          )}
+          className={`relative w-full md:w-[500px] md:mx-auto max-h-[94dvh] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isEditSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
+          style={{ willChange: 'transform' }}
         >
-          {isMobile && (
+          {/* Fondo animado (Tema Claro) */}
+          <div className="absolute inset-0 z-0 dark:hidden">
+            <MeshGradientBackground colors={["#60a5fa", "#3b82f6", "#93c5fd", "#4d7cfe"]} backgroundColor="#1e3a8a" />
+          </div>
+          {/* Fondo animado (Tema Oscuro) */}
+          <div className="absolute inset-0 z-0 hidden dark:block">
+            <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
+          </div>
+
+          <div className="relative z-10 flex flex-col h-full w-full">
+            {/* Handle */}
             <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
-          )}
 
-          <form onSubmit={handleUpdateUser} className="flex-1 flex flex-col overflow-hidden">
-            <div 
-              className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4 text-white font-light" : "p-7 space-y-7")}
-              onTouchStart={(e) => {
-                if (!isMobile) return;
-                const drawer = document.getElementById("edit-user-drawer");
-                if (!drawer) return;
-                drawer.dataset.startY = e.touches[0].clientY.toString();
-                drawer.style.transition = 'none';
-              }}
-              onTouchMove={(e) => {
-                if (!isMobile) return;
-                const drawer = document.getElementById("edit-user-drawer");
-                if (!drawer) return;
-                const startY = parseFloat(drawer.dataset.startY || '0');
-                const currentY = e.touches[0].clientY;
-                const deltaY = currentY - startY;
-
-                if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
-                  drawer.style.transform = `translateY(${deltaY}px)`;
-                  drawer.dataset.swiping = 'true';
-                }
-              }}
-              onTouchEnd={(e) => {
-                if (!isMobile) return;
-                const drawer = document.getElementById("edit-user-drawer");
-                if (!drawer) return;
-                
-                drawer.style.transition = 'transform 0.3s ease-out';
-                
-                if (drawer.dataset.swiping === 'true') {
+            <form onSubmit={handleUpdateUser} className="flex-1 flex flex-col overflow-hidden">
+              <div
+                className="flex-1 overflow-y-auto scrollbar-hide px-6 pb-6 pt-4 text-white font-light overscroll-contain"
+                onTouchStart={(e) => {
+                  const drawer = document.getElementById("edit-user-drawer");
+                  if (!drawer) return;
+                  drawer.dataset.startY = e.touches[0].clientY.toString();
+                  drawer.style.transition = 'none';
+                }}
+                onTouchMove={(e) => {
+                  const drawer = document.getElementById("edit-user-drawer");
+                  if (!drawer) return;
                   const startY = parseFloat(drawer.dataset.startY || '0');
-                  const deltaY = e.changedTouches[0].clientY - startY;
-                  
-                  drawer.dataset.swiping = 'false';
-                  
-                  if (deltaY > 150) {
-                    drawer.style.transform = `translateY(100%)`;
-                    setTimeout(() => {
-                      drawer.style.transform = '';
-                      setIsEditSheetOpen(false);
-                    }, 300);
-                  } else {
-                    drawer.style.transform = `translateY(0)`;
+                  const deltaY = e.touches[0].clientY - startY;
+                  if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
+                    drawer.style.transform = `translateY(${deltaY}px)`;
+                    drawer.dataset.swiping = 'true';
                   }
-                } else {
-                  drawer.style.transform = '';
-                }
-              }}
-            >
-              <div className={cn(isMobile ? "mb-6" : "")}>
-                <h2 className={cn("font-medium tracking-tight leading-none mb-2", isMobile ? "text-white text-lg" : "text-text")}>Editar Perfil</h2>
-                <p className={cn("text-sm font-inter font-bold", isMobile ? "text-white/80" : "text-text-dim")}>Modifica los datos de acceso y el rol del usuario en la plataforma.</p>
-              </div>
-
-              <div className="space-y-6 pb-6">
-                <div className="space-y-5">
-                <div className="space-y-2">
-                  <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Nombre completo</label>
-                  <input 
-                    required 
-                    value={newName} 
-                    onChange={e => setNewName(e.target.value)}
-                    className={cn(
-                      "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
-                      isMobile 
-                        ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
-                        : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
-                    )}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Teléfono WhatsApp</label>
-                  <input 
-                    required 
-                    pattern="[0-9]{8}"
-                    value={newPhone} 
-                    onChange={e => setNewPhone(e.target.value)}
-                    className={cn(
-                      "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
-                      isMobile 
-                        ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
-                        : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
-                    )}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Rol en la plataforma</label>
-                  <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
-                    <SelectTrigger className={cn(
-                      "w-full h-10 border text-text font-inter font-bold flex items-center justify-between",
-                      isMobile ? "border-white/20 bg-white/10 text-white" : "bg-dark2 border-border"
-                    )}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-dark2 border-border text-text">
-                      <SelectItem value="Admin">Admin (Acceso total)</SelectItem>
-                      <SelectItem value="Editor">Editor (Coordinador de comité)</SelectItem>
-                      <SelectItem value="Lector">Lector (Solo lectura)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                }}
+                onTouchEnd={(e) => {
+                  const drawer = document.getElementById("edit-user-drawer");
+                  if (!drawer) return;
+                  drawer.style.transition = 'transform 0.3s ease-out';
+                  if (drawer.dataset.swiping === 'true') {
+                    const startY = parseFloat(drawer.dataset.startY || '0');
+                    const deltaY = e.changedTouches[0].clientY - startY;
+                    drawer.dataset.swiping = 'false';
+                    if (deltaY > 150) {
+                      setIsEditSheetOpen(false);
+                      setTimeout(() => { drawer.style.transform = ''; }, 300);
+                    } else {
+                      drawer.style.transform = `translateY(0)`;
+                    }
+                  } else {
+                    drawer.style.transform = '';
+                  }
+                }}
+              >
+                <div className="mb-6">
+                  <h2 className="font-medium tracking-tight leading-none mb-2 text-white text-lg">Editar Perfil</h2>
+                  <p className="text-sm font-inter font-bold text-white/80">Modifica los datos de acceso y el rol del usuario en la plataforma.</p>
                 </div>
 
-                {newRole === 'Editor' && (
+                <div className="space-y-6">
+                  <div className="space-y-5">
                   <div className="space-y-2">
-                    <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Comité Asignado</label>
-                    <Select value={newCommittee} onValueChange={(v) => v && setNewCommittee(v)}>
-                      <SelectTrigger className={cn(
-                        "w-full h-10 border text-text font-inter font-bold flex items-center justify-between",
-                        isMobile ? "border-white/20 bg-white/10 text-white" : "bg-dark2 border-border"
-                      )}>
+                    <label className="block mb-2 text-xs font-normal text-white/90">Nombre completo</label>
+                    <input
+                      required
+                      value={newName}
+                      onChange={e => setNewName(e.target.value)}
+                      className="w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block mb-2 text-xs font-normal text-white/90">Teléfono WhatsApp</label>
+                    <input
+                      required
+                      pattern="[0-9]{8}"
+                      value={newPhone}
+                      onChange={e => setNewPhone(e.target.value)}
+                      className="w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block mb-2 text-xs font-normal text-white/90">Rol en la plataforma</label>
+                    <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
+                      <SelectTrigger className="w-full h-10 border font-inter font-bold flex items-center justify-between border-white/20 bg-white/10 text-white">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="bg-dark2 border-border text-text">
-                        {committeesList.map(c => (
-                          <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                        ))}
+                      <SelectContent className="bg-[#050a15] border-white/10 text-white backdrop-blur-xl">
+                        <SelectItem value="Admin">Admin (Acceso total)</SelectItem>
+                        <SelectItem value="Editor">Editor (Coordinador de comité)</SelectItem>
+                        <SelectItem value="Lector">Lector (Solo lectura)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                )}
 
-                <div className="space-y-2">
-                  <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>PIN de Acceso Actual</label>
-                  <div className="flex gap-2">
-                    <div className="relative w-32 shrink-0">
-                      <input 
-                        readOnly
-                        type={showPin ? "text" : "password"}
-                        value={
-                          editingUser?.pin 
-                            ? ((currentUserRole?.toLowerCase() === 'admin' || (currentUserRole?.toLowerCase() === 'editor' && editingUser.committee === currentUserCommittee))
-                                ? editingUser.pin : '****')
-                            : ''
-                        } 
-                        className={cn(
-                          "w-full h-10 pl-3 pr-8 rounded-sm border text-sm font-inter font-bold outline-none tracking-widest text-left",
-                          isMobile ? "border-white/20 bg-white/5 text-white/70" : "border-border bg-dark3 text-text-dim"
-                        )}
-                      />
-                      {(currentUserRole?.toLowerCase() === 'admin' || (currentUserRole?.toLowerCase() === 'editor' && editingUser?.committee === currentUserCommittee)) && editingUser?.pin && (
-                        <button
-                          type="button"
-                          onClick={() => setShowPin(!showPin)}
-                          className={cn("absolute right-2 top-1/2 -translate-y-1/2 p-0.5 transition-colors flex items-center justify-center",
-                            isMobile ? "text-white/50 hover:text-white" : "text-text-dim hover:text-text"
-                          )}
-                        >
-                          <span className="material-symbols-outlined text-[18px]">
-                            {showPin ? 'visibility_off' : 'visibility'}
-                          </span>
-                        </button>
-                      )}
+                  {newRole === 'Editor' && (
+                    <div className="space-y-2">
+                      <label className="block mb-2 text-xs font-normal text-white/90">Comité Asignado</label>
+                      <Select value={newCommittee} onValueChange={(v) => v && setNewCommittee(v)}>
+                        <SelectTrigger className="w-full h-10 border font-inter font-bold flex items-center justify-between border-white/20 bg-white/10 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#050a15] border-white/10 text-white backdrop-blur-xl">
+                          {committeesList.map(c => (
+                            <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => handleResetPin(editingUser!)}
-                      className={cn(
-                        "flex-1 h-10 px-4 p-0 flex items-center justify-center gap-2 border rounded-sm",
-                        isMobile ? "text-white border-white/20 bg-white/10 hover:bg-white/25" : "text-[#4d7cfe] border-[#4d7cfe] hover:bg-[#4d7cfe]/10"
-                      )}
-                    >
-                      <span className="material-symbols-outlined text-[18px]">lock_reset</span>
-                      <span className="font-bold font-inter text-sm">Resetear PIN</span>
-                    </Button>
+                  )}
+
+                  <div className="space-y-2">
+                    <label className="block mb-2 text-xs font-normal text-white/90">PIN de Acceso Actual</label>
+                    <div className="flex gap-2">
+                      <div className="relative w-32 shrink-0">
+                        <input
+                          readOnly
+                          type={showPin ? "text" : "password"}
+                          value={
+                            editingUser?.pin
+                              ? ((currentUserRole?.toLowerCase() === 'admin' || (currentUserRole?.toLowerCase() === 'editor' && editingUser.committee === currentUserCommittee))
+                                  ? editingUser.pin : '****')
+                              : ''
+                          }
+                          className="w-full h-10 pl-3 pr-8 rounded-sm border text-sm font-inter font-bold outline-none tracking-widest text-left border-white/20 bg-white/5 text-white/70"
+                        />
+                        {(currentUserRole?.toLowerCase() === 'admin' || (currentUserRole?.toLowerCase() === 'editor' && editingUser?.committee === currentUserCommittee)) && editingUser?.pin && (
+                          <button
+                            type="button"
+                            onClick={() => setShowPin(!showPin)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 transition-colors flex items-center justify-center text-white/50 hover:text-white"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">
+                              {showPin ? 'visibility_off' : 'visibility'}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handleResetPin(editingUser!)}
+                        className="flex-1 h-10 px-4 p-0 flex items-center justify-center gap-2 border rounded-sm text-white border-white/20 bg-white/10 hover:bg-white/25"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">lock_reset</span>
+                        <span className="font-bold font-inter text-sm">Resetear PIN</span>
+                      </Button>
+                    </div>
+                    <p className="text-[10px] italic font-inter text-white/70">El PIN por defecto tras un reseteo es '1234'.</p>
                   </div>
-                  <p className={cn("text-[10px] italic font-inter", isMobile ? "text-white/70" : "text-text-dim")}>El PIN por defecto tras un reseteo es '1234'.</p>
                 </div>
-              </div>
 
-              {errorMsg && (
-                <div className={cn(
-                  "p-3 text-sm rounded-sm border",
-                  isMobile ? "text-white bg-white/10 border-white/20" : "text-red bg-red-50 border-red-200"
-                )}>
-                  {errorMsg}
-                </div>
-              )}
-
-              </div>
-            </div>
-
-            <div className="flex flex-row w-full mt-auto">
-              <Button 
-                type="button" 
-                variant="ghost"
-                onClick={() => setIsEditSheetOpen(false)} 
-                className="btn-cancel flex-1 h-[52px] rounded-none rounded-tl-[24px] shadow-none font-inter font-bold text-base border-r border-black/5 dark:border-white/5"
-              >
-                Cancelar
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={isUpdating} 
-                className="btn-action flex-1 h-[52px] rounded-none rounded-tr-[24px] shadow-none font-inter font-bold text-base"
-              >
-                {isUpdating ? (
-                  <>
-                    <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-                    Actualizando...
-                  </>
-                ) : (
-                  'Guardar Cambios'
+                {errorMsg && (
+                  <div className="p-3 text-sm rounded-sm border text-white bg-white/10 border-white/20 mt-4">
+                    {errorMsg}
+                  </div>
                 )}
-              </Button>
-            </div>
-          </form>
-        </SheetContent>
-      </Sheet>
+
+                </div>
+              </div>
+
+              {/* Botones */}
+              <div
+                className="flex flex-row w-full mt-auto shrink-0 gap-3 px-6 pt-0"
+                style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditSheetOpen(false)}
+                  className="flex-1 rounded-full shadow-lg h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97] bg-white/10 hover:!bg-red-500 hover:!text-white hover:!border-red-500 text-white border-white/20"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97] flex items-center justify-center gap-1.5"
+                >
+                  {isUpdating ? (
+                    <>
+                      <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+                      Actualizando...
+                    </>
+                  ) : (
+                    'Guardar Cambios'
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
 
       <Toast 
         message={toast.message} 

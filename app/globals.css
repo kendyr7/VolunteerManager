@@ -161,9 +161,11 @@
     color: var(--text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    scrollbar-gutter: stable;
   }
   html {
     @apply font-sans;
+    scrollbar-gutter: stable;
   }
   
   h1 {
@@ -325,6 +327,23 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--mid);
+}
+
+/* Prevent layout shift when drawers/dialogs open */
+/* Base UI sets data-base-ui-scroll-locked on <html> and applies inline styles */
+html[data-base-ui-scroll-locked],
+html[data-base-ui-scroll-locked] body {
+  overflow: auto !important;
+  width: 100vw !important;
+  height: auto !important;
+  position: static !important;
+}
+/* Legacy fallback for data-scroll-locked on body */
+body[data-scroll-locked] {
+  padding-right: 0 !important;
+  overflow: auto !important;
+  margin-right: 0 !important;
+  width: 100% !important;
 }
 
 @layer utilities {

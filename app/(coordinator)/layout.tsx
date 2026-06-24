@@ -11,8 +11,8 @@ import { SearchProvider, useSearch } from "@/lib/search-context";
 // Helper component for Material Symbols
 function Icon({ name, size = 20, className = "" }: { name: string, size?: number, className?: string }) {
   return (
-    <span 
-      className={`material-symbols-outlined ${className}`} 
+    <span
+      className={`material-symbols-outlined ${className}`}
       style={{ fontSize: size, width: size, height: size, lineHeight: 1 }}
     >
       {name}
@@ -132,12 +132,12 @@ function CoordinatorLayoutInner({
 
   return (
     <div className="h-screen bg-dark flex flex-col font-sans text-text overflow-hidden">
-      
+
 
 
       {/* Main Layout Area */}
       <div className="flex flex-1 min-h-0 overflow-hidden lg:pb-0">
-        
+
         {/* Desktop Sidebar */}
         <aside
           className="hidden lg:flex flex-col border-r border-border bg-dark2 shrink-0 overflow-hidden transition-all duration-300 relative z-50"
@@ -183,8 +183,8 @@ function CoordinatorLayoutInner({
                     className={cn(
                       "group flex items-center h-[42px] rounded-md transition-all duration-200 relative",
                       sidebarOpen ? "gap-3 px-3" : "justify-center px-0",
-                      isActive 
-                        ? "bg-dark3 text-gold font-semibold" 
+                      isActive
+                        ? "bg-dark3 text-gold font-semibold"
                         : "text-text-dim hover:bg-dark3 hover:text-text font-medium"
                     )}
                   >
@@ -241,7 +241,7 @@ function CoordinatorLayoutInner({
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto min-w-0 bg-dark relative pb-24 lg:pb-0">
+        <main className="flex-1 overflow-y-auto min-w-0 bg-dark relative pb-24 lg:pb-0" style={{ scrollbarGutter: 'stable' }}>
           <div className="w-full h-full">
             {children}
           </div>

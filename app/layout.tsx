@@ -67,6 +67,28 @@ export default function RootLayout({
             `,
           }}
         />
+        <Script
+          id="prevent-scroll-lock-shift"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var html = document.documentElement;
+                var observer = new MutationObserver(function(mutations) {
+                  mutations.forEach(function(m) {
+                    if (m.type === 'attributes' && m.attributeName === 'style') {
+                      if (html.style.overflowY === 'hidden' || html.style.overflow === 'hidden') {
+                        html.style.overflowY = '';
+                        html.style.overflow = '';
+                      }
+                    }
+                  });
+                });
+                observer.observe(html, { attributes: true, attributeFilter: ['style'] });
+              })();
+            `,
+          }}
+        />
       </body>
     </html>
   );

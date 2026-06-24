@@ -501,8 +501,8 @@ export default function ShiftsPage() {
       const normCommittee = normalizeSearch(v.committee);
       const normStake = normalizeSearch(v.stake);
       const normWard = normalizeSearch(v.ward);
-      
-      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term => 
+
+      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
         normName.includes(term) ||
         normCommittee.includes(term) ||
         normStake.includes(term) ||
@@ -566,23 +566,23 @@ export default function ShiftsPage() {
         >
           {/* Left: Date */}
           <div className="flex-1 min-w-0 pr-4 flex items-center">
-             <p className="font-inter font-bold text-white text-[13px] drop-shadow-sm truncate capitalize">
-               {format(date, "EEEE", { locale: es })} {dateNum}
-             </p>
+            <p className="font-inter font-bold text-white text-[13px] drop-shadow-sm truncate capitalize">
+              {format(date, "EEEE", { locale: es })} {dateNum}
+            </p>
           </div>
 
           {/* Right: 4 Columns */}
           <div className="flex items-center shrink-0 ml-auto">
-             {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
-               const count = shiftData[t].length;
-               
-               return (
-                 <div key={t} className={`flex flex-col items-center justify-center w-12 sm:w-16 ${i !== 0 ? 'border-l border-white/20' : ''}`}>
-                   <span className="text-[16px] font-semibold text-white drop-shadow-sm leading-none">{count}</span>
-                   <span className="font-inter text-[10px] font-bold text-white/80 uppercase mt-1 tracking-widest">{t}</span>
-                 </div>
-               );
-             })}
+            {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
+              const count = shiftData[t].length;
+
+              return (
+                <div key={t} className={`flex flex-col items-center justify-center w-12 sm:w-16 ${i !== 0 ? 'border-l border-white/20' : ''}`}>
+                  <span className="text-[16px] font-semibold text-white drop-shadow-sm leading-none">{count}</span>
+                  <span className="font-inter text-[10px] font-bold text-white/80 uppercase mt-1 tracking-widest">{t}</span>
+                </div>
+              );
+            })}
           </div>
         </button>
 
@@ -613,8 +613,8 @@ export default function ShiftsPage() {
                   const hasMore = vols.length > 10;
 
                   return (
-                    <div 
-                      key={t} 
+                    <div
+                      key={t}
                       onClick={(e) => {
                         if (hasMore) {
                           e.stopPropagation();
@@ -692,19 +692,19 @@ export default function ShiftsPage() {
 
             {/* Mobile Bottom Drawer */}
             <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end pointer-events-none">
-              <div 
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity pointer-events-auto" 
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity pointer-events-auto"
                 onClick={(e) => { e.stopPropagation(); toggleDay(key); }}
               />
-              <div 
+              <div
                 id={`drawer-${key}`}
                 className="relative w-full h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full duration-300 ease-out pointer-events-auto"
                 style={{ willChange: 'transform' }}
               >
                 {/* Handle */}
                 <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
-                
-                <div 
+
+                <div
                   className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
                   onTouchStart={(e) => {
                     const drawer = document.getElementById(`drawer-${key}`);
@@ -727,15 +727,15 @@ export default function ShiftsPage() {
                   onTouchEnd={(e) => {
                     const drawer = document.getElementById(`drawer-${key}`);
                     if (!drawer) return;
-                    
+
                     drawer.style.transition = 'transform 0.3s ease-out';
-                    
+
                     if (drawer.dataset.swiping === 'true') {
                       const startY = parseFloat(drawer.dataset.startY || '0');
                       const deltaY = e.changedTouches[0].clientY - startY;
-                      
+
                       drawer.dataset.swiping = 'false';
-                      
+
                       if (deltaY > 150) {
                         drawer.style.transform = `translateY(100%)`;
                         setTimeout(() => {
@@ -792,7 +792,7 @@ export default function ShiftsPage() {
                   {/* Match highlights -> Turnos del Día */}
                   <div className="w-full">
                     <div className="space-y-3">
-                      {( [ ['T1', 'T2'], ['T3', 'T4'] ] as const ).map((group, groupIdx) => (
+                      {([['T1', 'T2'], ['T3', 'T4']] as const).map((group, groupIdx) => (
                         <div key={groupIdx} className="bg-black/20 backdrop-blur-md rounded-[32px] p-4 shadow-lg border border-white/10">
                           <div className="grid grid-cols-2 gap-4">
                             {group.map(t => {
@@ -807,17 +807,17 @@ export default function ShiftsPage() {
                                   minRequired += (committeeRequirements[c]?.[t] ?? 0);
                                 });
                               }
-                              
+
                               const combinedKey = `${key}-${t}`;
                               const isShiftExpanded = !!expandedShifts[combinedKey];
-                              
+
                               const limit = 5;
                               const hiddenCount = Math.max(0, vols.length - limit);
                               const hasMore = vols.length > limit;
 
                               return (
-                                <div 
-                                  key={t} 
+                                <div
+                                  key={t}
                                   className="flex flex-col h-fit"
                                 >
                                   {/* Turno Header */}
@@ -830,27 +830,27 @@ export default function ShiftsPage() {
                                       {count}/{minRequired}
                                     </span>
                                   </div>
-                                  
+
                                   {/* Vols List */}
                                   <div className="flex flex-col flex-1 gap-[3px]">
                                     {vols.length === 0 ? (
                                       <p className="text-[10px] text-white/40 italic py-1 text-center">Sin asignaciones</p>
                                     ) : (
-                                        (isShiftExpanded ? vols : vols.slice(0, limit)).map(vol => {
-                                          const isMatch = searchTerm.trim() !== '' && vol.name.toLowerCase().includes(searchTerm.toLowerCase());
-                                          return (
-                                            <div 
-                                              key={vol.id} 
-                                              className={`flex items-center gap-1.5 cursor-pointer p-1.5 rounded-xl transition-colors ${isMatch ? 'bg-yellow-400/20 ring-1 ring-yellow-300/40 hover:bg-yellow-400/30' : 'hover:bg-white/10'}`}
-                                              onClick={(e) => { e.stopPropagation(); toggleDay(key); handleEditClick(vol); }}
-                                            >
-                                              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMatch ? 'bg-yellow-300' : 'bg-white/60'}`} />
-                                              <span className="volunteer-name-text text-white/90 min-w-0 flex-1" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                <HighlightText text={vol.name} term={searchTerm} />
-                                              </span>
-                                            </div>
-                                          );
-                                        })
+                                      (isShiftExpanded ? vols : vols.slice(0, limit)).map(vol => {
+                                        const isMatch = searchTerm.trim() !== '' && vol.name.toLowerCase().includes(searchTerm.toLowerCase());
+                                        return (
+                                          <div
+                                            key={vol.id}
+                                            className={`flex items-center gap-1.5 cursor-pointer p-1.5 rounded-xl transition-colors ${isMatch ? 'bg-yellow-400/20 ring-1 ring-yellow-300/40 hover:bg-yellow-400/30' : 'hover:bg-white/10'}`}
+                                            onClick={(e) => { e.stopPropagation(); toggleDay(key); handleEditClick(vol); }}
+                                          >
+                                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMatch ? 'bg-yellow-300' : 'bg-white/60'}`} />
+                                            <span className="volunteer-name-text text-white/90 min-w-0 flex-1" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                              <HighlightText text={vol.name} term={searchTerm} />
+                                            </span>
+                                          </div>
+                                        );
+                                      })
                                     )}
                                   </div>
 
@@ -951,21 +951,21 @@ export default function ShiftsPage() {
       {/* Profile Bottom Drawer */}
       <div className={`md:hidden fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${isSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
         {/* Backdrop */}
-        <div 
+        <div
           className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isSheetOpen ? 'opacity-100' : 'opacity-0'}`}
           onClick={() => setIsSheetOpen(false)}
         />
 
         {/* Drawer Content */}
-        <div 
+        <div
           id="drawer-profile"
           className={`relative w-full h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
           style={{ willChange: 'transform' }}
         >
           {/* Handle */}
           <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
-          
-          <div 
+
+          <div
             className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
             onTouchStart={(e) => {
               const drawer = document.getElementById('drawer-profile');
@@ -988,15 +988,15 @@ export default function ShiftsPage() {
             onTouchEnd={(e) => {
               const drawer = document.getElementById('drawer-profile');
               if (!drawer) return;
-              
+
               drawer.style.transition = 'transform 0.3s ease-out';
-              
+
               if (drawer.dataset.swiping === 'true') {
                 const startY = parseFloat(drawer.dataset.startY || '0');
                 const deltaY = e.changedTouches[0].clientY - startY;
-                
+
                 drawer.dataset.swiping = 'false';
-                
+
                 if (deltaY > 150) {
                   setIsSheetOpen(false);
                   setTimeout(() => { drawer.style.transform = ''; }, 300);
@@ -1055,7 +1055,7 @@ export default function ShiftsPage() {
                 <div className="w-full">
                   <div className="flex items-center justify-between px-2 mb-4">
                     <p className="text-drawer-label text-white">Cronograma</p>
-                    
+
                     <div className="flex items-center gap-3">
                       {saved && <span className="text-[11px] text-green-300 font-bold animate-pulse">✓ Listo</span>}
                       {isEditingShifts ? (
@@ -1101,7 +1101,7 @@ export default function ShiftsPage() {
                               {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
                                 const active = dayShifts.includes(t);
                                 return (
-                                  <button 
+                                  <button
                                     key={t}
                                     disabled={!isEditingShifts}
                                     onClick={() => toggleShift(d.key, t)}

@@ -483,8 +483,8 @@ export default function VolunteersPage() {
       const normCommittee = normalizeSearch(v.committee);
       const normStake = normalizeSearch(v.stake);
       const normWard = normalizeSearch(v.ward);
-      
-      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term => 
+
+      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
         normName.includes(term) ||
         normCommittee.includes(term) ||
         normStake.includes(term) ||
@@ -542,12 +542,12 @@ export default function VolunteersPage() {
       <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto shrink-0">
         <motion.div variants={itemVariants} className="w-full flex items-center justify-between">
           <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
-            Voluntarios 
+            Voluntarios
             <span className="text-xs font-bold text-[#4d7cfe] bg-[#4d7cfe]/10 px-2.5 py-1 rounded-full border border-[#4d7cfe]/20">
               {filteredVolunteers.length}
             </span>
           </h1>
-          <Button 
+          <Button
             onClick={() => setIsAddSheetOpen(true)}
             className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5"
           >
@@ -560,12 +560,12 @@ export default function VolunteersPage() {
         <motion.div variants={itemVariants} className="w-full relative z-10">
           <div className="relative w-full">
             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-              <span className="material-symbols-outlined text-white/70 text-[20px]">search</span>
+              <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
             </div>
             <input
               type="text"
               placeholder="Buscar voluntarios por nombre, estaca o barrio..."
-              className="w-full bg-[#fff6] border border-black/10 dark:border-white/10 text-white placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
+              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               autoComplete="off"
@@ -573,7 +573,7 @@ export default function VolunteersPage() {
             {searchTerm.trim() !== '' && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-white/60 hover:text-white transition-colors"
+                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-black/40 hover:text-black dark:text-white/60 dark:hover:text-white transition-colors"
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
@@ -712,18 +712,18 @@ export default function VolunteersPage() {
                 <Fragment key={letter}>
                   {groupedVolunteers[letter].map((vol, index) => (
                     <div key={vol.id} id={index === 0 ? `letter-mobile-${letter}` : undefined}>
-                      <SwipeableMobileCard 
+                      <SwipeableMobileCard
                         name={vol.name}
                         phone={vol.phone}
                         searchTerm={searchTerm}
                         onEdit={() => handleEditClick(vol)}
-                        
+
                         onSwipeRight={() => handleResetPin(vol)}
                         swipeRightIcon="lock_reset"
                         swipeRightText="Reset PIN"
                         swipeRightColorClass="text-amber-500"
                         swipeRightBgColor="rgba(245, 158, 11, 0.2)"
-                        
+
                         onSwipeLeft={() => {
                           setVolunteerToArchive(vol);
                           setIsArchiveModalOpen(true);
@@ -732,7 +732,7 @@ export default function VolunteersPage() {
                         swipeLeftText={vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
                         swipeLeftColorClass="text-red"
                         swipeLeftBgColor="rgba(254, 77, 151, 0.2)"
-                        
+
                         badges={
                           <>
                             {vol.committee && (
@@ -766,21 +766,21 @@ export default function VolunteersPage() {
       {/* Editor Drawer (from Shifts) */}
       <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${isSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
         {/* Backdrop */}
-        <div 
+        <div
           className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isSheetOpen ? 'opacity-100' : 'opacity-0'}`}
           onClick={() => setIsSheetOpen(false)}
         />
 
         {/* Drawer Content */}
-        <div 
+        <div
           id="drawer-profile"
           className={`relative w-full md:w-[500px] md:mx-auto h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
           style={{ willChange: 'transform' }}
         >
           {/* Handle */}
           <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
-          
-          <div 
+
+          <div
             className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
             onTouchStart={(e) => {
               const drawer = document.getElementById('drawer-profile');
@@ -803,15 +803,15 @@ export default function VolunteersPage() {
             onTouchEnd={(e) => {
               const drawer = document.getElementById('drawer-profile');
               if (!drawer) return;
-              
+
               drawer.style.transition = 'transform 0.3s ease-out';
-              
+
               if (drawer.dataset.swiping === 'true') {
                 const startY = parseFloat(drawer.dataset.startY || '0');
                 const deltaY = e.changedTouches[0].clientY - startY;
-                
+
                 drawer.dataset.swiping = 'false';
-                
+
                 if (deltaY > 150) {
                   setIsSheetOpen(false);
                   setTimeout(() => { drawer.style.transform = ''; }, 300);
@@ -902,7 +902,7 @@ export default function VolunteersPage() {
                 <div className="w-full">
                   <div className="flex items-center justify-between px-2 mb-4">
                     <p className="text-drawer-label text-white">Cronograma</p>
-                    
+
                     <div className="flex items-center gap-3">
                       {saved && <span className="text-[11px] text-green-300 font-bold animate-pulse">✓ Listo</span>}
                       {isEditingShifts ? (
@@ -948,7 +948,7 @@ export default function VolunteersPage() {
                               {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
                                 const active = dayShifts.includes(t);
                                 return (
-                                  <button 
+                                  <button
                                     key={t}
                                     disabled={!isEditingShifts}
                                     onClick={() => toggleShift(d.key, t)}
@@ -983,8 +983,8 @@ export default function VolunteersPage() {
           side={isMobile ? "bottom" : "right"}
           className={cn(
             "flex flex-col gap-0 p-0",
-            isMobile 
-              ? "h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl border-0 overflow-hidden" 
+            isMobile
+              ? "h-[94dvh] bg-gradient-to-br from-[#1d4ed8] to-[#3b82f6] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl border-0 overflow-hidden"
               : "bg-dark2 text-text border-l border-white/10 sm:w-[40vw] sm:max-w-[95vw] h-full overflow-hidden"
           )}
         >
@@ -997,7 +997,7 @@ export default function VolunteersPage() {
             onSubmit={handleAddVolunteer}
             className="flex-1 flex flex-col overflow-hidden"
           >
-            <div 
+            <div
               className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4 text-white font-light" : "p-7 space-y-7")}
               onTouchStart={(e) => {
                 if (!isMobile) return;
@@ -1023,15 +1023,15 @@ export default function VolunteersPage() {
                 if (!isMobile) return;
                 const drawer = document.getElementById("add-volunteer-drawer");
                 if (!drawer) return;
-                
+
                 drawer.style.transition = 'transform 0.3s ease-out';
-                
+
                 if (drawer.dataset.swiping === 'true') {
                   const startY = parseFloat(drawer.dataset.startY || '0');
                   const deltaY = e.changedTouches[0].clientY - startY;
-                  
+
                   drawer.dataset.swiping = 'false';
-                  
+
                   if (deltaY > 150) {
                     drawer.style.transform = `translateY(100%)`;
                     setTimeout(() => {
@@ -1059,9 +1059,9 @@ export default function VolunteersPage() {
                       required
                       minLength={3}
                       className={cn(
-                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
-                        isMobile 
-                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
+                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all",
+                        isMobile
+                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
                           : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
                       )}
                       placeholder="Ej. Juan Pérez"
@@ -1070,7 +1070,7 @@ export default function VolunteersPage() {
                     />
                     <p className={cn("text-[11px] italic font-inter", isMobile ? "text-white/70" : "text-text-dim")}>Asegúrate de incluir ambos apellidos si es posible.</p>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Celular</label>
                     <Input
@@ -1082,9 +1082,9 @@ export default function VolunteersPage() {
                         if (!/[0-9]/.test(e.key)) e.preventDefault();
                       }}
                       className={cn(
-                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
-                        isMobile 
-                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
+                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all",
+                        isMobile
+                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
                           : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
                       )}
                       placeholder="Ej. 88888888"
@@ -1099,9 +1099,9 @@ export default function VolunteersPage() {
                     <Input
                       required
                       className={cn(
-                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
-                        isMobile 
-                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
+                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all",
+                        isMobile
+                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
                           : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
                       )}
                       placeholder="Ej. Managua Sur"
@@ -1115,9 +1115,9 @@ export default function VolunteersPage() {
                     <Input
                       required
                       className={cn(
-                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all", 
-                        isMobile 
-                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
+                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all",
+                        isMobile
+                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
                           : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
                       )}
                       placeholder="Ej. Barrio 1"
@@ -1137,9 +1137,9 @@ export default function VolunteersPage() {
                       hideCountBadge
                       isCommitteeFilter
                       className={cn(
-                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all justify-between", 
-                        isMobile 
-                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white" 
+                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all justify-between",
+                        isMobile
+                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
                           : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
                       )}
                       onChange={(vals) => {
@@ -1158,22 +1158,25 @@ export default function VolunteersPage() {
               </div>
             </div>
 
-            <div className={cn("flex flex-row w-full mt-auto shrink-0 gap-3", isMobile ? "px-6 pb-6 pt-2" : "p-7 pt-4 border-t border-white/5")}>
-              <Button 
-                type="button" 
+            <div
+              className={cn("flex flex-row w-full mt-auto shrink-0 gap-3", isMobile ? "px-6 pt-2" : "p-7 pt-4 border-t border-white/5")}
+              style={isMobile ? { paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' } : undefined}
+            >
+              <Button
+                type="button"
                 variant="outline"
-                onClick={() => setIsAddSheetOpen(false)} 
+                onClick={() => setIsAddSheetOpen(false)}
                 className={cn(
                   "flex-1 rounded-full shadow-lg h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97]",
-                  isMobile 
-                    ? "bg-white/10 hover:bg-white/20 text-white border-white/20" 
+                  isMobile
+                    ? "bg-white/10 hover:bg-white/20 text-white border-white/20"
                     : "bg-dark2 hover:bg-dark3 text-text border-white/10"
                 )}
               >
                 Cancelar
               </Button>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97]"
               >
                 Añadir Voluntario

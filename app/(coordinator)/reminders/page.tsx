@@ -319,8 +319,8 @@ export default function RemindersPage() {
         const normCommittee = normalizeSearch(vol.committee);
         const normStake = normalizeSearch(vol.stake);
         const normWard = normalizeSearch(vol.ward);
-        
-        const matchesSearch = searchTerms.length === 0 || searchTerms.every(term => 
+
+        const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
           normName.includes(term) ||
           normCommittee.includes(term) ||
           normStake.includes(term) ||
@@ -356,8 +356,8 @@ export default function RemindersPage() {
       const normCommittee = normalizeSearch(vol.committee);
       const normStake = normalizeSearch(vol.stake);
       const normWard = normalizeSearch(vol.ward);
-      
-      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term => 
+
+      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
         normName.includes(term) ||
         normCommittee.includes(term) ||
         normStake.includes(term) ||
@@ -452,7 +452,7 @@ export default function RemindersPage() {
           <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
             Avisos
           </h1>
-          <Button 
+          <Button
             onClick={() => setShowTemplate(true)}
             className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5"
           >
@@ -467,659 +467,659 @@ export default function RemindersPage() {
         {/* Selector de Turnos Rediseñado en Dos Filas */}
         <div className="shrink-0 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-4 md:p-5 flex flex-col gap-4 md:gap-5">
 
-        {/* FILA 1: FECHA */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase">FECHA</span>
-          </div>
-          <div className="grid grid-cols-5 sm:grid-cols-8 md:flex md:flex-wrap gap-2">
-            {EVENT_DAYS.map((day, index) => {
-              const dayCounts = shiftCounts[day.key] || { T1: 0, T2: 0, T3: 0, T4: 0 };
-              const totalVolunteersOnDay = Object.values(dayCounts).reduce((acc, count) => acc + count, 0);
-              const isSelected = selectedDayKey === day.key;
-              const dayAbbr = day.label.substring(0, 3); // e.g. 'jue', 'vie', 'sáb'
-              
-              const bgColors = [
-                'bg-[#10a562]',
-                'bg-[#4aa9df]',
-                'bg-[#f1c130]',
-                'bg-[#d54134]',
-                'bg-[#981e32]',
-                'bg-[#2c44c2]',
-                'bg-[#f1c130]',
-                'bg-[#ed1b24]'
-              ];
-              const cardBg = bgColors[index % bgColors.length];
-              
-              return (
-                <button
-                  key={day.key}
-                  onClick={() => {
-                    if (selectedDayKey === day.key) {
-                      setSelectedDayKey("");
-                      setSelectedShiftId("");
-                    } else {
-                      setSelectedDayKey(day.key);
-                      if (!selectedShiftId) {
-                        setSelectedShiftId("T1");
-                      }
-                    }
-                  }}
-                  className={`relative shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto w-full text-white ${cardBg} ${isSelected
-                      ? 'border-white/50 shadow-sm scale-105 brightness-110'
-                      : 'border-transparent opacity-80 hover:opacity-100 hover:scale-[1.02]'
-                    }`}
-                >
-                  <span className={`font-inter font-bold text-[10px] md:text-[9px] uppercase tracking-widest ${isSelected ? 'text-white/90' : 'text-white/70'}`}>
-                    {dayAbbr}
-                  </span>
-                  <span className="text-base md:text-sm font-black leading-none drop-shadow-sm">{day.dateNum}</span>
-                  <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? (isSelected ? 'bg-white' : 'bg-white/70') : 'bg-black/20'
-                    }`} />
-                </button>
-              );
-            })}
-          </div>
-        </div>
+          {/* FILA 1: FECHA */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase">FECHA</span>
+            </div>
+            <div className="grid grid-cols-5 sm:grid-cols-8 md:flex md:flex-wrap gap-2">
+              {EVENT_DAYS.map((day, index) => {
+                const dayCounts = shiftCounts[day.key] || { T1: 0, T2: 0, T3: 0, T4: 0 };
+                const totalVolunteersOnDay = Object.values(dayCounts).reduce((acc, count) => acc + count, 0);
+                const isSelected = selectedDayKey === day.key;
+                const dayAbbr = day.label.substring(0, 3); // e.g. 'jue', 'vie', 'sáb'
 
-        {/* Separador */}
-        <div className="h-px bg-border/40" />
+                const bgColors = [
+                  'bg-[#10a562]',
+                  'bg-[#4aa9df]',
+                  'bg-[#f1c130]',
+                  'bg-[#d54134]',
+                  'bg-[#981e32]',
+                  'bg-[#2c44c2]',
+                  'bg-[#f1c130]',
+                  'bg-[#ed1b24]'
+                ];
+                const cardBg = bgColors[index % bgColors.length];
 
-        {/* FILA 2: TURNOS */}
-        <div className="space-y-2">
-          <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase">TURNOS</span>
-          <div className="grid grid-cols-4 md:flex md:flex-wrap gap-2">
-            {['T1', 'T2', 'T3', 'T4'].map((t) => {
-              // Obtener conteo de voluntarios para este turno (si hay día seleccionado, del día; si no, total acumulado de todos los días)
-              let count = 0;
-              if (selectedDayKey) {
-                count = shiftCounts[selectedDayKey]?.[t] || 0;
-              } else {
-                EVENT_DAYS.forEach(day => {
-                  count += shiftCounts[day.key]?.[t] || 0;
-                });
-              }
-
-              const isSelected = selectedDayKey && selectedShiftId === t;
-
-              // Lógica de colores según requerimientos de comité
-              const isSingleCommittee = selectedCommittees.length === 1;
-              const activeCommittee = isSingleCommittee ? selectedCommittees[0] : null;
-              const minRequired = activeCommittee ? (committeeRequirements[activeCommittee]?.[t] ?? 0) : 0;
-
-              let buttonClass = "";
-              let countTextClass = "";
-
-              if (isSelected) {
-                if (isSingleCommittee) {
-                  const isUnderstaffed = count < minRequired;
-                  if (isUnderstaffed) {
-                    buttonClass = "bg-rose-600 border-rose-500 text-white shadow-sm scale-105 font-bold";
-                    countTextClass = "text-rose-100/90";
-                  } else {
-                    buttonClass = "bg-teal-600 border-teal-500 text-white shadow-sm scale-105 font-bold";
-                    countTextClass = "text-teal-100/90";
-                  }
-                } else {
-                  // Selección neutra global
-                  buttonClass = "bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105 font-bold";
-                  countTextClass = "text-sky-100/90";
-                }
-              } else {
-                if (isSingleCommittee) {
-                  const isUnderstaffed = count < minRequired;
-                  if (isUnderstaffed) {
-                    buttonClass = "bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100/20 hover:text-rose-700 font-bold";
-                    countTextClass = "text-rose-500";
-                  } else {
-                    buttonClass = "bg-teal-50 border-teal-100 text-accent hover:bg-teal-100/20 hover:text-teal-700 font-bold";
-                    countTextClass = "text-accent";
-                  }
-                } else {
-                  // Estilo neutro vista global
-                  if (count > 0) {
-                    buttonClass = "bg-dark3 border-border text-text hover:bg-dark3 hover:text-text font-bold";
-                    countTextClass = "text-text-dim";
-                  } else {
-                    buttonClass = "bg-dark2 border-border text-text-dim hover:bg-dark3";
-                    countTextClass = "text-text-dim";
-                  }
-                }
-              }
-
-              // Si no hay día seleccionado, forzar un estilo atenuado y deshabilitar
-              if (!selectedDayKey) {
-                buttonClass = "bg-dark2 border-border text-text-dim opacity-60 cursor-not-allowed";
-                countTextClass = "text-text-dim";
-              }
-
-              const shiftTimeLabel = SHIFT_TIMES.find(s => `T${s.id}` === t)?.name || "";
-
-              return (
-                <button
-                  key={t}
-                  disabled={!selectedDayKey}
-                  onClick={() => {
-                    if (selectedDayKey) {
-                      if (selectedShiftId === t) {
+                return (
+                  <button
+                    key={day.key}
+                    onClick={() => {
+                      if (selectedDayKey === day.key) {
+                        setSelectedDayKey("");
                         setSelectedShiftId("");
                       } else {
-                        setSelectedShiftId(t);
-                      }
-                    }
-                  }}
-                  title={!selectedDayKey ? "Por favor selecciona una fecha primero" : `Seleccionar ${shiftTimeLabel}`}
-                  className={`shrink-0 flex items-center justify-center gap-1.5 px-2 md:px-4.5 py-2.5 rounded-sm border text-xs transition-all w-full md:w-auto ${buttonClass}`}
-                >
-                  <span className="font-bold">{t}</span>
-                  <span className="text-[10px] opacity-30">|</span>
-                  <span className={`font-inter font-bold ${countTextClass}`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Panel de Gestión del Turno Seleccionado (Debajo) */}
-      <div className="flex-1 min-h-0 flex flex-col">
-        {!selectedDayKey || !selectedShiftId ? (
-          <div className="flex-1 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-12 flex flex-col items-center justify-center text-center min-h-[300px]">
-            <span className="material-symbols-outlined text-[64px] text-text-dim mb-4 animate-pulse">calendar_month</span>
-            <h3 className="text-lg font-bold tracking-tight text-text mb-2">Ningún turno seleccionado</h3>
-            <p className="text-xs font-inter font-bold text-text-dim max-w-sm leading-relaxed">
-              Selecciona un día y un turno específico (T1 - T4) en el selector superior para comenzar a enviar recordatorios de WhatsApp.
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Lista de Voluntarios (Completa) */}
-            <div className="flex-1 min-h-0 flex flex-col">
-              <div className="flex-1 flex flex-col min-h-0">
-                <div className="bg-dark2 border border-border rounded-sm shadow-sm flex flex-col flex-1 overflow-hidden">
-                  <div className="overflow-auto bg-dark2 flex-1 relative">
-                    {activeVolunteers.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 text-center text-text-dim h-full">
-                        <span className="material-symbols-outlined text-[48px] text-text-dim mb-4">group_off</span>
-                        <p className="text-base font-bold text-text">Sin voluntarios asignados</p>
-                        <p className="text-sm max-w-[250px] mt-1 text-text-dim">No hay voluntarios asignados a este turno para los filtros seleccionados.</p>
-                      </div>
-                    ) : (
-                      <>
-                        {/* Vista Mobile/Tablet: Tarjetas Deslizables */}
-                        <div className="block lg:hidden divide-y divide-white/5 bg-dark2">
-                          {currentVolunteers.map((vol) => {
-                            const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
-                            const msg = generateReminderMessage(
-                              vol.name,
-                              dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
-                              selectedShiftDetails?.name || "",
-                              selectedShiftDetails?.time || "",
-                              vol.committee,
-                              isSelectedHoliday
-                            );
-
-                            return (
-                              <div key={vol.id} className={cn(
-                                "transition-colors",
-                                isConfirmed && "bg-[#6dd230]/5"
-                              )}>
-                                <SwipeableMobileCard 
-                                  name={vol.name}
-                                  phone={vol.phone}
-                                  searchTerm={searchTerm}
-                                  onEdit={() => handleEditClick(vol)}
-                                  
-                                  onSwipeRight={() => {
-                                    const link = generateWaMeLink(vol.phone, msg);
-                                    window.open(link, '_blank');
-                                  }}
-                                  swipeRightIcon="send"
-                                  swipeRightText="WhatsApp"
-                                  swipeRightColorClass="text-[#25D366]"
-                                  swipeRightBgColor="rgba(37, 211, 102, 0.2)"
-                                  
-                                  onSwipeLeft={() => toggleConfirmed(vol.id)}
-                                  swipeLeftIcon={isConfirmed ? "close" : "check"}
-                                  swipeLeftText={isConfirmed ? "Desmarcar" : "Confirmar"}
-                                  swipeLeftColorClass={isConfirmed ? "text-text-dim" : "text-[#6dd230]"}
-                                  swipeLeftBgColor={isConfirmed ? "rgba(255, 255, 255, 0.1)" : "rgba(109, 210, 48, 0.2)"}
-                                  
-                                  badges={
-                                    <>
-                                      {vol.committee && (
-                                        <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
-                                          {vol.committee}
-                                        </Badge>
-                                      )}
-                                      <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, isConfirmed ? "bg-accent/10 text-accent border-accent/20" : "bg-amber-50 text-amber-600 border-amber-200")}>
-                                        {isConfirmed ? 'Confirmado' : 'Pendiente'}
-                                      </Badge>
-                                    </>
-                                  }
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Desktop Table (Hidden on small screens) */}
-                        <div className="hidden lg:block overflow-auto bg-dark2 flex-1 relative max-h-[calc(100vh-220px)]">
-                          <table className="w-full text-sm text-left">
-                            <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
-                              <tr>
-                                <th className="px-5 py-4 text-center w-24">Asistencia</th>
-                                <th className="px-5 py-4 text-center w-32">Estado</th>
-                                <th className="px-5 py-4">Nombre y Apellido</th>
-                                <th className="px-5 py-4 text-center">Barrio</th>
-                                <th className="px-5 py-4 text-center">Estaca</th>
-                                <th className="px-5 py-4 text-center">Comité</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                              <AnimatePresence mode="popLayout">
-                                {currentVolunteers.map((vol) => {
-                                  const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
-                                  const msg = generateReminderMessage(
-                                    vol.name,
-                                    dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
-                                    selectedShiftDetails?.name || "",
-                                    selectedShiftDetails?.time || "",
-                                    vol.committee,
-                                    isSelectedHoliday
-                                  );
-                                  const link = generateWaMeLink(vol.phone, msg);
-
-                                  return (
-                                    <motion.tr 
-                                      key={vol.id}
-                                      layout
-                                      initial={{ opacity: 0 }}
-                                      animate={{ opacity: 1 }}
-                                      exit={{ opacity: 0 }}
-                                      transition={{ duration: 0.2 }}
-                                      onClick={() => handleEditClick(vol)}
-                                      className={cn(
-                                        "group hover:bg-white/[0.02] transition-colors cursor-pointer",
-                                        isConfirmed && "bg-[#6dd230]/5 hover:bg-[#6dd230]/10"
-                                      )}
-                                    >
-                                      <td className="px-5 py-4 text-center">
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); toggleConfirmed(vol.id); }}
-                                          className={cn(
-                                            "w-6 h-6 rounded-full flex items-center justify-center transition-all active:scale-90 mx-auto",
-                                            isConfirmed 
-                                              ? "bg-accent text-white shadow-sm shadow-accent/30" 
-                                              : "bg-dark3 border border-border text-transparent hover:border-[#4d7cfe] group-hover:border-[#4d7cfe]/50"
-                                          )}
-                                        >
-                                          <span className="material-symbols-outlined text-[16px] font-bold">
-                                            check
-                                          </span>
-                                        </button>
-                                      </td>
-                                      <td className="px-5 py-4 text-center">
-                                        {!isConfirmed ? (
-                                          <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
-                                            Pendiente
-                                          </Badge>
-                                        ) : (
-                                          <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
-                                            Confirmado
-                                          </Badge>
-                                        )}
-                                      </td>
-                                      <td className="px-5 py-4 font-bold text-text">
-                                        <div className="flex items-center gap-2">
-                                          <span>{vol.name}</span>
-                                          <a 
-                                            href={link}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="inline-flex items-center justify-center h-8 w-8 text-[#25D366] hover:bg-dark3 transition-all active:scale-90 rounded-sm"
-                                            title="Enviar recordatorio WhatsApp"
-                                          >
-                                            <span className="material-symbols-outlined text-[20px]">send</span>
-                                          </a>
-                                        </div>
-                                      </td>
-                                      <td className="px-5 py-4 text-text text-center">{vol.ward || '—'}</td>
-                                      <td className="px-5 py-4 text-text-dim text-center">{vol.stake || '—'}</td>
-                                      <td className="px-5 py-4 text-center">
-                                        <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
-                                          {vol.committee}
-                                        </Badge>
-                                      </td>
-                                    </motion.tr>
-                                  );
-                                })}
-                              </AnimatePresence>
-                            </tbody>
-                          </table>
-                        </div>
-                  </>
-                )}
-                  </div>
-                  
-
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Ver Plantilla Drawer */}
-      <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${showTemplate ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-        {/* Backdrop */}
-        <div 
-          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${showTemplate ? 'opacity-100' : 'opacity-0'}`}
-          onClick={() => setShowTemplate(false)}
-        />
-
-        {/* Drawer Content */}
-        <div 
-          id="drawer-template"
-          className={`relative w-full md:w-[500px] md:mx-auto h-[80vh] md:h-[94vh] bg-dark2 border border-white/10 rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${showTemplate ? 'translate-y-0' : 'translate-y-full'}`}
-          style={{ willChange: 'transform' }}
-        >
-          {/* Handle */}
-          <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
-          
-          <div 
-            className="flex-1 overflow-y-auto scrollbar-hide px-6 pb-6 pt-2 overscroll-contain"
-            onTouchStart={(e) => {
-              const drawer = document.getElementById('drawer-template');
-              if (!drawer) return;
-              drawer.dataset.startY = e.touches[0].clientY.toString();
-              drawer.style.transition = 'none';
-            }}
-            onTouchMove={(e) => {
-              const drawer = document.getElementById('drawer-template');
-              if (!drawer) return;
-              const startY = parseFloat(drawer.dataset.startY || '0');
-              const currentY = e.touches[0].clientY;
-              const deltaY = currentY - startY;
-
-              if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
-                drawer.style.transform = `translateY(${deltaY}px)`;
-                drawer.dataset.swiping = 'true';
-              }
-            }}
-            onTouchEnd={(e) => {
-              const drawer = document.getElementById('drawer-template');
-              if (!drawer) return;
-              
-              drawer.style.transition = 'transform 0.3s ease-out';
-              
-              if (drawer.dataset.swiping === 'true') {
-                const startY = parseFloat(drawer.dataset.startY || '0');
-                const deltaY = e.changedTouches[0].clientY - startY;
-                
-                drawer.dataset.swiping = 'false';
-                
-                if (deltaY > 150) {
-                  setShowTemplate(false);
-                  setTimeout(() => { drawer.style.transform = ''; }, 300);
-                } else {
-                  drawer.style.transform = `translateY(0)`;
-                }
-              } else {
-                drawer.style.transform = '';
-              }
-            }}
-          >
-            {/* Header Drawer Info */}
-            <div className="text-center mt-2 mb-8 px-4">
-              <h3 className="text-xl font-bold text-text flex items-center justify-center gap-2 mb-2">
-                <span className="material-symbols-outlined text-[#0084d1]">chat_bubble</span>
-                Mensaje Plantilla
-              </h3>
-            </div>
-
-            <div className="flex-1 flex flex-col gap-6">
-              <div className="bg-sky-50/80 p-5 rounded-md rounded-tl-none border border-sky-100 shadow-sm text-sm text-sky-950 leading-relaxed whitespace-pre-wrap font-sans relative">
-                {previewMessage}
-                <div className="absolute top-0 -left-2 w-0 h-0 border-[10px] border-transparent border-r-sky-50 border-t-sky-50" />
-              </div>
-
-              <div className="p-4 rounded-sm bg-dark3 border border-border text-xs text-text-dim flex items-start gap-2 leading-relaxed">
-                <span className="material-symbols-outlined text-[18px] text-blue-500 shrink-0 mt-0.5">info</span>
-                <span>
-                  Este mensaje se genera automáticamente para cada voluntario. 
-                  Los datos como el nombre, la fecha y la hora del turno se rellenan automáticamente 
-                  al hacer clic en enviar WhatsApp.
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Editor Drawer (from Shifts/Volunteers) */}
-      <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${isSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-        {/* Backdrop */}
-        <div 
-          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isSheetOpen ? 'opacity-100' : 'opacity-0'}`}
-          onClick={() => setIsSheetOpen(false)}
-        />
-
-        {/* Drawer Content */}
-        <div 
-          id="drawer-profile"
-          className={`relative w-full md:w-[500px] md:mx-auto h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
-          style={{ willChange: 'transform' }}
-        >
-          {/* Handle */}
-          <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
-          
-          <div 
-            className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
-            onTouchStart={(e) => {
-              const drawer = document.getElementById('drawer-profile');
-              if (!drawer) return;
-              drawer.dataset.startY = e.touches[0].clientY.toString();
-              drawer.style.transition = 'none';
-            }}
-            onTouchMove={(e) => {
-              const drawer = document.getElementById('drawer-profile');
-              if (!drawer) return;
-              const startY = parseFloat(drawer.dataset.startY || '0');
-              const currentY = e.touches[0].clientY;
-              const deltaY = currentY - startY;
-
-              if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
-                drawer.style.transform = `translateY(${deltaY}px)`;
-                drawer.dataset.swiping = 'true';
-              }
-            }}
-            onTouchEnd={(e) => {
-              const drawer = document.getElementById('drawer-profile');
-              if (!drawer) return;
-              
-              drawer.style.transition = 'transform 0.3s ease-out';
-              
-              if (drawer.dataset.swiping === 'true') {
-                const startY = parseFloat(drawer.dataset.startY || '0');
-                const deltaY = e.changedTouches[0].clientY - startY;
-                
-                drawer.dataset.swiping = 'false';
-                
-                if (deltaY > 150) {
-                  setIsSheetOpen(false);
-                  setTimeout(() => { drawer.style.transform = ''; }, 300);
-                } else {
-                  drawer.style.transform = `translateY(0)`;
-                }
-              } else {
-                drawer.style.transform = '';
-              }
-            }}
-          >
-            {editingVolunteer && (
-              <>
-                {/* Header Profile Info */}
-                <div className="text-center mt-4 mb-8 px-4">
-                  <h3 className="text-drawer-title text-white mb-1">
-                    {editingVolunteer.name}
-                  </h3>
-                  <p className="text-drawer-subtitle text-white/80">
-                    {editingVolunteer.committee} • {editingVolunteer.ward}
-                  </p>
-                </div>
-
-                {/* Top Stats Row */}
-                <div className="flex items-center mb-8 -mx-4">
-                  {(() => {
-                    const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
-                    const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
-                    
-                    let totalAssigned = 0;
-                    let totalConfirmed = 0;
-                    for (const [day, shifts] of Object.entries(shiftsByDay)) {
-                      for (const shift of shifts) {
-                        totalAssigned++;
-                        if (confirmedReminders[`${editingVolunteer.id}-${day}-${shift}`]) {
-                          totalConfirmed++;
+                        setSelectedDayKey(day.key);
+                        if (!selectedShiftId) {
+                          setSelectedShiftId("T1");
                         }
                       }
+                    }}
+                    className={`relative shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto w-full text-white ${cardBg} ${isSelected
+                      ? 'border-white/50 shadow-sm scale-105 brightness-110'
+                      : 'border-transparent opacity-80 hover:opacity-100 hover:scale-[1.02]'
+                      }`}
+                  >
+                    <span className={`font-inter font-bold text-[10px] md:text-[9px] uppercase tracking-widest ${isSelected ? 'text-white/90' : 'text-white/70'}`}>
+                      {dayAbbr}
+                    </span>
+                    <span className="text-base md:text-sm font-black leading-none drop-shadow-sm">{day.dateNum}</span>
+                    <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? (isSelected ? 'bg-white' : 'bg-white/70') : 'bg-black/20'
+                      }`} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Separador */}
+          <div className="h-px bg-border/40" />
+
+          {/* FILA 2: TURNOS */}
+          <div className="space-y-2">
+            <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase">TURNOS</span>
+            <div className="grid grid-cols-4 md:flex md:flex-wrap gap-2">
+              {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                // Obtener conteo de voluntarios para este turno (si hay día seleccionado, del día; si no, total acumulado de todos los días)
+                let count = 0;
+                if (selectedDayKey) {
+                  count = shiftCounts[selectedDayKey]?.[t] || 0;
+                } else {
+                  EVENT_DAYS.forEach(day => {
+                    count += shiftCounts[day.key]?.[t] || 0;
+                  });
+                }
+
+                const isSelected = selectedDayKey && selectedShiftId === t;
+
+                // Lógica de colores según requerimientos de comité
+                const isSingleCommittee = selectedCommittees.length === 1;
+                const activeCommittee = isSingleCommittee ? selectedCommittees[0] : null;
+                const minRequired = activeCommittee ? (committeeRequirements[activeCommittee]?.[t] ?? 0) : 0;
+
+                let buttonClass = "";
+                let countTextClass = "";
+
+                if (isSelected) {
+                  if (isSingleCommittee) {
+                    const isUnderstaffed = count < minRequired;
+                    if (isUnderstaffed) {
+                      buttonClass = "bg-rose-600 border-rose-500 text-white shadow-sm scale-105 font-bold";
+                      countTextClass = "text-rose-100/90";
+                    } else {
+                      buttonClass = "bg-teal-600 border-teal-500 text-white shadow-sm scale-105 font-bold";
+                      countTextClass = "text-teal-100/90";
                     }
-                    const dynamicReliability = totalAssigned === 0 ? '-' : Math.round((totalConfirmed / totalAssigned) * 100);
+                  } else {
+                    // Selección neutra global
+                    buttonClass = "bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105 font-bold";
+                    countTextClass = "text-sky-100/90";
+                  }
+                } else {
+                  if (isSingleCommittee) {
+                    const isUnderstaffed = count < minRequired;
+                    if (isUnderstaffed) {
+                      buttonClass = "bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100/20 hover:text-rose-700 font-bold";
+                      countTextClass = "text-rose-500";
+                    } else {
+                      buttonClass = "bg-teal-50 border-teal-100 text-accent hover:bg-teal-100/20 hover:text-teal-700 font-bold";
+                      countTextClass = "text-accent";
+                    }
+                  } else {
+                    // Estilo neutro vista global
+                    if (count > 0) {
+                      buttonClass = "bg-dark3 border-border text-text hover:bg-dark3 hover:text-text font-bold";
+                      countTextClass = "text-text-dim";
+                    } else {
+                      buttonClass = "bg-dark2 border-border text-text-dim hover:bg-dark3";
+                      countTextClass = "text-text-dim";
+                    }
+                  }
+                }
 
-                    return (
-                      <>
-                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{totalTurnos}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Turnos</span>
-                        </div>
-                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{diasCubiertos}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Días</span>
-                        </div>
-                        <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                          <span className="text-drawer-kpi-value text-white drop-shadow-md">
-                            {dynamicReliability}
-                            {dynamicReliability !== '-' && <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>}
-                          </span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Confia.</span>
-                        </div>
-                        <div className="flex flex-col items-center flex-1">
-                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{editingVolunteer.age || '-'}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Edad</span>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
+                // Si no hay día seleccionado, forzar un estilo atenuado y deshabilitar
+                if (!selectedDayKey) {
+                  buttonClass = "bg-dark2 border-border text-text-dim opacity-60 cursor-not-allowed";
+                  countTextClass = "text-text-dim";
+                }
 
-                {/* Acciones de Contacto */}
-                <div className="grid grid-cols-2 gap-4 px-2 mb-8">
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-11 gap-2 text-white border-white/20 bg-white/10 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20"
-                    onClick={() => window.open(`https://wa.me/${editingVolunteer.phone.replace(/\s+/g, '')}`, '_blank')}
+                const shiftTimeLabel = SHIFT_TIMES.find(s => `T${s.id}` === t)?.name || "";
+
+                return (
+                  <button
+                    key={t}
+                    disabled={!selectedDayKey}
+                    onClick={() => {
+                      if (selectedDayKey) {
+                        if (selectedShiftId === t) {
+                          setSelectedShiftId("");
+                        } else {
+                          setSelectedShiftId(t);
+                        }
+                      }
+                    }}
+                    title={!selectedDayKey ? "Por favor selecciona una fecha primero" : `Seleccionar ${shiftTimeLabel}`}
+                    className={`shrink-0 flex items-center justify-center gap-1.5 px-2 md:px-4.5 py-2.5 rounded-sm border text-xs transition-all w-full md:w-auto ${buttonClass}`}
                   >
-                    <span className="material-symbols-outlined text-[20px]">message</span>
-                    WHATSAPP
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-11 gap-2 text-white border-white/20 bg-white/10 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20"
-                    onClick={() => window.location.href = `tel:${editingVolunteer.phone.replace(/\s+/g, '')}`}
-                  >
-                    <span className="material-symbols-outlined text-[20px]">call</span>
-                    LLAMAR
-                  </Button>
-                </div>
-
-                {/* Squad/Schedule / Day Cards List */}
-                <div className="w-full">
-                  <div className="flex items-center justify-between px-2 mb-4">
-                    <p className="text-drawer-label text-white">Cronograma</p>
-                    
-                    <div className="flex items-center gap-3">
-                      {saved && <span className="text-[11px] text-green-300 font-bold animate-pulse">✓ Listo</span>}
-                      {isEditingShifts ? (
-                        <button onClick={handleSaveShifts} className="h-7 px-4 bg-white hover:bg-white/90 text-black rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
-                          Guardar
-                        </button>
-                      ) : (
-                        <button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-7 px-4 bg-black/20 backdrop-blur-sm border border-white/10 hover:bg-black/30 text-white rounded-full font-bold text-[11px] transition-all active:scale-[0.97]">
-                          Editar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Shifts Content as Day Cards */}
-                  <div className="flex flex-col gap-2 pb-12">
-                    {EVENT_DAYS.map((d, index) => {
-                      const dayShifts = shiftsByDay[d.key] || [];
-                      const bgColors = [
-                        'bg-[#10a562]',
-                        'bg-[#4aa9df]',
-                        'bg-[#f1c130]',
-                        'bg-[#d54134]',
-                        'bg-[#981e32]',
-                        'bg-[#2c44c2]',
-                        'bg-[#f1c130]',
-                        'bg-[#ed1b24]'
-                      ];
-                      const cardBg = bgColors[index % bgColors.length];
-
-                      return (
-                        <div key={d.key} className={`${cardBg} rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01]`}>
-                          <div className="w-full flex items-center justify-between px-5 sm:px-6 py-4">
-                            {/* Left: Date */}
-                            <div className="flex-1 min-w-0 pr-4 flex items-center">
-                              <p className="font-inter font-bold text-white text-[13px] drop-shadow-sm truncate capitalize">
-                                {d.label} {d.dateNum}
-                              </p>
-                            </div>
-
-                            {/* Right: 4 Columns (T1 to T4) */}
-                            <div className="flex items-center shrink-0 ml-auto">
-                              {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
-                                const active = dayShifts.includes(t);
-                                return (
-                                  <button 
-                                    key={t}
-                                    disabled={!isEditingShifts}
-                                    onClick={() => toggleShift(d.key, t)}
-                                    className={`flex flex-col items-center justify-center w-12 sm:w-16 h-full ${i !== 0 ? 'border-l border-white/20' : ''} transition-colors ${isEditingShifts ? 'hover:bg-white/20 rounded-lg' : ''} ${active ? 'opacity-100' : 'opacity-50'}`}
-                                  >
-                                    <span className={`text-[16px] font-semibold drop-shadow-sm leading-none ${active ? 'text-white' : 'text-white'}`}>
-                                      {active ? '✓' : '-'}
-                                    </span>
-                                    <span className={`font-inter text-[10px] font-bold uppercase mt-1 tracking-widest ${active ? 'text-white/90' : 'text-white/70'}`}>
-                                      {t}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
+                    <span className="font-bold">{t}</span>
+                    <span className="text-[10px] opacity-30">|</span>
+                    <span className={`font-inter font-bold ${countTextClass}`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
 
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        isVisible={toast.isVisible}
-        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
-      />
+        {/* Panel de Gestión del Turno Seleccionado (Debajo) */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          {!selectedDayKey || !selectedShiftId ? (
+            <div className="flex-1 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-12 flex flex-col items-center justify-center text-center min-h-[300px]">
+              <span className="material-symbols-outlined text-[64px] text-text-dim mb-4 animate-pulse">calendar_month</span>
+              <h3 className="text-lg font-bold tracking-tight text-text mb-2">Ningún turno seleccionado</h3>
+              <p className="text-xs font-inter font-bold text-text-dim max-w-sm leading-relaxed">
+                Selecciona un día y un turno específico (T1 - T4) en el selector superior para comenzar a enviar recordatorios de WhatsApp.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Lista de Voluntarios (Completa) */}
+              <div className="flex-1 min-h-0 flex flex-col">
+                <div className="flex-1 flex flex-col min-h-0">
+                  <div className="bg-dark2 border border-border rounded-sm shadow-sm flex flex-col flex-1 overflow-hidden">
+                    <div className="overflow-auto bg-dark2 flex-1 relative">
+                      {activeVolunteers.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center text-text-dim h-full">
+                          <span className="material-symbols-outlined text-[48px] text-text-dim mb-4">group_off</span>
+                          <p className="text-base font-bold text-text">Sin voluntarios asignados</p>
+                          <p className="text-sm max-w-[250px] mt-1 text-text-dim">No hay voluntarios asignados a este turno para los filtros seleccionados.</p>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Vista Mobile/Tablet: Tarjetas Deslizables */}
+                          <div className="block lg:hidden divide-y divide-white/5 bg-dark2">
+                            {currentVolunteers.map((vol) => {
+                              const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
+                              const msg = generateReminderMessage(
+                                vol.name,
+                                dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
+                                selectedShiftDetails?.name || "",
+                                selectedShiftDetails?.time || "",
+                                vol.committee,
+                                isSelectedHoliday
+                              );
+
+                              return (
+                                <div key={vol.id} className={cn(
+                                  "transition-colors",
+                                  isConfirmed && "bg-[#6dd230]/5"
+                                )}>
+                                  <SwipeableMobileCard
+                                    name={vol.name}
+                                    phone={vol.phone}
+                                    searchTerm={searchTerm}
+                                    onEdit={() => handleEditClick(vol)}
+
+                                    onSwipeRight={() => {
+                                      const link = generateWaMeLink(vol.phone, msg);
+                                      window.open(link, '_blank');
+                                    }}
+                                    swipeRightIcon="send"
+                                    swipeRightText="WhatsApp"
+                                    swipeRightColorClass="text-[#25D366]"
+                                    swipeRightBgColor="rgba(37, 211, 102, 0.2)"
+
+                                    onSwipeLeft={() => toggleConfirmed(vol.id)}
+                                    swipeLeftIcon={isConfirmed ? "close" : "check"}
+                                    swipeLeftText={isConfirmed ? "Desmarcar" : "Confirmar"}
+                                    swipeLeftColorClass={isConfirmed ? "text-text-dim" : "text-[#6dd230]"}
+                                    swipeLeftBgColor={isConfirmed ? "rgba(255, 255, 255, 0.1)" : "rgba(109, 210, 48, 0.2)"}
+
+                                    badges={
+                                      <>
+                                        {vol.committee && (
+                                          <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
+                                            {vol.committee}
+                                          </Badge>
+                                        )}
+                                        <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, isConfirmed ? "bg-accent/10 text-accent border-accent/20" : "bg-amber-50 text-amber-600 border-amber-200")}>
+                                          {isConfirmed ? 'Confirmado' : 'Pendiente'}
+                                        </Badge>
+                                      </>
+                                    }
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Desktop Table (Hidden on small screens) */}
+                          <div className="hidden lg:block overflow-auto bg-dark2 flex-1 relative max-h-[calc(100vh-220px)]">
+                            <table className="w-full text-sm text-left">
+                              <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
+                                <tr>
+                                  <th className="px-5 py-4 text-center w-24">Asistencia</th>
+                                  <th className="px-5 py-4 text-center w-32">Estado</th>
+                                  <th className="px-5 py-4">Nombre y Apellido</th>
+                                  <th className="px-5 py-4 text-center">Barrio</th>
+                                  <th className="px-5 py-4 text-center">Estaca</th>
+                                  <th className="px-5 py-4 text-center">Comité</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                <AnimatePresence mode="popLayout">
+                                  {currentVolunteers.map((vol) => {
+                                    const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
+                                    const msg = generateReminderMessage(
+                                      vol.name,
+                                      dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
+                                      selectedShiftDetails?.name || "",
+                                      selectedShiftDetails?.time || "",
+                                      vol.committee,
+                                      isSelectedHoliday
+                                    );
+                                    const link = generateWaMeLink(vol.phone, msg);
+
+                                    return (
+                                      <motion.tr
+                                        key={vol.id}
+                                        layout
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        onClick={() => handleEditClick(vol)}
+                                        className={cn(
+                                          "group hover:bg-white/[0.02] transition-colors cursor-pointer",
+                                          isConfirmed && "bg-[#6dd230]/5 hover:bg-[#6dd230]/10"
+                                        )}
+                                      >
+                                        <td className="px-5 py-4 text-center">
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); toggleConfirmed(vol.id); }}
+                                            className={cn(
+                                              "w-6 h-6 rounded-full flex items-center justify-center transition-all active:scale-90 mx-auto",
+                                              isConfirmed
+                                                ? "bg-accent text-white shadow-sm shadow-accent/30"
+                                                : "bg-dark3 border border-border text-transparent hover:border-[#4d7cfe] group-hover:border-[#4d7cfe]/50"
+                                            )}
+                                          >
+                                            <span className="material-symbols-outlined text-[16px] font-bold">
+                                              check
+                                            </span>
+                                          </button>
+                                        </td>
+                                        <td className="px-5 py-4 text-center">
+                                          {!isConfirmed ? (
+                                            <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
+                                              Pendiente
+                                            </Badge>
+                                          ) : (
+                                            <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
+                                              Confirmado
+                                            </Badge>
+                                          )}
+                                        </td>
+                                        <td className="px-5 py-4 font-bold text-text">
+                                          <div className="flex items-center gap-2">
+                                            <span>{vol.name}</span>
+                                            <a
+                                              href={link}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="inline-flex items-center justify-center h-8 w-8 text-[#25D366] hover:bg-dark3 transition-all active:scale-90 rounded-sm"
+                                              title="Enviar recordatorio WhatsApp"
+                                            >
+                                              <span className="material-symbols-outlined text-[20px]">send</span>
+                                            </a>
+                                          </div>
+                                        </td>
+                                        <td className="px-5 py-4 text-text text-center">{vol.ward || '—'}</td>
+                                        <td className="px-5 py-4 text-text-dim text-center">{vol.stake || '—'}</td>
+                                        <td className="px-5 py-4 text-center">
+                                          <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
+                                            {vol.committee}
+                                          </Badge>
+                                        </td>
+                                      </motion.tr>
+                                    );
+                                  })}
+                                </AnimatePresence>
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Ver Plantilla Drawer */}
+        <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${showTemplate ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+          {/* Backdrop */}
+          <div
+            className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${showTemplate ? 'opacity-100' : 'opacity-0'}`}
+            onClick={() => setShowTemplate(false)}
+          />
+
+          {/* Drawer Content */}
+          <div
+            id="drawer-template"
+            className={`relative w-full md:w-[500px] md:mx-auto h-[80vh] md:h-[94vh] bg-dark2 border border-white/10 rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${showTemplate ? 'translate-y-0' : 'translate-y-full'}`}
+            style={{ willChange: 'transform' }}
+          >
+            {/* Handle */}
+            <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+
+            <div
+              className="flex-1 overflow-y-auto scrollbar-hide px-6 pb-6 pt-2 overscroll-contain"
+              onTouchStart={(e) => {
+                const drawer = document.getElementById('drawer-template');
+                if (!drawer) return;
+                drawer.dataset.startY = e.touches[0].clientY.toString();
+                drawer.style.transition = 'none';
+              }}
+              onTouchMove={(e) => {
+                const drawer = document.getElementById('drawer-template');
+                if (!drawer) return;
+                const startY = parseFloat(drawer.dataset.startY || '0');
+                const currentY = e.touches[0].clientY;
+                const deltaY = currentY - startY;
+
+                if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
+                  drawer.style.transform = `translateY(${deltaY}px)`;
+                  drawer.dataset.swiping = 'true';
+                }
+              }}
+              onTouchEnd={(e) => {
+                const drawer = document.getElementById('drawer-template');
+                if (!drawer) return;
+
+                drawer.style.transition = 'transform 0.3s ease-out';
+
+                if (drawer.dataset.swiping === 'true') {
+                  const startY = parseFloat(drawer.dataset.startY || '0');
+                  const deltaY = e.changedTouches[0].clientY - startY;
+
+                  drawer.dataset.swiping = 'false';
+
+                  if (deltaY > 150) {
+                    setShowTemplate(false);
+                    setTimeout(() => { drawer.style.transform = ''; }, 300);
+                  } else {
+                    drawer.style.transform = `translateY(0)`;
+                  }
+                } else {
+                  drawer.style.transform = '';
+                }
+              }}
+            >
+              {/* Header Drawer Info */}
+              <div className="text-center mt-2 mb-8 px-4">
+                <h3 className="text-xl font-bold text-text flex items-center justify-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-[#0084d1]">chat_bubble</span>
+                  Mensaje Plantilla
+                </h3>
+              </div>
+
+              <div className="flex-1 flex flex-col gap-6">
+                <div className="bg-sky-50/80 p-5 rounded-md rounded-tl-none border border-sky-100 shadow-sm text-sm text-sky-950 leading-relaxed whitespace-pre-wrap font-sans relative">
+                  {previewMessage}
+                  <div className="absolute top-0 -left-2 w-0 h-0 border-[10px] border-transparent border-r-sky-50 border-t-sky-50" />
+                </div>
+
+                <div className="p-4 rounded-sm bg-dark3 border border-border text-xs text-text-dim flex items-start gap-2 leading-relaxed">
+                  <span className="material-symbols-outlined text-[18px] text-blue-500 shrink-0 mt-0.5">info</span>
+                  <span>
+                    Este mensaje se genera automáticamente para cada voluntario.
+                    Los datos como el nombre, la fecha y la hora del turno se rellenan automáticamente
+                    al hacer clic en enviar WhatsApp.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Editor Drawer (from Shifts/Volunteers) */}
+        <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${isSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+          {/* Backdrop */}
+          <div
+            className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isSheetOpen ? 'opacity-100' : 'opacity-0'}`}
+            onClick={() => setIsSheetOpen(false)}
+          />
+
+          {/* Drawer Content */}
+          <div
+            id="drawer-profile"
+            className={`relative w-full md:w-[500px] md:mx-auto h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
+            style={{ willChange: 'transform' }}
+          >
+            {/* Handle */}
+            <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+
+            <div
+              className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
+              onTouchStart={(e) => {
+                const drawer = document.getElementById('drawer-profile');
+                if (!drawer) return;
+                drawer.dataset.startY = e.touches[0].clientY.toString();
+                drawer.style.transition = 'none';
+              }}
+              onTouchMove={(e) => {
+                const drawer = document.getElementById('drawer-profile');
+                if (!drawer) return;
+                const startY = parseFloat(drawer.dataset.startY || '0');
+                const currentY = e.touches[0].clientY;
+                const deltaY = currentY - startY;
+
+                if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
+                  drawer.style.transform = `translateY(${deltaY}px)`;
+                  drawer.dataset.swiping = 'true';
+                }
+              }}
+              onTouchEnd={(e) => {
+                const drawer = document.getElementById('drawer-profile');
+                if (!drawer) return;
+
+                drawer.style.transition = 'transform 0.3s ease-out';
+
+                if (drawer.dataset.swiping === 'true') {
+                  const startY = parseFloat(drawer.dataset.startY || '0');
+                  const deltaY = e.changedTouches[0].clientY - startY;
+
+                  drawer.dataset.swiping = 'false';
+
+                  if (deltaY > 150) {
+                    setIsSheetOpen(false);
+                    setTimeout(() => { drawer.style.transform = ''; }, 300);
+                  } else {
+                    drawer.style.transform = `translateY(0)`;
+                  }
+                } else {
+                  drawer.style.transform = '';
+                }
+              }}
+            >
+              {editingVolunteer && (
+                <>
+                  {/* Header Profile Info */}
+                  <div className="text-center mt-4 mb-8 px-4">
+                    <h3 className="text-drawer-title text-white mb-1">
+                      {editingVolunteer.name}
+                    </h3>
+                    <p className="text-drawer-subtitle text-white/80">
+                      {editingVolunteer.committee} • {editingVolunteer.ward}
+                    </p>
+                  </div>
+
+                  {/* Top Stats Row */}
+                  <div className="flex items-center mb-8 -mx-4">
+                    {(() => {
+                      const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
+                      const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
+
+                      let totalAssigned = 0;
+                      let totalConfirmed = 0;
+                      for (const [day, shifts] of Object.entries(shiftsByDay)) {
+                        for (const shift of shifts) {
+                          totalAssigned++;
+                          if (confirmedReminders[`${editingVolunteer.id}-${day}-${shift}`]) {
+                            totalConfirmed++;
+                          }
+                        }
+                      }
+                      const dynamicReliability = totalAssigned === 0 ? '-' : Math.round((totalConfirmed / totalAssigned) * 100);
+
+                      return (
+                        <>
+                          <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                            <span className="text-drawer-kpi-value text-white drop-shadow-md">{totalTurnos}</span>
+                            <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Turnos</span>
+                          </div>
+                          <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                            <span className="text-drawer-kpi-value text-white drop-shadow-md">{diasCubiertos}</span>
+                            <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Días</span>
+                          </div>
+                          <div className="flex flex-col items-center flex-1 border-r border-white/20">
+                            <span className="text-drawer-kpi-value text-white drop-shadow-md">
+                              {dynamicReliability}
+                              {dynamicReliability !== '-' && <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>}
+                            </span>
+                            <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Confia.</span>
+                          </div>
+                          <div className="flex flex-col items-center flex-1">
+                            <span className="text-drawer-kpi-value text-white drop-shadow-md">{editingVolunteer.age || '-'}</span>
+                            <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Edad</span>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Acciones de Contacto */}
+                  <div className="grid grid-cols-2 gap-4 px-2 mb-8">
+                    <Button
+                      variant="outline"
+                      className="flex-1 h-11 gap-2 text-white border-white/20 bg-white/10 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20"
+                      onClick={() => window.open(`https://wa.me/${editingVolunteer.phone.replace(/\s+/g, '')}`, '_blank')}
+                    >
+                      <span className="material-symbols-outlined text-[20px]">message</span>
+                      WHATSAPP
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1 h-11 gap-2 text-white border-white/20 bg-white/10 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20"
+                      onClick={() => window.location.href = `tel:${editingVolunteer.phone.replace(/\s+/g, '')}`}
+                    >
+                      <span className="material-symbols-outlined text-[20px]">call</span>
+                      LLAMAR
+                    </Button>
+                  </div>
+
+                  {/* Squad/Schedule / Day Cards List */}
+                  <div className="w-full">
+                    <div className="flex items-center justify-between px-2 mb-4">
+                      <p className="text-drawer-label text-white">Cronograma</p>
+
+                      <div className="flex items-center gap-3">
+                        {saved && <span className="text-[11px] text-green-300 font-bold animate-pulse">✓ Listo</span>}
+                        {isEditingShifts ? (
+                          <button onClick={handleSaveShifts} className="h-7 px-4 bg-white hover:bg-white/90 text-black rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
+                            Guardar
+                          </button>
+                        ) : (
+                          <button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-7 px-4 bg-black/20 backdrop-blur-sm border border-white/10 hover:bg-black/30 text-white rounded-full font-bold text-[11px] transition-all active:scale-[0.97]">
+                            Editar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Shifts Content as Day Cards */}
+                    <div className="flex flex-col gap-2 pb-12">
+                      {EVENT_DAYS.map((d, index) => {
+                        const dayShifts = shiftsByDay[d.key] || [];
+                        const bgColors = [
+                          'bg-[#10a562]',
+                          'bg-[#4aa9df]',
+                          'bg-[#f1c130]',
+                          'bg-[#d54134]',
+                          'bg-[#981e32]',
+                          'bg-[#2c44c2]',
+                          'bg-[#f1c130]',
+                          'bg-[#ed1b24]'
+                        ];
+                        const cardBg = bgColors[index % bgColors.length];
+
+                        return (
+                          <div key={d.key} className={`${cardBg} rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01]`}>
+                            <div className="w-full flex items-center justify-between px-5 sm:px-6 py-4">
+                              {/* Left: Date */}
+                              <div className="flex-1 min-w-0 pr-4 flex items-center">
+                                <p className="font-inter font-bold text-white text-[13px] drop-shadow-sm truncate capitalize">
+                                  {d.label} {d.dateNum}
+                                </p>
+                              </div>
+
+                              {/* Right: 4 Columns (T1 to T4) */}
+                              <div className="flex items-center shrink-0 ml-auto">
+                                {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
+                                  const active = dayShifts.includes(t);
+                                  return (
+                                    <button
+                                      key={t}
+                                      disabled={!isEditingShifts}
+                                      onClick={() => toggleShift(d.key, t)}
+                                      className={`flex flex-col items-center justify-center w-12 sm:w-16 h-full ${i !== 0 ? 'border-l border-white/20' : ''} transition-colors ${isEditingShifts ? 'hover:bg-white/20 rounded-lg' : ''} ${active ? 'opacity-100' : 'opacity-50'}`}
+                                    >
+                                      <span className={`text-[16px] font-semibold drop-shadow-sm leading-none ${active ? 'text-white' : 'text-white'}`}>
+                                        {active ? '✓' : '-'}
+                                      </span>
+                                      <span className={`font-inter text-[10px] font-bold uppercase mt-1 tracking-widest ${active ? 'text-white/90' : 'text-white/70'}`}>
+                                        {t}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          isVisible={toast.isVisible}
+          onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
+        />
       </div>
     </div>
   );
