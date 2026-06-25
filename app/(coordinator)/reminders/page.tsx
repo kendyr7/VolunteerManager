@@ -120,6 +120,27 @@ export default function RemindersPage() {
     return defaults;
   });
 
+  // Contactados (localStorage)
+  const [contactedReminders, setContactedReminders] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("contacted_reminders");
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch (e) {
+          console.error("Error loading contacted reminders", e);
+        }
+      }
+    }
+    return {};
+  });
+
+  // Bulk Actions State
+  const [selectedVolunteers, setSelectedVolunteers] = useState<Set<string>>(new Set());
+  const [isReassignSheetOpen, setIsReassignSheetOpen] = useState(false);
+  const [reassignDayKey, setReassignDayKey] = useState<string>("");
+  const [reassignShiftId, setReassignShiftId] = useState<string>("");
+
   const loadData = async () => {
     // Fetch volunteers
     const { data: volsData, error: volsError } = await supabase
@@ -292,6 +313,14 @@ export default function RemindersPage() {
             console.error("Error syncing committee requirements in reminders", e);
           }
         }
+        const contactedStored = localStorage.getItem("contacted_reminders");
+        if (contactedStored) {
+          try {
+            setContactedReminders(JSON.parse(contactedStored));
+          } catch (e) {
+            console.error("Error syncing contacted", e);
+          }
+        }
       }
     };
 
@@ -408,6 +437,99 @@ export default function RemindersPage() {
       }
       return updated;
     });
+  };
+
+  const toggleSelection = (volId: string) => {
+    setSelectedVolunteers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(volId)) newSet.delete(volId);
+      else newSet.add(volId);
+      return newSet;
+    });
+  };
+
+  const toggleAllSelection = () => {
+    if (selectedVolunteers.size === currentVolunteers.length && currentVolunteers.length > 0) {
+      setSelectedVolunteers(new Set());
+    } else {
+      setSelectedVolunteers(new Set(currentVolunteers.map(v => v.id)));
+    }
+  };
+
+  const handleBulkConfirm = (confirm: boolean) => {
+    setConfirmedReminders(prev => {
+      const updated = { ...prev };
+      selectedVolunteers.forEach(volId => {
+        const key = `${volId}-${selectedDayKey}-${selectedShiftId}`;
+        if (confirm) updated[key] = true;
+        else delete updated[key];
+      });
+      if (typeof window !== "undefined") {
+        localStorage.setItem("confirmed_reminders", JSON.stringify(updated));
+      }
+      return updated;
+    });
+    setSelectedVolunteers(new Set());
+    showToast(confirm ? "Asistencia confirmada" : "Asistencia cancelada");
+  };
+
+  const handleBulkContacted = () => {
+    setContactedReminders(prev => {
+      const updated = { ...prev };
+      selectedVolunteers.forEach(volId => {
+        const key = `${volId}-${selectedDayKey}-${selectedShiftId}`;
+        updated[key] = true; // Always mark as contacted in bulk
+      });
+      if (typeof window !== "undefined") {
+        localStorage.setItem("contacted_reminders", JSON.stringify(updated));
+      }
+      return updated;
+    });
+    setSelectedVolunteers(new Set());
+    showToast("Marcados como contactados");
+  };
+
+  const handleBulkReassign = async () => {
+    if (!reassignDayKey || !reassignShiftId) {
+      showToast("Selecciona día y turno para reasignar", "error");
+      return;
+    }
+
+    setLoading(true);
+    
+    // Process reassignments
+    const insertRows: any[] = [];
+    const deletePromises = Array.from(selectedVolunteers).map(volId => {
+      insertRows.push({
+        volunteer_id: volId,
+        day_key: reassignDayKey,
+        shift_key: reassignShiftId
+      });
+      // Delete old shift for this specific selected day
+      return supabase
+        .from('shifts')
+        .delete()
+        .eq('volunteer_id', volId)
+        .eq('day_key', selectedDayKey)
+        .eq('shift_key', selectedShiftId);
+    });
+
+    await Promise.all(deletePromises);
+
+    const { error: insErr } = await supabase
+      .from('shifts')
+      .insert(insertRows);
+
+    if (insErr) {
+      console.error("Error inserting reassigned shifts:", insErr);
+      showToast("Error al reasignar", "error");
+    } else {
+      showToast(`Reasignados a ${reassignShiftId} el ${reassignDayKey}`);
+      setIsReassignSheetOpen(false);
+      setSelectedVolunteers(new Set());
+      await loadData();
+    }
+    setLoading(false);
   };
 
   const handleCopyNumbers = () => {
@@ -652,6 +774,7 @@ export default function RemindersPage() {
                           <div className="block lg:hidden divide-y divide-white/5 bg-dark2">
                             {currentVolunteers.map((vol) => {
                               const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
+                              const isContacted = !!contactedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                               const msg = generateReminderMessage(
                                 vol.name,
                                 dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
@@ -671,6 +794,9 @@ export default function RemindersPage() {
                                     phone={vol.phone}
                                     searchTerm={searchTerm}
                                     onEdit={() => handleEditClick(vol)}
+                                    isSelected={selectedVolunteers.has(vol.id)}
+                                    onToggleSelect={() => toggleSelection(vol.id)}
+                                    selectionModeActive={selectedVolunteers.size > 0}
 
                                     onSwipeRight={() => {
                                       const link = generateWaMeLink(vol.phone, msg);
@@ -694,8 +820,8 @@ export default function RemindersPage() {
                                             {vol.committee}
                                           </Badge>
                                         )}
-                                        <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, isConfirmed ? "bg-accent/10 text-accent border-accent/20" : "bg-amber-50 text-amber-600 border-amber-200")}>
-                                          {isConfirmed ? 'Confirmado' : 'Pendiente'}
+                                        <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, isConfirmed ? "bg-accent/10 text-accent border-accent/20" : isContacted ? "bg-sky-500/10 text-sky-500 border-sky-500/20" : "bg-amber-50 text-amber-600 border-amber-200")}>
+                                          {isConfirmed ? 'Confirmado' : isContacted ? 'Contactado' : 'Pendiente'}
                                         </Badge>
                                       </>
                                     }
@@ -710,6 +836,14 @@ export default function RemindersPage() {
                             <table className="w-full text-sm text-left">
                               <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
                                 <tr>
+                                  <th className="px-5 py-4 text-center w-12">
+                                    <input 
+                                      type="checkbox" 
+                                      className="w-4 h-4 rounded border-white/20 bg-dark3 accent-[#4d7cfe] cursor-pointer" 
+                                      checked={selectedVolunteers.size === currentVolunteers.length && currentVolunteers.length > 0}
+                                      onChange={toggleAllSelection}
+                                    />
+                                  </th>
                                   <th className="px-5 py-4 text-center w-24">Asistencia</th>
                                   <th className="px-5 py-4 text-center w-32">Estado</th>
                                   <th className="px-5 py-4">Nombre y Apellido</th>
@@ -722,6 +856,7 @@ export default function RemindersPage() {
                                 <AnimatePresence mode="popLayout">
                                   {currentVolunteers.map((vol) => {
                                     const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
+                                    const isContacted = !!contactedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                                     const msg = generateReminderMessage(
                                       vol.name,
                                       dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
@@ -740,13 +875,30 @@ export default function RemindersPage() {
                                         animate={{ opacity: 1 }}
                                         exit={{ opacity: 0 }}
                                         transition={{ duration: 0.2 }}
-                                        onClick={() => handleEditClick(vol)}
+                                        onClick={() => {
+                                          if (selectedVolunteers.size > 0) {
+                                            toggleSelection(vol.id);
+                                          } else {
+                                            handleEditClick(vol);
+                                          }
+                                        }}
                                         className={cn(
                                           "group hover:bg-white/[0.02] transition-colors cursor-pointer",
-                                          isConfirmed && "bg-[#6dd230]/5 hover:bg-[#6dd230]/10"
+                                          isConfirmed && "bg-[#6dd230]/5 hover:bg-[#6dd230]/10",
+                                          selectedVolunteers.has(vol.id) && "bg-[#4d7cfe]/10 hover:bg-[#4d7cfe]/15"
                                         )}
                                       >
-                                        <td className="px-5 py-4 text-center">
+                                        <td className="px-5 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                          <input 
+                                            type="checkbox" 
+                                            className="w-4 h-4 rounded border-white/20 bg-dark3 accent-[#4d7cfe] cursor-pointer" 
+                                            checked={selectedVolunteers.has(vol.id)}
+                                            onChange={() => toggleSelection(vol.id)}
+                                          />
+                                        </td>
+                                        <td className="px-5 py-4 text-center" onClick={(e) => {
+                                          if (selectedVolunteers.size === 0) e.stopPropagation();
+                                        }}>
                                           <button
                                             onClick={(e) => { e.stopPropagation(); toggleConfirmed(vol.id); }}
                                             className={cn(
@@ -763,9 +915,15 @@ export default function RemindersPage() {
                                         </td>
                                         <td className="px-5 py-4 text-center">
                                           {!isConfirmed ? (
-                                            <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
-                                              Pendiente
-                                            </Badge>
+                                            isContacted ? (
+                                              <Badge variant="outline" className="bg-sky-500/10 text-sky-500 border-sky-500/20 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
+                                                Contactado
+                                              </Badge>
+                                            ) : (
+                                              <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
+                                                Pendiente
+                                              </Badge>
+                                            )
                                           ) : (
                                             <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
                                               Confirmado
@@ -1110,6 +1268,159 @@ export default function RemindersPage() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* Bulk Actions Toolbar */}
+        <AnimatePresence>
+          {selectedVolunteers.size > 0 && (
+            <motion.div
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              className="fixed bottom-0 md:bottom-6 left-0 right-0 z-[90] flex justify-center px-4 pointer-events-none"
+            >
+              <div className="bg-dark2 border border-border shadow-2xl rounded-t-2xl md:rounded-full px-6 py-4 flex flex-col md:flex-row items-center gap-4 pointer-events-auto w-full md:w-auto max-w-2xl">
+                <div className="flex items-center gap-2 font-bold text-text whitespace-nowrap">
+                  <div className="w-6 h-6 rounded-full bg-[#4d7cfe] text-white flex items-center justify-center text-xs">
+                    {selectedVolunteers.size}
+                  </div>
+                  <span>seleccionados</span>
+                </div>
+                
+                <div className="h-px md:h-8 w-full md:w-px bg-border/50 hidden md:block" />
+
+                <div className="flex flex-wrap md:flex-nowrap items-center gap-2 w-full md:w-auto justify-center">
+                  <Button 
+                    onClick={() => handleBulkConfirm(true)}
+                    className="bg-[#6dd230]/10 hover:bg-[#6dd230]/20 text-[#6dd230] border border-[#6dd230]/20 h-9 rounded-full text-xs font-bold"
+                  >
+                    <span className="material-symbols-outlined text-[16px] mr-1">check_circle</span>
+                    Confirmar
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => handleBulkContacted()}
+                    className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-500 border border-sky-500/20 h-9 rounded-full text-xs font-bold"
+                  >
+                    <span className="material-symbols-outlined text-[16px] mr-1">forum</span>
+                    Contactados
+                  </Button>
+
+                  <Button 
+                    onClick={() => setIsReassignSheetOpen(true)}
+                    className="bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 h-9 rounded-full text-xs font-bold"
+                  >
+                    <span className="material-symbols-outlined text-[16px] mr-1">sync_alt</span>
+                    Reasignar
+                  </Button>
+
+                  <Button 
+                    onClick={() => handleBulkConfirm(false)}
+                    className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 h-9 rounded-full text-xs font-bold"
+                  >
+                    <span className="material-symbols-outlined text-[16px] mr-1">cancel</span>
+                    Cancelar
+                  </Button>
+                  
+                  <Button 
+                    variant="ghost"
+                    onClick={() => setSelectedVolunteers(new Set())}
+                    className="text-text-dim hover:text-text h-9 rounded-full px-2"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">close</span>
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Reasignar Turno Drawer */}
+        <div className={`fixed inset-0 z-[105] flex flex-col justify-end transition-all duration-300 ${isReassignSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+          <div
+            className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isReassignSheetOpen ? 'opacity-100' : 'opacity-0'}`}
+            onClick={() => setIsReassignSheetOpen(false)}
+          />
+
+          <div
+            className={`relative w-full md:w-[400px] md:mx-auto bg-dark2 border border-white/10 rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isReassignSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
+          >
+            <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+            
+            <div className="p-6">
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-bold text-text mb-1">Reasignar Turno</h3>
+                <p className="text-sm text-text-dim">Moviendo a {selectedVolunteers.size} voluntarios</p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-text-dim tracking-widest uppercase mb-3 block">FECHA DESTINO</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {EVENT_DAYS.map((d, index) => {
+                      const isSelected = reassignDayKey === d.key;
+                      const dayAbbr = d.label.substring(0, 3);
+                      const bgColors = [
+                        'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
+                        'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
+                      ];
+                      const cardBg = bgColors[index % bgColors.length];
+                      
+                      return (
+                        <button
+                          key={d.key}
+                          onClick={() => setReassignDayKey(d.key)}
+                          className={`relative flex flex-col items-center justify-center p-2 rounded-lg border transition-all text-white ${cardBg} ${isSelected
+                            ? 'border-white/50 shadow-sm scale-105 brightness-110 z-10'
+                            : 'border-transparent opacity-60 hover:opacity-100'
+                            }`}
+                        >
+                          <span className={`font-inter font-bold text-[9px] uppercase tracking-widest ${isSelected ? 'text-white/90' : 'text-white/70'}`}>
+                            {dayAbbr}
+                          </span>
+                          <span className="text-sm font-black leading-none mt-0.5 drop-shadow-sm">{d.dateNum}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <label className="text-[10px] font-bold text-text-dim tracking-widest uppercase mb-3 block">TURNO DESTINO</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                      const isSelected = reassignShiftId === t;
+                      return (
+                        <button
+                          key={t}
+                          disabled={!reassignDayKey}
+                          onClick={() => setReassignShiftId(t)}
+                          className={`flex items-center justify-center py-2.5 rounded-lg border text-sm font-bold transition-all ${
+                            !reassignDayKey ? 'bg-dark2 border-border text-text-dim opacity-50 cursor-not-allowed' :
+                            isSelected
+                            ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-sm scale-105 z-10'
+                            : 'bg-dark3 border-border text-text hover:bg-dark3/80 hover:text-text'
+                            }`}
+                        >
+                          {t}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <Button 
+                    onClick={handleBulkReassign}
+                    disabled={!reassignDayKey || !reassignShiftId}
+                    className="w-full bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold h-12 rounded-xl"
+                  >
+                    Confirmar Reasignación
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -266,11 +266,7 @@ function CoordinatorLayoutInner({
           <div className="relative w-full overflow-hidden rounded-full">
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 rounded-full border border-black/10 bg-white/58 shadow-[0_12px_40px_rgba(15,23,42,0.14)] backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/42 dark:border-white/10 dark:bg-black/34 dark:shadow-[0_12px_40px_rgba(0,0,0,0.5)] dark:supports-[backdrop-filter]:bg-black/22"
-            />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-x-4 top-px h-1/2 rounded-full bg-white/25 dark:bg-white/6"
+              className="pointer-events-none absolute inset-0 rounded-full border border-white/10 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl shadow-lg"
             />
             <div
               ref={navScrollRef}
