@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from "react";
+import { AlphabetScrubber } from "@/components/AlphabetScrubber";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -70,6 +71,15 @@ export default function RemindersPage() {
   const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
   const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isMobileSelectorExpanded, setIsMobileSelectorExpanded] = useState(true);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // Toast State
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({
@@ -211,6 +221,29 @@ export default function RemindersPage() {
   const [selectedDayKey, setSelectedDayKey] = useState<string>("");
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Auto-collapse selector on mobile scroll
+  useEffect(() => {
+    if (!isMobile) return;
+    
+    // On mobile, the main scroll container is likely the 'main' element in the layout
+    const mainEl = document.querySelector('main');
+    if (!mainEl) return;
+    
+    let lastScrollY = mainEl.scrollTop;
+    
+    const handleScroll = () => {
+      const currentScrollY = mainEl.scrollTop;
+      // If we scroll down more than 50px, collapse it, but only if day and shift are selected
+      if (currentScrollY > 50 && isMobileSelectorExpanded && selectedDayKey && selectedShiftId) {
+        setIsMobileSelectorExpanded(false);
+      }
+      lastScrollY = currentScrollY;
+    };
+    
+    mainEl.addEventListener('scroll', handleScroll, { passive: true });
+    return () => mainEl.removeEventListener('scroll', handleScroll);
+  }, [isMobile, isMobileSelectorExpanded, selectedDayKey, selectedShiftId]);
 
   // Drawer states
   const [editingVolunteer, setEditingVolunteer] = useState<VolunteerType | null>(null);
@@ -407,6 +440,17 @@ export default function RemindersPage() {
 
   const currentVolunteers = activeVolunteers;
 
+  const groupedVolunteers = useMemo(() => {
+    const groups: Record<string, VolunteerType[]> = {};
+    activeVolunteers.forEach(v => {
+      let letter = v.name.charAt(0).toUpperCase();
+      if (!/^[A-Z]$/.test(letter)) letter = '#';
+      if (!groups[letter]) groups[letter] = [];
+      groups[letter].push(v);
+    });
+    return groups;
+  }, [activeVolunteers]);
+  const sortedLetters = Object.keys(groupedVolunteers).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
   // Detalles del turno seleccionado
   const selectedShiftDetails = SHIFT_TIMES.find(s => `T${s.id}` === selectedShiftId);
   const selectedDayObj = EVENT_DAYS.find(d => d.key === selectedDayKey);
@@ -565,11 +609,11 @@ export default function RemindersPage() {
   }
 
   return (
-    <div className="w-full mx-auto pb-32 md:pb-12 flex flex-col min-h-[calc(100dvh-10rem)] md:h-[calc(100dvh-8rem)]">
+    <div className="w-full mx-auto pb-32 lg:pb-0 flex flex-col min-h-screen lg:h-full lg:overflow-hidden">
 
 
       {/* Sticky Header matching users design */}
-      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto shrink-0">
+      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-8 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 pointer-events-auto shrink-0">
         <div className="w-full flex items-center justify-between">
           <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
             Avisos
@@ -585,9 +629,50 @@ export default function RemindersPage() {
       </div>
 
       {/* Content wrapper with mobile padding */}
-      <div className="flex flex-col gap-4 md:gap-6 flex-1 px-4 sm:px-6 lg:px-0">
+      <div className="flex flex-col gap-4 md:gap-6 flex-1 px-4 sm:px-6 lg:px-8 lg:min-h-0 lg:pb-6">
         {/* Selector de Turnos Rediseñado en Dos Filas */}
-        <div className="shrink-0 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-4 md:p-5 flex flex-col gap-4 md:gap-5">
+        <div className="shrink-0 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden flex flex-col sticky top-[96px] z-30 bg-dark2/90 backdrop-blur-md">
+          
+          {/* Mobile Header / Summary Pill */}
+          {selectedDayKey && selectedShiftId ? (
+            <button 
+              className="lg:hidden flex items-center justify-between w-full p-4 bg-dark3 transition-colors active:bg-dark2"
+              onClick={() => setIsMobileSelectorExpanded(!isMobileSelectorExpanded)}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#4d7cfe]/10 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[#4d7cfe] text-[20px]">event_available</span>
+                </div>
+                <div className="flex flex-col items-start">
+                  <span className="text-xs font-bold text-text">
+                    {EVENT_DAYS.find(d => d.key === selectedDayKey)?.label} {EVENT_DAYS.find(d => d.key === selectedDayKey)?.dateNum}
+                  </span>
+                  <span className="text-[10px] font-bold text-text-dim">
+                    {SHIFT_TIMES.find(s => `T${s.id}` === selectedShiftId)?.name} ({SHIFT_TIMES.find(s => `T${s.id}` === selectedShiftId)?.time})
+                  </span>
+                </div>
+              </div>
+              <span className="material-symbols-outlined text-text-dim text-[20px]">
+                {isMobileSelectorExpanded ? 'expand_less' : 'expand_more'}
+              </span>
+            </button>
+          ) : (
+            <button 
+              className="lg:hidden flex items-center justify-between w-full p-4 text-sm font-bold text-text bg-dark3"
+              onClick={() => setIsMobileSelectorExpanded(!isMobileSelectorExpanded)}
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">calendar_month</span>
+                <span>Filtros de Fecha y Turno</span>
+              </div>
+              <span className="material-symbols-outlined text-text-dim">
+                {isMobileSelectorExpanded ? 'expand_less' : 'expand_more'}
+              </span>
+            </button>
+          )}
+
+          {/* Selector Content (Collapsible on mobile) */}
+          <div className={cn("p-4 md:p-5 flex-col gap-4 md:gap-5", isMobileSelectorExpanded || (!selectedDayKey || !selectedShiftId) ? "flex" : "hidden lg:flex")}>
 
           {/* FILA 1: FECHA */}
           <div className="space-y-2">
@@ -743,10 +828,11 @@ export default function RemindersPage() {
               })}
             </div>
           </div>
+          </div>
         </div>
 
         {/* Panel de Gestión del Turno Seleccionado (Debajo) */}
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex flex-col w-full lg:flex-1 lg:min-h-0">
           {!selectedDayKey || !selectedShiftId ? (
             <div className="flex-1 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden p-12 flex flex-col items-center justify-center text-center min-h-[300px]">
               <span className="material-symbols-outlined text-[64px] text-text-dim mb-4 animate-pulse">calendar_month</span>
@@ -758,10 +844,11 @@ export default function RemindersPage() {
           ) : (
             <>
               {/* Lista de Voluntarios (Completa) */}
-              <div className="flex-1 min-h-0 flex flex-col">
-                <div className="flex-1 flex flex-col min-h-0">
-                  <div className="bg-dark2 border border-border rounded-sm shadow-sm flex flex-col flex-1 overflow-hidden">
-                    <div className="overflow-auto bg-dark2 flex-1 relative">
+              <div className="flex flex-col w-full lg:h-full lg:min-h-0">
+                <div className="flex flex-col w-full lg:h-full lg:min-h-0">
+                  <div className="bg-dark2 border border-border rounded-sm shadow-sm flex flex-col w-full relative lg:h-full lg:min-h-0">
+                    <AlphabetScrubber isMobile={isMobile} />
+                    <div className="bg-dark2 w-full relative lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:rounded-sm">
                       {activeVolunteers.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center text-text-dim h-full">
                           <span className="material-symbols-outlined text-[48px] text-text-dim mb-4">group_off</span>
@@ -772,7 +859,9 @@ export default function RemindersPage() {
                         <>
                           {/* Vista Mobile/Tablet: Tarjetas Deslizables */}
                           <div className="block lg:hidden divide-y divide-white/5 bg-dark2">
-                            {currentVolunteers.map((vol) => {
+                            {sortedLetters.map(letter => (
+                              <Fragment key={letter}>
+                                {groupedVolunteers[letter].map((vol, index) => {
                               const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                               const isContacted = !!contactedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                               const msg = generateReminderMessage(
@@ -785,7 +874,7 @@ export default function RemindersPage() {
                               );
 
                               return (
-                                <div key={vol.id} className={cn(
+                                <div key={vol.id} id={index === 0 ? `letter-mobile-${letter}` : undefined} className={cn(
                                   "transition-colors",
                                   isConfirmed && "bg-[#6dd230]/5"
                                 )}>
@@ -829,21 +918,15 @@ export default function RemindersPage() {
                                 </div>
                               );
                             })}
+                          </Fragment>
+                        ))}
                           </div>
 
                           {/* Desktop Table (Hidden on small screens) */}
-                          <div className="hidden lg:block overflow-auto bg-dark2 flex-1 relative max-h-[calc(100vh-220px)]">
-                            <table className="w-full text-sm text-left">
-                              <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
+                          <div className="hidden lg:block bg-dark2 relative w-full pb-10">
+                            <table className="w-full text-sm text-left font-inter border-separate border-spacing-0">
+                              <thead className="bg-dark3/90 sticky top-0 z-20 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
                                 <tr>
-                                  <th className="px-5 py-4 text-center w-12">
-                                    <input 
-                                      type="checkbox" 
-                                      className="w-4 h-4 rounded border-white/20 bg-dark3 accent-[#4d7cfe] cursor-pointer" 
-                                      checked={selectedVolunteers.size === currentVolunteers.length && currentVolunteers.length > 0}
-                                      onChange={toggleAllSelection}
-                                    />
-                                  </th>
                                   <th className="px-5 py-4 text-center w-24">Asistencia</th>
                                   <th className="px-5 py-4 text-center w-32">Estado</th>
                                   <th className="px-5 py-4">Nombre y Apellido</th>
@@ -854,7 +937,9 @@ export default function RemindersPage() {
                               </thead>
                               <tbody className="divide-y divide-white/5">
                                 <AnimatePresence mode="popLayout">
-                                  {currentVolunteers.map((vol) => {
+                                  {sortedLetters.map(letter => (
+                                    <Fragment key={letter}>
+                                      {groupedVolunteers[letter].map((vol, index) => {
                                     const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                                     const isContacted = !!contactedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                                     const msg = generateReminderMessage(
@@ -870,6 +955,7 @@ export default function RemindersPage() {
                                     return (
                                       <motion.tr
                                         key={vol.id}
+                                        id={index === 0 ? `letter-${letter}` : undefined}
                                         layout
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
@@ -888,14 +974,7 @@ export default function RemindersPage() {
                                           selectedVolunteers.has(vol.id) && "bg-[#4d7cfe]/10 hover:bg-[#4d7cfe]/15"
                                         )}
                                       >
-                                        <td className="px-5 py-4 text-center" onClick={(e) => e.stopPropagation()}>
-                                          <input 
-                                            type="checkbox" 
-                                            className="w-4 h-4 rounded border-white/20 bg-dark3 accent-[#4d7cfe] cursor-pointer" 
-                                            checked={selectedVolunteers.has(vol.id)}
-                                            onChange={() => toggleSelection(vol.id)}
-                                          />
-                                        </td>
+
                                         <td className="px-5 py-4 text-center" onClick={(e) => {
                                           if (selectedVolunteers.size === 0) e.stopPropagation();
                                         }}>
@@ -955,6 +1034,8 @@ export default function RemindersPage() {
                                       </motion.tr>
                                     );
                                   })}
+                                </Fragment>
+                              ))}
                                 </AnimatePresence>
                               </tbody>
                             </table>
