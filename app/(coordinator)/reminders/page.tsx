@@ -17,6 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DataTableFilter } from "@/components/DataTableFilter";
@@ -239,8 +240,8 @@ export default function RemindersPage() {
       const currentScrollY = mainEl.scrollTop;
       setIsScrolled(currentScrollY > 20);
 
-      // If we scroll down more than 50px, collapse it, but only if day and shift are selected
-      if (currentScrollY > 50 && isMobileSelectorExpanded && selectedDayKey && selectedShiftId) {
+      // Only collapse if actively scrolling down by at least 10px and past 50px threshold
+      if (currentScrollY > lastScrollY + 10 && currentScrollY > 50 && isMobileSelectorExpanded && selectedDayKey && selectedShiftId) {
         setIsMobileSelectorExpanded(false);
       }
       lastScrollY = currentScrollY;
@@ -474,6 +475,47 @@ export default function RemindersPage() {
     isSelectedHoliday
   );
 
+  const handleStatusChange = (volId: string, status: string) => {
+    const key = `${volId}-${selectedDayKey}-${selectedShiftId}`;
+    if (status === "Pendiente") {
+      setConfirmedReminders(prev => {
+        const u = { ...prev };
+        delete u[key];
+        if (typeof window !== "undefined") localStorage.setItem("confirmed_reminders", JSON.stringify(u));
+        return u;
+      });
+      setContactedReminders(prev => {
+        const u = { ...prev };
+        delete u[key];
+        if (typeof window !== "undefined") localStorage.setItem("contacted_reminders", JSON.stringify(u));
+        return u;
+      });
+    } else if (status === "Contactado") {
+      setConfirmedReminders(prev => {
+        const u = { ...prev };
+        delete u[key];
+        if (typeof window !== "undefined") localStorage.setItem("confirmed_reminders", JSON.stringify(u));
+        return u;
+      });
+      setContactedReminders(prev => {
+        const u = { ...prev, [key]: true };
+        if (typeof window !== "undefined") localStorage.setItem("contacted_reminders", JSON.stringify(u));
+        return u;
+      });
+    } else if (status === "Confirmado") {
+      setConfirmedReminders(prev => {
+        const u = { ...prev, [key]: true };
+        if (typeof window !== "undefined") localStorage.setItem("confirmed_reminders", JSON.stringify(u));
+        return u;
+      });
+      setContactedReminders(prev => {
+        const u = { ...prev, [key]: true };
+        if (typeof window !== "undefined") localStorage.setItem("contacted_reminders", JSON.stringify(u));
+        return u;
+      });
+    }
+  };
+
   const toggleConfirmed = (volId: string) => {
     const key = `${volId}-${selectedDayKey}-${selectedShiftId}`;
     setConfirmedReminders(prev => {
@@ -581,6 +623,23 @@ export default function RemindersPage() {
     setLoading(false);
   };
 
+  const handleArchiveVolunteer = async (vol: VolunteerType) => {
+    if (!window.confirm(`¿Estás seguro de que quieres archivar a ${vol.name}?`)) return;
+    
+    const { error } = await supabase
+      .from('volunteers')
+      .update({ status: 'archived' })
+      .eq('id', vol.id);
+
+    if (error) {
+      console.error("Error updating status:", error);
+      showToast(`Error al archivar a ${vol.name}`, "error");
+    } else {
+      showToast(`${vol.name} archivado con éxito`);
+      await loadData();
+    }
+  };
+
   const handleCopyNumbers = () => {
     if (activeVolunteers.length === 0) {
       showToast("No hay voluntarios en este turno para copiar.", "info");
@@ -617,14 +676,17 @@ export default function RemindersPage() {
           <div 
             style={{ width: '68px', height: '52px' }}
             className={cn(
-              "relative shrink-0 flex flex-col items-center justify-center gap-1 rounded-lg border border-white/50 shadow-sm brightness-110 transition-all text-white",
+              "relative shrink-0 flex flex-col items-center justify-center gap-1 overflow-hidden rounded-lg border border-white/50 shadow-sm brightness-110 transition-all text-white bg-white/5"
+            )}
+          >
+            <div className={cn(
+              "absolute left-0 top-0 bottom-0 w-1.5 opacity-90",
               (() => {
                 const idx = EVENT_DAYS.findIndex(d => d.key === selectedDayKey);
                 const bgColors = ['bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]', 'bg-[#981e32]', 'bg-[#7a3994]', 'bg-[#d97c2c]', 'bg-[#10a562]'];
                 return idx >= 0 ? bgColors[idx % bgColors.length] : 'bg-dark3';
               })()
-            )}
-          >
+            )} />
             <span className="font-inter font-bold text-[10px] uppercase tracking-widest text-white/90">
               {EVENT_DAYS.find(d => d.key === selectedDayKey)?.label.substring(0, 3)}
             </span>
@@ -718,7 +780,7 @@ export default function RemindersPage() {
       {/* Content wrapper with mobile padding */}
       <div className="flex flex-col gap-4 md:gap-6 flex-1 px-4 sm:px-6 lg:px-8 lg:min-h-0 lg:pb-6">
         {/* Selector de Turnos Rediseñado en Dos Filas */}
-        <div className="shrink-0 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden flex flex-col z-30 bg-dark2/90 backdrop-blur-md sticky top-[96px]">
+        <div className={cn("shrink-0 bg-dark2 border border-border rounded-sm shadow-sm flex flex-col z-30 bg-dark2/90 backdrop-blur-md sticky top-[96px]", (!isMobile || !isScrolled) && "overflow-hidden")}>
           
           {/* Mobile Header / Summary Pill */}
           <AnimatePresence mode="popLayout" initial={false}>
@@ -766,7 +828,7 @@ export default function RemindersPage() {
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={isMobile ? { height: 0, opacity: 0 } : {}}
                 transition={{ type: "spring", bounce: 0, duration: 0.35 }}
-                className={cn("p-4 md:p-5 flex-col gap-4 md:gap-5 overflow-hidden", "flex")}
+                className={cn("p-4 md:p-5 flex-col gap-4 md:gap-5 overflow-hidden", "flex", (isMobile && isScrolled) ? "absolute top-full left-[-1px] right-[-1px] bg-dark2/95 backdrop-blur-xl border border-border border-t-0 rounded-b-md shadow-2xl z-40" : "")}
               >
 
           {/* FILA 1: FECHA */}
@@ -807,16 +869,17 @@ export default function RemindersPage() {
                         }
                       }
                     }}
-                    className={`relative shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto md:flex-1 w-full text-white ${cardBg} ${isSelected
+                    className={`relative overflow-hidden shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto md:flex-1 w-full text-white bg-white/5 ${isSelected
                       ? 'border-white/50 shadow-sm scale-105 brightness-110'
-                      : 'border-transparent opacity-80 hover:opacity-100 hover:scale-[1.02]'
+                      : 'border-white/10 opacity-80 hover:opacity-100 hover:scale-[1.02]'
                       }`}
                   >
+                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${cardBg} opacity-90`} />
                     <span className={`font-inter font-bold text-[10px] md:text-[9px] uppercase tracking-widest ${isSelected ? 'text-white/90' : 'text-white/70'}`}>
                       {dayAbbr}
                     </span>
                     <span className="text-base md:text-sm font-black leading-none drop-shadow-sm">{day.dateNum}</span>
-                    <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? (isSelected ? 'bg-white' : 'bg-white/70') : 'bg-black/20'
+                    <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? 'bg-[#10a562] shadow-[0_0_6px_rgba(16,165,98,0.6)]' : 'bg-white/20'
                       }`} />
                   </button>
                 );
@@ -1037,12 +1100,33 @@ export default function RemindersPage() {
                             <table className="w-full text-sm text-left font-inter border-separate border-spacing-0">
                               <thead className="bg-dark3/90 sticky top-0 z-20 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
                                 <tr>
-                                  <th className="px-5 py-4 text-center w-24">Asistencia</th>
-                                  <th className="px-5 py-4 text-center w-32">Estado</th>
-                                  <th className="px-5 py-4">Nombre y Apellido</th>
-                                  <th className="px-5 py-4 text-center">Barrio</th>
-                                  <th className="px-5 py-4 text-center">Estaca</th>
-                                  <th className="px-5 py-4 text-center">Comité</th>
+                                  <th className="px-5 py-4 text-center w-16">
+                                    <button 
+                                      onClick={() => {
+                                        const allDisplayed = sortedLetters.flatMap(l => groupedVolunteers[l]).map(v => v.id);
+                                        const allSelected = allDisplayed.every(id => selectedVolunteers.has(id));
+                                        if (allSelected) {
+                                          setSelectedVolunteers(new Set());
+                                        } else {
+                                          setSelectedVolunteers(new Set(allDisplayed));
+                                        }
+                                      }}
+                                      className={cn(
+                                        "w-5 h-5 rounded flex items-center justify-center transition-all mx-auto border",
+                                        sortedLetters.flatMap(l => groupedVolunteers[l]).every(v => selectedVolunteers.has(v.id)) && sortedLetters.flatMap(l => groupedVolunteers[l]).length > 0
+                                          ? "bg-[#4d7cfe] border-[#4d7cfe] text-white"
+                                          : "border-white/20 hover:border-white/50 text-transparent"
+                                      )}
+                                    >
+                                      <span className="material-symbols-outlined text-[14px] font-bold">check</span>
+                                    </button>
+                                  </th>
+                                  <th className="px-5 py-4 text-left w-36">Estado</th>
+                                  <th className="px-5 py-4 w-[25%]">Nombre y Apellido</th>
+                                  <th className="px-5 py-4 text-center w-[20%]">Barrio</th>
+                                  <th className="px-5 py-4 text-center w-[20%]">Estaca</th>
+                                  <th className="px-5 py-4 text-center w-[15%]">Comité</th>
+                                  <th className="px-5 py-4 text-center w-px whitespace-nowrap">Acciones</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-white/5">
@@ -1085,53 +1169,44 @@ export default function RemindersPage() {
                                         )}
                                       >
 
-                                        <td className="px-5 py-4 text-center" onClick={(e) => {
-                                          if (selectedVolunteers.size === 0) e.stopPropagation();
-                                        }}>
+                                        <td className="px-5 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); toggleConfirmed(vol.id); }}
+                                            onClick={() => toggleSelection(vol.id)}
                                             className={cn(
-                                              "w-6 h-6 rounded-full flex items-center justify-center transition-all active:scale-90 mx-auto",
-                                              isConfirmed
-                                                ? "bg-accent text-white shadow-sm shadow-accent/30"
-                                                : "bg-dark3 border border-border text-transparent hover:border-[#4d7cfe] group-hover:border-[#4d7cfe]/50"
+                                              "w-5 h-5 rounded flex items-center justify-center transition-all mx-auto border",
+                                              selectedVolunteers.has(vol.id)
+                                                ? "bg-[#4d7cfe] border-[#4d7cfe] text-white"
+                                                : "border-white/20 hover:border-white/50 text-transparent"
                                             )}
                                           >
-                                            <span className="material-symbols-outlined text-[16px] font-bold">
-                                              check
-                                            </span>
+                                            <span className="material-symbols-outlined text-[14px] font-bold">check</span>
                                           </button>
                                         </td>
-                                        <td className="px-5 py-4 text-center">
-                                          {!isConfirmed ? (
-                                            isContacted ? (
-                                              <Badge variant="outline" className="bg-sky-500/10 text-sky-500 border-sky-500/20 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
-                                                Contactado
-                                              </Badge>
-                                            ) : (
-                                              <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
-                                                Pendiente
-                                              </Badge>
-                                            )
-                                          ) : (
-                                            <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20 font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5">
-                                              Confirmado
-                                            </Badge>
-                                          )}
+                                        <td className="px-5 py-4 text-left" onClick={(e) => e.stopPropagation()}>
+                                          <Select 
+                                            value={isConfirmed ? "Confirmado" : isContacted ? "Contactado" : "Pendiente"} 
+                                            onValueChange={(val) => handleStatusChange(vol.id as string, val as string)}
+                                          >
+                                            <SelectTrigger 
+                                              className={cn(
+                                                "h-6 border-0 focus:ring-0 focus:ring-offset-0 font-inter font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5 rounded-full w-[130px] shadow-none",
+                                                isConfirmed ? "bg-accent/10 text-accent" : 
+                                                isContacted ? "bg-sky-500/10 text-sky-500" : 
+                                                "bg-amber-50 text-amber-600 hover:bg-amber-100"
+                                              )}
+                                            >
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="bg-dark2 border-white/10 text-white font-inter">
+                                              <SelectItem value="Pendiente" className="text-amber-500 font-bold text-xs">Pendiente</SelectItem>
+                                              <SelectItem value="Contactado" className="text-sky-500 font-bold text-xs">Contactado</SelectItem>
+                                              <SelectItem value="Confirmado" className="text-accent font-bold text-xs">Confirmado</SelectItem>
+                                            </SelectContent>
+                                          </Select>
                                         </td>
                                         <td className="px-5 py-4 font-bold text-text">
                                           <div className="flex items-center gap-2">
                                             <span>{vol.name}</span>
-                                            <a
-                                              href={link}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              onClick={(e) => e.stopPropagation()}
-                                              className="inline-flex items-center justify-center h-8 w-8 text-[#25D366] hover:bg-dark3 transition-all active:scale-90 rounded-sm"
-                                              title="Enviar recordatorio WhatsApp"
-                                            >
-                                              <span className="material-symbols-outlined text-[20px]">send</span>
-                                            </a>
                                           </div>
                                         </td>
                                         <td className="px-5 py-4 text-text text-center">{vol.ward || '—'}</td>
@@ -1140,6 +1215,32 @@ export default function RemindersPage() {
                                           <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
                                             {vol.committee}
                                           </Badge>
+                                        </td>
+                                        <td className="px-3 py-4 text-center w-px whitespace-nowrap">
+                                          <div className="flex items-center justify-center gap-1">
+                                            <a
+                                              href={link}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="inline-flex items-center justify-center h-8 w-8 text-[#25D366] hover:bg-white/10 transition-all active:scale-90 rounded-full"
+                                              title="Enviar recordatorio WhatsApp"
+                                            >
+                                              <span className="material-symbols-outlined text-[20px]">send</span>
+                                            </a>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-8 w-8 text-amber-500/70 hover:bg-amber-500/10 hover:text-amber-500 transition-all active:scale-90 rounded-full"
+                                              title="Archivar"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleArchiveVolunteer(vol);
+                                              }}
+                                            >
+                                              <span className="material-symbols-outlined text-[18px]">archive</span>
+                                            </Button>
+                                          </div>
                                         </td>
                                       </motion.tr>
                                     );
@@ -1491,66 +1592,54 @@ export default function RemindersPage() {
               exit={{ y: 100, opacity: 0 }}
               className="fixed bottom-0 md:bottom-6 left-0 right-0 z-[90] flex justify-center px-4 pointer-events-none"
             >
-              <div className="bg-dark2 border border-border shadow-2xl rounded-t-2xl md:rounded-full px-4 py-4 flex flex-col md:flex-row items-center gap-4 pointer-events-auto w-full md:w-auto max-w-2xl">
-                <div className="flex items-center justify-between w-full md:w-auto">
+              <div className="bg-dark2 border border-border shadow-2xl rounded-t-2xl md:rounded-2xl p-4 flex flex-col gap-4 pointer-events-auto w-full md:w-auto md:min-w-[550px] max-w-full">
+                <div className="relative flex items-center justify-center w-full">
                   <div className="flex items-center gap-2 font-bold text-text whitespace-nowrap">
                     <div className="w-6 h-6 rounded-full bg-[#4d7cfe] text-white flex items-center justify-center text-xs">
                       {selectedVolunteers.size}
                     </div>
                     <span>seleccionados</span>
                   </div>
-                  {/* Mobile Clear Button */}
                   <Button 
                     variant="ghost"
                     onClick={() => setSelectedVolunteers(new Set())}
-                    className="text-text-dim hover:text-text h-9 rounded-full px-2 md:hidden"
+                    className="absolute right-0 text-text-dim hover:text-text h-8 rounded-full px-2"
                   >
                     <span className="material-symbols-outlined text-[20px]">close</span>
                   </Button>
                 </div>
                 
-                <div className="h-px md:h-8 w-full md:w-px bg-border/50 hidden md:block" />
-
-                <div className="grid grid-cols-2 md:flex md:flex-nowrap items-center gap-2 w-full md:w-auto justify-center">
+                <div className="flex flex-wrap items-center justify-center gap-2 w-full">
                   <Button 
                     onClick={() => handleBulkConfirm(true)}
-                    className="bg-[#6dd230]/10 hover:bg-[#6dd230]/20 text-[#6dd230] border border-[#6dd230]/20 h-9 rounded-full text-[11px] sm:text-xs font-bold w-full md:w-auto px-2 sm:px-4"
+                    className="bg-[#6dd230]/10 hover:bg-[#6dd230]/20 text-[#6dd230] border border-[#6dd230]/20 h-9 flex items-center justify-center rounded-full text-[11px] font-bold px-3 shrink-0"
                   >
-                    <span className="material-symbols-outlined text-[16px] mr-1 hidden sm:inline-block">check_circle</span>
+                    <span className="material-symbols-outlined text-[15px] mr-1">check_circle</span>
                     Confirmar
                   </Button>
                   
                   <Button 
                     onClick={() => handleBulkContacted()}
-                    className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-500 border border-sky-500/20 h-9 rounded-full text-[11px] sm:text-xs font-bold w-full md:w-auto px-2 sm:px-4"
+                    className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-500 border border-sky-500/20 h-9 flex items-center justify-center rounded-full text-[11px] font-bold px-3 shrink-0"
                   >
-                    <span className="material-symbols-outlined text-[16px] mr-1 hidden sm:inline-block">forum</span>
+                    <span className="material-symbols-outlined text-[15px] mr-1">forum</span>
                     Contactados
                   </Button>
 
                   <Button 
                     onClick={() => setIsReassignSheetOpen(true)}
-                    className="bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 h-9 rounded-full text-[11px] sm:text-xs font-bold w-full md:w-auto px-2 sm:px-4"
+                    className="bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 h-9 flex items-center justify-center rounded-full text-[11px] font-bold px-3 shrink-0"
                   >
-                    <span className="material-symbols-outlined text-[16px] mr-1 hidden sm:inline-block">sync_alt</span>
+                    <span className="material-symbols-outlined text-[15px] mr-1">sync_alt</span>
                     Reasignar
                   </Button>
 
                   <Button 
                     onClick={() => handleBulkConfirm(false)}
-                    className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 h-9 rounded-full text-[11px] sm:text-xs font-bold w-full md:w-auto px-2 sm:px-4"
+                    className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 h-9 flex items-center justify-center rounded-full text-[11px] font-bold px-3 shrink-0"
                   >
-                    <span className="material-symbols-outlined text-[16px] mr-1 hidden sm:inline-block">cancel</span>
+                    <span className="material-symbols-outlined text-[15px] mr-1">cancel</span>
                     Cancelar
-                  </Button>
-                  
-                  {/* Desktop Clear Button */}
-                  <Button 
-                    variant="ghost"
-                    onClick={() => setSelectedVolunteers(new Set())}
-                    className="text-text-dim hover:text-text h-9 rounded-full px-2 hidden md:flex"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">close</span>
                   </Button>
                 </div>
               </div>
@@ -1593,11 +1682,12 @@ export default function RemindersPage() {
                         <button
                           key={d.key}
                           onClick={() => setReassignDayKey(d.key)}
-                          className={`relative flex flex-col items-center justify-center p-2 rounded-lg border transition-all text-white ${cardBg} ${isSelected
+                          className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-lg border transition-all text-white bg-white/5 ${isSelected
                             ? 'border-white/50 shadow-sm scale-105 brightness-110 z-10'
-                            : 'border-transparent opacity-60 hover:opacity-100'
+                            : 'border-white/10 opacity-60 hover:opacity-100'
                             }`}
                         >
+                          <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${cardBg} opacity-90`} />
                           <span className={`font-inter font-bold text-[9px] uppercase tracking-widest ${isSelected ? 'text-white/90' : 'text-white/70'}`}>
                             {dayAbbr}
                           </span>
