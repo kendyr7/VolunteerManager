@@ -649,9 +649,6 @@ export default function CoordinatorDashboard() {
                     <div className="flex-1 w-full min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider group-hover:text-text transition-colors truncate" title={committee.name}>{committee.name}</p>
-                        {committee.status === 'high_risk' && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-red animate-ping" />
-                        )}
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="flex-1 h-1.5 bg-dark3 rounded-full overflow-hidden border border-border">
