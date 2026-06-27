@@ -28,6 +28,7 @@ import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { USER_TABLE_STYLES } from "@/app/(coordinator)/users/page";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { normalizeSearch } from "@/lib/utils";
+import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -1248,22 +1249,37 @@ export default function RemindersPage() {
           </div>
         </div>
 
-        {/* Editor Drawer (from Shifts/Volunteers) */}
-        <div className={`fixed inset-0 z-[100] flex flex-col justify-end transition-all duration-300 ${isSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        {/* Editor Drawer / Sidebar (from Shifts/Volunteers) */}
+        <div className={cn("fixed inset-0 z-[100] flex transition-all duration-300", isMobile ? "flex-col justify-end" : "justify-end", isSheetOpen ? "pointer-events-auto" : "pointer-events-none")}>
           {/* Backdrop */}
           <div
             className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isSheetOpen ? 'opacity-100' : 'opacity-0'}`}
             onClick={() => setIsSheetOpen(false)}
           />
 
-          {/* Drawer Content */}
+          {/* Drawer/Sidebar Content */}
           <div
             id="drawer-profile"
-            className={`relative w-full md:w-[500px] md:mx-auto h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
+            className={cn(
+              "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-[#0a101d]",
+              isMobile
+                ? `w-full max-h-[94dvh] rounded-t-[40px] shadow-2xl ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
+                : `w-[400px] h-full shadow-2xl border-l border-white/10 ${isSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
+            )}
             style={{ willChange: 'transform' }}
           >
-            {/* Handle */}
-            <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+            {/* Fondo animado (Tema Claro) */}
+            <div className="absolute inset-0 z-0 dark:hidden">
+              <MeshGradientBackground colors={["#60a5fa", "#3b82f6", "#93c5fd", "#4d7cfe"]} backgroundColor="#1e3a8a" />
+            </div>
+            {/* Fondo animado (Tema Oscuro) */}
+            <div className="absolute inset-0 z-0 hidden dark:block">
+              <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
+            </div>
+
+            <div className="relative z-10 flex flex-col h-full w-full">
+              {/* Handle (Mobile only) */}
+              <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none lg:hidden" />
 
             <div
               className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
@@ -1461,8 +1477,9 @@ export default function RemindersPage() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Bulk Actions Toolbar */}
+      {/* Bulk Actions Toolbar */}
         <AnimatePresence>
           {selectedVolunteers.size > 0 && (
             <motion.div

@@ -590,7 +590,7 @@ export default function ShiftsPage() {
           <>
             {/* Desktop inline expansion */}
             <div className="hidden md:block">
-              <div className="grid grid-cols-2 gap-3 p-4 items-start border-t border-border/50">
+              <div className="grid grid-cols-4 gap-3 p-4 items-start border-t border-border/50">
                 {(['T1', 'T2', 'T3', 'T4'] as const).map(t => {
                   const info = SHIFT_TIMES[parseInt(t[1]) - 1];
                   const vols = shiftData[t];
@@ -656,12 +656,12 @@ export default function ShiftsPage() {
                                 >
                                   <div className="flex items-center gap-2 min-w-0 flex-1">
                                     <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.dot}`} />
-                                    <span className="text-[12px] font-semibold text-text truncate group-hover:text-[#4d7cfe] transition-colors">
+                                    <span className="font-inter font-bold text-[12px] text-text truncate group-hover:text-[#4d7cfe] transition-colors">
                                       {vol.name}
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-[18px] font-semibold border ${getCommitteeColor(vol.committee)}`}>
+                                    <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
                                       {vol.committee}
                                     </Badge>
                                   </div>
@@ -845,7 +845,7 @@ export default function ShiftsPage() {
                                             onClick={(e) => { e.stopPropagation(); toggleDay(key); handleEditClick(vol); }}
                                           >
                                             <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMatch ? 'bg-yellow-300' : 'bg-white/60'}`} />
-                                            <span className="volunteer-name-text text-white/90 min-w-0 flex-1" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            <span className="font-inter font-bold text-white/90 min-w-0 flex-1 text-[12px]" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                               <HighlightText text={vol.name} term={searchTerm} />
                                             </span>
                                           </div>
@@ -914,12 +914,12 @@ export default function ShiftsPage() {
         <motion.div variants={itemVariants} className="w-full relative z-10">
           <div className="relative w-full">
             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-              <span className="material-symbols-outlined text-white/70 text-[20px]">search</span>
+              <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
             </div>
             <input
               type="text"
               placeholder="Buscar turnos o grupos"
-              className="w-full bg-[#fff6] border border-black/10 dark:border-white/10 text-white placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
+              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               autoComplete="off"
@@ -927,7 +927,7 @@ export default function ShiftsPage() {
             {searchTerm.trim() !== '' && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-white/60 hover:text-white transition-colors"
+                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-black/40 hover:text-black dark:text-white/60 dark:hover:text-white transition-colors"
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
