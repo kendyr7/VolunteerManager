@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { createPortal } from "react-dom";
+import { startAuthentication } from "@simplewebauthn/browser";
 
 export function LoginForm() {
   const router = useRouter();
@@ -23,13 +24,61 @@ export function LoginForm() {
   const [newPin, setNewNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [userData, setUserData] = useState<{ id: string, type: 'profile' | 'volunteer' } | null>(null);
+  const [preferredAuthMethod, setPreferredAuthMethod] = useState<'pin' | 'biometrics'>('pin');
 
   useEffect(() => {
     const savedPhone = localStorage.getItem("volunteer_phone");
     if (savedPhone) {
       setPhone(savedPhone);
     }
+    const savedMethod = localStorage.getItem("preferred_auth_method");
+    if (savedMethod === 'biometrics') {
+      setPreferredAuthMethod('biometrics');
+    }
   }, []);
+
+  const handleBiometricLogin = async () => {
+    if (!phone) {
+      setError("Ingresa tu número de teléfono primero.");
+      return;
+    }
+    
+    setError(null);
+    startTransition(async () => {
+      try {
+        const resp = await fetch('/api/webauthn/authenticate/generate-options', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone })
+        });
+        
+        if (!resp.ok) {
+          const errData = await resp.json();
+          throw new Error(errData.error || 'Error al generar opciones de autenticación');
+        }
+
+        const options = await resp.json();
+        const asseResp = await startAuthentication(options);
+
+        const verifyResp = await fetch('/api/webauthn/authenticate/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(asseResp)
+        });
+
+        const verifyData = await verifyResp.json();
+        
+        if (verifyData.verified) {
+          localStorage.setItem("preferred_auth_method", "biometrics");
+          finishLogin(verifyData);
+        } else {
+          throw new Error('La huella no pudo ser verificada.');
+        }
+      } catch (err: any) {
+        setError(err.message || "Error al autenticar con huella");
+      }
+    });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,7 +141,10 @@ export function LoginForm() {
   };
 
   const finishLogin = (result: any) => {
-    localStorage.setItem("volunteer_phone", phone);
+    localStorage.setItem("volunteer_phone", phone || result.phone);
+    if (!localStorage.getItem("preferred_auth_method")) {
+      localStorage.setItem("preferred_auth_method", "pin");
+    }
     if (result.role) {
       localStorage.setItem("mock_role", result.role);
     }
@@ -170,22 +222,35 @@ export function LoginForm() {
               </div>
             )}
 
-            <button 
-              type="submit" 
-              className="w-full h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 group"
-              disabled={isPending}
-            >
-              {isPending ? (
-                <>
+            <div className="flex gap-2">
+              <button 
+                type="submit" 
+                className="w-full h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 group"
+                disabled={isPending}
+                onClick={() => {
+                  localStorage.setItem("preferred_auth_method", "pin");
+                }}
+              >
+                {isPending ? (
                   <span>Verificando...</span>
-                </>
-              ) : (
-                <>
-                  <span>Ingresar</span>
-                  <span className="material-symbols-outlined text-[18px] opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all">north_east</span>
-                </>
-              )}
-            </button>
+                ) : (
+                  <>
+                    <span>Ingresar</span>
+                    <span className="material-symbols-outlined text-[18px] opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all">north_east</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBiometricLogin}
+                className={`h-12 px-4 rounded-sm font-bold shadow-lg transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 shrink-0 border ${preferredAuthMethod === 'biometrics' ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-[#4d7cfe]/20' : 'bg-dark2 border-white/10 text-white hover:bg-white/10'}`}
+                disabled={isPending || !phone}
+                title="Iniciar sesión con huella dactilar"
+              >
+                <span className="material-symbols-outlined text-[20px]">fingerprint</span>
+              </button>
+            </div>
           </motion.form>
         ) : (
           <motion.form 

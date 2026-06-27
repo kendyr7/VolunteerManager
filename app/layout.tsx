@@ -38,6 +38,8 @@ export const metadata: Metadata = {
   },
 };
 
+import { AutoLogout } from "@/components/AutoLogout";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -53,6 +55,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/app-icon-192.png" />
       </head>
       <body className="min-h-full flex flex-col font-sans bg-dark text-text tracking-[-0.01em]">
+        <AutoLogout />
         {children}
         <Script
           id="service-worker-registration"

@@ -1281,53 +1281,64 @@ export default function RemindersPage() {
               exit={{ y: 100, opacity: 0 }}
               className="fixed bottom-0 md:bottom-6 left-0 right-0 z-[90] flex justify-center px-4 pointer-events-none"
             >
-              <div className="bg-dark2 border border-border shadow-2xl rounded-t-2xl md:rounded-full px-6 py-4 flex flex-col md:flex-row items-center gap-4 pointer-events-auto w-full md:w-auto max-w-2xl">
-                <div className="flex items-center gap-2 font-bold text-text whitespace-nowrap">
-                  <div className="w-6 h-6 rounded-full bg-[#4d7cfe] text-white flex items-center justify-center text-xs">
-                    {selectedVolunteers.size}
+              <div className="bg-dark2 border border-border shadow-2xl rounded-t-2xl md:rounded-full px-4 py-4 flex flex-col md:flex-row items-center gap-4 pointer-events-auto w-full md:w-auto max-w-2xl">
+                <div className="flex items-center justify-between w-full md:w-auto">
+                  <div className="flex items-center gap-2 font-bold text-text whitespace-nowrap">
+                    <div className="w-6 h-6 rounded-full bg-[#4d7cfe] text-white flex items-center justify-center text-xs">
+                      {selectedVolunteers.size}
+                    </div>
+                    <span>seleccionados</span>
                   </div>
-                  <span>seleccionados</span>
+                  {/* Mobile Clear Button */}
+                  <Button 
+                    variant="ghost"
+                    onClick={() => setSelectedVolunteers(new Set())}
+                    className="text-text-dim hover:text-text h-9 rounded-full px-2 md:hidden"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">close</span>
+                  </Button>
                 </div>
                 
                 <div className="h-px md:h-8 w-full md:w-px bg-border/50 hidden md:block" />
 
-                <div className="flex flex-wrap md:flex-nowrap items-center gap-2 w-full md:w-auto justify-center">
+                <div className="grid grid-cols-2 md:flex md:flex-nowrap items-center gap-2 w-full md:w-auto justify-center">
                   <Button 
                     onClick={() => handleBulkConfirm(true)}
-                    className="bg-[#6dd230]/10 hover:bg-[#6dd230]/20 text-[#6dd230] border border-[#6dd230]/20 h-9 rounded-full text-xs font-bold"
+                    className="bg-[#6dd230]/10 hover:bg-[#6dd230]/20 text-[#6dd230] border border-[#6dd230]/20 h-9 rounded-full text-[11px] sm:text-xs font-bold w-full md:w-auto px-2 sm:px-4"
                   >
-                    <span className="material-symbols-outlined text-[16px] mr-1">check_circle</span>
+                    <span className="material-symbols-outlined text-[16px] mr-1 hidden sm:inline-block">check_circle</span>
                     Confirmar
                   </Button>
                   
                   <Button 
                     onClick={() => handleBulkContacted()}
-                    className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-500 border border-sky-500/20 h-9 rounded-full text-xs font-bold"
+                    className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-500 border border-sky-500/20 h-9 rounded-full text-[11px] sm:text-xs font-bold w-full md:w-auto px-2 sm:px-4"
                   >
-                    <span className="material-symbols-outlined text-[16px] mr-1">forum</span>
+                    <span className="material-symbols-outlined text-[16px] mr-1 hidden sm:inline-block">forum</span>
                     Contactados
                   </Button>
 
                   <Button 
                     onClick={() => setIsReassignSheetOpen(true)}
-                    className="bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 h-9 rounded-full text-xs font-bold"
+                    className="bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 h-9 rounded-full text-[11px] sm:text-xs font-bold w-full md:w-auto px-2 sm:px-4"
                   >
-                    <span className="material-symbols-outlined text-[16px] mr-1">sync_alt</span>
+                    <span className="material-symbols-outlined text-[16px] mr-1 hidden sm:inline-block">sync_alt</span>
                     Reasignar
                   </Button>
 
                   <Button 
                     onClick={() => handleBulkConfirm(false)}
-                    className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 h-9 rounded-full text-xs font-bold"
+                    className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 h-9 rounded-full text-[11px] sm:text-xs font-bold w-full md:w-auto px-2 sm:px-4"
                   >
-                    <span className="material-symbols-outlined text-[16px] mr-1">cancel</span>
+                    <span className="material-symbols-outlined text-[16px] mr-1 hidden sm:inline-block">cancel</span>
                     Cancelar
                   </Button>
                   
+                  {/* Desktop Clear Button */}
                   <Button 
                     variant="ghost"
                     onClick={() => setSelectedVolunteers(new Set())}
-                    className="text-text-dim hover:text-text h-9 rounded-full px-2"
+                    className="text-text-dim hover:text-text h-9 rounded-full px-2 hidden md:flex"
                   >
                     <span className="material-symbols-outlined text-[20px]">close</span>
                   </Button>

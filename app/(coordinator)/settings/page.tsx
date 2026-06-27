@@ -8,6 +8,7 @@ import { Toast } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
 import { DataTableFilter } from "@/components/DataTableFilter";
+import { startRegistration } from "@simplewebauthn/browser";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -38,6 +39,7 @@ export default function SettingsPage() {
   const [committees, setCommittees] = useState<{ id: string, name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isRegisteringPasskey, setIsRegisteringPasskey] = useState(false);
 
   // Form states for profile
   const [editName, setEditName] = useState('');
@@ -184,6 +186,48 @@ export default function SettingsPage() {
     setIsUpdating(false);
   };
 
+  const handleRegisterPasskey = async () => {
+    if (!userProfile) return;
+    setIsRegisteringPasskey(true);
+    
+    try {
+      const resp = await fetch('/api/webauthn/register/generate-options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: userProfile.id,
+          userType: currentRole === 'Lector' ? 'volunteer' : 'profile',
+          phone: editPhone
+        })
+      });
+      
+      if (!resp.ok) {
+        throw new Error('Error al generar opciones de registro');
+      }
+
+      const options = await resp.json();
+      const asseResp = await startRegistration(options);
+
+      const verifyResp = await fetch('/api/webauthn/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(asseResp)
+      });
+
+      const verifyData = await verifyResp.json();
+      
+      if (verifyData.verified) {
+        showToast("Huella registrada correctamente");
+      } else {
+        throw new Error("No se pudo verificar la huella");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Error al registrar la huella", "error");
+    } finally {
+      setIsRegisteringPasskey(false);
+    }
+  };
+
   // Permissions Data
   const ALL_PERMISSIONS = ['Ver voluntarios', 'Editar turnos', 'Enviar mensajes', 'Ver reportes', 'Importar datos', 'Configurar ajustes'];
   const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -302,6 +346,41 @@ export default function SettingsPage() {
             </div>
           )}
         </form>
+      </motion.div>
+
+      {/* Seguridad & Autenticación */}
+      <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden mb-8">
+        <div className="p-6 md:p-8 border-b border-white/5 flex items-center justify-between bg-dark3">
+          <div>
+            <h3 className="font-bold text-text tracking-tight leading-none mb-2">Seguridad y Acceso</h3>
+            <p className="text-xs md:text-sm font-inter font-bold text-text-dim">Gestiona métodos de inicio de sesión.</p>
+          </div>
+        </div>
+        
+        <div className="p-6 md:p-8 space-y-6">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-[#4d7cfe]/10 text-[#4d7cfe] shrink-0">
+                <span className="material-symbols-outlined text-[24px]">fingerprint</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-text mb-1">Inicio de Sesión Biométrico</p>
+                <p className="text-xs text-text-dim leading-relaxed max-w-sm">
+                  Vincula este dispositivo para iniciar sesión usando tu huella dactilar, Face ID o método de bloqueo seguro del sistema sin necesidad de introducir un PIN.
+                </p>
+              </div>
+            </div>
+            
+            <Button 
+              type="button" 
+              onClick={handleRegisterPasskey}
+              disabled={isRegisteringPasskey} 
+              className="bg-white/10 hover:bg-white/20 text-white font-bold px-6 h-10 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto"
+            >
+              {isRegisteringPasskey ? 'Registrando...' : 'Vincular Dispositivo'}
+            </Button>
+          </div>
+        </div>
       </motion.div>
 
       {/* Permissions Section (Toggles) */}
