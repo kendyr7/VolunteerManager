@@ -636,23 +636,78 @@ export default function RemindersPage() {
           {/* Mobile Header / Summary Pill */}
           {selectedDayKey && selectedShiftId ? (
             <button 
-              className="lg:hidden flex items-center justify-between w-full p-4 bg-dark3 transition-colors active:bg-dark2"
+              className="lg:hidden flex items-center justify-between w-full px-3 py-2 bg-dark3 transition-colors active:bg-dark2"
               onClick={() => setIsMobileSelectorExpanded(!isMobileSelectorExpanded)}
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#4d7cfe]/10 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[#4d7cfe] text-[20px]">event_available</span>
+              <div className="flex items-center w-full">
+                {/* Left: Selected Day Card */}
+                <div 
+                  style={{ width: '52px', height: '52px' }}
+                  className={cn(
+                    "relative shrink-0 flex flex-col items-center justify-center gap-1 rounded-lg border border-white/50 shadow-sm brightness-110 transition-all text-white",
+                    (() => {
+                      const idx = EVENT_DAYS.findIndex(d => d.key === selectedDayKey);
+                      const bgColors = ['bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]', 'bg-[#981e32]', 'bg-[#7a3994]', 'bg-[#d97c2c]', 'bg-[#10a562]'];
+                      return idx >= 0 ? bgColors[idx % bgColors.length] : 'bg-dark3';
+                    })()
+                  )}
+                >
+                  <span className="font-inter font-bold text-[10px] uppercase tracking-widest text-white/90">
+                    {EVENT_DAYS.find(d => d.key === selectedDayKey)?.label.substring(0, 3)}
+                  </span>
+                  <span className="text-base font-black leading-none drop-shadow-sm">
+                    {EVENT_DAYS.find(d => d.key === selectedDayKey)?.dateNum}
+                  </span>
                 </div>
-                <div className="flex flex-col items-start">
-                  <span className="text-xs font-bold text-text">
-                    {EVENT_DAYS.find(d => d.key === selectedDayKey)?.label} {EVENT_DAYS.find(d => d.key === selectedDayKey)?.dateNum}
-                  </span>
-                  <span className="text-[10px] font-bold text-text-dim">
-                    {SHIFT_TIMES.find(s => `T${s.id}` === selectedShiftId)?.name} ({SHIFT_TIMES.find(s => `T${s.id}` === selectedShiftId)?.time})
-                  </span>
+
+                {/* Right: Shift Cards Quick Selector */}
+                <div className="flex items-center gap-1.5 ml-auto mr-3">
+                  {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                    const isSelected = selectedShiftId === t;
+                    
+                    let count = 0;
+                    if (selectedDayKey) {
+                      count = shiftCounts[selectedDayKey]?.[t] || 0;
+                    }
+                    const isSingleCommittee = selectedCommittees.length === 1;
+                    const activeCommittee = isSingleCommittee ? selectedCommittees[0] : null;
+                    const minRequired = activeCommittee ? (committeeRequirements[activeCommittee]?.[t] ?? 0) : 0;
+                    
+                    let buttonClass = "";
+                    if (isSelected) {
+                      if (isSingleCommittee) {
+                        buttonClass = count < minRequired ? "bg-rose-600 border-rose-500 text-white shadow-sm" : "bg-teal-600 border-teal-500 text-white shadow-sm";
+                      } else {
+                        buttonClass = "bg-[#0084d1] border-[#0084d1] text-white shadow-sm";
+                      }
+                    } else {
+                      if (isSingleCommittee) {
+                        buttonClass = count < minRequired ? "bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100/20" : "bg-teal-50 border-teal-100 text-accent hover:bg-teal-100/20";
+                      } else {
+                        buttonClass = count > 0 ? "bg-dark3 border-border text-text hover:bg-dark3" : "bg-dark2 border-border text-text-dim hover:bg-dark3";
+                      }
+                    }
+
+                    return (
+                      <div 
+                        key={t}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedShiftId(t);
+                        }}
+                        style={{ width: '52px', height: '52px' }}
+                        className={cn(
+                          "relative shrink-0 flex flex-col items-center justify-center gap-1 rounded-lg border transition-all font-inter font-bold",
+                          buttonClass
+                        )}
+                      >
+                        <span className="font-inter font-bold text-xs">{t}</span>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
-              <span className="material-symbols-outlined text-text-dim text-[20px]">
+              <span className="material-symbols-outlined text-text-dim text-[20px] shrink-0">
                 {isMobileSelectorExpanded ? 'expand_less' : 'expand_more'}
               </span>
             </button>
@@ -818,7 +873,7 @@ export default function RemindersPage() {
                     title={!selectedDayKey ? "Por favor selecciona una fecha primero" : `Seleccionar ${shiftTimeLabel}`}
                     className={`shrink-0 flex items-center justify-center gap-1.5 px-2 md:px-4.5 py-2.5 rounded-sm border text-xs transition-all w-full md:w-auto ${buttonClass}`}
                   >
-                    <span className="font-bold">{t}</span>
+                    <span className="font-inter font-bold">{t}</span>
                     <span className="text-[10px] opacity-30">|</span>
                     <span className={`font-inter font-bold ${countTextClass}`}>
                       {count}
