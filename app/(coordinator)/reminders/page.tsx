@@ -222,6 +222,8 @@ export default function RemindersPage() {
   const [selectedShiftId, setSelectedShiftId] = useState<string>("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const [isScrolled, setIsScrolled] = useState(false);
+
   // Auto-collapse selector on mobile scroll
   useEffect(() => {
     if (!isMobile) return;
@@ -234,6 +236,8 @@ export default function RemindersPage() {
     
     const handleScroll = () => {
       const currentScrollY = mainEl.scrollTop;
+      setIsScrolled(currentScrollY > 20);
+
       // If we scroll down more than 50px, collapse it, but only if day and shift are selected
       if (currentScrollY > 50 && isMobileSelectorExpanded && selectedDayKey && selectedShiftId) {
         setIsMobileSelectorExpanded(false);
@@ -562,11 +566,11 @@ export default function RemindersPage() {
 
     const { error: insErr } = await supabase
       .from('shifts')
-      .insert(insertRows);
+      .upsert(insertRows, { onConflict: 'volunteer_id,day_key,shift_key', ignoreDuplicates: true });
 
     if (insErr) {
       console.error("Error inserting reassigned shifts:", insErr);
-      showToast("Error al reasignar", "error");
+      showToast("Error al reasignar: " + insErr.message, "error");
     } else {
       showToast(`Reasignados a ${reassignShiftId} el ${reassignDayKey}`);
       setIsReassignSheetOpen(false);
@@ -600,6 +604,88 @@ export default function RemindersPage() {
 
   const committees = committeesList.map(c => c.name);
 
+  const renderQuickSelectorPill = () => {
+    if (!selectedDayKey || !selectedShiftId) return null;
+    return (
+      <button 
+        className="lg:hidden flex items-center justify-between w-full px-3 py-2 bg-dark3 transition-colors active:bg-dark2 border-b border-border/50"
+        onClick={() => setIsMobileSelectorExpanded(!isMobileSelectorExpanded)}
+      >
+        <div className="flex items-center w-full">
+          {/* Left: Selected Day Card */}
+          <div 
+            style={{ width: '68px', height: '52px' }}
+            className={cn(
+              "relative shrink-0 flex flex-col items-center justify-center gap-1 rounded-lg border border-white/50 shadow-sm brightness-110 transition-all text-white",
+              (() => {
+                const idx = EVENT_DAYS.findIndex(d => d.key === selectedDayKey);
+                const bgColors = ['bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]', 'bg-[#981e32]', 'bg-[#7a3994]', 'bg-[#d97c2c]', 'bg-[#10a562]'];
+                return idx >= 0 ? bgColors[idx % bgColors.length] : 'bg-dark3';
+              })()
+            )}
+          >
+            <span className="font-inter font-bold text-[10px] uppercase tracking-widest text-white/90">
+              {EVENT_DAYS.find(d => d.key === selectedDayKey)?.label.substring(0, 3)}
+            </span>
+            <span className="text-base font-black leading-none drop-shadow-sm">
+              {EVENT_DAYS.find(d => d.key === selectedDayKey)?.dateNum}
+            </span>
+          </div>
+
+          {/* Right: Shift Cards Quick Selector */}
+          <div className="flex items-center gap-1.5 ml-auto mr-3">
+            {['T1', 'T2', 'T3', 'T4'].map((t) => {
+              const isSelected = selectedShiftId === t;
+              
+              let count = 0;
+              if (selectedDayKey) {
+                count = shiftCounts[selectedDayKey]?.[t] || 0;
+              }
+              const isSingleCommittee = selectedCommittees.length === 1;
+              const activeCommittee = isSingleCommittee ? selectedCommittees[0] : null;
+              const minRequired = activeCommittee ? (committeeRequirements[activeCommittee]?.[t] ?? 0) : 0;
+              
+              let buttonClass = "";
+              if (isSelected) {
+                if (isSingleCommittee) {
+                  buttonClass = count < minRequired ? "bg-rose-600 border-rose-500 text-white shadow-sm" : "bg-teal-600 border-teal-500 text-white shadow-sm";
+                } else {
+                  buttonClass = "bg-[#0084d1] border-[#0084d1] text-white shadow-sm";
+                }
+              } else {
+                if (isSingleCommittee) {
+                  buttonClass = count < minRequired ? "bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100/20" : "bg-teal-50 border-teal-100 text-accent hover:bg-teal-100/20";
+                } else {
+                  buttonClass = count > 0 ? "bg-dark3 border-border text-text hover:bg-dark3" : "bg-dark2 border-border text-text-dim hover:bg-dark3";
+                }
+              }
+
+              return (
+                <div 
+                  key={t}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedShiftId(t);
+                  }}
+                  style={{ width: '52px', height: '52px' }}
+                  className={cn(
+                    "relative shrink-0 flex flex-col items-center justify-center gap-1 rounded-lg border transition-all font-inter font-bold",
+                    buttonClass
+                  )}
+                >
+                  <span className="font-inter font-bold text-xs">{t}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+        <span className="material-symbols-outlined text-text-dim text-[20px] shrink-0">
+          {isMobileSelectorExpanded ? 'expand_less' : 'expand_more'}
+        </span>
+      </button>
+    );
+  };
+
   if (loading) {
     return (
       <div className="absolute inset-0 flex items-center justify-center z-50">
@@ -631,110 +717,63 @@ export default function RemindersPage() {
       {/* Content wrapper with mobile padding */}
       <div className="flex flex-col gap-4 md:gap-6 flex-1 px-4 sm:px-6 lg:px-8 lg:min-h-0 lg:pb-6">
         {/* Selector de Turnos Rediseñado en Dos Filas */}
-        <div className="shrink-0 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden flex flex-col sticky top-[96px] z-30 bg-dark2/90 backdrop-blur-md">
+        <div className="shrink-0 bg-dark2 border border-border rounded-sm shadow-sm overflow-hidden flex flex-col z-30 bg-dark2/90 backdrop-blur-md sticky top-[96px]">
           
           {/* Mobile Header / Summary Pill */}
-          {selectedDayKey && selectedShiftId ? (
-            <button 
-              className="lg:hidden flex items-center justify-between w-full px-3 py-2 bg-dark3 transition-colors active:bg-dark2"
-              onClick={() => setIsMobileSelectorExpanded(!isMobileSelectorExpanded)}
-            >
-              <div className="flex items-center w-full">
-                {/* Left: Selected Day Card */}
-                <div 
-                  style={{ width: '52px', height: '52px' }}
-                  className={cn(
-                    "relative shrink-0 flex flex-col items-center justify-center gap-1 rounded-lg border border-white/50 shadow-sm brightness-110 transition-all text-white",
-                    (() => {
-                      const idx = EVENT_DAYS.findIndex(d => d.key === selectedDayKey);
-                      const bgColors = ['bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]', 'bg-[#981e32]', 'bg-[#7a3994]', 'bg-[#d97c2c]', 'bg-[#10a562]'];
-                      return idx >= 0 ? bgColors[idx % bgColors.length] : 'bg-dark3';
-                    })()
-                  )}
+          <AnimatePresence mode="popLayout" initial={false}>
+            {isScrolled && selectedDayKey && selectedShiftId ? (
+              <motion.div
+                key="pill"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+                className="w-full"
+              >
+                {renderQuickSelectorPill()}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="button"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+                className="w-full"
+              >
+                <button 
+                  className="lg:hidden flex items-center justify-between w-full p-4 bg-dark3 transition-colors active:bg-dark2"
+                  onClick={() => setIsMobileSelectorExpanded(!isMobileSelectorExpanded)}
                 >
-                  <span className="font-inter font-bold text-[10px] uppercase tracking-widest text-white/90">
-                    {EVENT_DAYS.find(d => d.key === selectedDayKey)?.label.substring(0, 3)}
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-text text-xl">event_available</span>
+                    <span className="font-bold text-text text-sm">Filtros de Búsqueda</span>
+                  </div>
+                  <span className="material-symbols-outlined text-text-dim text-[20px]">
+                    {isMobileSelectorExpanded ? 'expand_less' : 'expand_more'}
                   </span>
-                  <span className="text-base font-black leading-none drop-shadow-sm">
-                    {EVENT_DAYS.find(d => d.key === selectedDayKey)?.dateNum}
-                  </span>
-                </div>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-                {/* Right: Shift Cards Quick Selector */}
-                <div className="flex items-center gap-1.5 ml-auto mr-3">
-                  {['T1', 'T2', 'T3', 'T4'].map((t) => {
-                    const isSelected = selectedShiftId === t;
-                    
-                    let count = 0;
-                    if (selectedDayKey) {
-                      count = shiftCounts[selectedDayKey]?.[t] || 0;
-                    }
-                    const isSingleCommittee = selectedCommittees.length === 1;
-                    const activeCommittee = isSingleCommittee ? selectedCommittees[0] : null;
-                    const minRequired = activeCommittee ? (committeeRequirements[activeCommittee]?.[t] ?? 0) : 0;
-                    
-                    let buttonClass = "";
-                    if (isSelected) {
-                      if (isSingleCommittee) {
-                        buttonClass = count < minRequired ? "bg-rose-600 border-rose-500 text-white shadow-sm" : "bg-teal-600 border-teal-500 text-white shadow-sm";
-                      } else {
-                        buttonClass = "bg-[#0084d1] border-[#0084d1] text-white shadow-sm";
-                      }
-                    } else {
-                      if (isSingleCommittee) {
-                        buttonClass = count < minRequired ? "bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100/20" : "bg-teal-50 border-teal-100 text-accent hover:bg-teal-100/20";
-                      } else {
-                        buttonClass = count > 0 ? "bg-dark3 border-border text-text hover:bg-dark3" : "bg-dark2 border-border text-text-dim hover:bg-dark3";
-                      }
-                    }
-
-                    return (
-                      <div 
-                        key={t}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedShiftId(t);
-                        }}
-                        style={{ width: '52px', height: '52px' }}
-                        className={cn(
-                          "relative shrink-0 flex flex-col items-center justify-center gap-1 rounded-lg border transition-all font-inter font-bold",
-                          buttonClass
-                        )}
-                      >
-                        <span className="font-inter font-bold text-xs">{t}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-              <span className="material-symbols-outlined text-text-dim text-[20px] shrink-0">
-                {isMobileSelectorExpanded ? 'expand_less' : 'expand_more'}
-              </span>
-            </button>
-          ) : (
-            <button 
-              className="lg:hidden flex items-center justify-between w-full p-4 text-sm font-bold text-text bg-dark3"
-              onClick={() => setIsMobileSelectorExpanded(!isMobileSelectorExpanded)}
-            >
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px]">calendar_month</span>
-                <span>Filtros de Fecha y Turno</span>
-              </div>
-              <span className="material-symbols-outlined text-text-dim">
-                {isMobileSelectorExpanded ? 'expand_less' : 'expand_more'}
-              </span>
-            </button>
-          )}
-
-          {/* Selector Content (Collapsible on mobile) */}
-          <div className={cn("p-4 md:p-5 flex-col gap-4 md:gap-5", isMobileSelectorExpanded || (!selectedDayKey || !selectedShiftId) ? "flex" : "hidden lg:flex")}>
+          {/* Selector Content (Collapsible on mobile with Framer Motion) */}
+          <AnimatePresence initial={false}>
+            {(isMobileSelectorExpanded || !isMobile || (!selectedDayKey || !selectedShiftId)) && (
+              <motion.div 
+                initial={isMobile ? { height: 0, opacity: 0 } : false}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={isMobile ? { height: 0, opacity: 0 } : {}}
+                transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+                className={cn("p-4 md:p-5 flex-col gap-4 md:gap-5 overflow-hidden", "flex")}
+              >
 
           {/* FILA 1: FECHA */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase">FECHA</span>
             </div>
-            <div className="grid grid-cols-5 sm:grid-cols-8 md:flex md:flex-wrap gap-2">
+            <div className="grid grid-cols-5 sm:grid-cols-8 md:flex md:flex-wrap w-full gap-2">
               {EVENT_DAYS.map((day, index) => {
                 const dayCounts = shiftCounts[day.key] || { T1: 0, T2: 0, T3: 0, T4: 0 };
                 const totalVolunteersOnDay = Object.values(dayCounts).reduce((acc, count) => acc + count, 0);
@@ -767,7 +806,7 @@ export default function RemindersPage() {
                         }
                       }
                     }}
-                    className={`relative shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto w-full text-white ${cardBg} ${isSelected
+                    className={`relative shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto md:flex-1 w-full text-white ${cardBg} ${isSelected
                       ? 'border-white/50 shadow-sm scale-105 brightness-110'
                       : 'border-transparent opacity-80 hover:opacity-100 hover:scale-[1.02]'
                       }`}
@@ -784,106 +823,121 @@ export default function RemindersPage() {
             </div>
           </div>
 
-          {/* Separador */}
-          <div className="h-px bg-border/40" />
+          {/* Separador y FILA 2: TURNOS solo si no está el selector rápido visible */}
+          <AnimatePresence initial={false}>
+            {!(isScrolled && selectedDayKey && selectedShiftId) && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+                className="flex flex-col gap-4 md:gap-5 overflow-hidden"
+              >
+                {/* Separador */}
+                <div className="h-px bg-border/40" />
 
-          {/* FILA 2: TURNOS */}
-          <div className="space-y-2">
-            <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase">TURNOS</span>
-            <div className="grid grid-cols-4 md:flex md:flex-wrap gap-2">
-              {['T1', 'T2', 'T3', 'T4'].map((t) => {
-                // Obtener conteo de voluntarios para este turno (si hay día seleccionado, del día; si no, total acumulado de todos los días)
-                let count = 0;
-                if (selectedDayKey) {
-                  count = shiftCounts[selectedDayKey]?.[t] || 0;
-                } else {
-                  EVENT_DAYS.forEach(day => {
-                    count += shiftCounts[day.key]?.[t] || 0;
-                  });
-                }
-
-                const isSelected = selectedDayKey && selectedShiftId === t;
-
-                // Lógica de colores según requerimientos de comité
-                const isSingleCommittee = selectedCommittees.length === 1;
-                const activeCommittee = isSingleCommittee ? selectedCommittees[0] : null;
-                const minRequired = activeCommittee ? (committeeRequirements[activeCommittee]?.[t] ?? 0) : 0;
-
-                let buttonClass = "";
-                let countTextClass = "";
-
-                if (isSelected) {
-                  if (isSingleCommittee) {
-                    const isUnderstaffed = count < minRequired;
-                    if (isUnderstaffed) {
-                      buttonClass = "bg-rose-600 border-rose-500 text-white shadow-sm scale-105 font-bold";
-                      countTextClass = "text-rose-100/90";
+              {/* FILA 2: TURNOS */}
+              <div className="space-y-3">
+                <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase block">TURNOS</span>
+                <div className="grid grid-cols-4 md:flex md:flex-wrap gap-2">
+                  {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                    // Obtener conteo de voluntarios para este turno (si hay día seleccionado, del día; si no, total acumulado de todos los días)
+                    let count = 0;
+                    if (selectedDayKey) {
+                      count = shiftCounts[selectedDayKey]?.[t] || 0;
                     } else {
-                      buttonClass = "bg-teal-600 border-teal-500 text-white shadow-sm scale-105 font-bold";
-                      countTextClass = "text-teal-100/90";
+                      EVENT_DAYS.forEach(day => {
+                        count += shiftCounts[day.key]?.[t] || 0;
+                      });
                     }
-                  } else {
-                    // Selección neutra global
-                    buttonClass = "bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105 font-bold";
-                    countTextClass = "text-sky-100/90";
-                  }
-                } else {
-                  if (isSingleCommittee) {
-                    const isUnderstaffed = count < minRequired;
-                    if (isUnderstaffed) {
-                      buttonClass = "bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100/20 hover:text-rose-700 font-bold";
-                      countTextClass = "text-rose-500";
-                    } else {
-                      buttonClass = "bg-teal-50 border-teal-100 text-accent hover:bg-teal-100/20 hover:text-teal-700 font-bold";
-                      countTextClass = "text-accent";
-                    }
-                  } else {
-                    // Estilo neutro vista global
-                    if (count > 0) {
-                      buttonClass = "bg-dark3 border-border text-text hover:bg-dark3 hover:text-text font-bold";
-                      countTextClass = "text-text-dim";
-                    } else {
-                      buttonClass = "bg-dark2 border-border text-text-dim hover:bg-dark3";
-                      countTextClass = "text-text-dim";
-                    }
-                  }
-                }
 
-                // Si no hay día seleccionado, forzar un estilo atenuado y deshabilitar
-                if (!selectedDayKey) {
-                  buttonClass = "bg-dark2 border-border text-text-dim opacity-60 cursor-not-allowed";
-                  countTextClass = "text-text-dim";
-                }
+                    const isSelected = selectedDayKey && selectedShiftId === t;
 
-                const shiftTimeLabel = SHIFT_TIMES.find(s => `T${s.id}` === t)?.name || "";
+                    // Lógica de colores según requerimientos de comité
+                    const isSingleCommittee = selectedCommittees.length === 1;
+                    const activeCommittee = isSingleCommittee ? selectedCommittees[0] : null;
+                    const minRequired = activeCommittee ? (committeeRequirements[activeCommittee]?.[t] ?? 0) : 0;
 
-                return (
-                  <button
-                    key={t}
-                    disabled={!selectedDayKey}
-                    onClick={() => {
-                      if (selectedDayKey) {
-                        if (selectedShiftId === t) {
-                          setSelectedShiftId("");
+                    let buttonClass = "";
+                    let countTextClass = "";
+
+                    if (isSelected) {
+                      if (isSingleCommittee) {
+                        const isUnderstaffed = count < minRequired;
+                        if (isUnderstaffed) {
+                          buttonClass = "bg-rose-600 border-rose-500 text-white shadow-sm scale-105 font-bold";
+                          countTextClass = "text-rose-100/90";
                         } else {
-                          setSelectedShiftId(t);
+                          buttonClass = "bg-teal-600 border-teal-500 text-white shadow-sm scale-105 font-bold";
+                          countTextClass = "text-teal-100/90";
+                        }
+                      } else {
+                        // Selección neutra global
+                        buttonClass = "bg-[#0084d1] border-[#0084d1] text-white shadow-sm scale-105 font-bold";
+                        countTextClass = "text-sky-100/90";
+                      }
+                    } else {
+                      if (isSingleCommittee) {
+                        const isUnderstaffed = count < minRequired;
+                        if (isUnderstaffed) {
+                          buttonClass = "bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100/20 hover:text-rose-700 font-bold";
+                          countTextClass = "text-rose-500";
+                        } else {
+                          buttonClass = "bg-teal-50 border-teal-100 text-accent hover:bg-teal-100/20 hover:text-teal-700 font-bold";
+                          countTextClass = "text-accent";
+                        }
+                      } else {
+                        // Estilo neutro vista global
+                        if (count > 0) {
+                          buttonClass = "bg-dark3 border-border text-text hover:bg-dark3 hover:text-text font-bold";
+                          countTextClass = "text-text-dim";
+                        } else {
+                          buttonClass = "bg-dark2 border-border text-text-dim hover:bg-dark3";
+                          countTextClass = "text-text-dim";
                         }
                       }
-                    }}
-                    title={!selectedDayKey ? "Por favor selecciona una fecha primero" : `Seleccionar ${shiftTimeLabel}`}
-                    className={`shrink-0 flex items-center justify-center gap-1.5 px-2 md:px-4.5 py-2.5 rounded-sm border text-xs transition-all w-full md:w-auto ${buttonClass}`}
-                  >
-                    <span className="font-inter font-bold">{t}</span>
-                    <span className="text-[10px] opacity-30">|</span>
-                    <span className={`font-inter font-bold ${countTextClass}`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          </div>
+                    }
+
+                    // Si no hay día seleccionado, forzar un estilo atenuado y deshabilitar
+                    if (!selectedDayKey) {
+                      buttonClass = "bg-dark2 border-border text-text-dim opacity-60 cursor-not-allowed";
+                      countTextClass = "text-text-dim";
+                    }
+
+                    const shiftTimeLabel = SHIFT_TIMES.find(s => `T${s.id}` === t)?.name || "";
+
+                    return (
+                      <button
+                        key={t}
+                        disabled={!selectedDayKey}
+                        onClick={() => {
+                          if (selectedDayKey) {
+                            if (selectedShiftId === t) {
+                              setSelectedShiftId("");
+                            } else {
+                              setSelectedShiftId(t);
+                            }
+                          }
+                        }}
+                        title={!selectedDayKey ? "Por favor selecciona una fecha primero" : `Seleccionar ${shiftTimeLabel}`}
+                        className={`shrink-0 flex items-center justify-center gap-1.5 px-2 md:px-4.5 py-2.5 rounded-sm border text-xs transition-all w-full md:w-auto ${buttonClass}`}
+                      >
+                        <span className="font-inter font-bold">{t}</span>
+                        <div className="w-[1px] h-3 bg-current opacity-20" />
+                        <span className={`font-inter font-bold ${countTextClass}`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Panel de Gestión del Turno Seleccionado (Debajo) */}
