@@ -676,7 +676,7 @@ export default function RemindersPage() {
           <div 
             style={{ width: '68px', height: '52px' }}
             className={cn(
-              "relative shrink-0 flex flex-col items-center justify-center gap-1 overflow-hidden rounded-lg border border-white/50 shadow-sm brightness-110 transition-all text-white bg-white/5"
+              "relative shrink-0 flex flex-col items-center justify-center gap-1 overflow-hidden rounded-lg border border-border shadow-sm transition-all text-text bg-dark3"
             )}
           >
             <div className={cn(
@@ -687,7 +687,7 @@ export default function RemindersPage() {
                 return idx >= 0 ? bgColors[idx % bgColors.length] : 'bg-dark3';
               })()
             )} />
-            <span className="font-inter font-bold text-[10px] uppercase tracking-widest text-white/90">
+            <span className="font-inter font-bold text-[10px] uppercase tracking-widest text-text">
               {EVENT_DAYS.find(d => d.key === selectedDayKey)?.label.substring(0, 3)}
             </span>
             <span className="text-base font-black leading-none drop-shadow-sm">
@@ -869,17 +869,17 @@ export default function RemindersPage() {
                         }
                       }
                     }}
-                    className={`relative overflow-hidden shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto md:flex-1 w-full text-white bg-white/5 ${isSelected
-                      ? 'border-white/50 shadow-sm scale-105 brightness-110'
-                      : 'border-white/10 opacity-80 hover:opacity-100 hover:scale-[1.02]'
+                    className={`relative overflow-hidden shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto md:flex-1 w-full bg-dark3 ${isSelected
+                      ? 'border-text text-text shadow-sm scale-105 z-10'
+                      : 'border-border text-text-dim opacity-80 hover:opacity-100 hover:scale-[1.02]'
                       }`}
                   >
                     <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${cardBg} opacity-90`} />
-                    <span className={`font-inter font-bold text-[10px] md:text-[9px] uppercase tracking-widest ${isSelected ? 'text-white/90' : 'text-white/70'}`}>
+                    <span className={`font-inter font-bold text-[10px] md:text-[9px] uppercase tracking-widest ${isSelected ? 'text-text' : 'text-text-dim'}`}>
                       {dayAbbr}
                     </span>
                     <span className="text-base md:text-sm font-black leading-none drop-shadow-sm">{day.dateNum}</span>
-                    <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? 'bg-[#10a562] shadow-[0_0_6px_rgba(16,165,98,0.6)]' : 'bg-white/20'
+                    <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? 'bg-[#10a562] shadow-[0_0_6px_rgba(16,165,98,0.6)]' : 'bg-black/10 dark:bg-white/20'
                       }`} />
                   </button>
                 );
@@ -1122,10 +1122,10 @@ export default function RemindersPage() {
                                     </button>
                                   </th>
                                   <th className="px-5 py-4 text-left w-36">Estado</th>
-                                  <th className="px-5 py-4 w-[25%]">Nombre y Apellido</th>
-                                  <th className="px-5 py-4 text-center w-[20%]">Barrio</th>
-                                  <th className="px-5 py-4 text-center w-[20%]">Estaca</th>
-                                  <th className="px-5 py-4 text-center w-[15%]">Comité</th>
+                                  <th className="px-5 py-4 text-left">Nombre y Apellido</th>
+                                  <th className="px-5 py-4 text-center">Barrio</th>
+                                  <th className="px-5 py-4 text-center">Estaca</th>
+                                  <th className="px-5 py-4 text-center">Comité</th>
                                   <th className="px-5 py-4 text-center w-px whitespace-nowrap">Acciones</th>
                                 </tr>
                               </thead>
@@ -1682,13 +1682,13 @@ export default function RemindersPage() {
                         <button
                           key={d.key}
                           onClick={() => setReassignDayKey(d.key)}
-                          className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-lg border transition-all text-white bg-white/5 ${isSelected
-                            ? 'border-white/50 shadow-sm scale-105 brightness-110 z-10'
-                            : 'border-white/10 opacity-60 hover:opacity-100'
+                          className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-lg border transition-all bg-dark3 ${isSelected
+                            ? 'border-text text-text shadow-sm scale-105 z-10'
+                            : 'border-border text-text-dim opacity-70 hover:opacity-100'
                             }`}
                         >
                           <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${cardBg} opacity-90`} />
-                          <span className={`font-inter font-bold text-[9px] uppercase tracking-widest ${isSelected ? 'text-white/90' : 'text-white/70'}`}>
+                          <span className={`font-inter font-bold text-[9px] uppercase tracking-widest ${isSelected ? 'text-text' : 'text-text-dim'}`}>
                             {dayAbbr}
                           </span>
                           <span className="text-sm font-black leading-none mt-0.5 drop-shadow-sm">{d.dateNum}</span>

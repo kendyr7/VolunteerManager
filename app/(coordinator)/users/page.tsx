@@ -667,9 +667,9 @@ export default function UsersPage() {
             <table className="w-full text-sm text-left border-separate border-spacing-0">
               <thead className="bg-dark3/80 sticky top-[140px] z-10 backdrop-blur-md text-[10px] font-bold text-text-dim uppercase tracking-wider">
                 <tr>
-                  <th className="px-5 py-4 w-full">Usuario</th>
-                  <th className="px-3 py-4 w-px whitespace-nowrap">Teléfono</th>
-                  <th className="px-3 py-4 w-px whitespace-nowrap">Rol y Acceso</th>
+                  <th className="px-5 py-4">Usuario</th>
+                  <th className="px-3 py-4">Teléfono</th>
+                  <th className="px-3 py-4">Rol y Acceso</th>
                   <th className="px-3 py-4 text-center w-px whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
@@ -696,15 +696,15 @@ export default function UsersPage() {
                           className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
                           onClick={() => handleEditClick(user)}
                         >
-                          <td className="px-5 py-4 w-full">
+                          <td className="px-5 py-4">
                             <p className={USER_TABLE_STYLES.name}>
                               <HighlightText text={user.name} term={searchTerm} />
                             </p>
                           </td>
-                          <td className={cn("px-3 py-4 w-px whitespace-nowrap", USER_TABLE_STYLES.phone)}>
+                          <td className={cn("px-3 py-4", USER_TABLE_STYLES.phone)}>
                             {user.phone}
                           </td>
-                          <td className="px-3 py-4 w-px whitespace-nowrap">
+                          <td className="px-3 py-4">
                             <div className="flex items-center gap-2">
                               <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.role === 'Admin' ? USER_TABLE_STYLES.roleAdmin : USER_TABLE_STYLES.roleEditor)}>
                                 {user.role}
