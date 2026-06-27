@@ -559,32 +559,37 @@ export default function ShiftsPage() {
     const cardBg = bgColors[dayIndex % bgColors.length];
 
     return (
-      <div key={key} className={`rounded-[20px] shadow-md h-fit self-start w-full ${cardBg}`}>
-        <button
-          onClick={() => toggleDay(key)}
-          className="w-full flex items-center justify-between px-6 sm:px-8 py-5 text-left hover:brightness-110 rounded-[20px] transition-transform hover:scale-[1.01] active:scale-[0.99]"
-        >
-          {/* Left: Date */}
-          <div className="flex-1 min-w-0 pr-4 flex items-center">
-            <p className="font-inter font-bold text-white text-[13px] drop-shadow-sm truncate capitalize">
-              {format(date, "EEEE", { locale: es })} {dateNum}
-            </p>
-          </div>
+      <div key={key} className={`rounded-[20px] shadow-sm h-fit self-start w-full bg-white dark:bg-dark2 border border-border overflow-hidden transition-transform duration-200 flex`}>
+        {/* Etiqueta de color lateral estructural */}
+        <div className={`w-3 shrink-0 ${cardBg} opacity-90`} />
+        
+        {/* Contenedor del contenido */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <button
+            onClick={() => toggleDay(key)}
+            className="w-full flex items-center justify-between px-5 sm:px-6 py-5 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/5 active:scale-[0.99]"
+          >
+            {/* Left: Date */}
+            <div className="flex-1 min-w-0 pr-4 flex items-center">
+              <p className="font-inter font-bold text-text text-[13px] truncate capitalize">
+                {format(date, "EEEE", { locale: es })} {dateNum}
+              </p>
+            </div>
 
-          {/* Right: 4 Columns */}
-          <div className="flex items-center shrink-0 ml-auto">
-            {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
-              const count = shiftData[t].length;
+            {/* Right: 4 Columns */}
+            <div className="flex items-center shrink-0 ml-auto">
+              {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
+                const count = shiftData[t].length;
 
-              return (
-                <div key={t} className={`flex flex-col items-center justify-center w-12 sm:w-16 ${i !== 0 ? 'border-l border-white/20' : ''}`}>
-                  <span className="text-[16px] font-semibold text-white drop-shadow-sm leading-none">{count}</span>
-                  <span className="font-inter text-[10px] font-bold text-white/80 uppercase mt-1 tracking-widest">{t}</span>
-                </div>
-              );
-            })}
-          </div>
-        </button>
+                return (
+                  <div key={t} className={`flex flex-col items-center justify-center w-12 sm:w-16 ${i !== 0 ? 'border-l border-border' : ''}`}>
+                    <span className="text-[16px] font-semibold text-text leading-none">{count}</span>
+                    <span className="font-inter text-[10px] font-bold text-text-dim uppercase mt-1 tracking-widest">{t}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </button>
 
         {isOpen && (
           <>
@@ -880,6 +885,7 @@ export default function ShiftsPage() {
             </div>
           </>
         )}
+        </div>
       </div>
     );
   };

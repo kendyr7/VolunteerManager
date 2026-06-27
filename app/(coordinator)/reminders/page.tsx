@@ -1436,11 +1436,14 @@ export default function RemindersPage() {
                         const cardBg = bgColors[index % bgColors.length];
 
                         return (
-                          <div key={d.key} className={`${cardBg} rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01]`}>
-                            <div className="w-full flex items-center justify-between px-5 sm:px-6 py-4">
+                          <div key={d.key} className={`rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01] bg-white/5 border border-white/10 flex`}>
+                            {/* Etiqueta de color lateral estructural */}
+                            <div className={`w-3 shrink-0 ${cardBg} opacity-90`} />
+                            
+                            <div className="flex-1 flex items-center justify-between px-5 sm:px-6 py-4">
                               {/* Left: Date */}
                               <div className="flex-1 min-w-0 pr-4 flex items-center">
-                                <p className="font-inter font-bold text-white text-[13px] drop-shadow-sm truncate capitalize">
+                                <p className="font-inter font-bold text-white text-[13px] truncate capitalize">
                                   {d.label} {d.dateNum}
                                 </p>
                               </div>
@@ -1454,12 +1457,12 @@ export default function RemindersPage() {
                                       key={t}
                                       disabled={!isEditingShifts}
                                       onClick={() => toggleShift(d.key, t)}
-                                      className={`flex flex-col items-center justify-center w-12 sm:w-16 h-full ${i !== 0 ? 'border-l border-white/20' : ''} transition-colors ${isEditingShifts ? 'hover:bg-white/20 rounded-lg' : ''} ${active ? 'opacity-100' : 'opacity-50'}`}
+                                      className={`flex flex-col items-center justify-center w-12 sm:w-16 h-full ${i !== 0 ? 'border-l border-white/10' : ''} transition-colors ${isEditingShifts ? 'hover:bg-white/10 rounded-lg' : ''} ${active ? 'opacity-100' : 'opacity-40'}`}
                                     >
-                                      <span className={`text-[16px] font-semibold drop-shadow-sm leading-none ${active ? 'text-white' : 'text-white'}`}>
+                                      <span className={`text-[16px] font-semibold leading-none ${active ? 'text-white' : 'text-white'}`}>
                                         {active ? '✓' : '-'}
                                       </span>
-                                      <span className={`font-inter text-[10px] font-bold uppercase mt-1 tracking-widest ${active ? 'text-white/90' : 'text-white/70'}`}>
+                                      <span className={`font-inter text-[10px] font-bold uppercase mt-1 tracking-widest ${active ? 'text-white/90' : 'text-white/50'}`}>
                                         {t}
                                       </span>
                                     </button>
