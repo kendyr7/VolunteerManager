@@ -9,6 +9,7 @@ export type AuthState = {
   redirectTo?: string;
   role?: string;
   committee?: string;
+  name?: string;
   force_pin_change?: boolean;
   user_id?: string;
   user_type?: 'profile' | 'volunteer';
@@ -62,7 +63,8 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
       success: true, 
       redirectTo,
       role,
-      committee: committeeName
+      committee: committeeName,
+      name: profile.full_name
     };
   }
 
@@ -99,7 +101,8 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
       success: true, 
       redirectTo: '/calendar',
       role: 'Lector', // Los voluntarios ven su perfil tipo Lector
-      committee: committeeName
+      committee: committeeName,
+      name: `${volunteer.first_name} ${volunteer.last_name}`.trim()
     };
   }
 

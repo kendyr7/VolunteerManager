@@ -26,6 +26,10 @@ export function LoginForm() {
   const [userData, setUserData] = useState<{ id: string, type: 'profile' | 'volunteer' } | null>(null);
   const [preferredAuthMethod, setPreferredAuthMethod] = useState<'pin' | 'biometrics'>('pin');
 
+  // Remember User State
+  const [savedUserMode, setSavedUserMode] = useState(false);
+  const [savedName, setSavedName] = useState("");
+
   useEffect(() => {
     const savedPhone = localStorage.getItem("volunteer_phone");
     if (savedPhone) {
@@ -34,6 +38,11 @@ export function LoginForm() {
     const savedMethod = localStorage.getItem("preferred_auth_method");
     if (savedMethod === 'biometrics') {
       setPreferredAuthMethod('biometrics');
+    }
+    const savedName = localStorage.getItem("volunteer_name");
+    if (savedName && savedPhone) {
+      setSavedUserMode(true);
+      setSavedName(savedName);
     }
   }, []);
 
@@ -44,40 +53,45 @@ export function LoginForm() {
     }
     
     setError(null);
-    startTransition(async () => {
-      try {
-        const resp = await fetch('/api/webauthn/authenticate/generate-options', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone })
-        });
-        
-        if (!resp.ok) {
-          const errData = await resp.json();
-          throw new Error(errData.error || 'Error al generar opciones de autenticación');
-        }
-
-        const options = await resp.json();
-        const asseResp = await startAuthentication(options);
-
-        const verifyResp = await fetch('/api/webauthn/authenticate/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(asseResp)
-        });
-
-        const verifyData = await verifyResp.json();
-        
-        if (verifyData.verified) {
-          localStorage.setItem("preferred_auth_method", "biometrics");
-          finishLogin(verifyData);
-        } else {
-          throw new Error('La huella no pudo ser verificada.');
-        }
-      } catch (err: any) {
-        setError(err.message || "Error al autenticar con huella");
+    try {
+      const resp = await fetch('/api/webauthn/authenticate/generate-options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      });
+      
+      if (!resp.ok) {
+        const errData = await resp.json();
+        throw new Error(errData.error || 'Error al generar opciones de autenticación');
       }
-    });
+
+      const options = await resp.json();
+      const asseResp = await startAuthentication(options);
+
+      // Sólo mostrar el overlay de carga DESPUÉS de que pone la huella
+      startTransition(async () => {
+        try {
+          const verifyResp = await fetch('/api/webauthn/authenticate/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(asseResp)
+          });
+
+          const verifyData = await verifyResp.json();
+          
+          if (verifyData.verified) {
+            localStorage.setItem("preferred_auth_method", "biometrics");
+            finishLogin(verifyData);
+          } else {
+            throw new Error('La huella no pudo ser verificada.');
+          }
+        } catch (err: any) {
+          setError(err.message || "Error al verificar la huella");
+        }
+      });
+    } catch (err: any) {
+      setError("Huella no reconocida, inténtelo de nuevo.");
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -142,6 +156,9 @@ export function LoginForm() {
 
   const finishLogin = (result: any) => {
     localStorage.setItem("volunteer_phone", phone || result.phone);
+    if (result.name) {
+      localStorage.setItem("volunteer_name", result.name);
+    }
     if (!localStorage.getItem("preferred_auth_method")) {
       localStorage.setItem("preferred_auth_method", "pin");
     }
@@ -173,24 +190,50 @@ export function LoginForm() {
             onSubmit={handleSubmit} 
             className="space-y-5"
           >
-            <div className="space-y-2">
-              <Label htmlFor="phone" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
-                Número de Teléfono
-              </Label>
-              <div className="relative group">
-                <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">call</span>
-                <input
-                  id="phone"
-                  type="tel"
-                  placeholder="8888 8888"
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all placeholder:text-slate-500"
-                  disabled={isPending}
-                />
+            {savedUserMode ? (
+              <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#4d7cfe]/20 text-[#4d7cfe] flex items-center justify-center font-bold font-inter">
+                    {savedName.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white font-inter">{savedName}</p>
+                    <p className="text-[11px] text-slate-400 font-inter">{phone}</p>
+                  </div>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => { 
+                    setSavedUserMode(false); 
+                    localStorage.removeItem('volunteer_name'); 
+                    localStorage.removeItem('volunteer_phone');
+                    setPhone(''); 
+                  }}
+                  className="text-xs font-bold text-slate-400 hover:text-white transition-colors"
+                >
+                  Cambiar
+                </button>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
+                  Número de Teléfono
+                </Label>
+                <div className="relative group">
+                  <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">call</span>
+                  <input
+                    id="phone"
+                    type="tel"
+                    placeholder="8888 8888"
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all placeholder:text-slate-500"
+                    disabled={isPending}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="pin" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
@@ -218,11 +261,11 @@ export function LoginForm() {
             {error && (
               <div className="p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
                 <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
-                <p className="text-sm font-bold text-red">{error}</p>
+                <p className="text-sm font-inter font-bold text-red">{error}</p>
               </div>
             )}
 
-            <div className="flex gap-2">
+            <div className="flex lg:block gap-2">
               <button 
                 type="submit" 
                 className="w-full h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 group"
@@ -244,7 +287,7 @@ export function LoginForm() {
               <button
                 type="button"
                 onClick={handleBiometricLogin}
-                className={`h-12 px-4 rounded-sm font-bold shadow-lg transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 shrink-0 border ${preferredAuthMethod === 'biometrics' ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-[#4d7cfe]/20' : 'bg-dark2 border-white/10 text-white hover:bg-white/10'}`}
+                className={`lg:hidden h-12 px-4 rounded-sm font-bold shadow-lg transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 shrink-0 border ${preferredAuthMethod === 'biometrics' ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-[#4d7cfe]/20' : 'bg-dark2 border-white/10 text-white hover:bg-white/10'}`}
                 disabled={isPending || !phone}
                 title="Iniciar sesión con huella dactilar"
               >
@@ -320,7 +363,7 @@ export function LoginForm() {
             {error && (
               <div className="p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
-                <p className="text-sm font-bold text-red">{error}</p>
+                <p className="text-sm font-inter font-bold text-red">{error}</p>
               </div>
             )}
 

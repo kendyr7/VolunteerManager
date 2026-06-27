@@ -77,10 +77,13 @@ export async function POST(request: Request) {
       let committeeName = '';
       let redirectTo = '/calendar';
 
+      let name = '';
+
       if (userType === 'profile') {
         const { data: profile } = await supabase.from('profiles').select('*, committees(name)').eq('id', userId).single();
         role = profile.role;
         committeeName = profile.committees?.name || '';
+        name = profile.full_name;
         cookieStore.set('session', `coordinator-${role}-${committeeName}`, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
@@ -93,6 +96,7 @@ export async function POST(request: Request) {
       } else {
         const { data: volunteer } = await supabase.from('volunteers').select('*, committees(name)').eq('id', userId).single();
         committeeName = volunteer.committees?.name || '';
+        name = `${volunteer.first_name} ${volunteer.last_name}`.trim();
         cookieStore.set('session', `volunteer-${volunteer.id}-${committeeName}`, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
@@ -106,6 +110,7 @@ export async function POST(request: Request) {
         redirectTo, 
         role, 
         committee: committeeName,
+        name,
         phone // Send phone back to save in localStorage if needed
       });
     }

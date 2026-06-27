@@ -42,6 +42,8 @@ export function AnimatedLogo({ className, isLooping = false }: { className?: str
     <motion.svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 543.06 543.01"
+      width="100%"
+      height="100%"
       className={cn("text-white", className)}
       initial="hidden"
       animate={isLooping ? "visible" : undefined}

@@ -40,6 +40,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isRegisteringPasskey, setIsRegisteringPasskey] = useState(false);
+  const [hasPasskey, setHasPasskey] = useState(false);
 
   // Form states for profile
   const [editName, setEditName] = useState('');
@@ -94,6 +95,16 @@ export default function SettingsPage() {
         setSelectedConfigCommittees([userComm]);
       } else if (role === 'Admin') {
         setSelectedConfigCommittees(['Seguridad']); // Default for admin
+      }
+
+      // Check if user has passkeys
+      const { data: passkeys } = await supabase
+        .from('passkeys')
+        .select('id')
+        .eq('user_id', user.id);
+      
+      if (passkeys && passkeys.length > 0) {
+        setHasPasskey(true);
       }
     }
     setLoading(false);
@@ -217,12 +228,13 @@ export default function SettingsPage() {
       const verifyData = await verifyResp.json();
       
       if (verifyData.verified) {
+        setHasPasskey(true);
         showToast("Huella registrada correctamente");
       } else {
         throw new Error("No se pudo verificar la huella");
       }
     } catch (err: any) {
-      showToast(err.message || "Error al registrar la huella", "error");
+      showToast("Registro cancelado o dispositivo no compatible.", "error");
     } finally {
       setIsRegisteringPasskey(false);
     }
@@ -348,8 +360,8 @@ export default function SettingsPage() {
         </form>
       </motion.div>
 
-      {/* Seguridad & Autenticación */}
-      <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden mb-8">
+      {/* Seguridad & Autenticación (Solo móvil/tablet por ahora) */}
+      <motion.div variants={itemVariants} className="lg:hidden bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden mb-8">
         <div className="p-6 md:p-8 border-b border-white/5 flex items-center justify-between bg-dark3">
           <div>
             <h3 className="font-bold text-text tracking-tight leading-none mb-2">Seguridad y Acceso</h3>
@@ -374,10 +386,10 @@ export default function SettingsPage() {
             <Button 
               type="button" 
               onClick={handleRegisterPasskey}
-              disabled={isRegisteringPasskey} 
-              className="bg-white/10 hover:bg-white/20 text-white font-bold px-6 h-10 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto"
+              disabled={isRegisteringPasskey || hasPasskey} 
+              className={`font-bold px-6 h-10 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto ${hasPasskey ? 'bg-[#4d7cfe]/10 text-[#4d7cfe] border border-[#4d7cfe]/20' : 'bg-white/10 hover:bg-white/20 text-white'}`}
             >
-              {isRegisteringPasskey ? 'Registrando...' : 'Vincular Dispositivo'}
+              {isRegisteringPasskey ? 'Registrando...' : hasPasskey ? 'Dispositivo Vinculado' : 'Vincular Dispositivo'}
             </Button>
           </div>
         </div>
