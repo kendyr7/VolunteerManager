@@ -240,6 +240,26 @@ export default function SettingsPage() {
     }
   };
 
+  const handleDeletePasskey = async () => {
+    if (!userProfile) return;
+    setIsRegisteringPasskey(true);
+    try {
+      const resp = await fetch('/api/webauthn/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userProfile.id })
+      });
+      if (!resp.ok) throw new Error('Error al desvincular huella');
+      setHasPasskey(false);
+      localStorage.setItem("preferred_auth_method", "pin"); // Reset auth method to pin
+      showToast("Huella desvinculada correctamente");
+    } catch (err: any) {
+      showToast("Error al desvincular huella", "error");
+    } finally {
+      setIsRegisteringPasskey(false);
+    }
+  };
+
   // Permissions Data
   const ALL_PERMISSIONS = ['Ver voluntarios', 'Editar turnos', 'Enviar mensajes', 'Ver reportes', 'Importar datos', 'Configurar ajustes'];
   const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -383,14 +403,25 @@ export default function SettingsPage() {
               </div>
             </div>
             
-            <Button 
-              type="button" 
-              onClick={handleRegisterPasskey}
-              disabled={isRegisteringPasskey || hasPasskey} 
-              className={`font-bold px-6 h-10 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto ${hasPasskey ? 'bg-[#4d7cfe]/10 text-[#4d7cfe] border border-[#4d7cfe]/20' : 'bg-white/10 hover:bg-white/20 text-white'}`}
-            >
-              {isRegisteringPasskey ? 'Registrando...' : hasPasskey ? 'Dispositivo Vinculado' : 'Vincular Dispositivo'}
-            </Button>
+            {hasPasskey ? (
+              <Button 
+                type="button" 
+                onClick={handleDeletePasskey}
+                disabled={isRegisteringPasskey} 
+                className="font-bold px-6 h-10 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-red/10 text-red hover:bg-red/20 border border-red/20"
+              >
+                {isRegisteringPasskey ? 'Desvinculando...' : 'Desvincular Dispositivo'}
+              </Button>
+            ) : (
+              <Button 
+                type="button" 
+                onClick={handleRegisterPasskey}
+                disabled={isRegisteringPasskey} 
+                className="font-bold px-6 h-10 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-white/10 hover:bg-white/20 text-white"
+              >
+                {isRegisteringPasskey ? 'Registrando...' : 'Vincular Dispositivo'}
+              </Button>
+            )}
           </div>
         </div>
       </motion.div>
