@@ -7,7 +7,7 @@ import { es } from "date-fns/locale";
 
 const SECRET = process.env.JWT_SECRET || "default_volunteer_manager_secret_key_123456";
 
-// Parse day key to actual date in Sept 2026
+// Parse day key to actual Date representing the end of the shift in Nicaragua timezone (UTC-6)
 function parseShiftDateTime(dayKey: string, shiftKey: string): Date {
   const dayNumPart = dayKey.split(' ')[1];
   const dayNum = parseInt(dayNumPart) || 10; // Fallback to 10
@@ -17,21 +17,25 @@ function parseShiftDateTime(dayKey: string, shiftKey: string): Date {
   if (shiftKey === 'T3') endHour = 18;
   if (shiftKey === 'T4') endHour = 22;
 
-  // Event is in September 2026 (Month index 8 in JS Dates)
-  return new Date(2026, 8, dayNum, endHour, 0, 0);
+  // Nicaragua is UTC-6. So UTC Time = Nicaragua Time + 6 hours.
+  // Using Date.UTC guarantees a timezone-independent absolute epoch timestamp.
+  const utcMillis = Date.UTC(2026, 8, dayNum, endHour + 6, 0, 0);
+  return new Date(utcMillis);
 }
 
-// Check if current time is within a shift window (with 45 min buffer before/after)
+// Check if current time is within a shift window (with 45 min buffer before/after) based on America/Managua time
 function isCurrentTimeInShiftWindow(dayKey: string, shiftKey: string): boolean {
-  const now = new Date();
+  // Get current time in America/Managua timezone
+  const nicaString = new Date().toLocaleString("en-US", { timeZone: "America/Managua" });
+  const nicaNow = new Date(nicaString);
   
   // Format current date to day_key: e.g. "mié 16"
-  const currentDayKey = format(now, "EEE d", { locale: es }).toLowerCase();
+  const currentDayKey = format(nicaNow, "EEE d", { locale: es }).toLowerCase();
   if (dayKey.toLowerCase() !== currentDayKey) {
     return false;
   }
 
-  const currentHour = now.getHours() + now.getMinutes() / 60;
+  const currentHour = nicaNow.getHours() + nicaNow.getMinutes() / 60;
 
   // Window definitions (StartHour - 45 min buffer to EndHour + 45 min buffer)
   let startWindow = 7.25; // T1 starts at 8:00 AM (7:15 AM)
@@ -219,9 +223,10 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
     };
   }
 
-  // Filter shifts for today
-  const now = new Date();
-  const todayKey = format(now, "EEE d", { locale: es }).toLowerCase();
+  // Filter shifts for today (based on America/Managua time)
+  const nicaString = new Date().toLocaleString("en-US", { timeZone: "America/Managua" });
+  const nicaNow = new Date(nicaString);
+  const todayKey = format(nicaNow, "EEE d", { locale: es }).toLowerCase();
   
   const todayShifts = shifts.filter(s => s.day_key.toLowerCase() === todayKey);
 

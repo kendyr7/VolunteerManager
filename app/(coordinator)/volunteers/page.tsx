@@ -853,17 +853,6 @@ export default function VolunteersPage() {
                   {(() => {
                     const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
                     const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
-                    let totalAssigned = 0;
-                    let totalConfirmed = 0;
-                    for (const [day, shifts] of Object.entries(shiftsByDay)) {
-                      for (const shift of shifts) {
-                        totalAssigned++;
-                        if (confirmedReminders[`${editingVolunteer.id}-${day}-${shift}`]) {
-                          totalConfirmed++;
-                        }
-                      }
-                    }
-                    const dynamicReliability = totalAssigned === 0 ? '-' : Math.round((totalConfirmed / totalAssigned) * 100);
 
                     return (
                       <>
@@ -877,8 +866,8 @@ export default function VolunteersPage() {
                         </div>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
                           <span className="text-drawer-kpi-value text-white drop-shadow-md">
-                            {dynamicReliability}
-                            {dynamicReliability !== '-' && <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>}
+                            {editingVolunteer.reliability}
+                            <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>
                           </span>
                           <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Confia.</span>
                         </div>

@@ -79,6 +79,8 @@ export default function CoordinatorDashboard() {
     return defaults;
   });
 
+  const [dbCheckedInMap, setDbCheckedInMap] = useState<Record<string, boolean>>({});
+
   const supabase = createClient();
 
   const loadData = async () => {
@@ -99,6 +101,8 @@ export default function CoordinatorDashboard() {
       .select('*');
 
     const gShifts: Record<string, Record<string, string[]>> = {};
+    const cMap: Record<string, boolean> = {};
+
     if (shiftsData) {
       shiftsData.forEach(s => {
         if (s.volunteer_id) {
@@ -111,18 +115,22 @@ export default function CoordinatorDashboard() {
           if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
             gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
           }
+          if (s.checked_in) {
+            cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
+          }
         }
       });
     }
 
     setGlobalShifts(gShifts);
+    setDbCheckedInMap(cMap);
 
     if (volsData) {
       const mapped = volsData.map((v: any) => ({
         id: v.id,
         name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
         committee: v.committees?.name || 'Sin comité',
-        reliability: 100
+        reliability: v.reliability_score ?? 100
       }));
       setVolunteers(mapped);
     }
@@ -257,7 +265,7 @@ export default function CoordinatorDashboard() {
       Object.entries(days).forEach(([day, shifts]) => {
         shifts.forEach(shift => {
           totalGlobalAssigned++;
-          if (confirmedReminders[`${volId}-${day}-${shift}`]) {
+          if (dbCheckedInMap[`${volId}-${day}-${shift}`]) {
             totalGlobalConfirmed++;
           }
         });
@@ -274,7 +282,7 @@ export default function CoordinatorDashboard() {
       criticalAlerts,
       averageReliability
     };
-  }, [volunteers, committeesList, globalShifts, committeeRequirements, confirmedReminders]);
+  }, [volunteers, committeesList, globalShifts, committeeRequirements, dbCheckedInMap]);
 
   const committeeStatus = useMemo(() => {
     return committeesList.map((c, index) => {
@@ -539,21 +547,18 @@ export default function CoordinatorDashboard() {
                 <div className="p-3 bg-dark3 rounded-sm group-hover:bg-blue-500 transition-colors duration-300 text-text">
                   <span className="material-symbols-outlined text-[20px]">person_check</span>
                 </div>
-                <span className="material-symbols-outlined text-[20px] text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity">trending_up</span>
+                <span className="material-symbols-outlined text-[20px] text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity">trending_up</span>
               </div>
               <div className="space-y-1">
                 <h3 className="font-bold tracking-tighter text-text">
                   {globalStats.averageReliability}%
                 </h3>
-                <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Compromiso Real</p>
+                <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Asistencia General</p>
               </div>
               <div className="mt-3 sm:mt-6 flex items-center gap-2">
-                <div className="flex -space-x-2">
-                  {[1, 2, 3].map(i => (
-                    <div key={i} className="w-5 h-5 rounded-full border border-dark bg-border" />
-                  ))}
-                </div>
-                <p className="text-[10px] text-teal-400 font-inter font-bold uppercase tracking-widest">Altamente Confiable</p>
+                <p className="text-[10px] text-text-dim font-inter font-bold uppercase tracking-widest">
+                  Confirmaciones por QR hoy
+                </p>
               </div>
             </div>
             {/* Visual Flare */}
