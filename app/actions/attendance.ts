@@ -114,47 +114,57 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
   let volunteerId = "";
   
   if (manualShiftId) {
-    // Manual override check-in for a specific shift ID
-    const { data: shift, error: shiftErr } = await supabase
-      .from('shifts')
-      .select('volunteer_id')
-      .eq('id', manualShiftId)
-      .single();
+    try {
+      // Manual override check-in for a specific shift ID
+      const { data: shift, error: shiftErr } = await supabase
+        .from('shifts')
+        .select('volunteer_id')
+        .eq('id', manualShiftId)
+        .single();
 
-    if (shiftErr || !shift) {
-      return { error: "No se encontró el turno seleccionado." };
-    }
-    volunteerId = shift.volunteer_id;
+      if (shiftErr || !shift) {
+        return { error: "No se encontró el turno seleccionado." };
+      }
+      volunteerId = shift.volunteer_id;
 
-    const { error: updateErr } = await supabase
-      .from('shifts')
-      .update({
+      const FALLBACK_ID = '99999999-9999-9999-9999-999999999999';
+      const updatePayload: Record<string, unknown> = {
         checked_in: true,
         checked_in_at: new Date().toISOString(),
-        checked_in_by: coordinatorId
-      })
-      .eq('id', manualShiftId);
+      };
+      if (coordinatorId && coordinatorId !== FALLBACK_ID) {
+        updatePayload.checked_in_by = coordinatorId;
+      }
 
-    if (updateErr) {
-      console.error("Error updating manual check-in:", updateErr);
-      return { error: "Error al registrar la asistencia." };
+      const { error: updateErr } = await supabase
+        .from('shifts')
+        .update(updatePayload)
+        .eq('id', manualShiftId);
+
+      if (updateErr) {
+        console.error("Error updating manual check-in:", updateErr);
+        return { error: "Error al registrar la asistencia en la base de datos." };
+      }
+
+      await recalculateReliability(volunteerId);
+
+      // Fetch volunteer details to return
+      const { data: vol } = await supabase
+        .from('volunteers')
+        .select('*, committees(name)')
+        .eq('id', volunteerId)
+        .single();
+
+      return {
+        success: true,
+        message: "Asistencia registrada manualmente.",
+        volunteer: vol ? `${vol.first_name} ${vol.last_name}` : "Voluntario",
+        committee: vol?.committees?.name || "Sin comité"
+      };
+    } catch (manualErr) {
+      console.error("Unexpected error in manual check-in:", manualErr);
+      return { error: "Error inesperado al registrar la asistencia." };
     }
-
-    await recalculateReliability(volunteerId);
-
-    // Fetch volunteer details to return
-    const { data: vol } = await supabase
-      .from('volunteers')
-      .select('*, committees(name)')
-      .eq('id', volunteerId)
-      .single();
-
-    return {
-      success: true,
-      message: "Asistencia registrada manualmente.",
-      volunteer: vol ? `${vol.first_name} ${vol.last_name}` : "Voluntario",
-      committee: vol?.committees?.name || "Sin comité"
-    };
   }
 
   // standard QR scan flow
@@ -230,15 +240,19 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       };
     }
 
-    // Automatic check-in for this active shift
-    const { error: checkinErr } = await supabase
-      .from('shifts')
-      .update({
+      const FALLBACK_ID = '99999999-9999-9999-9999-999999999999';
+      const autoPayload: Record<string, unknown> = {
         checked_in: true,
         checked_in_at: new Date().toISOString(),
-        checked_in_by: coordinatorId
-      })
-      .eq('id', activeShift.id);
+      };
+      if (coordinatorId && coordinatorId !== FALLBACK_ID) {
+        autoPayload.checked_in_by = coordinatorId;
+      }
+
+      const { error: checkinErr } = await supabase
+        .from('shifts')
+        .update(autoPayload)
+        .eq('id', activeShift.id);
 
     if (checkinErr) {
       return { error: "Error al registrar la asistencia en base de datos." };
