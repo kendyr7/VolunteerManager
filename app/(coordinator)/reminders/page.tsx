@@ -76,10 +76,23 @@ export default function RemindersPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [isMobileSelectorExpanded, setIsMobileSelectorExpanded] = useState(true);
 
+  // User Role/Committee isolation
+  const [currentUserRole, setCurrentUserRole] = useState<string>('Admin');
+  const [currentUserCommittee, setCurrentUserCommittee] = useState<string>('');
+
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener("resize", checkMobile);
+
+    const role = localStorage.getItem('mock_role') || 'Admin';
+    const committee = localStorage.getItem('mock_committee') || '';
+    setCurrentUserRole(role);
+    setCurrentUserCommittee(committee);
+    if (role === 'Editor' && committee) {
+      setSelectedCommittees([committee]);
+    }
+
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
@@ -154,10 +167,24 @@ export default function RemindersPage() {
   const [reassignShiftId, setReassignShiftId] = useState<string>("");
 
   const loadData = async () => {
-    // Fetch volunteers
-    const { data: volsData, error: volsError } = await supabase
-      .from('volunteers')
-      .select('*, committees(name)');
+    const role = localStorage.getItem('mock_role') || 'Admin';
+    const committee = localStorage.getItem('mock_committee') || '';
+
+    let query = supabase.from('volunteers').select('*, committees(name)');
+
+    if (role === 'Editor' && committee) {
+      const { data: commObj } = await supabase
+        .from('committees')
+        .select('id')
+        .eq('name', committee)
+        .maybeSingle();
+
+      if (commObj) {
+        query = query.eq('committee_id', commObj.id);
+      }
+    }
+
+    const { data: volsData, error: volsError } = await query;
 
     if (volsError) {
       console.error("Error loading volunteers:", volsError);
@@ -879,7 +906,7 @@ export default function RemindersPage() {
                       {dayAbbr}
                     </span>
                     <span className="text-base md:text-sm font-black leading-none drop-shadow-sm">{day.dateNum}</span>
-                    <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? 'bg-[#10a562] shadow-[0_0_6px_rgba(16,165,98,0.6)]' : 'bg-black/10 dark:bg-white/20'
+                    <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? 'bg-[#10a562] shadow-[0_0_6px_rgba(16,165,98,0.6)]' : 'bg-neutral-300 dark:bg-neutral-700'
                       }`} />
                   </button>
                 );
