@@ -194,7 +194,7 @@ export default function VolunteersPage() {
       onConfirm: async () => {
         const { error } = await supabase
           .from('volunteers')
-          .update({ pin_hash: '1234' })
+          .update({ pin: '1234' })
           .eq('id', vol.id);
 
         if (error) {
@@ -407,6 +407,10 @@ export default function VolunteersPage() {
           last_name,
           phone: newPhone,
           committee_id: newCommitteeId || null,
+          stake: newStake,
+          neighborhood: newWard,
+          pin: '1234',
+          status: 'active'
         }
       ]);
 

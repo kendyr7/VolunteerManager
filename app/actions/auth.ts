@@ -19,6 +19,8 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
   const phone = (formData.get('phone') as string || '').replace(/\s+/g, '');
   const pin = formData.get('pin') as string;
 
+  console.log("AUTH_LOG: Received login request", { phone, pin, pin_length: pin?.length });
+
   if (!phone || !pin) {
     return { error: 'Por favor, ingresa tu teléfono y PIN.' };
   }
@@ -48,7 +50,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     const role = profile.role;
     const committeeName = profile.committees?.name || '';
     
-    cookieStore.set('session', `coordinator-${role}-${committeeName}`, {
+    cookieStore.set('session', encodeURIComponent(`coordinator-${role}-${committeeName}`), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 7, // 7 días
@@ -90,7 +92,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     const cookieStore = await cookies();
     const committeeName = volunteer.committees?.name || '';
 
-    cookieStore.set('session', `volunteer-${volunteer.id}-${committeeName}`, {
+    cookieStore.set('session', encodeURIComponent(`volunteer-${volunteer.id}-${committeeName}`), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 7, // 7 días

@@ -391,16 +391,14 @@ export default function SettingsPage() {
         
         <div className="p-6 md:p-8 space-y-6">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-[#4d7cfe]/10 text-[#4d7cfe] shrink-0">
-                <span className="material-symbols-outlined text-[24px]">fingerprint</span>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-text mb-1">Inicio de Sesión Biométrico</p>
-                <p className="text-xs text-text-dim leading-relaxed max-w-sm">
-                  Vincula este dispositivo para iniciar sesión usando tu huella dactilar, Face ID o método de bloqueo seguro del sistema sin necesidad de introducir un PIN.
-                </p>
-              </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-text mb-2 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#4d7cfe] text-[20px] shrink-0">fingerprint</span>
+                Inicio de Sesión Biométrico
+              </p>
+              <p className="text-xs text-text-dim leading-relaxed max-w-xl font-inter font-bold">
+                Vincula este dispositivo para iniciar sesión usando tu huella dactilar, Face ID o método de bloqueo seguro del sistema sin necesidad de introducir un PIN.
+              </p>
             </div>
             
             {hasPasskey ? (

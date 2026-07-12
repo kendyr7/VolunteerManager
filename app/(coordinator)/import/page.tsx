@@ -67,21 +67,90 @@ export default function ImportPage() {
 
   const handleParse = () => {
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
-    const data = lines.map(line => {
-      const parts = line.split(',');
-      const fullName = parts[0]?.trim() || '';
-      const nameParts = fullName.split(' ');
+    if (lines.length === 0) return;
+
+    // Detect delimiter
+    const firstLine = lines[0] || '';
+    let delimiter = ',';
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    
+    if (tabCount > commaCount && tabCount > semicolonCount) {
+      delimiter = '\t';
+    } else if (semicolonCount > commaCount && semicolonCount > tabCount) {
+      delimiter = ';';
+    }
+
+    // Helper to clean quotes and trim
+    const clean = (str: string) => (str || '').replace(/^["']|["']$/g, '').trim();
+
+    // Detect headers
+    const normalizedFirstLine = firstLine.toLowerCase();
+    const hasHeader = normalizedFirstLine.includes('nombre') || 
+                      normalizedFirstLine.includes('tel') || 
+                      normalizedFirstLine.includes('barrio') || 
+                      normalizedFirstLine.includes('estaca') || 
+                      normalizedFirstLine.includes('comit') ||
+                      normalizedFirstLine.includes('edad');
+
+    let nameIdx = 0;
+    let ageIdx = 1;
+    let wardIdx = 2;
+    let stakeIdx = 3;
+    let phoneIdx = 4;
+    let committeeIdx = 5;
+
+    let hasHeaderRow = false;
+
+    if (hasHeader) {
+      hasHeaderRow = true;
+      const headers = firstLine.split(delimiter).map(h => clean(h).toLowerCase());
+      
+      const nIdx = headers.findIndex(h => h.includes('nombre') || h.includes('apellido') || h.includes('voluntario') || h.includes('nombres'));
+      const aIdx = headers.findIndex(h => h.includes('edad') || h.includes('años') || h.includes('anos') || h.includes('age'));
+      const wIdx = headers.findIndex(h => h.includes('barrio') || h.includes('ward') || h.includes('colonia') || h.includes('localidad') || h.includes('vecindario') || h.includes('direc'));
+      const sIdx = headers.findIndex(h => h.includes('estaca') || h.includes('stake'));
+      const pIdx = headers.findIndex(h => h.includes('tel') || h.includes('cel') || h.includes('fon') || h.includes('phone') || h.includes('contacto') || h.includes('móvil') || h.includes('movil'));
+      const cIdx = headers.findIndex(h => h.includes('comit') || h.includes('grupo') || h.includes('seccion') || h.includes('area'));
+
+      if (nIdx !== -1) nameIdx = nIdx;
+      if (aIdx !== -1) ageIdx = aIdx; else ageIdx = -1;
+      if (wIdx !== -1) wardIdx = wIdx;
+      if (sIdx !== -1) stakeIdx = sIdx;
+      if (pIdx !== -1) phoneIdx = pIdx;
+      if (cIdx !== -1) committeeIdx = cIdx;
+    } else {
+      // Check number of columns to guess format
+      const parts = firstLine.split(delimiter);
+      if (parts.length === 5) {
+        // Format: Name, Barrio, Estaca, Phone, Committee (No Age)
+        nameIdx = 0;
+        ageIdx = -1;
+        wardIdx = 1;
+        stakeIdx = 2;
+        phoneIdx = 3;
+        committeeIdx = 4;
+      }
+    }
+
+    const linesToParse = hasHeaderRow ? lines.slice(1) : lines;
+
+    const data = linesToParse.map(line => {
+      const parts = line.split(delimiter);
+      const fullName = nameIdx !== -1 ? clean(parts[nameIdx]) : '';
+      const nameParts = fullName.split(/\s+/);
       const firstName = nameParts.length > 0 ? nameParts[0] : '';
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
       
       return {
         firstName: firstName,
         lastName: lastName,
-        age: parts[1]?.trim() || '',
-        ward: parts[2]?.trim() || '',
-        stake: parts[3]?.trim() || '',
-        phone: parts[4]?.trim() || '',
-        committeeName: parts[5]?.trim() || ''
+        age: ageIdx !== -1 ? clean(parts[ageIdx]) : '',
+        ward: wardIdx !== -1 ? clean(parts[wardIdx]) : '',
+        stake: stakeIdx !== -1 ? clean(parts[stakeIdx]) : '',
+        phone: phoneIdx !== -1 ? clean(parts[phoneIdx]) : '',
+        committeeName: committeeIdx !== -1 ? clean(parts[committeeIdx]) : ''
       };
     }).filter(v => v.firstName && v.phone);
 

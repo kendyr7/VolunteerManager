@@ -85,6 +85,7 @@ function CoordinatorLayoutInner({
     { name: "Dashboard", href: "/dashboard", icon: "space_dashboard", roles: ['Admin'] },
     { name: "Voluntarios", href: "/volunteers", icon: "group", roles: ['Admin', 'Editor'] },
     { name: currentRole === 'Lector' ? "Mi Perfil" : "Turnos", href: "/shifts", icon: currentRole === 'Lector' ? "person" : "checklist", roles: ['Admin', 'Editor', 'Lector'] },
+    { name: "Escanear QR", href: "/check-in", icon: "qr_code_scanner", roles: ['Admin', 'Editor'] },
     { name: "Avisos", href: "/reminders", icon: "campaign", roles: ['Admin', 'Editor'] },
     { name: "Usuarios", href: "/users", icon: "shield_person", roles: ['Admin'] },
     { name: "Importación", href: "/import", icon: "cloud_upload", roles: ['Admin', 'Editor'] },

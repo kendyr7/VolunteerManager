@@ -29,6 +29,7 @@ export function LoginForm() {
   // Remember User State
   const [savedUserMode, setSavedUserMode] = useState(false);
   const [savedName, setSavedName] = useState("");
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     const savedPhone = localStorage.getItem("volunteer_phone");
@@ -44,6 +45,7 @@ export function LoginForm() {
       setSavedUserMode(true);
       setSavedName(savedName);
     }
+    setIsMounted(true);
   }, []);
 
   const handleBiometricLogin = async () => {
@@ -104,21 +106,26 @@ export function LoginForm() {
     }
 
     startTransition(async () => {
-      const minDelay = new Promise(resolve => setTimeout(resolve, 2500));
-      const formData = new FormData();
-      formData.append("phone", phone);
-      formData.append("pin", pin);
+      try {
+        const minDelay = new Promise(resolve => setTimeout(resolve, 2500));
+        const formData = new FormData();
+        formData.append("phone", phone);
+        formData.append("pin", pin);
 
-      const [result] = await Promise.all([loginWithPin({}, formData), minDelay]);
+        const [result] = await Promise.all([loginWithPin({}, formData), minDelay]);
 
-      if (result.error) {
-        setError(result.error);
-        setPin("");
-      } else if (result.force_pin_change) {
-        setUserData({ id: result.user_id!, type: result.user_type! });
-        setNeedsNewPin(true);
-      } else if (result.success) {
-        finishLogin(result);
+        if (result.error) {
+          setError(result.error);
+          setPin("");
+        } else if (result.force_pin_change) {
+          setUserData({ id: result.user_id!, type: result.user_type! });
+          setNeedsNewPin(true);
+        } else if (result.success) {
+          finishLogin(result);
+        }
+      } catch (err: any) {
+        console.error("Login transition error:", err);
+        setError("Error de conexión con el servidor. Inténtalo de nuevo.");
       }
     });
   };
@@ -143,13 +150,18 @@ export function LoginForm() {
     }
 
     startTransition(async () => {
-      const minDelay = new Promise(resolve => setTimeout(resolve, 2500));
-      const [result] = await Promise.all([updateInitialPin(userData!.id, userData!.type, newPin), minDelay]);
+      try {
+        const minDelay = new Promise(resolve => setTimeout(resolve, 2500));
+        const [result] = await Promise.all([updateInitialPin(userData!.id, userData!.type, newPin), minDelay]);
 
-      if (result.error) {
-        setError(result.error);
-      } else if (result.success) {
-        finishLogin(result);
+        if (result.error) {
+          setError(result.error);
+        } else if (result.success) {
+          finishLogin(result);
+        }
+      } catch (err: any) {
+        console.error("PIN update transition error:", err);
+        setError("Error de conexión con el servidor. Inténtalo de nuevo.");
       }
     });
   };
@@ -288,7 +300,7 @@ export function LoginForm() {
                 type="button"
                 onClick={handleBiometricLogin}
                 className={`lg:hidden h-12 px-4 rounded-sm font-bold shadow-lg transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 shrink-0 border ${preferredAuthMethod === 'biometrics' ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-[#4d7cfe]/20' : 'bg-dark2 border-white/10 text-white hover:bg-white/10'}`}
-                disabled={isPending || !phone}
+                disabled={!isMounted || isPending || !phone}
                 title="Iniciar sesión con huella dactilar"
               >
                 <span className="material-symbols-outlined text-[20px]">fingerprint</span>

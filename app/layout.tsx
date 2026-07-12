@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Dela_Gothic_One, Inter } from "next/font/google";
-import "material-symbols/outlined.css";
 import "./globals.css";
 import Script from "next/script";
 

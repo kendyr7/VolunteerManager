@@ -8,9 +8,6 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
   const table = userType === 'profile' ? 'profiles' : 'volunteers';
   
   const updateData: any = { pin: newPin };
-  if (userType === 'volunteer') {
-    updateData.pin_hash = newPin; // For volunteers using pin_hash
-  }
 
   const { error } = await supabase
     .from(table)
@@ -35,7 +32,7 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     
     if (userType === 'profile') {
       const role = user.role;
-      cookieStore.set('session', `coordinator-${role}-${committeeName}`, {
+      cookieStore.set('session', encodeURIComponent(`coordinator-${role}-${committeeName}`), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         maxAge: 60 * 60 * 24 * 7,
@@ -48,7 +45,7 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
 
       return { success: true, redirectTo, role, committee: committeeName };
     } else {
-      cookieStore.set('session', `volunteer-${user.id}-${committeeName}`, {
+      cookieStore.set('session', encodeURIComponent(`volunteer-${user.id}-${committeeName}`), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         maxAge: 60 * 60 * 24 * 7,

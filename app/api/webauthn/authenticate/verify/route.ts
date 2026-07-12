@@ -84,7 +84,7 @@ export async function POST(request: Request) {
         role = profile.role;
         committeeName = profile.committees?.name || '';
         name = profile.full_name;
-        cookieStore.set('session', `coordinator-${role}-${committeeName}`, {
+        cookieStore.set('session', encodeURIComponent(`coordinator-${role}-${committeeName}`), {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           maxAge: 60 * 60 * 24 * 7,
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
         const { data: volunteer } = await supabase.from('volunteers').select('*, committees(name)').eq('id', userId).single();
         committeeName = volunteer.committees?.name || '';
         name = `${volunteer.first_name} ${volunteer.last_name}`.trim();
-        cookieStore.set('session', `volunteer-${volunteer.id}-${committeeName}`, {
+        cookieStore.set('session', encodeURIComponent(`volunteer-${volunteer.id}-${committeeName}`), {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           maxAge: 60 * 60 * 24 * 7,
