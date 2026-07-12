@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { QRCodeSVG } from "qrcode.react";
+import QRCode from "react-qr-code";
 import { generateEntryPassToken } from "@/app/actions/attendance";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -183,12 +183,13 @@ export function EntryPassModal({
                     <span className="material-symbols-outlined text-[36px] animate-spin text-[#4d7cfe]">progress_activity</span>
                   </div>
                 ) : qrValue ? (
-                  <QRCodeSVG
+                  <QRCode
                     value={qrValue}
                     size={180}
                     level="M"
-                    fgColor="#1e293b" // slate-800
+                    fgColor="#1e293b"
                     bgColor="#ffffff"
+                    style={{ height: 'auto', maxWidth: '100%', width: '180px' }}
                   />
                 ) : (
                   <div className="w-[180px] h-[180px] flex items-center justify-center bg-white text-slate-900">
