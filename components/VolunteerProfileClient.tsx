@@ -5,14 +5,19 @@ import { startRegistration } from "@simplewebauthn/browser";
 import { Button } from "@/components/ui/button";
 import { Toast } from "@/components/ui/toast";
 
+import { Badge } from "@/components/ui/badge";
+import { SHIFT_TIMES } from "@/lib/dates";
+
 interface VolunteerProfileClientProps {
   volunteer: any;
   initialHasPasskey: boolean;
+  initialShifts?: any[];
 }
 
 export function VolunteerProfileClient({
   volunteer,
-  initialHasPasskey
+  initialHasPasskey,
+  initialShifts = []
 }: VolunteerProfileClientProps) {
   const [hasPasskey, setHasPasskey] = useState(initialHasPasskey);
   const [isRegistering, setIsRegistering] = useState(false);
@@ -260,6 +265,75 @@ export function VolunteerProfileClient({
                 {score}%
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* Attendance History Card */}
+        <div className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden">
+          <div className="p-6 md:p-8 border-b border-white/5 bg-dark3">
+            <h3 className="font-bold text-text tracking-tight leading-none mb-2">Historial de Asistencia</h3>
+            <p className="text-xs md:text-sm font-inter font-bold text-text-dim">Registro cronológico de tus turnos y asistencias.</p>
+          </div>
+          
+          <div className="p-6 md:p-8">
+            {initialShifts.length === 0 ? (
+              <div className="text-center py-8 text-text-dim italic text-sm font-inter">
+                No tienes turnos programados en el sistema.
+              </div>
+            ) : (
+              <div className="divide-y divide-white/5 max-h-[360px] overflow-y-auto pr-1">
+                {[...initialShifts]
+                  .sort((a, b) => {
+                    const dayA = parseInt(a.day_key.split(' ')[1]) || 0;
+                    const dayB = parseInt(b.day_key.split(' ')[1]) || 0;
+                    if (dayA !== dayB) return dayA - dayB;
+                    const orderA = a.shift_key === 'T2' ? 2 : a.shift_key === 'T3' ? 3 : a.shift_key === 'T4' ? 4 : 1;
+                    const orderB = b.shift_key === 'T2' ? 2 : b.shift_key === 'T3' ? 3 : b.shift_key === 'T4' ? 4 : 1;
+                    return orderA - orderB;
+                  })
+                  .map((s) => {
+                    // Check if shift has passed
+                    const now = new Date();
+                    const dayNum = parseInt(s.day_key.split(' ')[1]) || 10;
+                    let endHour = 12;
+                    if (s.shift_key === 'T2') endHour = 15;
+                    if (s.shift_key === 'T3') endHour = 18;
+                    if (s.shift_key === 'T4') endHour = 22;
+                    const shiftEndTime = new Date(2026, 8, dayNum, endHour, 0, 0); // Sept 2026
+                    const passed = now > shiftEndTime;
+
+                    const shiftIdx = parseInt(s.shift_key[1]) - 1;
+                    const timeLabel = SHIFT_TIMES[shiftIdx]?.time || "";
+
+                    return (
+                      <div key={s.id} className="flex items-center justify-between py-3.5 first:pt-0 last:pb-0">
+                        <div className="min-w-0 pr-3">
+                          <p className="text-sm font-bold text-white capitalize leading-tight">
+                            {s.day_key} · Turno {s.shift_key[1]}
+                          </p>
+                          <p className="text-[11px] text-text-dim font-inter mt-1">
+                            {timeLabel}
+                          </p>
+                        </div>
+
+                        {s.checked_in ? (
+                          <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-inter font-bold text-[10px] py-1 px-2.5">
+                            Confirmado ✓
+                          </Badge>
+                        ) : passed ? (
+                          <Badge className="bg-red-500/10 text-red border border-red-500/20 font-inter font-bold text-[10px] py-1 px-2.5">
+                            Ausente
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-white/5 text-text-dim border border-white/10 font-inter font-bold text-[10px] py-1 px-2.5">
+                            Programado
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </div>
         </div>
 

@@ -42,10 +42,17 @@ export default async function VolunteerProfilePage() {
 
   const hasPasskey = passkeys && passkeys.length > 0;
 
+  // Fetch shifts to construct attendance history
+  const { data: shifts } = await supabase
+    .from('shifts')
+    .select('*')
+    .eq('volunteer_id', volunteerId);
+
   return (
     <VolunteerProfileClient 
       volunteer={volunteer}
       initialHasPasskey={!!hasPasskey}
+      initialShifts={shifts || []}
     />
   );
 }

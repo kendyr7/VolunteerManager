@@ -17,6 +17,7 @@ export function ShiftCalendar({ volunteerId }: ShiftCalendarProps) {
   const EVENT_DAYS = getActiveEventDays();
 
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>({});
+  const [checkedInShifts, setCheckedInShifts] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
 
@@ -35,6 +36,7 @@ export function ShiftCalendar({ volunteerId }: ShiftCalendarProps) {
       }
 
       const mapped: Record<string, string[]> = {};
+      const confirmed: Record<string, string[]> = {};
       data?.forEach(s => {
         if (!mapped[s.day_key]) {
           mapped[s.day_key] = [];
@@ -42,8 +44,18 @@ export function ShiftCalendar({ volunteerId }: ShiftCalendarProps) {
         if (!mapped[s.day_key].includes(s.shift_key)) {
           mapped[s.day_key].push(s.shift_key);
         }
+
+        if (s.checked_in) {
+          if (!confirmed[s.day_key]) {
+            confirmed[s.day_key] = [];
+          }
+          if (!confirmed[s.day_key].includes(s.shift_key)) {
+            confirmed[s.day_key].push(s.shift_key);
+          }
+        }
       });
       setShiftsByDay(mapped);
+      setCheckedInShifts(confirmed);
     } catch (e) {
       console.error(e);
     } finally {
@@ -57,6 +69,10 @@ export function ShiftCalendar({ volunteerId }: ShiftCalendarProps) {
 
   // Toggle shift on click
   const handleToggleShift = (dayKey: string, shiftKey: string) => {
+    // If the shift is already checked-in, do not allow toggling
+    const isCheckedIn = (checkedInShifts[dayKey] || []).includes(shiftKey);
+    if (isCheckedIn) return;
+
     startTransition(async () => {
       const active = (shiftsByDay[dayKey] || []).includes(shiftKey);
 
@@ -172,17 +188,33 @@ export function ShiftCalendar({ volunteerId }: ShiftCalendarProps) {
               <div className="flex items-center shrink-0 ml-auto border-l border-white/10 pl-3">
                 {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
                   const active = dayShifts.includes(t);
+                  const isCheckedIn = (checkedInShifts[key] || []).includes(t);
                   const info = SHIFT_TIMES[i];
 
                   return (
                     <button
                       key={t}
                       onClick={() => handleToggleShift(key, t)}
-                      className={`flex flex-col items-center justify-center w-12 sm:w-16 py-2.5 ${i !== 0 ? 'border-l border-white/10' : ''} transition-all active:scale-[0.96] ${active ? 'bg-white/5 text-white opacity-100 font-bold' : 'bg-transparent text-slate-500 hover:text-white/80 opacity-50'}`}
-                      title={`${t}: ${info?.time}`}
+                      disabled={isCheckedIn}
+                      className={`flex flex-col items-center justify-center w-12 sm:w-16 py-2.5 ${
+                        i !== 0 ? 'border-l border-white/10' : ''
+                      } transition-all ${
+                        isCheckedIn
+                          ? 'bg-emerald-500/10 text-emerald-400 font-bold cursor-not-allowed opacity-100'
+                          : active
+                          ? 'bg-white/5 text-white opacity-100 font-bold active:scale-[0.96]'
+                          : 'bg-transparent text-slate-500 hover:text-white/80 opacity-50 active:scale-[0.96]'
+                      }`}
+                      title={isCheckedIn ? `${t}: Asistencia Confirmada` : `${t}: ${info?.time}`}
                     >
-                      <span className="text-[13px] font-bold leading-none">
-                        {active ? '✓' : '-'}
+                      <span className="text-[13px] font-bold leading-none flex items-center gap-0.5">
+                        {isCheckedIn ? (
+                          <span className="material-symbols-outlined text-[14px]">task_alt</span>
+                        ) : active ? (
+                          '✓'
+                        ) : (
+                          '-'
+                        )}
                       </span>
                       <span className="font-inter text-[9px] font-black uppercase mt-1 tracking-widest leading-none">
                         {t}

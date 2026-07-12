@@ -104,6 +104,7 @@ export default function VolunteersPage() {
   const [volunteers, setVolunteers] = useState<VolunteerType[]>([]);
   const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
   const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
+  const [checkedInMap, setCheckedInMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
 
@@ -287,6 +288,7 @@ export default function VolunteersPage() {
 
     const sCounts: Record<string, number> = {};
     const gShifts: Record<string, Record<string, string[]>> = {};
+    const cMap: Record<string, boolean> = {};
 
     if (shiftsData) {
       shiftsData.forEach(s => {
@@ -302,11 +304,15 @@ export default function VolunteersPage() {
           if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
             gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
           }
+          if (s.checked_in) {
+            cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
+          }
         }
       });
     }
 
     setGlobalShifts(gShifts);
+    setCheckedInMap(cMap);
 
     if (volsData) {
       const mapped = volsData.map((v: any) => ({
@@ -957,17 +963,40 @@ export default function VolunteersPage() {
                             <div className="flex items-center shrink-0 ml-auto">
                               {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
                                 const active = dayShifts.includes(t);
+                                const isCheckedIn = checkedInMap[`${editingVolunteer.id}-${d.key}-${t}`];
                                 return (
                                   <button
                                     key={t}
-                                    disabled={!isEditingShifts}
+                                    disabled={!isEditingShifts || isCheckedIn}
                                     onClick={() => toggleShift(d.key, t)}
-                                    className={`flex flex-col items-center justify-center w-12 sm:w-16 h-full ${i !== 0 ? 'border-l border-white/10' : ''} transition-colors ${isEditingShifts ? 'hover:bg-white/10 rounded-lg' : ''} ${active ? 'opacity-100' : 'opacity-40'}`}
+                                    className={`flex flex-col items-center justify-center w-12 sm:w-16 py-2.5 ${
+                                      i !== 0 ? 'border-l border-white/10' : ''
+                                    } transition-colors ${
+                                      isEditingShifts && !isCheckedIn ? 'hover:bg-white/10 rounded-lg' : ''
+                                    } ${
+                                      isCheckedIn
+                                        ? 'opacity-100 text-emerald-400 bg-emerald-500/10 rounded-lg'
+                                        : active
+                                        ? 'opacity-100 text-white'
+                                        : 'opacity-40 text-white'
+                                    }`}
                                   >
-                                    <span className={`text-[16px] font-semibold leading-none ${active ? 'text-white' : 'text-white'}`}>
-                                      {active ? '✓' : '-'}
+                                    <span className="text-[16px] font-semibold leading-none flex items-center gap-0.5">
+                                      {isCheckedIn ? (
+                                        <span className="material-symbols-outlined text-[14px]">task_alt</span>
+                                      ) : active ? (
+                                        '✓'
+                                      ) : (
+                                        '-'
+                                      )}
                                     </span>
-                                    <span className={`font-inter text-[10px] font-bold uppercase mt-1 tracking-widest ${active ? 'text-white/90' : 'text-white/50'}`}>
+                                    <span className={`font-inter text-[10px] font-bold uppercase mt-1 tracking-widest ${
+                                      isCheckedIn
+                                        ? 'text-emerald-400/90'
+                                        : active
+                                        ? 'text-white/90'
+                                        : 'text-white/50'
+                                    }`}>
                                       {t}
                                     </span>
                                   </button>
