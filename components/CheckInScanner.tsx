@@ -121,25 +121,66 @@ export function CheckInScanner({
 
         const config = {
           fps: 10,
-          qrbox: (width: number, height: number) => {
-            const size = Math.min(width, height) * 0.72;
-            return { width: size, height: size };
-          }
+          // No qrbox — scan the full frame without visual region brackets
         };
 
-        await html5Qrcode.start(
-          { facingMode: "environment" },
-          config,
-          qrCodeSuccessCallback,
-          () => {}
-        );
+        // Build a list of camera sources to try in order (cascade fallback)
+        const cameraCandidates: Array<string | { facingMode: string }> = [];
+
+        try {
+          const cameras = await Html5Qrcode.getCameras();
+          if (cameras && cameras.length > 0) {
+            // 1st choice: main back camera (no ultra/wide in label)
+            const mainBack = cameras.find(c => {
+              const lbl = c.label.toLowerCase();
+              return (lbl.includes('back') || lbl.includes('rear') || lbl.includes('trasera'))
+                && !lbl.includes('ultra')
+                && !lbl.includes('wide');
+            });
+            if (mainBack) cameraCandidates.push(mainBack.id);
+
+            // 2nd choice: last camera in list (typically main back on most devices)
+            const lastCam = cameras[cameras.length - 1];
+            if (lastCam && lastCam.id !== mainBack?.id) {
+              cameraCandidates.push(lastCam.id);
+            }
+
+            // 3rd choice: first camera
+            if (cameras[0] && cameras[0].id !== lastCam?.id) {
+              cameraCandidates.push(cameras[0].id);
+            }
+          }
+        } catch {
+          // Enumeration not supported — skip to facingMode fallback
+        }
+
+        // Always add facingMode as final fallback
+        cameraCandidates.push({ facingMode: "environment" });
+
+        // Try each candidate in order until one works
+        let started = false;
+        for (const candidate of cameraCandidates) {
+          if (cancelled) break;
+          try {
+            await html5Qrcode.start(candidate, config, qrCodeSuccessCallback, () => {});
+            started = true;
+            break;
+          } catch {
+            // This candidate failed — try the next one silently
+          }
+        }
+
+        if (!started && !cancelled) {
+          setErrorMsg("No se pudo acceder a la cámara. Verifica los permisos e intenta de nuevo.");
+          setState('error');
+        }
       } catch (err) {
         if (!cancelled) {
-          console.error("Failed to start scanner:", err);
-          setErrorMsg("No se pudo iniciar la cámara. Asegúrese de otorgar permisos de cámara.");
+          setErrorMsg("Ocurrió un error al iniciar la cámara. Intenta de nuevo.");
           setState('error');
         }
       }
+
     };
 
     // Small initial delay to let React begin rendering the scanning state
@@ -290,45 +331,61 @@ export function CheckInScanner({
         </div>
       </div>
 
-      {/* ── Body: two-col on desktop ── */}
+      {/* ── Body ── */}
       <div className="flex-1 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full">
+        {/* A flexible grid system where order-* changes elements order on mobile vs desktop */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
 
-          {/* ── Left Panel: Info & Stats ── */}
-          <div className="lg:col-span-2 flex flex-col gap-4">
+          {/* Left panel items stacked individually for micro-ordering */}
 
-            {/* Primary CTA — only show when idle */}
-            {state === 'idle' && (
-              <Button
-                onClick={startScanning}
-                className="w-full bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-[20px] shadow-lg shadow-blue-500/20 h-14 font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-base"
-              >
-                <span className="material-symbols-outlined text-[22px]">photo_camera</span>
-                Activar Cámara
-              </Button>
-            )}
+          {/* 1. Camera Card (Listo para Escanear) — col-span-2, order 1 */}
+          <div className="lg:col-span-2 order-1 flex flex-col gap-4">
+            <div className={`rounded-[24px] border bg-dark2 overflow-hidden transition-colors duration-300 ${
+              state === 'scanning' ? 'border-[#4d7cfe]/40' : 'border-white/10'
+            }`}>
+              {/* Camera feed */}
+              <div className={state === 'scanning' ? 'block' : 'hidden'}>
+                <div className="aspect-square w-full bg-black">
+                  <div id="reader" className="w-full h-full" />
+                </div>
+                <div className="p-4 flex items-center justify-between">
+                  <p className="text-xs text-text-dim font-inter flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    Buscando código QR...
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { stopScanning(); setState('idle'); setScanResult(null); }}
+                    className="border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-xl h-8 px-3 text-xs font-bold"
+                  >
+                    Detener
+                  </Button>
+                </div>
+              </div>
 
-            {/* Instructions */}
-            <div className="rounded-[24px] border border-white/10 bg-dark2 p-5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-4">Instrucciones</p>
-              <ol className="space-y-3">
-                {[
-                  { icon: 'photo_camera', text: 'Presiona Activar Cámara para comenzar.' },
-                  { icon: 'qr_code_scanner', text: 'Apunta el lente al código QR del pase del voluntario.' },
-                  { icon: 'task_alt', text: 'El sistema registra la asistencia automáticamente.' },
-                  { icon: 'refresh', text: 'La cámara se reactiva en 3 segundos para el siguiente.' },
-                ].map((item, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <div className="w-7 h-7 rounded-xl bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">{item.icon}</span>
-                    </div>
-                    <p className="text-[12px] font-inter text-text-dim leading-snug">{item.text}</p>
-                  </li>
-                ))}
-              </ol>
+              {/* Idle state */}
+              {state !== 'scanning' && (
+                <div className="p-5 flex flex-col items-center text-center">
+                  <div className="w-14 h-14 bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 rounded-full flex items-center justify-center mb-4">
+                    <span className="material-symbols-outlined text-[30px] text-[#4d7cfe] animate-pulse">qr_code_scanner</span>
+                  </div>
+                  <h2 className="text-base font-black text-white mb-1">Listo para Escanear</h2>
+                  <p className="text-xs text-text-dim font-inter mb-4 leading-relaxed">
+                    Activa la cámara y apunta al QR del voluntario.
+                  </p>
+                  <Button
+                    onClick={startScanning}
+                    className="w-full bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-[16px] shadow-lg shadow-blue-500/20 h-11 font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">photo_camera</span>
+                    Activar Cámara
+                  </Button>
+                </div>
+              )}
             </div>
 
-            {/* Session Counter + Status — side by side */}
+            {/* KPIs: Session + Status */}
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-[20px] border border-white/10 bg-dark2 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-2">Esta Sesión</p>
@@ -361,7 +418,7 @@ export function CheckInScanner({
               </div>
             </div>
 
-            {/* Coordinator tag */}
+            {/* Coordinator info */}
             <div className="flex items-center gap-2 px-1">
               <span className="material-symbols-outlined text-[16px] text-text-dim">badge</span>
               <p className="text-[11px] font-inter font-bold text-text-dim">
@@ -369,83 +426,31 @@ export function CheckInScanner({
                 {committeeName && <span className="text-text-dim"> · {committeeName}</span>}
               </p>
             </div>
-
           </div>
 
-          {/* ── Right Panel: Scanner Card ── */}
-          <div className="lg:col-span-3">
+          {/* 2. Results Card — col-span-3, order 2 on mobile, order 3 on desktop */}
+          <div className="lg:col-span-3 order-2 lg:order-3">
             <div className={`rounded-[28px] border ${borderColor} bg-dark2 shadow-2xl ${shadowColor} overflow-hidden transition-colors duration-500`}>
               <div className="p-6 sm:p-8 flex flex-col items-center min-h-[480px] justify-center">
                 <AnimatePresence mode="wait">
 
-                  {/* IDLE */}
-                  {state === 'idle' && (
+                  {/* RIGHT PANEL: Idle and Scanning placeholder */}
+                  {(state === 'idle' || state === 'scanning') && (
                     <motion.div
-                      key="idle"
+                      key="idle-placeholder"
                       initial={{ opacity: 0, scale: 0.97 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.97 }}
                       transition={{ duration: 0.2 }}
-                      className="flex flex-col items-center text-center"
+                      className="flex flex-col items-center text-center p-6"
                     >
-                      <div className="w-28 h-28 bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 rounded-full flex items-center justify-center mb-7 shadow-inner">
-                        <span className="material-symbols-outlined text-[56px] text-[#4d7cfe] animate-pulse">qr_code_scanner</span>
+                      <div className="w-20 h-20 bg-white/5 border border-white/10 rounded-full flex items-center justify-center mb-5">
+                        <span className="material-symbols-outlined text-[36px] text-text-dim">barcode_reader</span>
                       </div>
-                      <h2 className="text-xl font-black text-white mb-2">Listo para Escanear</h2>
-                      <p className="text-sm text-text-dim font-inter max-w-xs mb-8 leading-relaxed">
-                        Activa la cámara y apunta al código QR del pase del voluntario para registrar su asistencia.
+                      <h3 className="text-lg font-bold text-white mb-1">Resultados de Escaneo</h3>
+                      <p className="text-xs text-text-dim font-inter max-w-xs leading-relaxed">
+                        Los resultados del registro de asistencia se mostrarán aquí en tiempo real al detectar un código QR.
                       </p>
-                      <Button
-                        onClick={startScanning}
-                        className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/20 px-10 h-13 font-bold transition-all active:scale-[0.98] flex items-center gap-2 text-base"
-                      >
-                        <span className="material-symbols-outlined text-[20px]">photo_camera</span>
-                        Activar Cámara
-                      </Button>
-                    </motion.div>
-                  )}
-
-                  {/* SCANNING */}
-                  {state === 'scanning' && (
-                    <motion.div
-                      key="scanning"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="w-full flex flex-col items-center"
-                    >
-                      <div className="w-full max-w-sm aspect-square rounded-[24px] overflow-hidden border border-white/10 bg-black relative shadow-2xl mb-5">
-                        <div id="reader" className="w-full h-full" />
-                        {/* Scan overlay */}
-                        <div className="absolute inset-0 pointer-events-none">
-                          {/* Corner brackets */}
-                          {[
-                            'top-4 left-4 border-t-2 border-l-2',
-                            'top-4 right-4 border-t-2 border-r-2',
-                            'bottom-4 left-4 border-b-2 border-l-2',
-                            'bottom-4 right-4 border-b-2 border-r-2',
-                          ].map((cls, i) => (
-                            <div key={i} className={`absolute w-7 h-7 border-[#4d7cfe] rounded-sm ${cls}`} />
-                          ))}
-                          {/* Laser line */}
-                          <div
-                            className="absolute left-[15%] right-[15%] h-0.5 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-[bounce_2s_infinite]"
-                            style={{ top: '12%' }}
-                          />
-                        </div>
-                      </div>
-
-                      <p className="text-sm text-text-dim font-inter mb-5 animate-pulse flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                        Buscando código QR...
-                      </p>
-                      <Button
-                        variant="outline"
-                        onClick={() => { stopScanning(); setState('idle'); }}
-                        className="border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-full px-8 h-11 font-bold transition-all active:scale-[0.98]"
-                      >
-                        Detener Cámara
-                      </Button>
                     </motion.div>
                   )}
 
@@ -467,7 +472,7 @@ export function CheckInScanner({
                     </motion.div>
                   )}
 
-                  {/* SUCCESS */}
+                  {/* SUCCESS — REDESIGNED PREMIUM TICKET STYLE */}
                   {state === 'success' && scanResult && (
                     <motion.div
                       key="success"
@@ -475,34 +480,53 @@ export function CheckInScanner({
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.97 }}
                       transition={{ duration: 0.2 }}
-                      className="flex flex-col items-center text-center w-full"
+                      className="flex flex-col items-center text-center w-full max-w-md"
                     >
-                      <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/25 text-white">
-                        <span className="material-symbols-outlined text-[48px] font-bold">check</span>
+                      {/* Success Glow */}
+                      <div className="relative mb-6">
+                        <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full" />
+                        <div className="relative w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg text-white">
+                          <span className="material-symbols-outlined text-[40px] font-bold">check</span>
+                        </div>
                       </div>
-                      <h3 className="text-2xl font-black text-emerald-400 mb-1">¡Asistencia Registrada!</h3>
-                      <p className="text-xl font-bold text-white max-w-xs truncate mt-1">{scanResult.volunteer}</p>
-                      <div className="flex items-center gap-2 mt-3 mb-8">
-                        <Badge variant="secondary" className="bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 text-[#4d7cfe] font-inter font-bold text-[10px] py-0.5 px-2.5 shadow-none">
-                          {scanResult.committee}
-                        </Badge>
-                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-inter font-bold text-[10px] py-0.5 px-2.5">
-                          {scanResult.shiftDetail}
-                        </Badge>
+
+                      <h3 className="text-2xl font-black text-emerald-400 mb-4 tracking-tight">¡Asistencia Confirmada!</h3>
+
+                      {/* Ticket Container */}
+                      <div className="w-full bg-white/3 border border-white/10 rounded-[20px] p-5 text-left space-y-4 mb-6 font-inter shadow-inner relative overflow-hidden">
+                        {/* Ticket left/right notched details */}
+                        <div className="absolute top-1/2 -left-2 -translate-y-1/2 w-4 h-4 rounded-full bg-dark2 border-r border-white/10" />
+                        <div className="absolute top-1/2 -right-2 -translate-y-1/2 w-4 h-4 rounded-full bg-dark2 border-l border-white/10" />
+
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-0.5">Voluntario</p>
+                          <p className="text-base font-bold text-white tracking-tight leading-snug">{scanResult.volunteer}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 pt-3.5 border-t border-white/5">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-0.5">Comité</p>
+                            <p className="text-sm font-bold text-white tracking-tight">{scanResult.committee}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-0.5">Turno Registrado</p>
+                            <p className="text-sm font-bold text-emerald-400 tracking-tight">{scanResult.shiftDetail}</p>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-xs text-text-dim italic font-inter mb-5">
-                        Volviendo a buscar en unos segundos...
+
+                      <p className="text-xs text-text-dim italic font-inter mb-6">
+                        Listo para el siguiente escaneo automáticamente...
                       </p>
                       <Button
                         onClick={handleManualReset}
-                        className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-full px-8 h-11 font-bold transition-all active:scale-[0.98]"
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl px-10 h-12 font-bold transition-all active:scale-[0.98] w-full text-sm"
                       >
                         Escanear Siguiente
                       </Button>
                     </motion.div>
                   )}
 
-                  {/* ALREADY CHECKED IN */}
+                  {/* ALREADY CHECKED IN — REDESIGNED PREMIUM TICKET STYLE */}
                   {state === 'already_checked_in' && scanResult && (
                     <motion.div
                       key="already_checked_in"
@@ -510,31 +534,49 @@ export function CheckInScanner({
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.97 }}
                       transition={{ duration: 0.2 }}
-                      className="flex flex-col items-center text-center w-full"
+                      className="flex flex-col items-center text-center w-full max-w-md"
                     >
-                      <div className="w-24 h-24 bg-amber-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-amber-500/25 text-white">
-                        <span className="material-symbols-outlined text-[48px] font-bold">warning</span>
+                      {/* Warning Glow */}
+                      <div className="relative mb-6">
+                        <div className="absolute inset-0 bg-amber-500/20 blur-xl rounded-full" />
+                        <div className="relative w-20 h-20 bg-amber-500 rounded-full flex items-center justify-center shadow-lg text-white">
+                          <span className="material-symbols-outlined text-[40px] font-bold">warning</span>
+                        </div>
                       </div>
-                      <h3 className="text-2xl font-black text-amber-500 mb-1">Ya Registrado</h3>
-                      <p className="text-xl font-bold text-white max-w-xs truncate mt-1">{scanResult.volunteer}</p>
-                      <div className="flex items-center gap-2 mt-3 mb-8">
-                        <Badge variant="secondary" className="bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 text-[#4d7cfe] font-inter font-bold text-[10px] py-0.5 px-2.5 shadow-none">
-                          {scanResult.committee}
-                        </Badge>
-                        <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border border-amber-500/20 font-inter font-bold text-[10px] py-0.5 px-2.5">
-                          {scanResult.shiftDetail}
-                        </Badge>
+
+                      <h3 className="text-2xl font-black text-amber-500 mb-4 tracking-tight">Asistencia Ya Registrada</h3>
+
+                      {/* Ticket Container */}
+                      <div className="w-full bg-white/3 border border-white/10 rounded-[20px] p-5 text-left space-y-4 mb-6 font-inter shadow-inner relative overflow-hidden">
+                        <div className="absolute top-1/2 -left-2 -translate-y-1/2 w-4 h-4 rounded-full bg-dark2 border-r border-white/10" />
+                        <div className="absolute top-1/2 -right-2 -translate-y-1/2 w-4 h-4 rounded-full bg-dark2 border-l border-white/10" />
+
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-0.5">Voluntario</p>
+                          <p className="text-base font-bold text-white tracking-tight leading-snug">{scanResult.volunteer}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 pt-3.5 border-t border-white/5">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-0.5">Comité</p>
+                            <p className="text-sm font-bold text-white tracking-tight">{scanResult.committee}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-0.5">Turno</p>
+                            <p className="text-sm font-bold text-amber-400 tracking-tight">{scanResult.shiftDetail}</p>
+                          </div>
+                        </div>
                       </div>
+
                       <Button
                         onClick={startScanning}
-                        className="bg-amber-500 hover:bg-amber-600 text-white rounded-full px-8 h-11 font-bold transition-all active:scale-[0.98]"
+                        className="bg-amber-500 hover:bg-amber-600 text-white rounded-2xl px-10 h-12 font-bold transition-all active:scale-[0.98] w-full text-sm"
                       >
                         Entendido, Escanear Otro
                       </Button>
                     </motion.div>
                   )}
 
-                  {/* MANUAL SELECTION */}
+                  {/* MANUAL SELECTION — REDESIGNED LIST */}
                   {state === 'manual_selection' && scanResult && (
                     <motion.div
                       key="manual_selection"
@@ -542,23 +584,23 @@ export function CheckInScanner({
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.97 }}
                       transition={{ duration: 0.2 }}
-                      className="w-full flex flex-col items-center"
+                      className="w-full flex flex-col items-center max-w-md"
                     >
                       <div className="w-16 h-16 bg-blue-500/10 border border-blue-500/20 rounded-full flex items-center justify-center mb-4 text-blue-400">
                         <span className="material-symbols-outlined text-[32px]">checklist</span>
                       </div>
-                      <h3 className="text-lg font-black text-white text-center">Seleccionar Turno</h3>
-                      <p className="text-base font-bold text-text-dim text-center truncate w-full max-w-[320px] mt-0.5">{scanResult.volunteer}</p>
-                      <p className="text-xs text-text-dim text-center mt-2 font-inter mb-5 max-w-xs">
-                        No se encontró un turno activo ahora. Selecciona el turno a registrar:
+                      <h3 className="text-xl font-black text-white text-center">Seleccionar Turno</h3>
+                      <p className="text-base font-bold text-text-dim text-center truncate w-full max-w-[320px] mt-1 mb-2">{scanResult.volunteer}</p>
+                      <p className="text-xs text-text-dim text-center mt-1 font-inter mb-6 max-w-xs leading-relaxed">
+                        No se encontró un turno activo ahora mismo. Selecciona manualmente qué turno deseas registrar:
                       </p>
 
-                      <div className="w-full max-h-[240px] overflow-y-auto space-y-2 mb-6 pr-1">
+                      <div className="w-full max-h-[220px] overflow-y-auto space-y-2 mb-6 pr-1">
                         {scanResult.shifts?.map((s) => (
-                          <div key={s.id} className="flex items-center justify-between py-3 px-4 hover:bg-white/5 rounded-xl border border-white/8 transition-all">
+                          <div key={s.id} className="flex items-center justify-between py-3.5 px-4 hover:bg-white/5 rounded-xl border border-white/8 transition-all">
                             <div className="text-left min-w-0 pr-3">
                               <p className="text-sm font-bold text-white capitalize leading-tight">{s.dayKey} · {s.shiftKey}</p>
-                              <p className="text-[11px] text-text-dim font-inter mt-0.5">{s.timeLabel}</p>
+                              <p className="text-[11px] text-text-dim font-inter mt-1">{s.timeLabel}</p>
                             </div>
                             {s.checkedIn ? (
                               <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold text-[9px] py-0.5 px-2 shrink-0">
@@ -595,7 +637,7 @@ export function CheckInScanner({
                     </motion.div>
                   )}
 
-                  {/* ERROR */}
+                  {/* ERROR — REDESIGNED BLOCK */}
                   {state === 'error' && (
                     <motion.div
                       key="error"
@@ -603,17 +645,24 @@ export function CheckInScanner({
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.97 }}
                       transition={{ duration: 0.2 }}
-                      className="flex flex-col items-center text-center w-full"
+                      className="flex flex-col items-center text-center w-full max-w-md"
                     >
-                      <div className="w-24 h-24 bg-red rounded-full flex items-center justify-center mb-6 shadow-lg shadow-red/20 text-white">
-                        <span className="material-symbols-outlined text-[48px] font-bold">close</span>
+                      <div className="relative mb-6">
+                        <div className="absolute inset-0 bg-red-500/20 blur-xl rounded-full" />
+                        <div className="relative w-20 h-20 bg-red-500 rounded-full flex items-center justify-center shadow-lg text-white">
+                          <span className="material-symbols-outlined text-[40px] font-bold">close</span>
+                        </div>
                       </div>
-                      <h3 className="text-2xl font-black text-red mb-4">Fallo de Validación</h3>
-                      <div className="bg-red-faint border border-red/20 rounded-2xl p-4 mb-8 w-full text-left">
-                        <p className="text-sm text-red font-bold font-inter leading-relaxed">
+
+                      <h3 className="text-2xl font-black text-red-500 mb-4 tracking-tight">Fallo de Validación</h3>
+                      
+                      <div className="bg-red-500/5 border border-red-500/15 rounded-2xl p-5 mb-8 w-full text-left font-inter">
+                        <p className="text-xs font-bold uppercase tracking-wider text-red-400/70 mb-1.5">Detalle del Error</p>
+                        <p className="text-sm text-red-400 font-bold leading-relaxed">
                           {errorMsg}
                         </p>
                       </div>
+
                       <div className="flex w-full gap-3">
                         <Button
                           variant="outline"
@@ -624,7 +673,7 @@ export function CheckInScanner({
                         </Button>
                         <Button
                           onClick={startScanning}
-                          className="flex-1 bg-red hover:bg-red/90 text-white rounded-xl h-11 font-bold text-sm shadow-md shadow-red/10"
+                          className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl h-11 font-bold text-sm shadow-md shadow-red-500/10"
                         >
                           Reintentar
                         </Button>
@@ -633,6 +682,28 @@ export function CheckInScanner({
                   )}
 
                 </AnimatePresence>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Instructions — col-span-5 on desktop (bottom), order 4 on mobile */}
+          <div className="lg:col-span-5 order-4 mt-2">
+            <div className="rounded-[24px] border border-white/10 bg-dark2 p-5 max-w-5xl">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-4">Instrucciones de Operación</p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {[
+                  { icon: 'photo_camera', text: 'Presiona Activar Cámara para comenzar.' },
+                  { icon: 'qr_code_scanner', text: 'Apunta el lente al código QR del pase del voluntario.' },
+                  { icon: 'task_alt', text: 'El sistema registra la asistencia automáticamente.' },
+                  { icon: 'refresh', text: 'La cámara se reactiva en 3 segundos para el siguiente.' },
+                ].map((item, i) => (
+                  <div key={i} className="flex items-start gap-3 p-2 hover:bg-white/3 rounded-xl transition-all">
+                    <div className="w-8 h-8 rounded-xl bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="material-symbols-outlined text-[16px] text-[#4d7cfe]">{item.icon}</span>
+                    </div>
+                    <p className="text-[12px] font-inter text-text-dim leading-snug">{item.text}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
