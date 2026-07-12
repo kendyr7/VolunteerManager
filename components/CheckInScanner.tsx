@@ -86,20 +86,30 @@ export function CheckInScanner({
     setScanResult(null);
   };
 
-  // Initialize html5-qrcode once the #reader div is in the DOM
+  // Initialize html5-qrcode — polls until #reader is in the DOM
   useEffect(() => {
     if (state !== 'scanning') return;
 
     let cancelled = false;
-    // 200ms: enough for AnimatePresence exit animation + React commit
-    const initTimer = setTimeout(async () => {
+    let attempts = 0;
+    const MAX_ATTEMPTS = 30; // 30 × 50ms = 1.5s max wait
+    let pollTimer: NodeJS.Timeout;
+
+    const initScanner = async () => {
       if (cancelled) return;
+
       const readerEl = document.getElementById('reader');
       if (!readerEl) {
-        setErrorMsg("No se pudo encontrar el visor de cámara. Intenta de nuevo.");
-        setState('error');
+        attempts++;
+        if (attempts >= MAX_ATTEMPTS) {
+          setErrorMsg("No se pudo iniciar la cámara. Intenta de nuevo.");
+          setState('error');
+          return;
+        }
+        pollTimer = setTimeout(initScanner, 50);
         return;
       }
+
       try {
         const html5Qrcode = new Html5Qrcode("reader");
         html5QrcodeRef.current = html5Qrcode;
@@ -130,14 +140,18 @@ export function CheckInScanner({
           setState('error');
         }
       }
-    }, 200);
+    };
+
+    // Small initial delay to let React begin rendering the scanning state
+    pollTimer = setTimeout(initScanner, 50);
 
     return () => {
       cancelled = true;
-      clearTimeout(initTimer);
+      clearTimeout(pollTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
+
 
   // Stop Scanner
   const stopScanning = async () => {
