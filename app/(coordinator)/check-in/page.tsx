@@ -4,8 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { CheckInScanner } from "@/components/CheckInScanner";
 
 export const metadata = {
-  title: "Registrar Asistencia | Volunteer Manager",
-  description: "Escanear pases QR de voluntarios",
+  title: "Escanear Turno | Volunteer Manager",
+  description: "Escanear pases QR de voluntarios para registrar asistencia",
 };
 
 export default async function CheckInPage() {

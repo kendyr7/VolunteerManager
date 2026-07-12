@@ -119,7 +119,7 @@ export function LoginPageClient() {
           }}
         >
           {/* ── Page 0 — Hero image + quote ── */}
-          <div className="relative h-full w-1/2 shrink-0 bg-black">
+          <div className="relative h-full w-1/2 shrink-0 bg-black touch-pan-y">
             <Image
               src="/templodark.jpg"
               alt="Templo de Managua"
@@ -145,7 +145,7 @@ export function LoginPageClient() {
           </div>
 
           {/* ── Page 1 — Login form ── */}
-          <div className="relative h-full w-1/2 shrink-0 overflow-y-auto bg-[#050a15]">
+          <div className="relative h-full w-1/2 shrink-0 overflow-y-auto bg-[#050a15] touch-pan-y">
             <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
             <div className="relative z-10 flex min-h-full flex-col justify-center px-6 py-12">
               <div className="mx-auto w-full max-w-sm">
@@ -191,14 +191,18 @@ export function LoginPageClient() {
               </span>
             </motion.div>
           )}
-          <div className={`flex items-center gap-2 ${page === 0 ? "" : "ml-auto"}`}>
-            <div
-              className={`rounded-full transition-all duration-300 ${
+          <div className={`flex items-center gap-2 pointer-events-auto ${page === 0 ? "" : "ml-auto"}`}>
+            <button
+              onClick={() => setPage(0)}
+              title="Ver imagen"
+              className={`rounded-full transition-all duration-300 focus:outline-none ${
                 page === 0 ? "bg-white w-6 h-2" : "bg-white/30 w-2 h-2"
               }`}
             />
-            <div
-              className={`rounded-full transition-all duration-300 ${
+            <button
+              onClick={() => setPage(1)}
+              title="Iniciar sesión"
+              className={`rounded-full transition-all duration-300 focus:outline-none ${
                 page === 1 ? "bg-white w-6 h-2" : "bg-white/30 w-2 h-2"
               }`}
             />
