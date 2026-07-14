@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { verifySessionToken } from '@/lib/auth'
 
 export function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl
   const origin = request.headers.get('origin')
   const allowedOrigin = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
-  // Para las rutas de API, bloquear si el origen es diferente al permitido
-  if (request.nextUrl.pathname.startsWith('/api/')) {
-    // Si la solicitud viene de un navegador (tiene cabecera Origin) y no coincide con nuestra app, denegar acceso.
+  // 1. Proteger APIs de CORS no autorizados
+  if (pathname.startsWith('/api/')) {
     if (origin && origin !== allowedOrigin) {
       return new NextResponse(
         JSON.stringify({ error: 'CORS: Origen no permitido.' }),
@@ -22,9 +23,65 @@ export function proxy(request: NextRequest) {
     }
   }
 
+  // 2. Control de Acceso de Servidor (Session & Role Checking / Admin Check)
+  const sessionCookie = request.cookies.get('session')?.value || ''
+  const session = verifySessionToken(sessionCookie)
+
+  const isAuthRoute = pathname.startsWith('/login')
+  const isVolunteerRoute = pathname.startsWith('/calendar') || pathname.startsWith('/profile')
+  const isCoordinatorRoute = 
+    pathname.startsWith('/dashboard') || 
+    pathname.startsWith('/volunteers') || 
+    pathname.startsWith('/shifts') || 
+    pathname.startsWith('/check-in') || 
+    pathname.startsWith('/reports') || 
+    pathname.startsWith('/reminders') || 
+    pathname.startsWith('/users') || 
+    pathname.startsWith('/settings') || 
+    pathname.startsWith('/import')
+
+  // Redirección si no está autenticado y busca páginas protegidas
+  if (!session && (isVolunteerRoute || isCoordinatorRoute)) {
+    const loginUrl = new URL('/login', request.url)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  // Redirección si ya está autenticado e intenta acceder al login
+  if (session && isAuthRoute) {
+    const dest = session.userType === 'volunteer' ? '/calendar' : '/volunteers'
+    return NextResponse.redirect(new URL(dest, request.url))
+  }
+
+  // Si es Voluntario e intenta ingresar a rutas de Coordinador
+  if (session && session.userType === 'volunteer' && isCoordinatorRoute) {
+    return NextResponse.redirect(new URL('/calendar', request.url))
+  }
+
+  // Si es Coordinador e intenta ingresar a rutas de Administrador (/users o /dashboard)
+  if (session && session.userType === 'profile' && session.role !== 'Admin') {
+    if (pathname.startsWith('/users') || pathname.startsWith('/dashboard')) {
+      const fallbackDest = session.role === 'Editor' ? '/volunteers' : '/shifts'
+      return NextResponse.redirect(new URL(fallbackDest, request.url))
+    }
+  }
+
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: '/api/:path*',
+  matcher: [
+    '/api/:path*',
+    '/login',
+    '/calendar',
+    '/profile',
+    '/dashboard',
+    '/volunteers',
+    '/shifts',
+    '/check-in',
+    '/reports',
+    '/reminders',
+    '/users',
+    '/settings',
+    '/import'
+  ]
 }

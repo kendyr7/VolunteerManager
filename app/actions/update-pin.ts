@@ -2,15 +2,37 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
+import { signSession } from '@/lib/auth'
+
+function isSequential(pin: string): boolean {
+  let asc = true;
+  let desc = true;
+  for (let i = 0; i < pin.length - 1; i++) {
+    const diff = pin.charCodeAt(i + 1) - pin.charCodeAt(i);
+    if (diff !== 1) asc = false;
+    if (diff !== -1) desc = false;
+  }
+  return asc || desc;
+}
+
+function isRepetitive(pin: string): boolean {
+  return /^(\d)\1+$/.test(pin);
+}
 
 export async function updateInitialPin(userId: string, userType: 'profile' | 'volunteer', newPin: string) {
-  // Validaciones de seguridad del lado del servidor para el PIN
+  // 1. Validaciones de seguridad del lado del servidor para el PIN
   const isNumeric = /^[0-9]+$/.test(newPin);
   if (!newPin || newPin.length < 4 || newPin.length > 6 || !isNumeric) {
     return { error: "El PIN debe ser únicamente numérico y tener entre 4 y 6 dígitos." };
   }
   if (newPin === '1234') {
     return { error: "No puedes elegir el PIN por defecto '1234' por motivos de seguridad." };
+  }
+  if (isRepetitive(newPin)) {
+    return { error: "Por motivos de seguridad, no utilices un PIN repetitivo (ej: 1111, 2222)." };
+  }
+  if (isSequential(newPin)) {
+    return { error: "Por motivos de seguridad, no utilices un PIN secuencial (ej: 1234, 4321)." };
   }
 
   const supabase = await createClient();
@@ -28,7 +50,7 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     return { error: "No se pudo actualizar el PIN." };
   }
 
-  // If successful, we need to create the session cookie because loginWithPin didn't do it
+  // 2. Si se actualizó correctamente, crear el token de sesión criptográfico
   const { data: user } = await supabase
     .from(table)
     .select('*, committees(name)')
@@ -41,7 +63,15 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     
     if (userType === 'profile') {
       const role = user.role;
-      cookieStore.set('session', encodeURIComponent(`coordinator-${role}-${committeeName}`), {
+      
+      const sessionToken = signSession({
+        userId: user.id,
+        userType: 'profile',
+        role,
+        committee: committeeName
+      });
+
+      cookieStore.set('session', sessionToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         maxAge: 60 * 60 * 24 * 7,
@@ -61,12 +91,20 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
         phone: user.phone
       };
     } else {
-      cookieStore.set('session', encodeURIComponent(`volunteer-${user.id}-${committeeName}`), {
+      const sessionToken = signSession({
+        userId: user.id,
+        userType: 'volunteer',
+        role: 'Lector',
+        committee: committeeName
+      });
+
+      cookieStore.set('session', sessionToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         maxAge: 60 * 60 * 24 * 7,
         path: '/',
       });
+
       return { 
         success: true, 
         redirectTo: '/calendar', 

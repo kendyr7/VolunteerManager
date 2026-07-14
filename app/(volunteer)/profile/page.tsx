@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { VolunteerProfileClient } from "@/components/VolunteerProfileClient";
+import { verifySessionToken } from "@/lib/auth";
 
 export const metadata = {
   title: "Mi Perfil | Volunteer Manager",
@@ -10,17 +11,14 @@ export const metadata = {
 
 export default async function VolunteerProfilePage() {
   const cookieStore = await cookies();
-  const session = decodeURIComponent(cookieStore.get('session')?.value || '');
+  const sessionCookie = cookieStore.get('session')?.value || '';
+  const session = verifySessionToken(sessionCookie);
 
-  if (!session) {
+  if (!session || session.userType !== 'volunteer') {
     redirect('/login');
   }
 
-  if (!session.startsWith('volunteer-')) {
-    redirect('/login');
-  }
-
-  const volunteerId = session.substring(10, 46);
+  const volunteerId = session.userId;
   const supabase = await createClient();
 
   // Fetch volunteer details with committee name

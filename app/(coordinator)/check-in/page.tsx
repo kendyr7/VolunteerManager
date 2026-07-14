@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CheckInScanner } from "@/components/CheckInScanner";
+import { verifySessionToken } from "@/lib/auth";
 
 export const metadata = {
   title: "Escanear Turno | Volunteer Manager",
@@ -10,20 +11,19 @@ export const metadata = {
 
 export default async function CheckInPage() {
   const cookieStore = await cookies();
-  const session = decodeURIComponent(cookieStore.get('session')?.value || '');
+  const sessionCookie = cookieStore.get('session')?.value || '';
+  const session = verifySessionToken(sessionCookie);
 
-  if (!session) {
+  if (!session || session.userType !== 'profile') {
     redirect('/login');
   }
 
-  if (!session.startsWith('coordinator-')) {
+  const { role, committee: committeeName, userId } = session;
+
+  // Admin Check: Solo Admin y Editor pueden acceder al check-in
+  if (role !== 'Admin' && role !== 'Editor') {
     redirect('/login');
   }
-
-  const firstHyphen = session.indexOf('-');
-  const secondHyphen = session.indexOf('-', firstHyphen + 1);
-  const role = session.substring(firstHyphen + 1, secondHyphen);
-  const committeeName = session.substring(secondHyphen + 1) || '';
 
   const supabase = await createClient();
   

@@ -2,31 +2,28 @@ import { NextResponse } from 'next/server';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { verifySessionToken } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session');
+    const sessionCookie = cookieStore.get('session')?.value || '';
+    const session = verifySessionToken(sessionCookie);
     
-    if (!sessionCookie) {
+    if (!session) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
-
-    // Get the user from the custom session cookie
-    // session format is typically "coordinator-Admin-Historia" or "volunteer-UUID-Historia"
-    // To properly link the passkey, we really need the user ID. 
-    // It seems our current custom auth doesn't store the user ID in the cookie for coordinators, 
-    // only the role/committee. Let's fix that or use Supabase to fetch the current user's ID via phone/pin.
-    
-    // Actually, wait, we need the user's ID to register a passkey.
-    // Let's pass the userId in the body of this request, or read it from somewhere secure.
-    // If the client passes it, we must verify it.
     
     const body = await request.json();
     const { userId, userType, phone } = body; // from the client
 
     if (!userId || !userType || !phone) {
       return NextResponse.json({ error: 'Faltan datos del usuario' }, { status: 400 });
+    }
+
+    // Validar que el token de sesión corresponda al usuario de la solicitud
+    if (session.userId !== userId) {
+      return NextResponse.json({ error: 'Prohibido: Token de sesión no coincide con el usuario.' }, { status: 403 });
     }
 
     const rpName = 'Volunteer Manager';

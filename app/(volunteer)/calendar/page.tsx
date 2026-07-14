@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { ShiftCalendar } from "@/components/ShiftCalendar";
 import { EntryPassButton } from "@/components/EntryPassButton";
+import { verifySessionToken } from "@/lib/auth";
 
 export const metadata = {
   title: "Mi Calendario | Volunteer Manager",
@@ -11,22 +12,18 @@ export const metadata = {
 
 export default async function CalendarPage() {
   const cookieStore = await cookies();
-  const session = decodeURIComponent(cookieStore.get('session')?.value || '');
+  const sessionCookie = cookieStore.get('session')?.value || '';
+  const session = verifySessionToken(sessionCookie);
 
-  console.log("CALENDAR_LOG: Reading session cookie:", session);
+  console.log("CALENDAR_LOG: Verifying session token");
 
-  if (!session) {
-    console.log("CALENDAR_LOG: Redirecting because session is empty");
+  if (!session || session.userType !== 'volunteer') {
+    console.log("CALENDAR_LOG: Redirecting because session is invalid or not volunteer");
     redirect('/login');
   }
 
-  if (!session.startsWith('volunteer-')) {
-    console.log("CALENDAR_LOG: Redirecting because session does not start with 'volunteer-'");
-    redirect('/login');
-  }
-
-  const volunteerId = session.substring(10, 46);
-  const committeeName = session.substring(47) || 'Sin comité';
+  const volunteerId = session.userId;
+  const committeeName = session.committee || 'Sin comité';
 
   const supabase = await createClient();
   const { data: volunteer, error } = await supabase

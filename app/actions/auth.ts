@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { signSession } from '@/lib/auth'
 
 export type AuthState = {
   error?: string;
@@ -19,7 +20,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
   const phone = (formData.get('phone') as string || '').replace(/\s+/g, '');
   const pin = formData.get('pin') as string;
 
-  console.log("AUTH_LOG: Received login request", { phone, pin, pin_length: pin?.length });
+  console.log("AUTH_LOG: Received login request", { phone, pin_length: pin?.length });
 
   if (!phone || !pin) {
     return { error: 'Por favor, ingresa tu teléfono y PIN.' };
@@ -27,8 +28,23 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
 
   const supabase = await createClient();
 
+  // 0. Verificar Rate Limiting (Fuerza Bruta)
+  const { data: attempt } = await supabase
+    .from('login_attempts')
+    .select('*')
+    .eq('phone', phone)
+    .maybeSingle();
+
+  if (attempt) {
+    const now = new Date();
+    if (attempt.locked_until && new Date(attempt.locked_until) > now) {
+      const remainingMin = Math.ceil((new Date(attempt.locked_until).getTime() - now.getTime()) / 60000);
+      return { error: `Teléfono bloqueado por exceso de intentos. Inténtalo de nuevo en ${remainingMin} minutos.` };
+    }
+  }
+
   // 1. Intentar buscar en Profiles (Coordinadores)
-  const { data: profile, error: profileErr } = await supabase
+  const { data: profile } = await supabase
     .from('profiles')
     .select('*, committees(name)')
     .eq('phone', phone)
@@ -36,6 +52,9 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     .maybeSingle();
 
   if (profile) {
+    // Resetear Rate Limiting tras login exitoso
+    await supabase.from('login_attempts').delete().eq('phone', phone);
+
     // Check if it's first login (assigned PIN 1234)
     if (pin === '1234') {
       return { 
@@ -46,11 +65,19 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
       };
     }
 
-    const cookieStore = await cookies();
     const role = profile.role;
     const committeeName = profile.committees?.name || '';
     
-    cookieStore.set('session', encodeURIComponent(`coordinator-${role}-${committeeName}`), {
+    // Generar Token de Sesión Criptográfico
+    const sessionToken = signSession({
+      userId: profile.id,
+      userType: 'profile',
+      role,
+      committee: committeeName
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set('session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 7, // 7 días
@@ -71,7 +98,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
   }
 
   // 2. Si no es coordinador, buscar en Volunteers (Voluntarios normales)
-  const { data: volunteer, error: volErr } = await supabase
+  const { data: volunteer } = await supabase
     .from('volunteers')
     .select('*, committees(name)')
     .eq('phone', phone)
@@ -79,6 +106,9 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     .maybeSingle();
 
   if (volunteer) {
+    // Resetear Rate Limiting tras login exitoso
+    await supabase.from('login_attempts').delete().eq('phone', phone);
+
     // Check if it's first login (assigned PIN 1234)
     if (pin === '1234') {
        return { 
@@ -89,10 +119,18 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
        };
     }
 
-    const cookieStore = await cookies();
     const committeeName = volunteer.committees?.name || '';
 
-    cookieStore.set('session', encodeURIComponent(`volunteer-${volunteer.id}-${committeeName}`), {
+    // Generar Token de Sesión Criptográfico
+    const sessionToken = signSession({
+      userId: volunteer.id,
+      userType: 'volunteer',
+      role: 'Lector',
+      committee: committeeName
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set('session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 7, // 7 días
@@ -102,10 +140,32 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     return { 
       success: true, 
       redirectTo: '/calendar',
-      role: 'Lector', // Los voluntarios ven su perfil tipo Lector
+      role: 'Lector',
       committee: committeeName,
       name: `${volunteer.first_name} ${volunteer.last_name}`.trim()
     };
+  }
+
+  // 3. Registrar Intento Fallido para Rate Limiting
+  if (attempt) {
+    const newCount = attempt.attempts_count + 1;
+    const lockedUntil = newCount >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
+    await supabase
+      .from('login_attempts')
+      .update({
+        attempts_count: newCount,
+        locked_until: lockedUntil,
+        last_attempt: new Date().toISOString()
+      })
+      .eq('phone', phone);
+  } else {
+    await supabase
+      .from('login_attempts')
+      .insert({
+        phone: phone,
+        attempts_count: 1,
+        last_attempt: new Date().toISOString()
+      });
   }
 
   return { error: 'El teléfono o PIN es incorrecto.' };

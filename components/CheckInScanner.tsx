@@ -25,6 +25,8 @@ export function CheckInScanner({
   const [state, setState] = useState<ScannerState>('idle');
   const [errorMsg, setErrorMsg] = useState("");
   const [sessionCount, setSessionCount] = useState(0);
+  const [camerasList, setCamerasList] = useState<Array<{ id: string, label: string }>>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>("");
   const [scanResult, setScanResult] = useState<{
     volunteer: string;
     committee: string;
@@ -130,25 +132,33 @@ export function CheckInScanner({
         try {
           const cameras = await Html5Qrcode.getCameras();
           if (cameras && cameras.length > 0) {
-            // 1st choice: main back camera (no ultra/wide in label)
+            setCamerasList(cameras.map(c => ({ id: c.id, label: c.label })));
+
+            // 1st choice: main back camera (includes 'wide' if not 'ultra')
             const mainBack = cameras.find(c => {
               const lbl = c.label.toLowerCase();
-              return (lbl.includes('back') || lbl.includes('rear') || lbl.includes('trasera'))
-                && !lbl.includes('ultra')
-                && !lbl.includes('wide');
+              const isBack = lbl.includes('back') || lbl.includes('rear') || lbl.includes('trasera') || lbl.includes('camara 0') || lbl.includes('camera 0');
+              const isUltra = lbl.includes('ultra') || lbl.includes('0.5x') || lbl.includes('0.6x');
+              const isTele = lbl.includes('telephoto') || lbl.includes('2x') || lbl.includes('3x') || lbl.includes('zoom');
+              return isBack && !isUltra && !isTele;
             });
-            if (mainBack) cameraCandidates.push(mainBack.id);
 
-            // 2nd choice: last camera in list (typically main back on most devices)
-            const lastCam = cameras[cameras.length - 1];
-            if (lastCam && lastCam.id !== mainBack?.id) {
+            if (mainBack) {
+              cameraCandidates.push(mainBack.id);
+              setSelectedCameraId(mainBack.id);
+            } else {
+              // Intenta tomar la última cámara trasera de la lista
+              const lastCam = cameras[cameras.length - 1];
               cameraCandidates.push(lastCam.id);
+              setSelectedCameraId(lastCam.id);
             }
 
-            // 3rd choice: first camera
-            if (cameras[0] && cameras[0].id !== lastCam?.id) {
-              cameraCandidates.push(cameras[0].id);
-            }
+            // Registrar el resto de las cámaras detectadas como candidatos de respaldo
+            cameras.forEach(c => {
+              if (c.id !== selectedCameraId) {
+                cameraCandidates.push(c.id);
+              }
+            });
           }
         } catch {
           // Enumeration not supported — skip to facingMode fallback
@@ -204,6 +214,38 @@ export function CheckInScanner({
       }
     }
     html5QrcodeRef.current = null;
+  };
+
+  // Alternar cámara en caliente
+  const handleSwitchCamera = async () => {
+    if (!html5QrcodeRef.current || camerasList.length <= 1) return;
+
+    const currentIndex = camerasList.findIndex(c => c.id === selectedCameraId);
+    const nextIndex = (currentIndex + 1) % camerasList.length;
+    const nextCamera = camerasList[nextIndex];
+
+    try {
+      if (html5QrcodeRef.current.isScanning) {
+        await html5QrcodeRef.current.stop();
+      }
+
+      setSelectedCameraId(nextCamera.id);
+
+      const qrCodeSuccessCallback = async (decodedText: string) => {
+        await stopScanning();
+        handleScannedData(decodedText);
+      };
+
+      const config = {
+        fps: 10,
+      };
+
+      await html5QrcodeRef.current.start(nextCamera.id, config, qrCodeSuccessCallback, () => {});
+    } catch (e) {
+      console.error("Error switching camera:", e);
+      setErrorMsg("No se pudo cambiar a la siguiente cámara.");
+      setState('error');
+    }
   };
 
   // Process Scanned Data
@@ -353,14 +395,28 @@ export function CheckInScanner({
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                     Buscando código QR...
                   </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { stopScanning(); setState('idle'); setScanResult(null); }}
-                    className="border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-xl h-8 px-3 text-xs font-bold"
-                  >
-                    Detener
-                  </Button>
+                  <div className="flex gap-2">
+                    {camerasList.length > 1 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSwitchCamera}
+                        className="border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-xl h-8 px-3 text-xs font-bold flex items-center gap-1.5"
+                        title="Cambiar de cámara"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">flip_camera_ios</span>
+                        <span>Cámara</span>
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { stopScanning(); setState('idle'); setScanResult(null); }}
+                      className="border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-xl h-8 px-3 text-xs font-bold"
+                    >
+                      Detener
+                    </Button>
+                  </div>
                 </div>
               </div>
 

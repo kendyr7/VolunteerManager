@@ -13,6 +13,7 @@ import { startAuthentication } from "@simplewebauthn/browser";
 export function LoginForm() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [isBiometricLoading, setIsBiometricLoading] = useState(false);
 
   // Unified Login Fields
   const [phone, setPhone] = useState("");
@@ -55,6 +56,7 @@ export function LoginForm() {
     }
     
     setError(null);
+    setIsBiometricLoading(true);
     try {
       const resp = await fetch('/api/webauthn/authenticate/generate-options', {
         method: 'POST',
@@ -69,6 +71,9 @@ export function LoginForm() {
 
       const options = await resp.json();
       const asseResp = await startAuthentication(options);
+
+      // Desactivamos el loading de la huella puesto que el lector nativo ya terminó
+      setIsBiometricLoading(false);
 
       // Sólo mostrar el overlay de carga DESPUÉS de que pone la huella
       startTransition(async () => {
@@ -92,7 +97,13 @@ export function LoginForm() {
         }
       });
     } catch (err: any) {
-      setError("Huella no reconocida, inténtelo de nuevo.");
+      setIsBiometricLoading(false);
+      if (err.name === 'NotAllowedError') {
+        // Cancelación voluntaria del usuario, limpiamos el error sin molestar
+        setError(null);
+      } else {
+        setError(err.message || "Huella no reconocida, inténtelo de nuevo.");
+      }
     }
   };
 
@@ -188,7 +199,7 @@ export function LoginForm() {
 
   return (
     <div className="relative">
-      {isPending && typeof document !== "undefined" && createPortal(
+      {(isPending || isBiometricLoading) && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[9999] bg-dark flex items-center justify-center animate-in fade-in duration-300">
           <AnimatedLogo className="w-16 h-16 md:w-20 md:h-20 text-text" isLooping={true} />
         </div>,
@@ -303,7 +314,7 @@ export function LoginForm() {
                 type="button"
                 onClick={handleBiometricLogin}
                 className={`lg:hidden h-12 px-4 rounded-sm font-bold shadow-lg transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 shrink-0 border ${preferredAuthMethod === 'biometrics' ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-[#4d7cfe]/20' : 'bg-dark2 border-white/10 text-white hover:bg-white/10'}`}
-                disabled={!isMounted || isPending || !phone}
+                disabled={!isMounted || isPending || isBiometricLoading || !phone}
                 title="Iniciar sesión con huella dactilar"
               >
                 <span className="material-symbols-outlined text-[20px]">fingerprint</span>
