@@ -180,7 +180,10 @@ export function LoginForm() {
     if (result.committee) {
       localStorage.setItem("mock_committee", result.committee);
     }
-    router.push(result.redirectTo || "/calendar");
+    
+    // Forzamos navegación dura mediante window.location.href para evitar que Next.js use caché del cliente
+    // y para garantizar que las cookies de sesión se envíen de inmediato en la primera solicitud al servidor.
+    window.location.href = result.redirectTo || "/calendar";
   };
 
   return (

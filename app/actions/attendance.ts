@@ -150,7 +150,10 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         return { error: "Error al registrar la asistencia en la base de datos." };
       }
 
-      await recalculateReliability(volunteerId);
+      // Recalculamos la fiabilidad en segundo plano sin bloquear el flujo principal del Check-In
+      recalculateReliability(volunteerId).catch(err => 
+        console.error("Error en segundo plano al recalcular fiabilidad (manual):", err)
+      );
 
       // Fetch volunteer details to return
       const { data: vol } = await supabase
@@ -263,8 +266,10 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       return { error: "Error al registrar la asistencia en base de datos." };
     }
 
-    // Recalculate score
-    await recalculateReliability(volunteerId);
+    // Recalculamos la fiabilidad en segundo plano sin bloquear el flujo principal del Check-In
+    recalculateReliability(volunteerId).catch(err => 
+      console.error("Error en segundo plano al recalcular fiabilidad (QR):", err)
+    );
 
     return {
       success: true,

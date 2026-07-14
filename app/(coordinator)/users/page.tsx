@@ -239,6 +239,19 @@ export default function UsersPage() {
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+
+    const parts = newName.trim().split(/\s+/);
+    if (parts.length < 2 || !parts[1]) {
+      setErrorMsg("Por favor, introduce el nombre completo (nombre y apellido).");
+      return;
+    }
+
+    const cleanPhone = newPhone.replace(/[^0-9]/g, '');
+    if (cleanPhone.length !== 8) {
+      setErrorMsg("El teléfono de WhatsApp debe tener exactamente 8 dígitos.");
+      return;
+    }
+
     const supabase = createClient();
 
     let committeeId: string | null = null;
@@ -310,6 +323,18 @@ export default function UsersPage() {
     e.preventDefault();
     if (!editingUser) return;
     
+    const parts = newName.trim().split(/\s+/);
+    if (parts.length < 2 || !parts[1]) {
+      setErrorMsg("Por favor, introduce el nombre completo (nombre y apellido).");
+      return;
+    }
+
+    const cleanPhone = newPhone.replace(/[^0-9]/g, '');
+    if (cleanPhone.length !== 8) {
+      setErrorMsg("El teléfono de WhatsApp debe tener exactamente 8 dígitos.");
+      return;
+    }
+
     setIsUpdating(true);
     setErrorMsg(null);
     const supabase = createClient();
@@ -549,10 +574,14 @@ export default function UsersPage() {
                     <input 
                       required 
                       pattern="[0-9]{8}"
+                      maxLength={8}
+                      onKeyPress={(e) => {
+                        if (!/[0-9]/.test(e.key)) e.preventDefault();
+                      }}
                       value={newPhone} 
-                      onChange={e => setNewPhone(e.target.value)}
+                      onChange={e => setNewPhone(e.target.value.replace(/[^0-9]/g, ''))}
                       placeholder="Ej. 88881111"
-                      className="w-full h-10 px-3 rounded-[10px] border border-white/10 bg-dark2 text-sm text-text font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                      className="w-full h-10 px-3 rounded-[10px] border border-white/10 bg-dark2 text-sm text-text font-mono focus-border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                     />
                   </div>
                   <div className="space-y-2">
@@ -904,8 +933,12 @@ export default function UsersPage() {
                     <input
                       required
                       pattern="[0-9]{8}"
+                      maxLength={8}
+                      onKeyPress={(e) => {
+                        if (!/[0-9]/.test(e.key)) e.preventDefault();
+                      }}
                       value={newPhone}
-                      onChange={e => setNewPhone(e.target.value)}
+                      onChange={e => setNewPhone(e.target.value.replace(/[^0-9]/g, ''))}
                       className="w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
                     />
                   </div>

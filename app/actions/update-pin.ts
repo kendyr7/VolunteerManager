@@ -4,6 +4,15 @@ import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 
 export async function updateInitialPin(userId: string, userType: 'profile' | 'volunteer', newPin: string) {
+  // Validaciones de seguridad del lado del servidor para el PIN
+  const isNumeric = /^[0-9]+$/.test(newPin);
+  if (!newPin || newPin.length < 4 || newPin.length > 6 || !isNumeric) {
+    return { error: "El PIN debe ser únicamente numérico y tener entre 4 y 6 dígitos." };
+  }
+  if (newPin === '1234') {
+    return { error: "No puedes elegir el PIN por defecto '1234' por motivos de seguridad." };
+  }
+
   const supabase = await createClient();
   const table = userType === 'profile' ? 'profiles' : 'volunteers';
   
@@ -43,7 +52,14 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
       if (role === 'Editor') redirectTo = '/volunteers';
       if (role === 'Lector') redirectTo = '/shifts';
 
-      return { success: true, redirectTo, role, committee: committeeName };
+      return { 
+        success: true, 
+        redirectTo, 
+        role, 
+        committee: committeeName,
+        name: user.full_name,
+        phone: user.phone
+      };
     } else {
       cookieStore.set('session', encodeURIComponent(`volunteer-${user.id}-${committeeName}`), {
         httpOnly: true,
@@ -51,7 +67,14 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
         maxAge: 60 * 60 * 24 * 7,
         path: '/',
       });
-      return { success: true, redirectTo: '/calendar', role: 'Lector', committee: committeeName };
+      return { 
+        success: true, 
+        redirectTo: '/calendar', 
+        role: 'Lector', 
+        committee: committeeName,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        phone: user.phone
+      };
     }
   }
 

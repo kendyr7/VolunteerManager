@@ -405,13 +405,26 @@ export default function VolunteersPage() {
     const first_name = parts[0] || '';
     const last_name = parts.slice(1).join(' ') || '';
 
+    // Validar nombre completo (nombre y apellido)
+    if (parts.length < 2 || !last_name) {
+      showToast("Por favor, introduce al menos un nombre y un apellido.", "error");
+      return;
+    }
+
+    // Sanitizar y validar teléfono
+    const cleanPhone = newPhone.replace(/[^0-9]/g, '');
+    if (cleanPhone.length !== 8) {
+      showToast("El celular debe tener exactamente 8 dígitos.", "error");
+      return;
+    }
+
     const { error } = await supabase
       .from('volunteers')
       .insert([
         {
           first_name,
           last_name,
-          phone: newPhone,
+          phone: cleanPhone,
           committee_id: newCommitteeId || null,
           stake: newStake,
           neighborhood: newWard,
