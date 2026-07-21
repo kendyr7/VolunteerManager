@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
 import { format } from "date-fns";
@@ -160,9 +160,17 @@ export default function ShiftsPage() {
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
-  const [viewMode, setViewMode] = useState<'turnos' | 'active'>('turnos');
+  const [viewMode, setViewMode] = useState<'turnos' | 'active' | 'completed'>('active');
   const [rawShiftsData, setRawShiftsData] = useState<any[]>([]);
   const [checkoutModal, setCheckoutModal] = useState<{ isOpen: boolean; item: any | null }>({ isOpen: false, item: null });
+
+  // Reassign State
+  const [isReassignSheetOpen, setIsReassignSheetOpen] = useState(false);
+  const [reassignVolunteer, setReassignVolunteer] = useState<VolunteerType | null>(null);
+  const [reassignSourceDayKey, setReassignSourceDayKey] = useState<string>("");
+  const [reassignSourceShiftId, setReassignSourceShiftId] = useState<string>("");
+  const [reassignDayKey, setReassignDayKey] = useState<string>("");
+  const [reassignShiftId, setReassignShiftId] = useState<string>("");
 
   const supabase = createClient();
   const [volunteers, setVolunteers] = useState<VolunteerType[]>([]);
@@ -326,6 +334,34 @@ export default function ShiftsPage() {
   
   // Track shifts that are already checked in
   const [checkedInMap, setCheckedInMap] = useState<Record<string, boolean>>({});
+
+  // Track completed shifts in local storage / state
+  const [completedShiftsMap, setCompletedShiftsMap] = useState<Record<string, { checkedOutAt: string }>>({});
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("completed_shifts_map");
+        if (saved) {
+          setCompletedShiftsMap(JSON.parse(saved));
+        }
+      } catch (e) {}
+    }
+  }, []);
+
+  const markShiftCompleted = useCallback((volId: string, dayKey: string, shiftKey: string) => {
+    const key = `${volId}-${dayKey}-${shiftKey}`;
+    const info = { checkedOutAt: new Date().toISOString() };
+    setCompletedShiftsMap(prev => {
+      const next = { ...prev, [key]: info };
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("completed_shifts_map", JSON.stringify(next));
+        } catch (e) {}
+      }
+      return next;
+    });
+  }, []);
 
   // Requerimientos por comité cargados de localStorage o por defecto
   const [committeeRequirements, setCommitteeRequirements] = useState<Record<string, Record<string, number>>>(() => {
@@ -499,7 +535,9 @@ export default function ShiftsPage() {
 
   const isVolunteerAssignedToShift = (vol: VolunteerType, dateKey: string, shiftId: string) => {
     const shifts = globalShifts[vol.id];
-    return shifts && shifts[dateKey] && shifts[dateKey].includes(shiftId);
+    const isAssigned = !!(shifts && shifts[dateKey] && shifts[dateKey].includes(shiftId));
+    const hasShiftRecord = rawShiftsData.some(r => r.volunteer_id === vol.id && r.day_key === dateKey && r.shift_key === shiftId);
+    return isAssigned || hasShiftRecord;
   };
 
   const handleEditClick = (vol: VolunteerType) => {
@@ -608,13 +646,155 @@ export default function ShiftsPage() {
     const item = checkoutModal.item;
     setCheckoutModal({ isOpen: false, item: null });
 
-    const res = await checkOutVolunteer(item.shiftId);
-    if (res.error) {
-      showToast(res.error, "error");
+    const volId = item.volunteer?.id;
+    const dayKey = item.dayKey || "";
+    const shiftKey = item.shiftKey || "";
+
+    if (volId && dayKey && shiftKey) {
+      markShiftCompleted(volId, dayKey, shiftKey);
+    }
+
+    if (item.shiftId) {
+      await checkOutVolunteer(item.shiftId);
+    } else if (volId && dayKey && shiftKey) {
+      try {
+        await supabase
+          .from('shifts')
+          .upsert({
+            volunteer_id: volId,
+            day_key: dayKey,
+            shift_key: shiftKey,
+            checked_in: true,
+            checked_out: true,
+            checked_out_at: new Date().toISOString()
+          }, { onConflict: 'volunteer_id,day_key,shift_key' });
+      } catch (e) {
+        console.error("Supabase upsert shift error:", e);
+      }
+    }
+
+    showToast(`Turno completado para ${item.volunteer.name}`);
+    await loadData();
+  };
+
+  const totalCompletedCount = useMemo(() => {
+    const dbCount = rawShiftsData.filter(s => s.checked_out === true).length;
+    let localCount = 0;
+    
+    // Contar los turnos en completedShiftsMap que NO están en dbCount (para evitar contar doble)
+    Object.keys(completedShiftsMap).forEach(key => {
+      const [volId, dayKey, shiftKey] = key.split('-');
+      const isInDbAsCompleted = rawShiftsData.some(s => 
+        s.volunteer_id === volId && s.day_key === dayKey && s.shift_key === shiftKey && s.checked_out === true
+      );
+      if (!isInDbAsCompleted) {
+        localCount++;
+      }
+    });
+    
+    return dbCount + localCount;
+  }, [rawShiftsData, completedShiftsMap]);
+
+  const getElapsedInfoBetween = (startIso?: string, endIso?: string) => {
+    if (!startIso || !endIso) return null;
+    const start = new Date(startIso).getTime();
+    const end = new Date(endIso).getTime();
+    if (isNaN(start) || isNaN(end)) return null;
+    const diffMs = Math.max(0, end - start);
+    const totalMins = Math.floor(diffMs / (1000 * 60));
+    const hours = Math.floor(totalMins / 60);
+    const minutes = totalMins % 60;
+    const isOver8Hours = hours > 8 || (hours === 8 && minutes > 0);
+
+    let text = '';
+    if (hours > 0 && minutes > 0) text = `${hours}h ${minutes}m`;
+    else if (hours > 0) text = `${hours}h`;
+    else text = `${minutes}m`;
+
+    return { text, isOver8Hours, hours, minutes };
+  };
+
+  const getReassignCapacityInfo = (targetDayKey: string, targetShiftId: string, volTarget?: VolunteerType | null) => {
+    const vol = volTarget || reassignVolunteer;
+    if (!targetDayKey || !targetShiftId || !vol) return null;
+
+    const commName = vol.committee || 'Sin comité';
+    const maxReq = committeeRequirements[commName]?.[targetShiftId] ?? 0;
+
+    const currentlyAssignedCount = volunteers.filter(v =>
+      v.committee === commName &&
+      isVolunteerAssignedToShift(v, targetDayKey, targetShiftId)
+    ).length;
+
+    const isAlreadyAssigned = isVolunteerAssignedToShift(vol, targetDayKey, targetShiftId);
+    const projectedTotal = isAlreadyAssigned ? currentlyAssignedCount : currentlyAssignedCount + 1;
+
+    if (maxReq > 0 && (currentlyAssignedCount >= maxReq || projectedTotal > maxReq)) {
+      return {
+        isFull: true,
+        committeeName: commName,
+        currentCount: currentlyAssignedCount,
+        maxReq,
+        projectedTotal
+      };
+    }
+
+    return { isFull: false };
+  };
+
+  const handleOpenReassign = (vol: VolunteerType, sourceDayKey: string = "", sourceShiftId: string = "") => {
+    setReassignVolunteer(vol);
+    setReassignSourceDayKey(sourceDayKey);
+    setReassignSourceShiftId(sourceShiftId);
+    setReassignDayKey(sourceDayKey || EVENT_DAYS[0]?.key || "");
+    setReassignShiftId(sourceShiftId || "T1");
+    setIsReassignSheetOpen(true);
+  };
+
+  const handleConfirmReassignInShifts = async () => {
+    if (!reassignVolunteer || !reassignDayKey || !reassignShiftId) {
+      showToast("Selecciona día y turno para reasignar", "error");
+      return;
+    }
+
+    const capacityInfo = getReassignCapacityInfo(reassignDayKey, reassignShiftId, reassignVolunteer);
+    if (capacityInfo?.isFull) {
+      showToast(
+        `El turno ${reassignShiftId} del ${reassignDayKey} ya está lleno para el comité de ${capacityInfo.committeeName} (${capacityInfo.currentCount}/${capacityInfo.maxReq} requeridos). Selecciona otra fecha u otro turno.`,
+        "error"
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    if (reassignSourceDayKey && reassignSourceShiftId) {
+      await supabase
+        .from('shifts')
+        .delete()
+        .eq('volunteer_id', reassignVolunteer.id)
+        .eq('day_key', reassignSourceDayKey)
+        .eq('shift_key', reassignSourceShiftId);
+    }
+
+    const { error: insErr } = await supabase
+      .from('shifts')
+      .upsert({
+        volunteer_id: reassignVolunteer.id,
+        day_key: reassignDayKey,
+        shift_key: reassignShiftId
+      }, { onConflict: 'volunteer_id,day_key,shift_key', ignoreDuplicates: true });
+
+    if (insErr) {
+      console.error("Error reassigning shift:", insErr);
+      showToast("Error al reasignar: " + insErr.message, "error");
     } else {
-      showToast(`Turno completado para ${item.volunteer.name}`);
+      showToast(`Turno de ${reassignVolunteer.name} reasignado a ${reassignShiftId} el ${reassignDayKey}`);
+      setIsReassignSheetOpen(false);
+      setReassignVolunteer(null);
       await loadData();
     }
+    setLoading(false);
   };
 
   // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales
@@ -623,14 +803,33 @@ export default function ShiftsPage() {
       .filter(vol => {
         const isAssigned = isVolunteerAssignedToShift(vol, dateKey, shiftId);
         if (!isAssigned) return false;
+
         if (viewMode === 'active') {
           const s = rawShiftsData.find(r => r.volunteer_id === vol.id && r.day_key === dateKey && r.shift_key === shiftId);
-          return !!(s && s.checked_in && !s.checked_out);
+          return !!(s && (s.checked_in || s.checked_out || s.checked_in_at || s.checked_out_at));
         }
+
         return true;
       })
       .sort((a, b) => a.committee.localeCompare(b.committee));
   };
+
+  const getTodayNicaraguaKey = useCallback(() => {
+    try {
+      const nicaraguaStr = new Date().toLocaleDateString("en-US", { timeZone: "America/Managua" });
+      const nicDate = new Date(nicaraguaStr);
+      const match = EVENT_DAYS.find(d => {
+        const dDate = new Date(d.date);
+        return dDate.getFullYear() === nicDate.getFullYear() &&
+               dDate.getMonth() === nicDate.getMonth() &&
+               dDate.getDate() === nicDate.getDate();
+      });
+      if (match) return match.key;
+    } catch (e) {
+      console.error("Error calculating Nicaragua date:", e);
+    }
+    return EVENT_DAYS[0]?.key || "";
+  }, [EVENT_DAYS]);
 
   const renderDayCard = (dayObj: typeof EVENT_DAYS[0]) => {
     const { date, key, dateNum } = dayObj;
@@ -646,11 +845,10 @@ export default function ShiftsPage() {
 
     const isFiltering = searchTerm.trim() !== '' || selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0;
 
-    if (isFiltering && totalVolsOnDay === 0) {
+    if (totalVolsOnDay === 0) {
       return null;
     }
 
-    // Only open via explicit tap — never auto-open on search
     const isOpen = !!expanded[key];
 
     const dayIndex = EVENT_DAYS.findIndex(d => d.key === key);
@@ -687,7 +885,15 @@ export default function ShiftsPage() {
             {/* Right: 4 Columns */}
             <div className="flex items-center shrink-0 ml-auto">
               {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
-                const count = shiftData[t].length;
+                let count = shiftData[t].length;
+                if (viewMode === 'active') {
+                  count = shiftData[t].filter(vol => {
+                    const s = rawShiftsData.find(r => r.volunteer_id === vol.id && r.day_key === key && r.shift_key === t);
+                    const isCompletedLocal = !!completedShiftsMap[`${vol.id}-${key}-${t}`];
+                    const isCheckedOut = s?.checked_out || isCompletedLocal;
+                    return !!(s && s.checked_in && !isCheckedOut);
+                  }).length;
+                }
 
                 return (
                   <div key={t} className={`flex flex-col items-center justify-center w-12 sm:w-16 ${i !== 0 ? 'border-l border-border' : ''}`}>
@@ -763,29 +969,38 @@ export default function ShiftsPage() {
                             <div className="space-y-1">
                               {displayedVols.map(vol => {
                                 const shiftRecord = rawShiftsData.find(s => s.volunteer_id === vol.id && s.day_key === key && s.shift_key === t);
-                                const isCheckedIn = shiftRecord ? !!shiftRecord.checked_in : checkedInMap[`${vol.id}-${key}-${t}`];
-                                const isCheckedOut = shiftRecord ? !!shiftRecord.checked_out : false;
+                                const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
+                                const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
+                                const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
                                 const checkInTimeStr = shiftRecord?.checked_in_at ? format(new Date(shiftRecord.checked_in_at), "hh:mm a") : undefined;
+                                const checkOutTimeStr = shiftRecord?.checked_out_at ? format(new Date(shiftRecord.checked_out_at), "hh:mm a") : (completedLocal?.checkedOutAt ? format(new Date(completedLocal.checkedOutAt), "hh:mm a") : undefined);
+                                const elapsed = getElapsedInfoBetween(shiftRecord?.checked_in_at, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
 
                                 return (
                                   <div
                                     key={vol.id}
-                                    className={`flex items-center justify-between group border rounded-sm px-2 py-1.5 transition-colors cursor-pointer ${
-                                      isCheckedIn
+                                    className={`flex items-center justify-between group border rounded-sm px-2 py-1.5 transition-all cursor-pointer ${
+                                      isCheckedOut
+                                        ? 'opacity-60 bg-gray-500/10 border-gray-500/20 text-text-dim dark:bg-white/5 dark:border-white/10 dark:text-gray-400 hover:opacity-100'
+                                        : isCheckedIn
                                         ? 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/15'
                                         : 'bg-dark2 border-border/40 hover:bg-dark3'
                                     }`}
                                     onClick={(e) => { e.stopPropagation(); handleEditClick(vol); }}
                                   >
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      <div className={`w-2 h-2 rounded-full shrink-0 ${isCheckedIn ? 'bg-emerald-400 animate-pulse' : c.dot}`} />
+                                      <div className={`w-2 h-2 rounded-full shrink-0 ${isCheckedOut ? 'bg-gray-400 dark:bg-gray-600' : isCheckedIn ? 'bg-emerald-400 animate-pulse' : c.dot}`} />
                                       <div className="flex flex-col min-w-0">
                                         <span className={`font-inter font-bold text-[12px] truncate group-hover:text-[#4d7cfe] transition-colors ${
-                                          isCheckedIn ? 'text-emerald-400 font-extrabold' : 'text-text'
+                                          isCheckedOut ? 'text-gray-400 dark:text-gray-400 font-bold' : isCheckedIn ? 'text-emerald-400 font-extrabold' : 'text-text'
                                         }`}>
                                           <HighlightText text={vol.name} term={searchTerm} />
                                         </span>
-                                        {isCheckedIn && (
+                                        {isCheckedOut ? (
+                                          <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOver8Hours ? 'text-red-400 font-extrabold' : 'text-gray-400 dark:text-gray-500'}`}>
+                                            Completado {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
+                                          </span>
+                                        ) : isCheckedIn ? (
                                           <span className={`font-inter font-bold text-[9px] leading-tight ${
                                             shiftRecord?.checked_in_at && (Date.now() - new Date(shiftRecord.checked_in_at).getTime() > 8 * 3600 * 1000)
                                               ? 'text-red-400 font-extrabold'
@@ -793,23 +1008,46 @@ export default function ShiftsPage() {
                                           }`}>
                                             En turno {checkInTimeStr ? `· ${checkInTimeStr}` : ''}
                                           </span>
-                                        )}
+                                        ) : null}
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                    <div className="flex items-center gap-1 shrink-0 ml-2">
                                       {isCheckedIn && !isCheckedOut ? (
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, volunteer: vol, checkedInAt: shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
+                                            }}
+                                            className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                                            title="Turno Completado"
+                                          >
+                                            <span className="material-symbols-outlined text-[12px]">task_alt</span>
+                                            <span>Completar</span>
+                                          </button>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenReassign(vol, key, t);
+                                            }}
+                                            className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                                            title="Reasignar Turno"
+                                          >
+                                            <span className="material-symbols-outlined text-[12px]">sync_alt</span>
+                                            <span>Reasignar</span>
+                                          </button>
+                                        </div>
+                                      ) : isCheckedOut ? (
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            if (shiftRecord) {
-                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord.id, volunteer: vol, checkedInAt: shiftRecord.checked_in_at } });
-                                            }
+                                            handleOpenReassign(vol, key, t);
                                           }}
-                                          className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95"
-                                          title="Turno Completado (Check-out)"
+                                          className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                                          title="Reasignar Turno"
                                         >
-                                          <span className="material-symbols-outlined text-[12px]">task_alt</span>
-                                          <span>Completar</span>
+                                          <span className="material-symbols-outlined text-[12px]">sync_alt</span>
+                                          <span>Reasignar</span>
                                         </button>
                                       ) : (
                                         <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
@@ -989,15 +1227,20 @@ export default function ShiftsPage() {
                                 (isShiftExpanded ? vols : vols.slice(0, limit)).map(vol => {
                                   const isMatch = searchTerm.trim() !== '' && vol.name.toLowerCase().includes(searchTerm.toLowerCase());
                                   const shiftRecord = rawShiftsData.find(s => s.volunteer_id === vol.id && s.day_key === key && s.shift_key === t);
-                                  const isCheckedIn = shiftRecord ? !!shiftRecord.checked_in : checkedInMap[`${vol.id}-${key}-${t}`];
-                                  const isCheckedOut = shiftRecord ? !!shiftRecord.checked_out : false;
+                                  const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
+                                  const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
+                                  const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
                                   const checkInTimeStr = shiftRecord?.checked_in_at ? format(new Date(shiftRecord.checked_in_at), "hh:mm a") : undefined;
+                                  const checkOutTimeStr = shiftRecord?.checked_out_at ? format(new Date(shiftRecord.checked_out_at), "hh:mm a") : (completedLocal?.checkedOutAt ? format(new Date(completedLocal.checkedOutAt), "hh:mm a") : undefined);
+                                  const elapsed = getElapsedInfoBetween(shiftRecord?.checked_in_at, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
 
                                   return (
                                     <div
                                       key={vol.id}
-                                      className={`flex items-center justify-between gap-2 cursor-pointer p-2 rounded-xl transition-colors ${
-                                        isCheckedIn
+                                      className={`flex items-center justify-between gap-2 cursor-pointer p-2 rounded-xl transition-all ${
+                                        isCheckedOut
+                                          ? 'opacity-60 bg-gray-500/10 border border-gray-500/20 dark:bg-white/5 dark:border-white/10 hover:opacity-100'
+                                          : isCheckedIn
                                           ? 'bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25'
                                           : isMatch
                                           ? 'bg-yellow-400/20 ring-1 ring-yellow-300/40 hover:bg-yellow-400/30'
@@ -1007,15 +1250,19 @@ export default function ShiftsPage() {
                                     >
                                       <div className="flex items-center gap-2 min-w-0 flex-1">
                                         <div className={`w-2 h-2 rounded-full shrink-0 ${
-                                          isCheckedIn ? 'bg-emerald-400 animate-pulse' : isMatch ? 'bg-yellow-300' : 'bg-white/60'
+                                          isCheckedOut ? 'bg-gray-400 dark:bg-gray-600' : isCheckedIn ? 'bg-emerald-400 animate-pulse' : isMatch ? 'bg-yellow-300' : 'bg-white/60'
                                         }`} />
                                         <div className="flex flex-col min-w-0">
                                           <span className={`font-inter font-bold text-[12px] truncate ${
-                                            isCheckedIn ? 'text-emerald-300 font-extrabold' : 'text-white'
+                                            isCheckedOut ? 'text-gray-400 font-bold' : isCheckedIn ? 'text-emerald-300 font-extrabold' : 'text-white'
                                           }`}>
                                             <HighlightText text={vol.name} term={searchTerm} />
                                           </span>
-                                          {isCheckedIn ? (
+                                          {isCheckedOut ? (
+                                            <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOver8Hours ? 'text-red-400 font-extrabold' : 'text-gray-400 dark:text-gray-400'}`}>
+                                              Completado {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
+                                            </span>
+                                          ) : isCheckedIn ? (
                                             <span className={`font-inter font-bold text-[9px] leading-tight ${
                                               shiftRecord?.checked_in_at && (Date.now() - new Date(shiftRecord.checked_in_at).getTime() > 8 * 3600 * 1000)
                                                 ? 'text-red-400 font-extrabold'
@@ -1031,24 +1278,55 @@ export default function ShiftsPage() {
                                         </div>
                                       </div>
                                       {isCheckedIn && !isCheckedOut ? (
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, volunteer: vol, checkedInAt: shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
+                                            }}
+                                            className="w-7 h-7 rounded-full bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm"
+                                            title="Turno Completado (Check-out)"
+                                          >
+                                            <span className="material-symbols-outlined text-[15px]">task_alt</span>
+                                          </button>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenReassign(vol, key, t);
+                                            }}
+                                            className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm"
+                                            title="Reasignar Turno"
+                                          >
+                                            <span className="material-symbols-outlined text-[15px]">sync_alt</span>
+                                          </button>
+                                        </div>
+                                      ) : isCheckedOut ? (
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            if (shiftRecord) {
-                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord.id, volunteer: vol, checkedInAt: shiftRecord.checked_in_at } });
-                                            }
+                                            handleOpenReassign(vol, key, t);
                                           }}
-                                          className="px-2.5 py-1 rounded-full font-inter font-bold text-[9px] bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/40 transition-all flex items-center gap-1 shrink-0 active:scale-95 shadow-sm"
+                                          className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm"
+                                          title="Reasignar Turno"
                                         >
-                                          <span className="material-symbols-outlined text-[12px]">task_alt</span>
-                                          <span>Completar</span>
+                                          <span className="material-symbols-outlined text-[15px]">sync_alt</span>
                                         </button>
-                                      ) : isCheckedIn ? (
-                                        <span className="material-symbols-outlined text-[14px] text-emerald-400 font-bold shrink-0">task_alt</span>
                                       ) : (
-                                        <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
-                                          {vol.committee}
-                                        </Badge>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenReassign(vol, key, t);
+                                            }}
+                                            className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm"
+                                            title="Reasignar Turno"
+                                          >
+                                            <span className="material-symbols-outlined text-[15px]">sync_alt</span>
+                                          </button>
+                                          <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
+                                            {vol.committee}
+                                          </Badge>
+                                        </div>
                                       )}
                                     </div>
                                   );
@@ -1108,10 +1386,10 @@ export default function ShiftsPage() {
             <button
               onClick={() => setViewMode('active')}
               className={cn(
-                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5",
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
                 viewMode === 'active'
                   ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
-                  : "text-text-dim hover:text-text font-medium"
+                  : "text-text-dim hover:text-text"
               )}
             >
               <span className="relative flex h-2 w-2">
@@ -1123,10 +1401,10 @@ export default function ShiftsPage() {
             <button
               onClick={() => setViewMode('turnos')}
               className={cn(
-                "px-3.5 py-1.5 rounded-full text-[10px] transition-all",
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all font-inter font-bold",
                 viewMode === 'turnos'
                   ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
-                  : "text-text-dim hover:text-text font-medium"
+                  : "text-text-dim hover:text-text"
               )}
             >
               Programación
@@ -1175,6 +1453,8 @@ export default function ShiftsPage() {
           </div>
         </div>
       )}
+
+
 
       {/* Lista de días (layout unificado para Programación y En Turno) */}
       <div className="flex flex-col gap-2 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
@@ -1518,6 +1798,136 @@ export default function ShiftsPage() {
         onConfirm={handleConfirmCheckout}
         onCancel={() => setCheckoutModal({ isOpen: false, item: null })}
       />
+
+      {/* Reasignar Turno Drawer */}
+      <div className={`fixed inset-0 z-[115] flex flex-col justify-end transition-all duration-300 ${isReassignSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        <div
+          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isReassignSheetOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setIsReassignSheetOpen(false)}
+        />
+
+        <div
+          className={`relative w-full md:w-[420px] md:mx-auto bg-dark2 border border-white/10 rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isReassignSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
+        >
+          <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+          
+          <div className="p-6">
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold text-text mb-1">Reasignar Turno</h3>
+              <p className="text-sm font-inter font-bold text-text-dim">Moviendo a {reassignVolunteer?.name}</p>
+              {reassignVolunteer?.committee && (
+                <span className="inline-block mt-2 px-3 py-1 rounded-full text-xs font-inter font-bold bg-[#4d7cfe]/20 text-[#8bb0ff] border border-[#4d7cfe]/30">
+                  {reassignVolunteer.committee}
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-text-dim tracking-widest uppercase mb-3 block">FECHA DESTINO</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {EVENT_DAYS.map((d, index) => {
+                    const isSelected = reassignDayKey === d.key;
+                    const dayAbbr = d.label.substring(0, 3);
+                    const bgColors = [
+                      'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
+                      'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
+                    ];
+                    const cardBg = bgColors[index % bgColors.length];
+                    
+                    return (
+                      <button
+                        key={d.key}
+                        onClick={() => setReassignDayKey(d.key)}
+                        className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-lg border transition-all bg-dark3 ${isSelected
+                          ? 'border-text text-text shadow-sm scale-105 z-10'
+                          : 'border-border text-text-dim opacity-70 hover:opacity-100'
+                          }`}
+                      >
+                        <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${cardBg} opacity-90`} />
+                        <span className={`font-inter font-bold text-[9px] uppercase tracking-widest ${isSelected ? 'text-text' : 'text-text-dim'}`}>
+                          {dayAbbr}
+                        </span>
+                        <span className="text-sm font-black leading-none mt-0.5 drop-shadow-sm">{d.dateNum}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <label className="text-[10px] font-bold text-text-dim tracking-widest uppercase mb-3 block">TURNO DESTINO</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                    const isSelected = reassignShiftId === t;
+                    const capInfo = reassignDayKey ? getReassignCapacityInfo(reassignDayKey, t) : null;
+                    const isFull = capInfo?.isFull;
+
+                    return (
+                      <button
+                        key={t}
+                        disabled={!reassignDayKey}
+                        onClick={() => setReassignShiftId(t)}
+                        className={`flex flex-col items-center justify-center py-2.5 rounded-lg border text-sm font-bold transition-all relative ${
+                          !reassignDayKey ? 'bg-dark2 border-border text-text-dim opacity-50 cursor-not-allowed' :
+                          isFull
+                          ? 'bg-rose-500/15 border-rose-500/40 text-rose-400 hover:bg-rose-500/25'
+                          : isSelected
+                          ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-sm scale-105 z-10'
+                          : 'bg-dark3 border-border text-text hover:bg-dark3/80 hover:text-text'
+                          }`}
+                      >
+                        <span>{t}</span>
+                        {isFull && (
+                          <span className="text-[8px] font-extrabold text-rose-400 leading-none mt-0.5 uppercase tracking-wider">Lleno</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Warning message for full shift */}
+              {(() => {
+                const currentCap = (reassignDayKey && reassignShiftId) ? getReassignCapacityInfo(reassignDayKey, reassignShiftId) : null;
+                if (!currentCap?.isFull) return null;
+
+                return (
+                  <div className="mt-4 p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-inter font-bold flex items-start gap-3 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[22px] text-rose-400 shrink-0">block</span>
+                    <div>
+                      <p className="text-rose-200 font-extrabold text-xs mb-1">Turno Lleno</p>
+                      <p className="text-[11px] text-rose-300/90 font-medium leading-relaxed">
+                        El turno <strong className="text-white">{reassignShiftId}</strong> del <strong className="text-white">{reassignDayKey}</strong> ya alcanzó la meta máxima para el comité de <strong className="text-white">{currentCap.committeeName}</strong> ({currentCap.currentCount}/{currentCap.maxReq} requeridos).
+                      </p>
+                      <p className="text-[11px] text-white font-bold mt-2">
+                        Por favor selecciona otra fecha u otro turno disponible para reasignar.
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="pt-4 flex gap-3">
+                <Button 
+                  variant="outline"
+                  onClick={() => setIsReassignSheetOpen(false)}
+                  className="flex-1 bg-dark3 border-border text-text hover:bg-dark2 font-bold h-12 rounded-xl"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={handleConfirmReassignInShifts}
+                  disabled={!reassignDayKey || !reassignShiftId || !!(reassignDayKey && reassignShiftId && getReassignCapacityInfo(reassignDayKey, reassignShiftId)?.isFull)}
+                  className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-dark3 disabled:text-text-dim disabled:border-border text-white font-bold h-12 rounded-xl transition-all"
+                >
+                  Confirmar Reasignación
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 }

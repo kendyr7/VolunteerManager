@@ -607,9 +607,63 @@ export default function RemindersPage() {
     showToast("Marcados como contactados");
   };
 
+  const getReassignCapacityInfo = useCallback((dayKey: string, shiftId: string) => {
+    if (!dayKey || !shiftId || selectedVolunteers.size === 0) return null;
+
+    const selectedVols = Array.from(selectedVolunteers)
+      .map(id => volunteers.find(v => v.id === id))
+      .filter((v): v is VolunteerType => !!v);
+
+    // Group selected volunteers by committee
+    const committeeGroups: Record<string, VolunteerType[]> = {};
+    selectedVols.forEach(v => {
+      const comm = v.committee || 'Sin Comité';
+      if (!committeeGroups[comm]) committeeGroups[comm] = [];
+      committeeGroups[comm].push(v);
+    });
+
+    for (const [commName, volsInComm] of Object.entries(committeeGroups)) {
+      const maxReq = committeeRequirements[commName]?.[shiftId] ?? 0;
+
+      // Volunteers of this committee currently assigned to target day & shift
+      const currentlyAssignedCount = volunteers.filter(v =>
+        v.committee === commName &&
+        (globalShifts[v.id]?.[dayKey] || []).includes(shiftId)
+      ).length;
+
+      // Selected volunteers of this committee not already in target day & shift
+      const newAdditions = volsInComm.filter(v =>
+        !(globalShifts[v.id]?.[dayKey] || []).includes(shiftId)
+      ).length;
+
+      const projectedTotal = currentlyAssignedCount + newAdditions;
+
+      if (maxReq > 0 && (currentlyAssignedCount >= maxReq || projectedTotal > maxReq)) {
+        return {
+          isFull: true,
+          committeeName: commName,
+          currentCount: currentlyAssignedCount,
+          maxReq,
+          projectedTotal
+        };
+      }
+    }
+
+    return { isFull: false };
+  }, [selectedVolunteers, volunteers, committeeRequirements, globalShifts]);
+
   const handleBulkReassign = async () => {
     if (!reassignDayKey || !reassignShiftId) {
       showToast("Selecciona día y turno para reasignar", "error");
+      return;
+    }
+
+    const capacityInfo = getReassignCapacityInfo(reassignDayKey, reassignShiftId);
+    if (capacityInfo?.isFull) {
+      showToast(
+        `El turno ${reassignShiftId} del ${reassignDayKey} está lleno para el comité de ${capacityInfo.committeeName} (${capacityInfo.currentCount}/${capacityInfo.maxReq} requeridos). Selecciona otra fecha o turno.`,
+        "error"
+      );
       return;
     }
 
@@ -1747,30 +1801,59 @@ export default function RemindersPage() {
                   <div className="grid grid-cols-4 gap-2">
                     {['T1', 'T2', 'T3', 'T4'].map((t) => {
                       const isSelected = reassignShiftId === t;
+                      const capInfo = reassignDayKey ? getReassignCapacityInfo(reassignDayKey, t) : null;
+                      const isFull = capInfo?.isFull;
+
                       return (
                         <button
                           key={t}
                           disabled={!reassignDayKey}
                           onClick={() => setReassignShiftId(t)}
-                          className={`flex items-center justify-center py-2.5 rounded-lg border text-sm font-bold transition-all ${
+                          className={`flex flex-col items-center justify-center py-2.5 rounded-lg border text-sm font-bold transition-all relative ${
                             !reassignDayKey ? 'bg-dark2 border-border text-text-dim opacity-50 cursor-not-allowed' :
-                            isSelected
+                            isFull
+                            ? 'bg-rose-500/15 border-rose-500/40 text-rose-400 hover:bg-rose-500/25'
+                            : isSelected
                             ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-sm scale-105 z-10'
                             : 'bg-dark3 border-border text-text hover:bg-dark3/80 hover:text-text'
                             }`}
                         >
-                          {t}
+                          <span>{t}</span>
+                          {isFull && (
+                            <span className="text-[8px] font-extrabold text-rose-400 leading-none mt-0.5 uppercase tracking-wider">Lleno</span>
+                          )}
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
+                {/* Warning message for full shift */}
+                {(() => {
+                  const currentCap = (reassignDayKey && reassignShiftId) ? getReassignCapacityInfo(reassignDayKey, reassignShiftId) : null;
+                  if (!currentCap?.isFull) return null;
+
+                  return (
+                    <div className="mt-4 p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-inter font-bold flex items-start gap-3 animate-in fade-in zoom-in-95">
+                      <span className="material-symbols-outlined text-[22px] text-rose-400 shrink-0">block</span>
+                      <div>
+                        <p className="text-rose-200 font-extrabold text-xs mb-1">Turno Lleno</p>
+                        <p className="text-[11px] text-rose-300/90 font-medium leading-relaxed">
+                          El turno <strong className="text-white">{reassignShiftId}</strong> del <strong className="text-white">{reassignDayKey}</strong> ya alcanzó la meta máxima para el comité de <strong className="text-white">{currentCap.committeeName}</strong> ({currentCap.currentCount}/{currentCap.maxReq} requeridos).
+                        </p>
+                        <p className="text-[11px] text-white font-bold mt-2">
+                          Por favor selecciona otra fecha u otro turno disponible para reasignar.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className="pt-4">
                   <Button 
                     onClick={handleBulkReassign}
-                    disabled={!reassignDayKey || !reassignShiftId}
-                    className="w-full bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold h-12 rounded-xl"
+                    disabled={!reassignDayKey || !reassignShiftId || !!(reassignDayKey && reassignShiftId && getReassignCapacityInfo(reassignDayKey, reassignShiftId)?.isFull)}
+                    className="w-full bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-dark3 disabled:text-text-dim disabled:border-border text-white font-bold h-12 rounded-xl transition-all"
                   >
                     Confirmar Reasignación
                   </Button>
