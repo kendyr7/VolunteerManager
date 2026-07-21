@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
+import { checkOutVolunteer } from "@/app/actions/attendance";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearch } from "@/lib/search-context";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
@@ -158,6 +160,9 @@ export default function ShiftsPage() {
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
+  const [viewMode, setViewMode] = useState<'turnos' | 'active'>('turnos');
+  const [rawShiftsData, setRawShiftsData] = useState<any[]>([]);
+  const [checkoutModal, setCheckoutModal] = useState<{ isOpen: boolean; item: any | null }>({ isOpen: false, item: null });
 
   const supabase = createClient();
   const [volunteers, setVolunteers] = useState<VolunteerType[]>([]);
@@ -235,6 +240,7 @@ export default function ShiftsPage() {
     const cMap: Record<string, boolean> = {};
 
     if (shiftsData) {
+      setRawShiftsData(shiftsData);
       shiftsData.forEach(s => {
         if (s.volunteer_id) {
           sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
@@ -538,10 +544,91 @@ export default function ShiftsPage() {
     });
   }, [volunteers, searchTerm, selectedCommittees, selectedStakes, selectedWards, currentRole]);
 
+  const totalActiveCount = useMemo(() => {
+    return rawShiftsData.filter(s => s.checked_in && !s.checked_out).length;
+  }, [rawShiftsData]);
+
+  const activeVolunteers = useMemo(() => {
+    if (!rawShiftsData || rawShiftsData.length === 0 || volunteers.length === 0) return [];
+
+    const volMap = new Map(volunteers.map(v => [v.id, v]));
+    const list: {
+      shiftId: string;
+      volunteer: VolunteerType;
+      dayKey: string;
+      shiftKey: string;
+      checkedInAt?: string;
+      checkedOut?: boolean;
+    }[] = [];
+
+    rawShiftsData.forEach(s => {
+      if (s.checked_in && !s.checked_out) {
+        const vol = volMap.get(s.volunteer_id);
+        if (vol) {
+          list.push({
+            shiftId: s.id,
+            volunteer: vol,
+            dayKey: s.day_key,
+            shiftKey: s.shift_key,
+            checkedInAt: s.checked_in_at,
+            checkedOut: !!s.checked_out
+          });
+        }
+      }
+    });
+
+    return list.filter(item => {
+      const v = item.volunteer;
+      const userCommittee = localStorage.getItem('mock_committee');
+      if (currentRole === 'Editor' && v.committee !== userCommittee) return false;
+
+      const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+      const normName = normalizeSearch(v.name);
+      const normCommittee = normalizeSearch(v.committee);
+      const normStake = normalizeSearch(v.stake);
+      const normWard = normalizeSearch(v.ward);
+
+      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
+        normName.includes(term) ||
+        normCommittee.includes(term) ||
+        normStake.includes(term) ||
+        normWard.includes(term)
+      );
+
+      const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(v.committee);
+      const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(v.stake);
+      const matchesWard = selectedWards.length === 0 || selectedWards.includes(v.ward);
+
+      return matchesSearch && matchesCommittee && matchesStake && matchesWard;
+    });
+  }, [rawShiftsData, volunteers, currentRole, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
+
+  const handleConfirmCheckout = async () => {
+    if (!checkoutModal.item) return;
+    const item = checkoutModal.item;
+    setCheckoutModal({ isOpen: false, item: null });
+
+    const res = await checkOutVolunteer(item.shiftId);
+    if (res.error) {
+      showToast(res.error, "error");
+    } else {
+      showToast(`Turno completado para ${item.volunteer.name}`);
+      await loadData();
+    }
+  };
+
   // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales
   const getAssignedVolunteers = (dateKey: string, shiftId: string) => {
     return filteredVolunteers
-      .filter(vol => isVolunteerAssignedToShift(vol, dateKey, shiftId))
+      .filter(vol => {
+        const isAssigned = isVolunteerAssignedToShift(vol, dateKey, shiftId);
+        if (!isAssigned) return false;
+        if (viewMode === 'active') {
+          const s = rawShiftsData.find(r => r.volunteer_id === vol.id && r.day_key === dateKey && r.shift_key === shiftId);
+          return !!(s && s.checked_in && !s.checked_out);
+        }
+        return true;
+      })
       .sort((a, b) => a.committee.localeCompare(b.committee));
   };
 
@@ -675,11 +762,15 @@ export default function ShiftsPage() {
                           <>
                             <div className="space-y-1">
                               {displayedVols.map(vol => {
-                                const isCheckedIn = checkedInMap[`${vol.id}-${key}-${t}`];
+                                const shiftRecord = rawShiftsData.find(s => s.volunteer_id === vol.id && s.day_key === key && s.shift_key === t);
+                                const isCheckedIn = shiftRecord ? !!shiftRecord.checked_in : checkedInMap[`${vol.id}-${key}-${t}`];
+                                const isCheckedOut = shiftRecord ? !!shiftRecord.checked_out : false;
+                                const checkInTimeStr = shiftRecord?.checked_in_at ? format(new Date(shiftRecord.checked_in_at), "hh:mm a") : undefined;
+
                                 return (
                                   <div
                                     key={vol.id}
-                                    className={`flex items-center justify-between group border rounded-sm px-2 py-1 transition-colors cursor-pointer ${
+                                    className={`flex items-center justify-between group border rounded-sm px-2 py-1.5 transition-colors cursor-pointer ${
                                       isCheckedIn
                                         ? 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/15'
                                         : 'bg-dark2 border-border/40 hover:bg-dark3'
@@ -687,16 +778,39 @@ export default function ShiftsPage() {
                                     onClick={(e) => { e.stopPropagation(); handleEditClick(vol); }}
                                   >
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCheckedIn ? 'bg-emerald-400' : c.dot}`} />
-                                      <span className={`font-inter font-bold text-[12px] truncate group-hover:text-[#4d7cfe] transition-colors ${
-                                        isCheckedIn ? 'text-emerald-400' : 'text-text'
-                                      }`}>
-                                        {vol.name}
-                                      </span>
+                                      <div className={`w-2 h-2 rounded-full shrink-0 ${isCheckedIn ? 'bg-emerald-400 animate-pulse' : c.dot}`} />
+                                      <div className="flex flex-col min-w-0">
+                                        <span className={`font-inter font-bold text-[12px] truncate group-hover:text-[#4d7cfe] transition-colors ${
+                                          isCheckedIn ? 'text-emerald-400 font-extrabold' : 'text-text'
+                                        }`}>
+                                          <HighlightText text={vol.name} term={searchTerm} />
+                                        </span>
+                                        {isCheckedIn && (
+                                          <span className={`font-inter font-bold text-[9px] leading-tight ${
+                                            shiftRecord?.checked_in_at && (Date.now() - new Date(shiftRecord.checked_in_at).getTime() > 8 * 3600 * 1000)
+                                              ? 'text-red-400 font-extrabold'
+                                              : 'text-emerald-400/90'
+                                          }`}>
+                                            En turno {checkInTimeStr ? `· ${checkInTimeStr}` : ''}
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                                      {isCheckedIn ? (
-                                        <span className="material-symbols-outlined text-[13px] text-emerald-400 font-bold shrink-0">task_alt</span>
+                                      {isCheckedIn && !isCheckedOut ? (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (shiftRecord) {
+                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord.id, volunteer: vol, checkedInAt: shiftRecord.checked_in_at } });
+                                            }
+                                          }}
+                                          className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                                          title="Turno Completado (Check-out)"
+                                        >
+                                          <span className="material-symbols-outlined text-[12px]">task_alt</span>
+                                          <span>Completar</span>
+                                        </button>
                                       ) : (
                                         <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
                                           {vol.committee}
@@ -828,104 +942,136 @@ export default function ShiftsPage() {
                     </p>
                   </div>
 
-                  {/* Match highlights -> Turnos del Día */}
+                  {/* Match highlights -> Turnos del Día (1 Card por Turno en Mobile) */}
                   <div className="w-full">
                     <div className="space-y-3">
-                      {([['T1', 'T2'], ['T3', 'T4']] as const).map((group, groupIdx) => (
-                        <div key={groupIdx} className="bg-black/20 backdrop-blur-md rounded-[32px] p-4 shadow-lg border border-white/10">
-                          <div className="grid grid-cols-2 gap-4">
-                            {group.map(t => {
-                              const info = SHIFT_TIMES[parseInt(t[1]) - 1];
-                              const vols = shiftData[t];
-                              const count = vols.length;
-                              let minRequired = 0;
-                              if (activeCommittee) {
-                                minRequired = committeeRequirements[activeCommittee]?.[t] ?? 0;
-                              } else {
-                                committees.forEach(c => {
-                                  minRequired += (committeeRequirements[c]?.[t] ?? 0);
-                                });
-                              }
+                      {(['T1', 'T2', 'T3', 'T4'] as const).map(t => {
+                        const info = SHIFT_TIMES[parseInt(t[1]) - 1];
+                        const vols = shiftData[t];
+                        const count = vols.length;
+                        let minRequired = 0;
+                        if (activeCommittee) {
+                          minRequired = committeeRequirements[activeCommittee]?.[t] ?? 0;
+                        } else {
+                          committees.forEach(c => {
+                            minRequired += (committeeRequirements[c]?.[t] ?? 0);
+                          });
+                        }
 
-                              const combinedKey = `${key}-${t}`;
-                              const isShiftExpanded = !!expandedShifts[combinedKey];
+                        const combinedKey = `${key}-${t}`;
+                        const isShiftExpanded = !!expandedShifts[combinedKey];
 
-                              const limit = 5;
-                              const hiddenCount = Math.max(0, vols.length - limit);
-                              const hasMore = vols.length > limit;
+                        const limit = 5;
+                        const hiddenCount = Math.max(0, vols.length - limit);
+                        const hasMore = vols.length > limit;
 
-                              return (
-                                <div
-                                  key={t}
-                                  className="flex flex-col h-fit"
-                                >
-                                  {/* Turno Header */}
-                                  <div className="flex items-start justify-between mb-2 border-b border-white/10 pb-1.5">
-                                    <div className="min-w-0 pr-1">
-                                      <p className="text-drawer-label text-white mb-1">{t}</p>
-                                      <p className="font-inter text-[8px] text-white/60 font-medium tracking-tight whitespace-nowrap truncate">{info?.time}</p>
-                                    </div>
-                                    <span className="font-inter text-[10px] font-medium text-white bg-white/10 px-1.5 py-0.5 rounded-md leading-none flex items-center justify-center shrink-0">
-                                      {count}/{minRequired}
-                                    </span>
-                                  </div>
+                        return (
+                          <div
+                            key={t}
+                            className="bg-black/20 backdrop-blur-md rounded-[24px] p-4 shadow-lg border border-white/10 flex flex-col h-fit"
+                          >
+                            {/* Turno Header */}
+                            <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-drawer-label text-white font-black text-xs sm:text-sm">{t}</span>
+                                <span className="font-inter text-[11px] text-white/70 font-medium">{info?.time}</span>
+                              </div>
+                              <span className="font-inter text-[10px] font-bold text-white bg-white/15 px-2 py-0.5 rounded-full leading-none flex items-center justify-center shrink-0 border border-white/10">
+                                {count}/{minRequired}
+                              </span>
+                            </div>
 
-                                  {/* Vols List */}
-                                  <div className="flex flex-col flex-1 gap-[3px]">
-                                    {vols.length === 0 ? (
-                                      <p className="text-[10px] text-white/40 italic py-1 text-center">Sin asignaciones</p>
-                                    ) : (
-                                      (isShiftExpanded ? vols : vols.slice(0, limit)).map(vol => {
-                                        const isMatch = searchTerm.trim() !== '' && vol.name.toLowerCase().includes(searchTerm.toLowerCase());
-                                        const isCheckedIn = checkedInMap[`${vol.id}-${key}-${t}`];
-                                        return (
-                                          <div
-                                            key={vol.id}
-                                            className={`flex items-center gap-1.5 cursor-pointer p-1.5 rounded-xl transition-colors ${
-                                              isCheckedIn
-                                                ? 'bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20'
-                                                : isMatch
-                                                ? 'bg-yellow-400/20 ring-1 ring-yellow-300/40 hover:bg-yellow-400/30'
-                                                : 'hover:bg-white/10'
-                                            }`}
-                                            onClick={(e) => { e.stopPropagation(); toggleDay(key); handleEditClick(vol); }}
-                                          >
-                                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                              isCheckedIn ? 'bg-emerald-400' : isMatch ? 'bg-yellow-300' : 'bg-white/60'
-                                            }`} />
-                                            <span className={`font-inter font-bold min-w-0 flex-1 text-[12px] truncate ${
-                                              isCheckedIn ? 'text-emerald-400' : 'text-white/90'
-                                            }`}>
-                                              <HighlightText text={vol.name} term={searchTerm} />
-                                            </span>
-                                            {isCheckedIn && (
-                                              <span className="material-symbols-outlined text-[13px] text-emerald-400 font-bold shrink-0">task_alt</span>
-                                            )}
-                                          </div>
-                                        );
-                                      })
-                                    )}
-                                  </div>
+                            {/* Vols List */}
+                            <div className="flex flex-col flex-1 gap-1.5">
+                              {vols.length === 0 ? (
+                                <p className="text-[11px] text-white/40 italic py-1.5 text-center">Sin asignaciones</p>
+                              ) : (
+                                (isShiftExpanded ? vols : vols.slice(0, limit)).map(vol => {
+                                  const isMatch = searchTerm.trim() !== '' && vol.name.toLowerCase().includes(searchTerm.toLowerCase());
+                                  const shiftRecord = rawShiftsData.find(s => s.volunteer_id === vol.id && s.day_key === key && s.shift_key === t);
+                                  const isCheckedIn = shiftRecord ? !!shiftRecord.checked_in : checkedInMap[`${vol.id}-${key}-${t}`];
+                                  const isCheckedOut = shiftRecord ? !!shiftRecord.checked_out : false;
+                                  const checkInTimeStr = shiftRecord?.checked_in_at ? format(new Date(shiftRecord.checked_in_at), "hh:mm a") : undefined;
 
-                                  {/* Expand Button */}
-                                  {hasMore && (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); toggleShiftExpand(key, t); }}
-                                      className="w-full mt-2 pt-1.5 pb-1 flex items-center justify-center gap-1 font-inter text-[10px] font-medium text-white/60 hover:text-white uppercase tracking-widest border-t border-white/5 transition-colors"
+                                  return (
+                                    <div
+                                      key={vol.id}
+                                      className={`flex items-center justify-between gap-2 cursor-pointer p-2 rounded-xl transition-colors ${
+                                        isCheckedIn
+                                          ? 'bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25'
+                                          : isMatch
+                                          ? 'bg-yellow-400/20 ring-1 ring-yellow-300/40 hover:bg-yellow-400/30'
+                                          : 'bg-white/5 hover:bg-white/10 border border-white/5'
+                                      }`}
+                                      onClick={(e) => { e.stopPropagation(); toggleDay(key); handleEditClick(vol); }}
                                     >
-                                      {isShiftExpanded ? (
-                                        <>Colapsar <span className="material-symbols-outlined text-[14px] rotate-180">expand_more</span></>
+                                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${
+                                          isCheckedIn ? 'bg-emerald-400 animate-pulse' : isMatch ? 'bg-yellow-300' : 'bg-white/60'
+                                        }`} />
+                                        <div className="flex flex-col min-w-0">
+                                          <span className={`font-inter font-bold text-[12px] truncate ${
+                                            isCheckedIn ? 'text-emerald-300 font-extrabold' : 'text-white'
+                                          }`}>
+                                            <HighlightText text={vol.name} term={searchTerm} />
+                                          </span>
+                                          {isCheckedIn ? (
+                                            <span className={`font-inter font-bold text-[9px] leading-tight ${
+                                              shiftRecord?.checked_in_at && (Date.now() - new Date(shiftRecord.checked_in_at).getTime() > 8 * 3600 * 1000)
+                                                ? 'text-red-400 font-extrabold'
+                                                : 'text-emerald-400/90'
+                                            }`}>
+                                              En turno {checkInTimeStr ? `· Ingreso: ${checkInTimeStr}` : ''}
+                                            </span>
+                                          ) : (
+                                            <span className="font-inter text-[10px] text-white/60 truncate">
+                                              {[vol.committee, vol.ward].filter(Boolean).join(' · ')}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {isCheckedIn && !isCheckedOut ? (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (shiftRecord) {
+                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord.id, volunteer: vol, checkedInAt: shiftRecord.checked_in_at } });
+                                            }
+                                          }}
+                                          className="px-2.5 py-1 rounded-full font-inter font-bold text-[9px] bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/40 transition-all flex items-center gap-1 shrink-0 active:scale-95 shadow-sm"
+                                        >
+                                          <span className="material-symbols-outlined text-[12px]">task_alt</span>
+                                          <span>Completar</span>
+                                        </button>
+                                      ) : isCheckedIn ? (
+                                        <span className="material-symbols-outlined text-[14px] text-emerald-400 font-bold shrink-0">task_alt</span>
                                       ) : (
-                                        <>+{hiddenCount} más <span className="material-symbols-outlined text-[14px]">expand_more</span></>
+                                        <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
+                                          {vol.committee}
+                                        </Badge>
                                       )}
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            {/* Expand Button */}
+                            {hasMore && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleShiftExpand(key, t); }}
+                                className="w-full mt-2 pt-1.5 pb-1 flex items-center justify-center gap-1 font-inter text-[10px] font-bold text-white/70 hover:text-white uppercase tracking-widest border-t border-white/10 transition-colors"
+                              >
+                                {isShiftExpanded ? (
+                                  <>Colapsar <span className="material-symbols-outlined text-[14px] rotate-180">expand_more</span></>
+                                ) : (
+                                  <>+{hiddenCount} más <span className="material-symbols-outlined text-[14px]">expand_more</span></>
+                                )}
+                              </button>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -959,8 +1105,32 @@ export default function ShiftsPage() {
         <motion.div variants={itemVariants} className="w-full flex items-center justify-between">
           <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight">Turnos</h1>
           <div className="flex bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10">
-            <button className="px-4 py-1.5 rounded-full text-[10px] font-medium text-text-dim hover:text-text transition-colors">Groups</button>
-            <button className="bg-white dark:bg-white px-4 py-1.5 rounded-full text-[10px] font-semibold text-black shadow-sm transition-colors">ABC</button>
+            <button
+              onClick={() => setViewMode('active')}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5",
+                viewMode === 'active'
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                  : "text-text-dim hover:text-text font-medium"
+              )}
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              En Turno ({totalActiveCount})
+            </button>
+            <button
+              onClick={() => setViewMode('turnos')}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all",
+                viewMode === 'turnos'
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                  : "text-text-dim hover:text-text font-medium"
+              )}
+            >
+              Programación
+            </button>
           </div>
         </motion.div>
 
@@ -972,7 +1142,7 @@ export default function ShiftsPage() {
             </div>
             <input
               type="text"
-              placeholder="Buscar turnos o grupos"
+              placeholder={viewMode === 'active' ? "Buscar voluntario en turno..." : "Buscar turnos o grupos..."}
               className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -990,7 +1160,23 @@ export default function ShiftsPage() {
         </motion.div>
       </div>
 
-      {/* Lista de días (1 columna para máximo ancho) */}
+      {viewMode === 'active' && totalActiveCount === 0 && (
+        <div className="w-full px-4 sm:px-6 lg:px-8 mb-4">
+          <div className="bg-dark2 border border-white/10 p-4 rounded-2xl flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20 shrink-0">
+              <span className="material-symbols-outlined text-[20px]">no_accounts</span>
+            </div>
+            <div>
+              <h4 className="font-inter font-bold text-text text-xs">Sin voluntarios activos en turno</h4>
+              <p className="text-[11px] text-text-dim">
+                Los voluntarios aparecerán en los turnos de cada día automáticamente al escanear su pase QR de ingreso.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de días (layout unificado para Programación y En Turno) */}
       <div className="flex flex-col gap-2 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
         {EVENT_DAYS.map(d => {
           const card = renderDayCard(d);
@@ -1088,9 +1274,26 @@ export default function ShiftsPage() {
                   <h3 className="text-drawer-title text-white mb-1">
                     {editingVolunteer.name}
                   </h3>
-                  <p className="text-drawer-subtitle text-white/80">
-                    {editingVolunteer.committee} • {editingVolunteer.ward}
-                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                    {editingVolunteer.committee && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-[#4d7cfe]/20 text-[#8bb0ff] border border-[#4d7cfe]/30 shadow-sm">
+                        <span className="material-symbols-outlined text-[13px]">groups</span>
+                        {editingVolunteer.committee}
+                      </span>
+                    )}
+                    {editingVolunteer.stake && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-amber-500/15 text-amber-300 border border-amber-500/25 shadow-sm">
+                        <span className="material-symbols-outlined text-[13px]">account_balance</span>
+                        {editingVolunteer.stake}
+                      </span>
+                    )}
+                    {editingVolunteer.ward && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 shadow-sm">
+                        <span className="material-symbols-outlined text-[13px]">location_on</span>
+                        {editingVolunteer.ward}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Top Stats Row */}
@@ -1254,6 +1457,66 @@ export default function ShiftsPage() {
         type={toast.type}
         isVisible={toast.isVisible}
         onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
+      />
+
+      <ConfirmationModal
+        isOpen={checkoutModal.isOpen}
+        title="Completar Turno"
+        message={(() => {
+          const name = checkoutModal.item?.volunteer?.name || 'este voluntario';
+          const checkedInAt = checkoutModal.item?.checkedInAt;
+
+          let elapsedText = '';
+          let isOver8Hours = false;
+
+          if (checkedInAt) {
+            const start = new Date(checkedInAt).getTime();
+            if (!isNaN(start)) {
+              const diffMs = Math.max(0, Date.now() - start);
+              const totalMins = Math.floor(diffMs / (1000 * 60));
+              const hours = Math.floor(totalMins / 60);
+              const minutes = totalMins % 60;
+
+              isOver8Hours = hours > 8 || (hours === 8 && minutes > 0);
+
+              if (hours > 0 && minutes > 0) {
+                elapsedText = `${hours} ${hours === 1 ? 'hora' : 'horas'} y ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+              } else if (hours > 0) {
+                elapsedText = `${hours} ${hours === 1 ? 'hora' : 'horas'}`;
+              } else {
+                elapsedText = `${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+              }
+            }
+          }
+
+          return (
+            <div className="flex flex-col gap-3 text-center">
+              <span>¿Deseas marcar el turno de <strong>{name}</strong> como completado?</span>
+              {elapsedText && (
+                <div className="pt-3 border-t border-black/10 dark:border-white/10 flex flex-col items-center gap-1.5">
+                  <span className="text-xs font-inter font-medium text-slate-500 dark:text-text-dim">
+                    Tiempo transcurrido de servicio:
+                  </span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-inter font-bold border shadow-sm",
+                      isOver8Hours
+                        ? "bg-red-500/15 text-red-500 border-red-500/30 dark:bg-red-500/20 dark:text-red-400"
+                        : "bg-emerald-500/15 text-emerald-600 border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-400"
+                    )}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">schedule</span>
+                    <span>{elapsedText}</span>
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        confirmText="Turno Completado"
+        type="primary"
+        onConfirm={handleConfirmCheckout}
+        onCancel={() => setCheckoutModal({ isOpen: false, item: null })}
       />
     </motion.div>
   );

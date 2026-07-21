@@ -7,7 +7,7 @@ import { Button } from "./button"
 interface ConfirmationModalProps {
   isOpen: boolean
   title: string
-  message: string
+  message: React.ReactNode
   confirmText: string
   cancelText?: string
   onConfirm: () => void
@@ -55,7 +55,7 @@ export function ConfirmationModal({
               </div>
               
               <h3 className="text-xl font-bold text-slate-900 dark:text-text mb-2">{title}</h3>
-              <p className="text-sm text-slate-500 dark:text-text-dim leading-relaxed font-inter font-bold">{message}</p>
+              <div className="text-sm text-slate-500 dark:text-text-dim leading-relaxed font-inter font-bold">{message}</div>
             </div>
 
             <div className="flex gap-px bg-slate-100 dark:bg-border border-t border-slate-100 dark:border-border">

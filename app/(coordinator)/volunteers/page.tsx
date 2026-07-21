@@ -856,9 +856,26 @@ export default function VolunteersPage() {
                   <h3 className="text-drawer-title text-white mb-1">
                     {editingVolunteer.name}
                   </h3>
-                  <p className="text-drawer-subtitle text-white/80">
-                    {editingVolunteer.committee} • {editingVolunteer.ward}
-                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                    {editingVolunteer.committee && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-[#4d7cfe]/20 text-[#8bb0ff] border border-[#4d7cfe]/30 shadow-sm">
+                        <span className="material-symbols-outlined text-[13px]">groups</span>
+                        {editingVolunteer.committee}
+                      </span>
+                    )}
+                    {editingVolunteer.stake && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-amber-500/15 text-amber-300 border border-amber-500/25 shadow-sm">
+                        <span className="material-symbols-outlined text-[13px]">account_balance</span>
+                        {editingVolunteer.stake}
+                      </span>
+                    )}
+                    {editingVolunteer.ward && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 shadow-sm">
+                        <span className="material-symbols-outlined text-[13px]">location_on</span>
+                        {editingVolunteer.ward}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Top Stats Row */}
@@ -1187,31 +1204,25 @@ export default function VolunteersPage() {
 
                   <div className="space-y-2">
                     <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Comité</label>
-                    <DataTableFilter
-                      title={newCommitteeId ? (committeesList.find(c => c.id === newCommitteeId)?.name || "Comité") : "Selecciona un comité"}
-                      options={committeesList.map(c => c.name)}
-                      value={newCommitteeId ? [committeesList.find(c => c.id === newCommitteeId)?.name || ""] : []}
-                      dropdownLabel="Comités disponibles"
-                      hideClearButton
-                      hideCountBadge
-                      isCommitteeFilter
-                      className={cn(
-                        "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all justify-between",
-                        isMobile
-                          ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
-                          : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
-                      )}
-                      onChange={(vals) => {
-                        if (vals.length === 0) {
-                          setNewCommitteeId("");
-                          return;
-                        }
-                        const currentName = committeesList.find(c => c.id === newCommitteeId)?.name;
-                        const newName = vals.find(v => v !== currentName) || vals[0];
-                        const comm = committeesList.find(c => c.name === newName);
-                        setNewCommitteeId(comm ? comm.id : "");
-                      }}
-                    />
+                    <Select value={newCommitteeId} onValueChange={(val) => setNewCommitteeId(val || '')}>
+                      <SelectTrigger
+                        className={cn(
+                          "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all flex items-center justify-between",
+                          isMobile
+                            ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
+                            : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
+                        )}
+                      >
+                        <SelectValue placeholder="Selecciona un comité" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
+                        {committeesList.map(c => (
+                          <SelectItem key={c.id} value={c.id} className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>

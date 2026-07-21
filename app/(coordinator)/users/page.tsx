@@ -590,7 +590,7 @@ export default function UsersPage() {
                       <SelectTrigger className="w-full h-10 bg-dark2 border-white/10 text-text flex items-center justify-between rounded-[10px]">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="bg-dark2 border-white/10 text-text">
+                      <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
                         <SelectItem value="Admin">
                           <div className="flex items-center gap-2">
                             <span className="material-symbols-outlined text-[18px] text-text-dim">admin_panel_settings</span>
@@ -610,24 +610,18 @@ export default function UsersPage() {
                   {newRole === 'Editor' && (
                     <div className="space-y-2 animate-in fade-in zoom-in-95">
                       <label className="block mb-2 text-xs font-semibold text-text">Comité Asignado</label>
-                      <DataTableFilter
-                        title={newCommittee || "Selecciona un comité"}
-                        options={committeesList.map(c => c.name)}
-                        value={newCommittee ? [newCommittee] : []}
-                        dropdownLabel="Comités disponibles"
-                        hideClearButton
-                        hideCountBadge
-                        isCommitteeFilter
-                        className="w-full bg-dark2 justify-between h-10 border-white/10 rounded-[10px]"
-                        onChange={(vals) => {
-                          if (vals.length === 0) {
-                            setNewCommittee("");
-                            return;
-                          }
-                          const newName = vals.find(v => v !== newCommittee) || vals[0];
-                          setNewCommittee(newName);
-                        }}
-                      />
+                      <Select value={newCommittee} onValueChange={(v) => setNewCommittee(v || '')}>
+                        <SelectTrigger className="w-full bg-dark2 justify-between h-10 border-white/10 rounded-[10px] text-text font-inter font-bold">
+                          <SelectValue placeholder="Selecciona un comité" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
+                          {committeesList.map(c => (
+                            <SelectItem key={c.id} value={c.name} className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
                 </div>
@@ -944,14 +938,14 @@ export default function UsersPage() {
                   </div>
                   <div className="space-y-2">
                     <label className="block mb-2 text-xs font-normal text-white/90">Rol en la plataforma</label>
-                    <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
+                    <Select value={newRole} onValueChange={(v) => v && setNewRole(v as Role)}>
                       <SelectTrigger className="w-full h-10 border font-inter font-bold flex items-center justify-between border-white/20 bg-white/10 text-white">
-                        <SelectValue />
+                        <SelectValue placeholder="Selecciona un rol" />
                       </SelectTrigger>
-                      <SelectContent className="bg-[#050a15] border-white/10 text-white backdrop-blur-xl">
-                        <SelectItem value="Admin">Admin (Acceso total)</SelectItem>
-                        <SelectItem value="Editor">Editor (Coordinador de comité)</SelectItem>
-                        <SelectItem value="Lector">Lector (Solo lectura)</SelectItem>
+                      <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
+                        <SelectItem value="Admin" className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">Admin (Acceso total)</SelectItem>
+                        <SelectItem value="Editor" className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">Editor (Coordinador de comité)</SelectItem>
+                        <SelectItem value="Lector" className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">Lector (Solo lectura)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -961,11 +955,11 @@ export default function UsersPage() {
                       <label className="block mb-2 text-xs font-normal text-white/90">Comité Asignado</label>
                       <Select value={newCommittee} onValueChange={(v) => v && setNewCommittee(v)}>
                         <SelectTrigger className="w-full h-10 border font-inter font-bold flex items-center justify-between border-white/20 bg-white/10 text-white">
-                          <SelectValue />
+                          <SelectValue placeholder="Selecciona un comité" />
                         </SelectTrigger>
-                        <SelectContent className="bg-[#050a15] border-white/10 text-white backdrop-blur-xl">
+                        <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
                           {committeesList.map(c => (
-                            <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                            <SelectItem key={c.id} value={c.name} className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">{c.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

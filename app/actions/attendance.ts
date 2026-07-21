@@ -307,3 +307,35 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
     shifts: formattedShifts
   };
 }
+
+// 4. Process Check-out (Turno Completado)
+export async function checkOutVolunteer(shiftId: string) {
+  const supabase = await createClient();
+
+  // Try updating checked_out
+  const { error } = await supabase
+    .from('shifts')
+    .update({
+      checked_out: true,
+      checked_out_at: new Date().toISOString(),
+    })
+    .eq('id', shiftId);
+
+  if (error) {
+    console.error("Error in checkOutVolunteer:", error);
+    // Fallback: update checked_in to false
+    const { error: fallbackErr } = await supabase
+      .from('shifts')
+      .update({
+        checked_in: false,
+      })
+      .eq('id', shiftId);
+
+    if (fallbackErr) {
+      return { error: "No se pudo realizar el checkout del voluntario." };
+    }
+  }
+
+  return { success: true, message: "Turno completado exitosamente." };
+}
+

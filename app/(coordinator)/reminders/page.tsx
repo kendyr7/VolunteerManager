@@ -1459,9 +1459,26 @@ export default function RemindersPage() {
                     <h3 className="text-drawer-title text-white mb-1">
                       {editingVolunteer.name}
                     </h3>
-                    <p className="text-drawer-subtitle text-white/80">
-                      {editingVolunteer.committee} • {editingVolunteer.ward}
-                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                      {editingVolunteer.committee && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-[#4d7cfe]/20 text-[#8bb0ff] border border-[#4d7cfe]/30 shadow-sm">
+                          <span className="material-symbols-outlined text-[13px]">groups</span>
+                          {editingVolunteer.committee}
+                        </span>
+                      )}
+                      {editingVolunteer.stake && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-amber-500/15 text-amber-300 border border-amber-500/25 shadow-sm">
+                          <span className="material-symbols-outlined text-[13px]">account_balance</span>
+                          {editingVolunteer.stake}
+                        </span>
+                      )}
+                      {editingVolunteer.ward && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 shadow-sm">
+                          <span className="material-symbols-outlined text-[13px]">location_on</span>
+                          {editingVolunteer.ward}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Top Stats Row */}
