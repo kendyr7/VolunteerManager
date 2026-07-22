@@ -86,8 +86,8 @@ function CoordinatorLayoutInner({
     { name: "Voluntarios", href: "/volunteers", icon: "group", roles: ['Admin', 'Editor'] },
     { name: currentRole === 'Lector' ? "Mi Perfil" : "Turnos", href: "/shifts", icon: currentRole === 'Lector' ? "person" : "checklist", roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Escanear QR", href: "/check-in", icon: "qr_code_scanner", roles: ['Admin', 'Editor'] },
-    { name: "Reportes", href: "/reports", icon: "analytics", roles: ['Admin', 'Editor'] },
     { name: "Avisos", href: "/reminders", icon: "campaign", roles: ['Admin', 'Editor'] },
+    { name: "Reportes", href: "/reports", icon: "analytics", roles: ['Admin', 'Editor'] },
     { name: "Usuarios", href: "/users", icon: "shield_person", roles: ['Admin'] },
     { name: "Importación", href: "/import", icon: "cloud_upload", roles: ['Admin', 'Editor'] },
   ];
@@ -106,7 +106,7 @@ function CoordinatorLayoutInner({
 
   const activeItem = [...NAV_ITEMS, ...BOTTOM_ITEMS].find(item => pathname === item.href);
   const currentTitle = activeItem ? activeItem.name : "Dashboard";
-  const ITEMS_PER_PAGE = 4;
+  const ITEMS_PER_PAGE = 5;
   const totalNavPages = Math.ceil(allMobileNavItems.length / ITEMS_PER_PAGE);
 
   const goToNavPage = useCallback((page: number) => {
@@ -279,9 +279,9 @@ function CoordinatorLayoutInner({
                 const isActive = pathname === item.href;
                 const isLogout = item.href === '#logout';
                 const isPageStart = index % ITEMS_PER_PAGE === 0;
-                const sharedStyle = { width: 'calc((100vw - 32px) / 4)', scrollSnapAlign: isPageStart ? 'start' as const : undefined };
+                const sharedStyle = { width: 'calc((100vw - 32px) / 5)', scrollSnapAlign: isPageStart ? 'start' as const : undefined };
                 const sharedClass = cn(
-                  "flex flex-col items-center justify-center py-2 rounded-full transition-all duration-200 shrink-0",
+                  "flex flex-col items-center justify-center py-2 rounded-full transition-all duration-200 shrink-0 px-0.5",
                   isActive ? "bg-black/10 dark:bg-white/25 text-black dark:text-white shadow-sm" : "text-black/50 dark:text-white/60 hover:text-black dark:hover:text-white"
                 );
                 if (isLogout) {
@@ -293,7 +293,7 @@ function CoordinatorLayoutInner({
                       className={cn(sharedClass, "text-red-400 hover:text-red-300")}
                     >
                       <Icon name="logout" size={20} className="mb-1 text-red-400" />
-                      <span className="font-inter text-[10px] font-semibold whitespace-nowrap">Salir</span>
+                      <span className="font-inter text-[9px] sm:text-[10px] font-semibold whitespace-nowrap truncate max-w-full">Salir</span>
                     </button>
                   );
                 }
@@ -305,7 +305,7 @@ function CoordinatorLayoutInner({
                     className={sharedClass}
                   >
                     <Icon name={item.icon} size={20} className={cn("mb-1", isActive ? "text-black dark:text-white" : "text-black/50 dark:text-white/60")} />
-                    <span className="font-inter text-[10px] font-semibold whitespace-nowrap">{item.name}</span>
+                    <span className="font-inter text-[9px] sm:text-[10px] font-semibold whitespace-nowrap truncate max-w-full">{item.name}</span>
                   </Link>
                 );
               })}

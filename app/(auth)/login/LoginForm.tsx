@@ -313,6 +313,7 @@ export function LoginForm() {
               <button
                 type="button"
                 onClick={handleBiometricLogin}
+                suppressHydrationWarning
                 className={`lg:hidden h-12 px-4 rounded-sm font-bold shadow-lg transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 shrink-0 border ${preferredAuthMethod === 'biometrics' ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-[#4d7cfe]/20' : 'bg-dark2 border-white/10 text-white hover:bg-white/10'}`}
                 disabled={!isMounted || isPending || isBiometricLoading || !phone}
                 title="Iniciar sesión con huella dactilar"

@@ -43,6 +43,7 @@ export default function CoordinatorDashboard() {
   const [volunteers, setVolunteers] = useState<any[]>([]);
   const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
+  const [activeKpiInfo, setActiveKpiInfo] = useState<{ title: string; explanation: string; formula: string } | null>(null);
   const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
   const [greeting, setGreeting] = useState<React.ReactNode>("Monitor central de operaciones para el programa de Puertas Abiertas.");
 
@@ -248,10 +249,6 @@ export default function CoordinatorDashboard() {
   }, [router]);
 
   const globalStats = useMemo(() => {
-    const totalRecruited = volunteers.length;
-    const targetVolunteers = 1500;
-    const recruitmentPercentage = targetVolunteers > 0 ? Math.round((totalRecruited / targetVolunteers) * 100) : 0;
-
     let totalRequired = 0;
     let totalAssignedInRequired = 0;
     let criticalAlerts = 0;
@@ -279,6 +276,10 @@ export default function CoordinatorDashboard() {
       });
     });
 
+    const totalRecruited = volunteers.length;
+    // Dynamic Meta: Sum of requirements across all committees and shift slots
+    const targetVolunteers = totalRequired;
+    const recruitmentPercentage = targetVolunteers > 0 ? Math.round((totalRecruited / targetVolunteers) * 100) : 0;
     const globalCoveragePercentage = totalRequired > 0 ? Math.round((totalAssignedInRequired / totalRequired) * 100) : 100;
     
     let totalGlobalAssigned = 0;
@@ -487,19 +488,33 @@ export default function CoordinatorDashboard() {
       >
 
       {/* Primary KPIs - Edge to Edge Fine Line Grid */}
-      <div className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/5">
+      <div className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/5 mb-8">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-[1px]">
           {/* Card 1 */}
-          <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3">
+          <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3 relative">
             <div className="flex items-start justify-between mb-3 sm:mb-6">
               <div className="p-3 bg-blue-500/10 text-blue-500 rounded-sm group-hover:bg-[#4d7cfe] group-hover:text-white transition-colors duration-300">
                 <span className="material-symbols-outlined text-[20px]">track_changes</span>
               </div>
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-dim mb-1">Progreso</span>
-                <Badge variant="secondary" className="bg-dark3 text-text font-bold border-none text-[10px] px-2 h-5">
-                  +{globalStats.recruitmentPercentage}%
-                </Badge>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiInfo({
+                    title: "Voluntarios Reclutados",
+                    explanation: "Compara el total de voluntarios registrados en el sistema contra la meta total de requerimientos sumando todos los turnos del evento.",
+                    formula: "Voluntarios Registrados / Suma de Requerimientos Totales"
+                  })}
+                  className="text-text-dim hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
+                  title="¿Cómo se calcula este KPI?"
+                >
+                  <span className="material-symbols-outlined text-[18px]">help_outline</span>
+                </button>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-dim mb-1">Progreso</span>
+                  <Badge variant="secondary" className="bg-dark3 text-text font-bold border-none text-[10px] px-2 h-5">
+                    +{globalStats.recruitmentPercentage}%
+                  </Badge>
+                </div>
               </div>
             </div>
             <div className="space-y-1 pr-4 sm:pr-0">
@@ -511,16 +526,30 @@ export default function CoordinatorDashboard() {
           </div>
 
           {/* Card 2 */}
-          <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3">
+          <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3 relative">
             <div className="flex items-start justify-between mb-3 sm:mb-6">
               <div className="p-3 bg-accent/10 rounded-sm group-hover:bg-accent group-hover:text-white transition-colors duration-300 text-accent">
                 <span className="material-symbols-outlined text-[20px]">monitoring</span>
               </div>
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-dim mb-1">Estado</span>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                  <span className="text-[10px] font-bold text-accent uppercase tracking-widest">Óptimo</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiInfo({
+                    title: "Turnos Registrados",
+                    explanation: "Muestra el porcentaje de cobertura de requerimientos que ya cuentan con un voluntario asignado en la agenda.",
+                    formula: "(Turnos Asignados válidos / Suma de Requerimientos Totales) × 100"
+                  })}
+                  className="text-text-dim hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
+                  title="¿Cómo se calcula este KPI?"
+                >
+                  <span className="material-symbols-outlined text-[18px]">help_outline</span>
+                </button>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-dim mb-1">Estado</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                    <span className="text-[10px] font-bold text-accent uppercase tracking-widest">Óptimo</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -534,16 +563,30 @@ export default function CoordinatorDashboard() {
           </div>
 
           {/* Card 3 */}
-          <div className="bg-dark2 p-4 sm:p-7 group transition-all duration-300 hover:bg-dark3">
+          <div className="bg-dark2 p-4 sm:p-7 group transition-all duration-300 hover:bg-dark3 relative">
             <div className="flex items-start justify-between mb-3 sm:mb-6">
               <div className={`p-3 rounded-sm transition-colors duration-300 ${globalStats.criticalAlerts > 0 ? 'bg-red/20 text-red group-hover:bg-red group-hover:text-white' : 'bg-dark3 text-text-dim group-hover:bg-white/10 group-hover:text-white'}`}>
                 <span className="material-symbols-outlined text-[20px]">security</span>
               </div>
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-dim mb-1">Prioridad</span>
-                <Badge variant="outline" className={`font-inter font-bold text-[10px] border-none px-2 h-5 ${globalStats.criticalAlerts > 0 ? 'bg-red/20 text-red' : 'bg-dark3 text-text-dim'}`}>
-                  {globalStats.criticalAlerts > 0 ? 'ACCIÓN REQ.' : 'NORMAL'}
-                </Badge>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiInfo({
+                    title: "Alertas Críticas",
+                    explanation: "Cantidad de turnos (por comité y día) donde los voluntarios asignados son menores al mínimo de requerimientos configurado.",
+                    formula: "Conteo de slots donde Voluntarios Asignados < Requerimiento Configurado"
+                  })}
+                  className="text-text-dim hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
+                  title="¿Cómo se calcula este KPI?"
+                >
+                  <span className="material-symbols-outlined text-[18px]">help_outline</span>
+                </button>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-dim mb-1">Prioridad</span>
+                  <Badge variant="outline" className={`font-inter font-bold text-[10px] border-none px-2 h-5 ${globalStats.criticalAlerts > 0 ? 'bg-red/20 text-red' : 'bg-dark3 text-text-dim'}`}>
+                    {globalStats.criticalAlerts > 0 ? 'ACCIÓN REQ.' : 'NORMAL'}
+                  </Badge>
+                </div>
               </div>
             </div>
             <div className="space-y-1">
@@ -558,11 +601,23 @@ export default function CoordinatorDashboard() {
           </div>
 
           {/* Card 4 — Asistencia General */}
-          <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3">
+          <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3 relative">
             <div className="flex items-start justify-between mb-3 sm:mb-6">
               <div className="p-3 bg-dark3 rounded-sm group-hover:bg-emerald-500 transition-colors duration-300 text-text">
                 <span className="material-symbols-outlined text-[20px]">person_check</span>
               </div>
+              <button
+                type="button"
+                onClick={() => setActiveKpiInfo({
+                  title: "Asistencia General (QR Confirmados)",
+                  explanation: "Porcentaje de turnos donde el voluntario escaneó su código QR de asistencia respecto al total de turnos asignados.",
+                  formula: "(Turnos con QR Confirmado / Total de Turnos Asignados a Voluntarios) × 100"
+                })}
+                className="text-text-dim hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
+                title="¿Cómo se calcula este KPI?"
+              >
+                <span className="material-symbols-outlined text-[18px]">help_outline</span>
+              </button>
             </div>
             <div className="space-y-1">
               <h3 className="font-bold tracking-tighter text-text">
@@ -570,14 +625,14 @@ export default function CoordinatorDashboard() {
               </h3>
               <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Asistencia General</p>
             </div>
-            <div className="mt-3 sm:mt-6 flex flex-col gap-0.5">
-              <p className="text-[13px] font-inter font-extrabold text-text tabular-nums leading-none">
+            <div className="mt-3 sm:mt-6 flex items-baseline gap-1.5 whitespace-nowrap overflow-hidden">
+              <p className="text-[13px] font-inter font-extrabold text-text tabular-nums leading-none shrink-0">
                 {globalStats.checkedInCount}
                 {globalStats.totalAssigned > 0 && (
                   <span className="text-white/30">/{globalStats.totalAssigned}</span>
                 )}
               </p>
-              <p className="text-[10px] text-text-dim font-inter font-bold uppercase tracking-widest">
+              <p className="text-[10px] text-text-dim font-inter font-bold uppercase tracking-widest whitespace-nowrap truncate">
                 QR Confirmado{globalStats.checkedInCount !== 1 ? 's' : ''}
               </p>
             </div>
@@ -586,7 +641,7 @@ export default function CoordinatorDashboard() {
       </div>
 
       {/* Bar Chart — edge to edge, no card */}
-      <motion.div variants={itemVariants} className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/[0.02]">
+      <motion.div variants={itemVariants} className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/[0.02] mb-8">
         {/* Header */}
         <div className="px-5 sm:px-8 py-4 flex items-center justify-between border-b border-white/5">
           <div className="flex items-center gap-3">
@@ -601,9 +656,9 @@ export default function CoordinatorDashboard() {
         </div>
 
         {/* Chart area */}
-        <div className="px-5 sm:px-8 py-5 overflow-x-auto">
-          <div className="min-w-[400px] flex flex-col">
-            <div className="flex items-end gap-1.5 min-h-[200px] pt-6">
+        <div className="px-3 sm:px-8 py-5">
+          <div className="w-full flex flex-col">
+            <div className="flex items-end gap-0.5 sm:gap-1.5 h-[200px] pt-6">
               {(() => {
                 const maxCount = Math.max(...Object.values(volsPerDay), 1);
                 return EVENT_DAYS.map((day, idx) => {
@@ -621,7 +676,7 @@ export default function CoordinatorDashboard() {
                         initial={{ height: 0 }}
                         animate={{ height: `${heightPct}%` }}
                         transition={{ duration: 0.7, delay: idx * 0.025, ease: "circOut" }}
-                        className={`w-full rounded-[3px] transition-colors duration-150 relative ${isHovered
+                        className={`w-full rounded-[2px] sm:rounded-[3px] transition-colors duration-150 relative ${isHovered
                           ? 'bg-[#4d7cfe] shadow-[0_0_12px_rgba(77,124,254,0.4)]'
                           : 'bg-[#4d7cfe]/20 hover:bg-[#4d7cfe]/50'
                           }`}
@@ -638,10 +693,10 @@ export default function CoordinatorDashboard() {
               })()}
             </div>
 
-            <div className="flex gap-1.5 mt-2">
+            <div className="flex gap-0.5 sm:gap-1.5 mt-2">
               {EVENT_DAYS.map(day => (
                 <div key={day.key} className="flex-1 text-center">
-                  <span className={`text-[10px] font-bold transition-colors ${hoveredDay === day.key ? 'text-[#4d7cfe]' : 'text-text-dim'}`}>{day.dateNum}</span>
+                  <span className={`text-[8px] sm:text-[10px] font-bold transition-colors ${hoveredDay === day.key ? 'text-[#4d7cfe]' : 'text-text-dim'}`}>{day.dateNum}</span>
                 </div>
               ))}
             </div>
@@ -650,9 +705,15 @@ export default function CoordinatorDashboard() {
             </div>
           </div>
         </div>
+      </motion.div>
 
-        {/* Committee status — inline below chart, full width, divided rows */}
-        <div className="border-t border-white/5 divide-y divide-white/5">
+      {/* Cobertura por Comité — edge to edge */}
+      <motion.div variants={itemVariants} className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/[0.02] mb-8">
+        <div className="px-5 sm:px-8 py-4 border-b border-white/5">
+          <h3 className="text-text tracking-tight leading-none text-sm font-bold">Cobertura por Comité</h3>
+          <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-widest mt-0.5">Porcentaje de requerimientos asignados</p>
+        </div>
+        <div className="divide-y divide-white/5">
           {committeeStatus.map((committee, idx) => (
             <motion.div
               key={committee.id}
@@ -694,7 +755,7 @@ export default function CoordinatorDashboard() {
             <div className="w-16 sm:w-20 shrink-0 bg-dark3 border-r border-border flex flex-col pt-8">
               {heatmapMatrix.map((dayData) => (
                 <div key={dayData.day} className="flex-1 min-h-[60px] flex items-center justify-center border-b border-border last:border-0 px-1 text-center">
-                  <span className="text-[10px] sm:text-xs font-bold text-text-dim leading-none">{dayData.shortLabel}</span>
+                  <span className="text-[10px] sm:text-xs font-bold text-text-dim leading-none">{dayData.shortLabel} {dayData.dayLabel}</span>
                 </div>
               ))}
             </div>
@@ -751,6 +812,60 @@ export default function CoordinatorDashboard() {
         </div>
       </motion.div>
 
+      {/* KPI Explanation Modal */}
+      <AnimatePresence>
+        {activeKpiInfo && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActiveKpiInfo(null)}
+              className="absolute inset-0 bg-black/70 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative bg-dark2 border border-white/10 p-6 rounded-lg max-w-md w-full shadow-2xl z-10 space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                <h3 className="text-lg font-bold text-text flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[#4d7cfe]">info</span>
+                  {activeKpiInfo.title}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiInfo(null)}
+                  className="text-text-dim hover:text-white transition-colors p-1 rounded-sm hover:bg-white/10"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm text-text-dim leading-relaxed">
+                  {activeKpiInfo.explanation}
+                </p>
+                <div className="p-3 bg-dark3 rounded-sm border border-white/5 space-y-1">
+                  <span className="text-[10px] font-bold text-[#4d7cfe] uppercase tracking-wider">Cálculo / Fórmula</span>
+                  <p className="text-xs font-mono font-bold text-text">{activeKpiInfo.formula}</p>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <Button
+                  type="button"
+                  onClick={() => setActiveKpiInfo(null)}
+                  className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white text-xs font-bold px-4 h-9"
+                >
+                  Entendido
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       </motion.div>
     </>
   );
