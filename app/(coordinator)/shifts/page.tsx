@@ -246,6 +246,7 @@ export default function ShiftsPage() {
     const sCounts: Record<string, number> = {};
     const gShifts: Record<string, Record<string, string[]>> = {};
     const cMap: Record<string, boolean> = {};
+    const coMap: Record<string, boolean> = {};
 
     if (shiftsData) {
       setRawShiftsData(shiftsData);
@@ -266,17 +267,23 @@ export default function ShiftsPage() {
           if (s.checked_in) {
             cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
           }
+          if (s.checked_out) {
+            coMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
+          }
         }
       });
     }
 
     setGlobalShifts(gShifts);
     setCheckedInMap(cMap);
+    setCheckedOutMap(coMap);
 
     if (volsData) {
       const mapped = volsData.map((v: any) => ({
         id: v.id,
         name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+        first_name: v.first_name || '',
+        last_name: v.last_name || '',
         stake: v.stake || '',
         ward: v.neighborhood || '',
         phone: v.phone || '',
@@ -317,6 +324,7 @@ export default function ShiftsPage() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isEditingShifts, setIsEditingShifts] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showLegend, setShowLegend] = useState(false);
 
   // Estado para expandir las listas de voluntarios por turno
   const [expandedShifts, setExpandedShifts] = useState<Record<string, boolean>>({});
@@ -332,8 +340,9 @@ export default function ShiftsPage() {
   // Global state for mock assignments so they can be edited and persisted within the session
   const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
   
-  // Track shifts that are already checked in
+  // Track shifts that are already checked in / out
   const [checkedInMap, setCheckedInMap] = useState<Record<string, boolean>>({});
+  const [checkedOutMap, setCheckedOutMap] = useState<Record<string, boolean>>({});
 
   // Track completed shifts in local storage / state
   const [completedShiftsMap, setCompletedShiftsMap] = useState<Record<string, { checkedOutAt: string }>>({});
@@ -909,7 +918,7 @@ export default function ShiftsPage() {
           <>
             {/* Desktop inline expansion */}
             <div className="hidden md:block">
-              <div className="grid grid-cols-4 gap-3 p-4 items-start border-t border-border/50">
+              <div className="grid grid-cols-2 gap-4 p-4 md:p-5 items-start border-t border-border/50">
                 {(['T1', 'T2', 'T3', 'T4'] as const).map(t => {
                   const info = SHIFT_TIMES[parseInt(t[1]) - 1];
                   const vols = shiftData[t];
@@ -1551,24 +1560,35 @@ export default function ShiftsPage() {
               <>
                 {/* Header Profile Info */}
                 <div className="text-center mt-4 mb-8 px-4">
-                  <h3 className="text-drawer-title text-white mb-1">
-                    {editingVolunteer.name}
-                  </h3>
-                  <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                  <div className="flex flex-col items-center justify-center leading-[1.25] font-black text-[26px] sm:text-[30px] text-white tracking-tight">
+                    {(() => {
+                      const parts = (editingVolunteer.name || '').trim().split(/\s+/).filter(Boolean);
+                      if (parts.length >= 4) {
+                        return (
+                          <>
+                            <span>{parts.slice(0, 2).join(' ')}</span>
+                            <span className="text-white/95">{parts.slice(2).join(' ')}</span>
+                          </>
+                        );
+                      }
+                      return <span>{parts.join(' ')}</span>;
+                    })()}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
                     {editingVolunteer.committee && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-[#4d7cfe]/20 text-[#8bb0ff] border border-[#4d7cfe]/30 shadow-sm">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-[#4d7cfe]/20 text-[#8bb0ff] border border-[#4d7cfe]/30 shadow-sm">
                         <span className="material-symbols-outlined text-[13px]">groups</span>
                         {editingVolunteer.committee}
                       </span>
                     )}
                     {editingVolunteer.stake && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-amber-500/15 text-amber-300 border border-amber-500/25 shadow-sm">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-amber-500/15 text-amber-300 border border-amber-500/25 shadow-sm">
                         <span className="material-symbols-outlined text-[13px]">account_balance</span>
                         {editingVolunteer.stake}
                       </span>
                     )}
                     {editingVolunteer.ward && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 shadow-sm">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 shadow-sm">
                         <span className="material-symbols-outlined text-[13px]">location_on</span>
                         {editingVolunteer.ward}
                       </span>
@@ -1584,23 +1604,23 @@ export default function ShiftsPage() {
                     return (
                       <>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{totalTurnos}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Turnos</span>
+                          <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">{totalTurnos}</span>
+                          <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Turnos</span>
                         </div>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{diasCubiertos}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Días</span>
+                          <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">{diasCubiertos}</span>
+                          <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Días</span>
                         </div>
                         <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                          <span className="text-drawer-kpi-value text-white drop-shadow-md">
+                          <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">
                             {editingVolunteer.reliability}
-                            <span className="text-[14px] font-normal text-white/70 ml-0.5">%</span>
+                            <span className="text-[16px] font-bold text-white/80 ml-0.5">%</span>
                           </span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Confia.</span>
+                          <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Confia.</span>
                         </div>
                         <div className="flex flex-col items-center flex-1">
-                          <span className="text-drawer-kpi-value text-white drop-shadow-md">{editingVolunteer.age || '-'}</span>
-                          <span className="text-drawer-kpi-label text-white/70 mt-2 font-inter font-bold">Edad</span>
+                          <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">{editingVolunteer.age || '-'}</span>
+                          <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Edad</span>
                         </div>
                       </>
                     );
@@ -1630,7 +1650,70 @@ export default function ShiftsPage() {
                 {/* Squad/Schedule / Day Cards List */}
                 <div className="w-full">
                   <div className="flex items-center justify-between px-2 mb-4">
-                    <p className="text-drawer-label text-white">Cronograma</p>
+                    <div className="flex items-center gap-2 relative">
+                      <p className="text-drawer-label text-white">Cronograma</p>
+                      
+                      {/* Helper Icon & Legend Popover */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowLegend(prev => !prev)}
+                          className="text-white/60 hover:text-white transition-colors p-0.5 rounded-full flex items-center justify-center focus:outline-none"
+                          title="Ver leyenda del cronograma"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">help_outline</span>
+                        </button>
+
+                        {showLegend && (
+                          <div className="absolute left-0 top-6 z-50 w-60 bg-[#0f172a] border border-white/20 rounded-xl p-3.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+                            <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10">
+                              <span className="text-xs font-bold text-white font-inter">Leyenda del Cronograma</span>
+                              <button onClick={() => setShowLegend(false)} className="text-white/50 hover:text-white flex items-center justify-center">
+                                <span className="material-symbols-outlined text-[14px]">close</span>
+                              </button>
+                            </div>
+                            <div className="space-y-2 text-[11px] font-inter">
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-6 h-6 rounded-lg bg-[#4d7cfe]/20 border border-[#4d7cfe]/40 text-[#4d7cfe] flex items-center justify-center shrink-0">
+                                  <span className="material-symbols-outlined text-[13px]">check</span>
+                                </span>
+                                <div>
+                                  <p className="text-white font-bold leading-tight">Programado</p>
+                                  <p className="text-white/60 text-[10px]">Turno asignado</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shrink-0">
+                                  <span className="material-symbols-outlined text-[13px]">check</span>
+                                </span>
+                                <div>
+                                  <p className="text-emerald-400 font-bold leading-tight">Entrada</p>
+                                  <p className="text-white/60 text-[10px]">Turno registrado con QR</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center shrink-0">
+                                  <span className="material-symbols-outlined text-[13px]">check</span>
+                                </span>
+                                <div>
+                                  <p className="text-slate-300 font-bold leading-tight">Salida</p>
+                                  <p className="text-white/60 text-[10px]">Turno completado en el sistema</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-6 h-6 rounded-lg bg-white/5 border border-white/10 text-white/30 flex items-center justify-center shrink-0 text-[12px] font-bold">
+                                  -
+                                </span>
+                                <div>
+                                  <p className="text-white/50 font-medium leading-tight">Sin Turnos</p>
+                                  <p className="text-white/40 text-[10px]">Disponible / No programado</p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
                     <div className="flex items-center gap-3">
                       {saved && <span className="text-[11px] text-green-300 font-bold animate-pulse">✓ Listo</span>}
@@ -1676,43 +1759,45 @@ export default function ShiftsPage() {
                             </div>
 
                             {/* Right: 4 Columns (T1 to T4) */}
-                            <div className="flex items-center shrink-0 ml-auto">
-                              {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
+                            <div className="flex items-center shrink-0 ml-auto gap-1">
+                              {(['T1', 'T2', 'T3', 'T4'] as const).map((t) => {
                                 const active = dayShifts.includes(t);
                                 const isCheckedIn = checkedInMap[`${editingVolunteer.id}-${d.key}-${t}`];
+                                const isCheckedOut = checkedOutMap[`${editingVolunteer.id}-${d.key}-${t}`];
+
+                                let statusStyle = "bg-white/[0.03] border-white/10 text-white/30";
+                                let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-white/30">-</span>;
+                                let labelColor = "text-white/40";
+
+                                if (isCheckedOut) {
+                                  statusStyle = "bg-slate-800/80 border-slate-700/60 text-slate-300 shadow-sm";
+                                  iconContent = <span className="material-symbols-outlined text-[15px] text-slate-400">check</span>;
+                                  labelColor = "text-slate-400 font-bold";
+                                } else if (isCheckedIn) {
+                                  statusStyle = "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 shadow-sm";
+                                  iconContent = <span className="material-symbols-outlined text-[15px] text-emerald-400">check</span>;
+                                  labelColor = "text-emerald-400 font-bold";
+                                } else if (active) {
+                                  statusStyle = "bg-[#4d7cfe]/15 border-[#4d7cfe]/35 text-[#4d7cfe] font-bold shadow-sm";
+                                  iconContent = <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">check</span>;
+                                  labelColor = "text-[#4d7cfe] font-bold";
+                                }
+
                                 return (
                                   <button
                                     key={t}
-                                    disabled={!isEditingShifts || isCheckedIn}
+                                    disabled={!isEditingShifts || isCheckedIn || isCheckedOut}
                                     onClick={() => toggleShift(d.key, t)}
-                                    className={`flex flex-col items-center justify-center w-12 sm:w-16 py-2.5 ${
-                                      i !== 0 ? 'border-l border-white/10' : ''
-                                    } transition-colors ${
-                                      isEditingShifts && !isCheckedIn ? 'hover:bg-white/10 rounded-lg' : ''
-                                    } ${
-                                      isCheckedIn
-                                        ? 'opacity-100 text-emerald-400 bg-emerald-500/10 rounded-lg'
-                                        : active
-                                        ? 'opacity-100 text-white'
-                                        : 'opacity-40 text-white'
-                                    }`}
+                                    className={cn(
+                                      "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all",
+                                      statusStyle,
+                                      isEditingShifts && !isCheckedIn && !isCheckedOut && "hover:bg-white/10 hover:border-white/20 cursor-pointer active:scale-95"
+                                    )}
                                   >
-                                    <span className="text-[16px] font-semibold leading-none flex items-center gap-0.5">
-                                      {isCheckedIn ? (
-                                        <span className="material-symbols-outlined text-[14px]">task_alt</span>
-                                      ) : active ? (
-                                        '✓'
-                                      ) : (
-                                        '-'
-                                      )}
-                                    </span>
-                                    <span className={`font-inter text-[10px] font-bold uppercase mt-1 tracking-widest ${
-                                      isCheckedIn
-                                        ? 'text-emerald-400/90'
-                                        : active
-                                        ? 'text-white/90'
-                                        : 'text-white/50'
-                                    }`}>
+                                    <div className="h-4 flex items-center justify-center">
+                                      {iconContent}
+                                    </div>
+                                    <span className={cn("font-inter text-[10px] uppercase tracking-wider mt-0.5", labelColor)}>
                                       {t}
                                     </span>
                                   </button>

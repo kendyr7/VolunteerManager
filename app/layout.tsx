@@ -1,17 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Dela_Gothic_One, Inter } from "next/font/google";
+import { Outfit } from "next/font/google";
 import "./globals.css";
 import Script from "next/script";
 
-const delaGothic = Dela_Gothic_One({
-  weight: "400",
-  variable: "--font-sans",
+const outfit = Outfit({
   subsets: ["latin"],
-});
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
+  variable: "--font-outfit",
+  display: "swap",
 });
 
 export const viewport: Viewport = {
@@ -52,7 +47,7 @@ export default async function RootLayout({
   return (
     <html
       lang="es"
-      className={`${delaGothic.variable} ${inter.variable} h-full antialiased dark`}
+      className={`${outfit.variable} h-full antialiased dark`}
       style={{ colorScheme: 'dark', backgroundColor: '#050505' }}
     >
       <head>
