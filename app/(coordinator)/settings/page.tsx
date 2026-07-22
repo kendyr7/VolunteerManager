@@ -24,8 +24,8 @@ const containerVariants = {
 
 const itemVariants = {
   hidden: { opacity: 0, y: 12 },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     y: 0,
     transition: {
       type: "spring" as const,
@@ -33,6 +33,45 @@ const itemVariants = {
       damping: 30
     }
   }
+};
+
+const getCommitteeStyle = (committeeName: string, isSelected: boolean) => {
+  if (!isSelected) {
+    return 'bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/70';
+  }
+
+  const comm = committeeName.toLowerCase();
+  let color = {
+    bgSelected: 'bg-[#4d7cfe] text-white border-[#4d7cfe] shadow-blue-500/25',
+  };
+
+  if (comm.includes('seguridad')) {
+    color = {
+      bgSelected: 'bg-[#fe4d97] text-white border-[#fe4d97] shadow-pink-500/25',
+    };
+  } else if (comm.includes('guía') || comm.includes('guia')) {
+    color = {
+      bgSelected: 'bg-[#6dd230] text-black font-extrabold border-[#6dd230] shadow-green-500/25',
+    };
+  } else if (comm.includes('traducción') || comm.includes('traduccion')) {
+    color = {
+      bgSelected: 'bg-amber-500 text-black font-extrabold border-amber-500 shadow-amber-500/25',
+    };
+  } else if (comm.includes('transporte')) {
+    color = {
+      bgSelected: 'bg-purple-500 text-white border-purple-500 shadow-purple-500/25',
+    };
+  } else if (comm.includes('auxilios') || comm.includes('médico') || comm.includes('medico')) {
+    color = {
+      bgSelected: 'bg-teal-500 text-white border-teal-500 shadow-teal-500/25',
+    };
+  } else if (comm.includes('logística') || comm.includes('logistica')) {
+    color = {
+      bgSelected: 'bg-cyan-500 text-black font-extrabold border-cyan-500 shadow-cyan-500/25',
+    };
+  }
+
+  return `${color.bgSelected} shadow-md scale-[1.02]`;
 };
 
 export default function SettingsPage() {
@@ -50,7 +89,7 @@ export default function SettingsPage() {
   const [editCommittee, setEditCommittee] = useState('');
   const [editRole, setEditRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
 
-  // Committee Requirements State
+  // Committee Requirements State - NONE selected by default
   const [selectedConfigCommittees, setSelectedConfigCommittees] = useState<string[]>([]);
   const [isSyncEnabled, setIsSyncEnabled] = useState(false);
   const [capacities, setCapacities] = useState({ T1: 0, T2: 0, T3: 0, T4: 0 });
@@ -73,6 +112,41 @@ export default function SettingsPage() {
     showToast(allowed ? "Permiso de edición de turnos HABILITADO para Coordinadores" : "Permiso de edición de turnos DESHABILITADO para Coordinadores");
   };
 
+  const handleToggleCommittee = (name: string) => {
+    if (selectedConfigCommittees.includes(name)) {
+      setSelectedConfigCommittees(prev => prev.filter(c => c !== name));
+    } else {
+      setSelectedConfigCommittees(prev => [...prev, name]);
+    }
+  };
+
+  const [isMobile, setIsMobile] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    personal: false,
+    security: false,
+    shiftEdit: false,
+    permissions: false,
+    requirements: false,
+  });
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  const toggleSection = (id: string) => {
+    setOpenSections(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const isSectionOpen = (id: string) => {
+    if (!isMobile) return true; // Always expanded on desktop
+    return !!openSections[id];
+  };
+
   // Toast State
   const [toast, setToast] = useState({ message: '', type: 'success' as 'success' | 'error', isVisible: false });
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -81,7 +155,7 @@ export default function SettingsPage() {
 
   const loadData = async () => {
     const supabase = createClient();
-    
+
     // 1. Get Committees
     const { data: comms } = await supabase.from('committees').select('*');
     if (comms) setCommittees(comms);
@@ -93,7 +167,7 @@ export default function SettingsPage() {
 
     // 3. Fetch current user details
     const table = role === 'Lector' ? 'volunteers' : 'profiles';
-    
+
     const { data: user } = await supabase
       .from(table)
       .select('*, committees(name)')
@@ -108,20 +182,22 @@ export default function SettingsPage() {
       setEditRole(role);
       const userComm = user.committees?.name || '';
       setEditCommittee(userComm);
-      
+
       // Initial committee for config
       if (role === 'Editor') {
         setSelectedConfigCommittees([userComm]);
       } else if (role === 'Admin') {
-        setSelectedConfigCommittees(['Seguridad']); // Default for admin
+        setSelectedConfigCommittees([]); // Default: none selected
       }
+
+
 
       // Check if user has passkeys
       const { data: passkeys } = await supabase
         .from('passkeys')
         .select('id')
         .eq('user_id', user.id);
-      
+
       if (passkeys && passkeys.length > 0) {
         setHasPasskey(true);
       }
@@ -129,44 +205,100 @@ export default function SettingsPage() {
     setLoading(false);
   };
 
-  useEffect(() => {
-    // Load requirements when primary committee selection changes
-    if (selectedConfigCommittees.length > 0) {
-      const primary = selectedConfigCommittees[0];
+  // Helper to load stored capacities for the primary selected committee
+  const loadStoredCapacities = (primary: string): { T1: number; T2: number; T3: number; T4: number } | null => {
+    try {
       const stored = localStorage.getItem("committee_requirements");
       if (stored) {
-        try {
-          const allReqs = JSON.parse(stored);
-          if (allReqs[primary]) {
-            setCapacities(allReqs[primary]);
-          } else {
-            setCapacities({ T1: 4, T2: 4, T3: 4, T4: 4 }); // Default
-          }
-        } catch (e) { console.error(e); }
+        const allReqs = JSON.parse(stored);
+        if (allReqs && allReqs[primary]) return allReqs[primary];
+      }
+    } catch (e) {
+      console.error("Error loading committee requirements:", e);
+    }
+    return null;
+  };
+
+  // Handle sync toggle: ON resets to 0, OFF restores stored per-committee values
+  const handleToggleSync = () => {
+    const enabling = !isSyncEnabled;
+    setIsSyncEnabled(enabling);
+    if (enabling) {
+      // Sync mode ON: start from 0
+      setCapacities({ T1: 0, T2: 0, T3: 0, T4: 0 });
+    } else {
+      // Sync mode OFF: restore last saved values for selected committee
+      if (selectedConfigCommittees.length > 0) {
+        const stored = loadStoredCapacities(selectedConfigCommittees[0]);
+        setCapacities(stored ?? { T1: 4, T2: 4, T3: 4, T4: 4 });
       }
     }
-  }, [selectedConfigCommittees[0]]);
+  };
+
+  useEffect(() => {
+    if (isSyncEnabled) {
+      setCapacities({ T1: 0, T2: 0, T3: 0, T4: 0 });
+      return;
+    }
+    if (selectedConfigCommittees.length === 1) {
+      // Exactly one committee — load its stored values
+      const stored = loadStoredCapacities(selectedConfigCommittees[0]);
+      setCapacities(stored ?? { T1: 4, T2: 4, T3: 4, T4: 4 });
+    } else {
+      // 0 or 2+ committees — show neutral zeros
+      setCapacities({ T1: 0, T2: 0, T3: 0, T4: 0 });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConfigCommittees.join(','), isSyncEnabled]);
 
   const handleSaveRequirements = async () => {
+    if (selectedConfigCommittees.length === 0) {
+      showToast("Selecciona al menos un comité primero para guardar los requerimientos", "error");
+      return;
+    }
     setIsSavingConfig(true);
+
+    // 1. Persist to localStorage (client-side fallback)
     const stored = localStorage.getItem("committee_requirements");
     let allReqs: any = {};
     if (stored) {
-      try { allReqs = JSON.parse(stored); } catch (e) {}
+      try { allReqs = JSON.parse(stored); } catch (e) { }
     }
     selectedConfigCommittees.forEach(comm => {
       allReqs[comm] = capacities;
     });
     localStorage.setItem("committee_requirements", JSON.stringify(allReqs));
-    
-    // Simulate short delay for premium feel
-    setTimeout(() => {
-      setIsSavingConfig(false);
-      showToast("Requerimientos guardados");
-    }, 600);
+
+    // 2. Persist to Supabase committee_shift_requirements
+    const supabaseClient = createClient();
+    const shiftKeys: Array<'T1' | 'T2' | 'T3' | 'T4'> = ['T1', 'T2', 'T3', 'T4'];
+    for (const commName of selectedConfigCommittees) {
+      const commObj = committees.find(c => c.name === commName);
+      if (!commObj) continue;
+      const rows = shiftKeys.map(sk => ({
+        committee_id: commObj.id,
+        shift_key: sk,
+        required: capacities[sk],
+        updated_at: new Date().toISOString(),
+      }));
+      const { error } = await supabaseClient
+        .from('committee_shift_requirements')
+        .upsert(rows, { onConflict: 'committee_id,shift_key' });
+      if (error) {
+        // Table may not exist yet — silently fall back to localStorage only
+        console.warn('committee_shift_requirements upsert skipped:', error.message);
+      }
+    }
+
+    setIsSavingConfig(false);
+    showToast("Requerimientos guardados correctamente");
   };
 
   const updateCapacity = (id: 'T1' | 'T2' | 'T3' | 'T4', delta: number) => {
+    if (selectedConfigCommittees.length === 0) {
+      showToast("Selecciona al menos un comité primero para modificar los requerimientos", "error");
+      return;
+    }
     setCapacities(prev => {
       const newVal = Math.max(0, (prev as any)[id] + delta);
       if (isSyncEnabled) {
@@ -186,7 +318,7 @@ export default function SettingsPage() {
 
     setIsUpdating(true);
     const supabase = createClient();
-    
+
     let committeeId = userProfile.committee_id;
     if (currentRole === 'Admin' && editCommittee) {
       const match = committees.find(c => c.name === editCommittee);
@@ -219,18 +351,18 @@ export default function SettingsPage() {
   const handleRegisterPasskey = async () => {
     if (!userProfile) return;
     setIsRegisteringPasskey(true);
-    
+
     try {
       const resp = await fetch('/api/webauthn/register/generate-options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           userId: userProfile.id,
           userType: currentRole === 'Lector' ? 'volunteer' : 'profile',
           phone: editPhone
         })
       });
-      
+
       if (!resp.ok) {
         throw new Error('Error al generar opciones de registro');
       }
@@ -245,7 +377,7 @@ export default function SettingsPage() {
       });
 
       const verifyData = await verifyResp.json();
-      
+
       if (verifyData.verified) {
         setHasPasskey(true);
         showToast("Huella registrada correctamente");
@@ -300,355 +432,521 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <motion.div 
+      <motion.div
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="max-w-4xl w-full mx-auto space-y-6 lg:space-y-10 pb-20 px-4 sm:px-6 lg:px-8 pt-4"
+        className="w-full pb-20 px-0 sm:px-6 lg:px-8 pt-2"
       >
+        {/* Full-width edge-to-edge settings container separated only by single border lines */}
+        <motion.div variants={itemVariants} className="w-full bg-dark2 border-y sm:border border-white/10 rounded-none sm:rounded-2xl overflow-hidden divide-y divide-white/10 shadow-lg">
 
+          {/* 1. Información Personal */}
+          <div className="w-full transition-all">
+            <button
+              type="button"
+              onClick={() => isMobile && toggleSection('personal')}
+              className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left ${isMobile ? 'cursor-pointer hover:bg-white/[0.02]' : 'cursor-default'
+                } ${isSectionOpen('personal') ? 'bg-white/[0.02]' : ''}`}
+            >
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="w-8 h-8 rounded-xl bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[18px]">account_circle</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Información personal</h3>
+                  <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">Datos registrados de tu cuenta</p>
+                </div>
+              </div>
 
-      {/* Profile Card */}
-      <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden">
-        <div className="p-6 md:p-8 border-b border-white/5 flex items-center justify-between bg-dark3">
-          <div>
-            <h3 className="font-bold text-text tracking-tight leading-none mb-2">Información Personal</h3>
-            <p className="text-xs md:text-sm font-inter font-bold text-text-dim">Datos registrados de tu cuenta.</p>
-          </div>
-        </div>
-        
-        <form onSubmit={handleUpdateProfile} className="p-6 md:p-8 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-            <div className="space-y-2">
-              <label className="block mb-2 text-xs font-normal text-text">Nombre completo</label>
-              <input 
-                readOnly={currentRole === 'Lector'}
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-                className={`w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all ${
-                  currentRole === 'Lector' 
-                    ? 'border-white/5 bg-dark/50 text-text-dim cursor-not-allowed' 
-                    : 'border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
-                }`}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="block mb-2 text-xs font-normal text-text">Teléfono WhatsApp</label>
-              <input 
-                readOnly={currentRole === 'Lector'}
-                value={editPhone}
-                onChange={e => setEditPhone(e.target.value)}
-                className={`w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all ${
-                  currentRole === 'Lector' 
-                    ? 'border-white/5 bg-dark/50 text-text-dim cursor-not-allowed' 
-                    : 'border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
-                }`}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <label className="block mb-2 text-xs font-normal text-text">Rol en la plataforma</label>
-              {currentRole === 'Admin' ? (
-                <Select value={editRole} onValueChange={(v) => setEditRole(v as 'Admin' | 'Editor' | 'Lector')}>
-                  <SelectTrigger className="w-full h-10 px-3 border text-text font-inter font-bold flex items-center justify-between bg-dark2 border-border rounded-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-dark2 border-border text-text font-inter font-bold">
-                    <SelectItem value="Admin">Admin (Acceso total)</SelectItem>
-                    <SelectItem value="Editor">Editor (Coordinador de comité)</SelectItem>
-                    <SelectItem value="Lector">Lector (Solo lectura)</SelectItem>
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="w-full h-10 px-3 rounded-sm border border-white/5 bg-dark/50 text-text-dim text-sm font-inter font-bold flex items-center cursor-not-allowed">
-                  {editRole}
+              {isMobile && (
+                <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-white/70 shrink-0">
+                  <span className="material-symbols-outlined text-[18px]">
+                    {isSectionOpen('personal') ? 'expand_less' : 'expand_more'}
+                  </span>
                 </div>
               )}
-            </div>
+            </button>
 
-            {editRole === 'Editor' && (
-              <div className="space-y-2">
-                <label className="block mb-2 text-xs font-normal text-text">Comité Asignado</label>
-                {currentRole === 'Admin' ? (
-                  <Select value={editCommittee} onValueChange={(v) => v && setEditCommittee(v)}>
-                    <SelectTrigger className="w-full h-10 px-3 border text-text font-inter font-bold flex items-center justify-between bg-dark2 border-border rounded-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-dark2 border-border text-text font-inter font-bold">
-                      {committees.map(c => (
-                        <SelectItem key={c.id} value={c.name} className="focus:bg-dark3 focus:text-text">{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <div className="w-full h-10 px-3 rounded-sm border border-white/5 bg-dark/50 text-text-dim text-sm font-inter font-bold flex items-center cursor-not-allowed">
-                    {editCommittee || 'Sin comité'}
+            {isSectionOpen('personal') && (
+              <div className="p-4 sm:p-6 space-y-5 border-t border-white/5 bg-black/10">
+                <form onSubmit={handleUpdateProfile} className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-text">Nombre completo</label>
+                      <input
+                        readOnly={currentRole === 'Lector'}
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        className={`w-full h-10 px-3 rounded-xl border text-xs font-inter font-bold outline-none transition-all ${currentRole === 'Lector'
+                          ? 'border-white/5 bg-dark/50 text-text-dim cursor-not-allowed'
+                          : 'border-white/15 bg-white/5 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
+                          }`}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-text">Teléfono WhatsApp</label>
+                      <input
+                        readOnly={currentRole === 'Lector'}
+                        value={editPhone}
+                        onChange={e => setEditPhone(e.target.value)}
+                        className={`w-full h-10 px-3 rounded-xl border text-xs font-inter font-bold outline-none transition-all ${currentRole === 'Lector'
+                          ? 'border-white/5 bg-dark/50 text-text-dim cursor-not-allowed'
+                          : 'border-white/15 bg-white/5 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
+                          }`}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-text">Rol en la plataforma</label>
+                      {currentRole === 'Admin' ? (
+                        <Select value={editRole} onValueChange={(v) => setEditRole(v as 'Admin' | 'Editor' | 'Lector')}>
+                          <SelectTrigger className="w-full h-10 px-3 border text-text text-xs font-inter font-bold flex items-center justify-between bg-white/5 border-white/15 rounded-xl">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#0f172a] border-white/20 text-text text-xs font-inter font-bold z-[120]">
+                            <SelectItem value="Admin">Admin (Acceso total)</SelectItem>
+                            <SelectItem value="Editor">Editor (Coordinador de comité)</SelectItem>
+                            <SelectItem value="Lector">Lector (Solo lectura)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="w-full h-10 px-3 rounded-xl border border-white/5 bg-dark/50 text-text-dim text-xs font-inter font-bold flex items-center cursor-not-allowed">
+                          {editRole}
+                        </div>
+                      )}
+                    </div>
+
+                    {editRole === 'Editor' && (
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-text">Comité Asignado</label>
+                        {currentRole === 'Admin' ? (
+                          <Select value={editCommittee} onValueChange={(v) => v && setEditCommittee(v)}>
+                            <SelectTrigger className="w-full h-10 px-3 border text-text text-xs font-inter font-bold flex items-center justify-between bg-white/5 border-white/15 rounded-xl">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-[#0f172a] border-white/20 text-text text-xs font-inter font-bold z-[120]">
+                              {committees.map(c => (
+                                <SelectItem key={c.id} value={c.name} className="focus:bg-white/10 focus:text-text">{c.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="w-full h-10 px-3 rounded-xl border border-white/5 bg-dark/50 text-text-dim text-xs font-inter font-bold flex items-center cursor-not-allowed">
+                            {editCommittee || 'Sin comité'}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
+
+                  {currentRole !== 'Lector' && (
+                    <div className="pt-2 flex justify-end">
+                      <Button type="submit" disabled={isUpdating} className="bg-white hover:bg-white/90 text-black font-bold px-6 h-9 shadow-lg active:scale-[0.97] transition-all rounded-full text-xs">
+                        {isUpdating ? 'Actualizando...' : 'Guardar Cambios de Perfil'}
+                      </Button>
+                    </div>
+                  )}
+                </form>
               </div>
             )}
           </div>
 
-          {currentRole !== 'Lector' && (
-            <div className="pt-6 md:pt-8 border-t border-white/5 flex justify-end">
-              <Button type="submit" disabled={isUpdating} className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-8 h-10 shadow-lg shadow-blue-500/15 transition-all active:scale-[0.97] rounded-full text-xs">
-                {isUpdating ? 'Actualizando...' : 'Guardar Cambios'}
-              </Button>
-            </div>
-          )}
-        </form>
-      </motion.div>
-
-      {/* Seguridad & Autenticación (Solo móvil/tablet por ahora) */}
-      <motion.div variants={itemVariants} className="lg:hidden bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden mb-8">
-        <div className="p-6 md:p-8 border-b border-white/5 flex items-center justify-between bg-dark3">
-          <div>
-            <h3 className="font-bold text-text tracking-tight leading-none mb-2">Seguridad y Acceso</h3>
-            <p className="text-xs md:text-sm font-inter font-bold text-text-dim">Gestiona métodos de inicio de sesión.</p>
-          </div>
-        </div>
-        
-        <div className="p-6 md:p-8 space-y-6">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="flex-1">
-              <p className="text-sm font-bold text-text mb-2 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#4d7cfe] text-[20px] shrink-0">fingerprint</span>
-                Inicio de Sesión Biométrico
-              </p>
-              <p className="text-xs text-text-dim leading-relaxed max-w-xl font-inter font-bold">
-                Vincula este dispositivo para iniciar sesión usando tu huella dactilar, Face ID o método de bloqueo seguro del sistema sin necesidad de introducir un PIN.
-              </p>
-            </div>
-            
-            {hasPasskey ? (
-              <Button 
-                type="button" 
-                onClick={handleDeletePasskey}
-                disabled={isRegisteringPasskey} 
-                className="font-bold px-6 h-10 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-red/10 text-red hover:bg-red/20 border border-red/20"
-              >
-                {isRegisteringPasskey ? 'Desvinculando...' : 'Desvincular Dispositivo'}
-              </Button>
-            ) : (
-              <Button 
-                type="button" 
-                onClick={handleRegisterPasskey}
-                disabled={isRegisteringPasskey} 
-                className="font-bold px-6 h-10 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-white/10 hover:bg-white/20 text-white"
-              >
-                {isRegisteringPasskey ? 'Registrando...' : 'Vincular Dispositivo'}
-              </Button>
-            )}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Permisos de Edición de Turnos */}
-      <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden mb-8">
-        <div className="p-6 md:p-8 border-b border-white/5 bg-dark3 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <h3 className="font-bold text-text tracking-tight leading-none mb-2 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#4d7cfe] text-[22px]">edit_calendar</span>
-              Edición de Turnos para Coordinadores
-            </h3>
-            <p className="text-xs md:text-sm font-inter font-bold text-text-dim max-w-xl">
-              Por defecto, los voluntarios no pueden editar sus turnos y esta función está deshabilitada para los coordinadores. Solo los Administradores pueden modificar asignaciones a menos que se habilite este permiso.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0">
-            <span className="text-xs font-bold text-text-dim">
-              {allowCoordinatorShiftEdit ? "Habilitado" : "Deshabilitado (Por defecto)"}
-            </span>
+          {/* 2. Huellas Digitales (Biometría / Face ID) */}
+          <div className="w-full transition-all">
             <button
               type="button"
-              disabled={currentRole !== 'Admin'}
-              onClick={() => handleToggleCoordinatorShiftEdit(!allowCoordinatorShiftEdit)}
-              className={`w-12 h-7 rounded-full transition-all relative flex-shrink-0 ${
-                allowCoordinatorShiftEdit ? 'bg-emerald-500' : 'bg-white/10'
-              } ${currentRole !== 'Admin' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+              onClick={() => isMobile && toggleSection('security')}
+              className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left ${isMobile ? 'cursor-pointer hover:bg-white/[0.02]' : 'cursor-default'
+                } ${isSectionOpen('security') ? 'bg-white/[0.02]' : ''}`}
             >
-              <motion.span 
-                initial={false}
-                animate={{ x: allowCoordinatorShiftEdit ? 24 : 4 }}
-                style={{ left: 0 }}
-                className="absolute top-[4px] w-5 h-5 rounded-full bg-white shadow-md" 
-              />
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[18px]">fingerprint</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Huellas digitales</h3>
+                  <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">Autenticación biométrica o Face ID para acceder sin PIN</p>
+                </div>
+              </div>
+
+              {isMobile && (
+                <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-white/70 shrink-0">
+                  <span className="material-symbols-outlined text-[18px]">
+                    {isSectionOpen('security') ? 'expand_less' : 'expand_more'}
+                  </span>
+                </div>
+              )}
             </button>
+
+            {isSectionOpen('security') && (
+              <div className="p-4 sm:p-6 border-t border-white/5 bg-black/10">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <p className="text-xs text-text-dim font-inter leading-relaxed max-w-xl">
+                      Vincula este dispositivo para iniciar sesión rápidamente mediante tu huella dactilar o reconocimiento facial.
+                    </p>
+                  </div>
+
+                  {hasPasskey ? (
+                    <Button
+                      type="button"
+                      onClick={handleDeletePasskey}
+                      disabled={isRegisteringPasskey}
+                      className="font-bold px-5 h-9 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-red/10 text-red hover:bg-red/20 border border-red/20"
+                    >
+                      {isRegisteringPasskey ? 'Desvinculando...' : 'Desvincular Dispositivo'}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={handleRegisterPasskey}
+                      disabled={isRegisteringPasskey}
+                      className="font-bold px-5 h-9 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/15"
+                    >
+                      {isRegisteringPasskey ? 'Registrando...' : 'Vincular Dispositivo'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-        {currentRole !== 'Admin' && (
-          <div className="px-6 py-3 bg-dark3/50 border-t border-white/5 text-[11px] text-amber-400 font-bold flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[14px]">lock</span>
-            Solo un Administrador puede activar o desactivar la edición de turnos para coordinadores.
-          </div>
-        )}
-      </motion.div>
-      <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden">
-        <div className="p-6 md:p-8 border-b border-white/5 bg-dark3">
-          <h3 className="font-bold text-text tracking-tight leading-none mb-2">Permisos</h3>
-          <p className="text-xs md:text-sm font-inter font-bold text-text-dim">Funcionalidades habilitadas para el rol de {editRole}.</p>
-        </div>
-        <div className="p-4 md:p-8">
-          <div className="divide-y divide-white/5 border border-white/5 rounded-2xl overflow-hidden bg-dark3">
-            {ALL_PERMISSIONS.map(perm => {
-              const isOn = ROLE_PERMISSIONS[editRole].includes(perm);
-              const isLocked = currentRole !== 'Admin';
-              
-              return (
-                <div key={perm} className="flex items-center justify-between p-4 md:p-5 bg-dark2/50 hover:bg-dark2 transition-colors group">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                      isOn ? 'bg-[#4d7cfe]/10 text-[#4d7cfe]' : 'bg-white/5 text-text-dim'
-                    }`}>
-                      <span className="material-symbols-outlined text-[20px] md:text-[22px]">
-                        {perm === 'Ver voluntarios' ? 'group' :
-                         perm === 'Editar turnos' ? 'edit_calendar' :
-                         perm === 'Enviar mensajes' ? 'send_to_mobile' :
-                         perm === 'Ver reportes' ? 'analytics' :
-                         perm === 'Importar datos' ? 'upload_file' : 'settings_suggest'}
-                      </span>
+
+          {/* 3. Permisos (Incluye Edición de Turnos e información del rol) */}
+          <div className="w-full transition-all">
+            <button
+              type="button"
+              onClick={() => isMobile && toggleSection('permissions')}
+              className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left ${isMobile ? 'cursor-pointer hover:bg-white/[0.02]' : 'cursor-default'
+                } ${isSectionOpen('permissions') ? 'bg-white/[0.02]' : ''}`}
+            >
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Permisos</h3>
+                  <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">Gestión de accesos y edición de turnos para coordinadores</p>
+                </div>
+              </div>
+
+              {isMobile && (
+                <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-white/70 shrink-0">
+                  <span className="material-symbols-outlined text-[18px]">
+                    {isSectionOpen('permissions') ? 'expand_less' : 'expand_more'}
+                  </span>
+                </div>
+              )}
+            </button>
+
+            {isSectionOpen('permissions') && (
+              <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-0 border-t border-white/5 bg-black/10">
+
+                {/* Permiso Especial: Edición de Turnos para Coordinadores */}
+                <div className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-white/[0.02] transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-[18px]">edit_calendar</span>
                     </div>
                     <div>
-                      <p className="text-xs md:text-sm font-bold text-text">{perm}</p>
-                      <p className="text-[10px] md:text-xs text-text-dim font-medium">{isOn ? 'Habilitado' : 'Restringido'}</p>
+                      <p className="text-xs font-bold text-text">Coordinadores editan turnos</p>
+                      <p className="text-[10px] text-text-dim font-medium">Por defecto solo administradores pueden modificar asignaciones</p>
+                      {currentRole !== 'Admin' && (
+                        <p className="text-[10px] text-amber-400 font-bold flex items-center gap-1 pt-0.5">
+                          <span className="material-symbols-outlined text-[12px]">lock</span>
+                          Solo Administradores pueden modificar este permiso
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   <button
                     type="button"
-                    disabled={isLocked}
-                    className={`w-10 h-6 rounded-full transition-all relative flex-shrink-0 ${
-                      isOn ? 'bg-[#4d7cfe]' : 'bg-white/10'
-                    } ${isLocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+                    disabled={currentRole !== 'Admin'}
+                    onClick={() => handleToggleCoordinatorShiftEdit(!allowCoordinatorShiftEdit)}
+                    className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${allowCoordinatorShiftEdit ? 'bg-emerald-500' : 'bg-white/10'
+                      } ${currentRole !== 'Admin' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
                   >
-                    <motion.span 
+                    <motion.span
                       initial={false}
-                      animate={{ x: isOn ? 20 : 4 }}
+                      animate={{ x: allowCoordinatorShiftEdit ? 18 : 3 }}
                       style={{ left: 0 }}
-                      className="absolute top-[4px] w-4 h-4 rounded-full bg-white shadow-md" 
+                      className="absolute top-[2.5px] w-3.5 h-3.5 rounded-full bg-white shadow-md"
                     />
                   </button>
                 </div>
-              );
-            })}
-          </div>
-          
-          {currentRole === 'Admin' && (
-            <div className="mt-6 md:mt-8 flex justify-end">
-              <p className="text-[10px] md:text-[11px] text-text-dim italic">Como Administrador, gestionas los permisos globales del sistema.</p>
-            </div>
-          )}
-        </div>
-      </motion.div>
 
-      {/* Committee Requirements Section (Role-based) */}
-      {(currentRole === 'Admin' || currentRole === 'Editor') && (
-        <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden mb-8">
-          <div className="p-6 md:p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-dark3">
-            <div>
-              <h3 className="font-bold text-text tracking-tight leading-none mb-2">Requerimientos por Turno</h3>
-              <p className="text-xs md:text-sm font-inter font-bold text-text-dim">Define el personal mínimo necesario para cada horario.</p>
-            </div>
-            
-            {currentRole === 'Admin' ? (
-              <div className="w-full md:max-w-sm">
-                <DataTableFilter
-                  title={selectedConfigCommittees.length === 1 ? selectedConfigCommittees[0] : "Comités seleccionados"}
-                  options={committees.map(c => c.name)}
-                  value={selectedConfigCommittees}
-                  dropdownLabel="Comités disponibles"
-                  hideClearButton
-                  hideCountBadge={selectedConfigCommittees.length === 1}
-                  isCommitteeFilter
-                  className="bg-dark border-white/10 justify-between w-full min-w-[200px] font-inter font-bold text-sm"
-                  onChange={(vals) => {
-                    if (vals.length > 0) {
-                      setSelectedConfigCommittees(vals);
-                    }
-                  }}
-                />
+                {/* Lista de Permisos por Rol — borderless rows */}
+                <div className="divide-y divide-white/5">
+                  {ALL_PERMISSIONS.map(perm => {
+                    const isOn = ROLE_PERMISSIONS[editRole].includes(perm);
+                    const isLocked = currentRole !== 'Admin';
+
+                    return (
+                      <div key={perm} className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-white/[0.02] transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isOn ? 'bg-[#4d7cfe]/15 text-[#4d7cfe]' : 'bg-white/5 text-text-dim'
+                            }`}>
+                            <span className="material-symbols-outlined text-[18px]">
+                              {perm === 'Ver voluntarios' ? 'group' :
+                                perm === 'Editar turnos' ? 'edit_calendar' :
+                                  perm === 'Enviar mensajes' ? 'send_to_mobile' :
+                                    perm === 'Ver reportes' ? 'analytics' :
+                                      perm === 'Importar datos' ? 'upload_file' : 'settings_suggest'}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-text">{perm}</p>
+                            <p className="text-[10px] text-text-dim font-medium">{isOn ? 'Habilitado' : 'Restringido'}</p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={isLocked}
+                          className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${isOn ? 'bg-[#4d7cfe]' : 'bg-white/10'
+                            } ${isLocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+                        >
+                          <motion.span
+                            initial={false}
+                            animate={{ x: isOn ? 18 : 3 }}
+                            style={{ left: 0 }}
+                            className="absolute top-[2.5px] w-3.5 h-3.5 rounded-full bg-white shadow-md"
+                          />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
               </div>
-            ) : (
-              <Badge className="bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20 font-inter font-bold uppercase tracking-widest px-3 py-1">
-                Comité: {selectedConfigCommittees[0]}
-              </Badge>
             )}
           </div>
 
-          <div className="p-4 md:p-8">
-            <div className="relative grid grid-cols-2 gap-3 md:gap-6">
-              {([
-                { id: 'T1', label: 'Turno 1', time: '8:00 AM - 12:00 PM' },
-                { id: 'T2', label: 'Turno 2', time: '11:00 AM - 3:00 PM' },
-                { id: 'T3', label: 'Turno 3', time: '2:00 PM - 6:00 PM' },
-                { id: 'T4', label: 'Turno 4', time: '5:00 PM - 10:00 PM' }
-              ] as const).map(({ id, label, time }) => (
-                <div key={id} className="p-5 rounded-2xl border border-white/5 bg-dark3 space-y-4">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-bold text-text">{label}</span>
-                    <span className="text-[10px] font-inter font-bold text-text-dim uppercase">{time}</span>
+          {/* 4. Requerimientos por Turno (Role-based) */}
+          {(currentRole === 'Admin' || currentRole === 'Editor') && (
+            <div className="w-full transition-all">
+              <button
+                type="button"
+                onClick={() => isMobile && toggleSection('requirements')}
+                className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left ${isMobile ? 'cursor-pointer hover:bg-white/[0.02]' : 'cursor-default'
+                  } ${isSectionOpen('requirements') ? 'bg-white/[0.02]' : ''}`}
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[18px]">groups</span>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <button 
-                      type="button"
-                      onClick={() => updateCapacity(id, -1)}
-                      className="w-10 h-10 flex items-center justify-center rounded-xl bg-dark2 border border-white/10 text-text-dim hover:text-text hover:border-white/20 transition-all active:scale-90 shadow-sm"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">remove</span>
-                    </button>
-                    <span className="text-3xl font-bold text-text tabular-nums font-inter">{(capacities as any)[id]}</span>
-                    <button 
-                      type="button"
-                      onClick={() => updateCapacity(id, 1)}
-                      className="w-10 h-10 flex items-center justify-center rounded-xl bg-dark2 border border-white/10 text-text-dim hover:text-text hover:border-white/20 transition-all active:scale-90 shadow-sm"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">add</span>
-                    </button>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Requerimientos por turno</h3>
+                    <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">Capacidad mínima de personal por horario</p>
                   </div>
                 </div>
-              ))}
-              
-              {/* Sync Button (Centered in the 2x2 grid, visible on all screens) */}
-              <div className="flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center bg-dark2 rounded-full p-1.5 md:p-2 shadow-md border border-white/5 z-10">
-                <button
-                  onClick={() => setIsSyncEnabled(!isSyncEnabled)}
-                  title={isSyncEnabled ? "Sincronización activada" : "Sincronización desactivada"}
-                  className={`flex items-center justify-center w-10 h-10 rounded-full transition-all shadow-sm ${
-                    isSyncEnabled 
-                      ? 'bg-[#4d7cfe] text-white shadow-blue-500/20' 
-                      : 'bg-dark3 text-text-dim hover:bg-white/5 hover:text-text'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[20px]">link</span>
-                </button>
-              </div>
-            </div>
 
-            <div className="mt-6 md:mt-10 pt-6 md:pt-8 border-t border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <p className="text-[10px] md:text-[11px] text-text-dim max-w-md">
-                Estos valores determinan los estados de alerta (Déficit/Crítico) en los tableros de gestión global.
-              </p>
-              <div className="flex justify-end w-full sm:w-auto">
-                <Button 
-                  onClick={handleSaveRequirements} 
-                  disabled={isSavingConfig}
-                  className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-8 h-10 shadow-lg shadow-blue-500/15 transition-all active:scale-[0.97] rounded-full text-xs"
-                >
-                  {isSavingConfig ? 'Guardando...' : 'Guardar Cambios'}
-                </Button>
-              </div>
+                {isMobile && (
+                  <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-white/70 shrink-0">
+                    <span className="material-symbols-outlined text-[18px]">
+                      {isSectionOpen('requirements') ? 'expand_less' : 'expand_more'}
+                    </span>
+                  </div>
+                )}
+              </button>
+
+              {isSectionOpen('requirements') && (
+                <div className="p-4 sm:p-6 space-y-5 border-t border-white/5 bg-black/10">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <p className="text-xs font-inter text-text-dim">
+                      Ajusta la cantidad mínima de voluntarios requeridos por turno.
+                    </p>
+                    
+                    {/* Sync Button */}
+                    <button
+                      onClick={handleToggleSync}
+                      title={isSyncEnabled ? "Sincronización activada" : "Sincronización desactivada"}
+                      className={`flex items-center gap-1.5 px-3 h-8 rounded-full border text-xs font-bold transition-all shrink-0 self-start sm:self-auto ${
+                        isSyncEnabled 
+                          ? 'bg-[#4d7cfe] text-white border-[#4d7cfe] shadow-blue-500/20' 
+                          : 'bg-white/5 border-white/15 text-text-dim hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">link</span>
+                      <span className="text-[11px]">{isSyncEnabled ? 'Sincronizado' : 'Sincronizar'}</span>
+                    </button>
+                  </div>
+
+                  {/* Multi-select Committee Chips Bar (Max 2 Rows) */}
+                  {currentRole === 'Admin' && committees.length > 0 ? (
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider">
+                          Comités Seleccionados ({selectedConfigCommittees.length}):
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (selectedConfigCommittees.length === committees.length) {
+                              setSelectedConfigCommittees([]);
+                            } else {
+                              setSelectedConfigCommittees(committees.map(c => c.name));
+                            }
+                          }}
+                          className="text-[11px] font-bold text-[#4d7cfe] hover:underline"
+                        >
+                          {selectedConfigCommittees.length === committees.length ? 'Deseleccionar Todos' : 'Seleccionar Todos'}
+                        </button>
+                      </div>
+                      
+                      {/* Dynamic grid to guarantee MAX 2 ROWS */}
+                      <div 
+                        className="grid gap-2 pt-0.5 w-full"
+                        style={{
+                          gridTemplateColumns: `repeat(${Math.max(2, Math.ceil(committees.length / 2))}, minmax(0, 1fr))`
+                        }}
+                      >
+                        {committees.map((comm) => {
+                          const isSelected = selectedConfigCommittees.includes(comm.name);
+                          const style = getCommitteeStyle(comm.name, isSelected);
+                          return (
+                            <button
+                              key={comm.id}
+                              type="button"
+                              onClick={() => handleToggleCommittee(comm.name)}
+                              className={`w-full h-9 flex items-center justify-center text-center px-2 rounded-full text-xs font-bold transition-all border truncate ${style}`}
+                            >
+                              <span className="truncate">{comm.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pt-1">
+                      <Badge className="bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/30 font-inter font-bold text-xs uppercase tracking-wider px-3 py-1 rounded-lg">
+                        Comité: {selectedConfigCommittees[0] || 'Ninguno seleccionado'}
+                      </Badge>
+                    </div>
+                  )}
+
+                  {/* Warning banner when no committee is selected */}
+                  {selectedConfigCommittees.length === 0 && currentRole === 'Admin' && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-400 font-bold flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[15px]">info</span>
+                      Selecciona al menos un comité arriba para ver y modificar sus requerimientos por turno.
+                    </div>
+                  )}
+
+                  {/* Shift List: ERD Database Schema Relation Lines (0 Pixel Resize) */}
+                  <div className="divide-y divide-white/5 border border-white/10 rounded-xl overflow-hidden bg-black/20 relative">
+                    {([
+                      { id: 'T1', label: 'Turno 1', time: '8:00 AM - 12:00 PM' },
+                      { id: 'T2', label: 'Turno 2', time: '11:00 AM - 3:00 PM' },
+                      { id: 'T3', label: 'Turno 3', time: '2:00 PM - 6:00 PM' },
+                      { id: 'T4', label: 'Turno 4', time: '5:00 PM - 10:00 PM' }
+                    ] as const).map(({ id, label, time }) => (
+                      <div key={id} className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-white/[0.02] transition-colors relative min-h-[57px]">
+                        <div className="flex flex-col gap-0.5 shrink-0">
+                          <span className="text-xs font-extrabold text-text">{label}</span>
+                          <span className="text-[10px] font-inter font-medium text-text-dim uppercase">{time}</span>
+                        </div>
+
+                        {!isSyncEnabled && (
+                          /* Independent counter control */
+                          <div className="flex items-center gap-3 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => updateCapacity(id, -1)}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1e293b] border border-white/15 text-white hover:bg-[#334155] transition-all active:scale-90 shadow-sm"
+                            >
+                              <span className="material-symbols-outlined text-[16px] text-white font-bold">remove</span>
+                            </button>
+                            <span className="text-base sm:text-lg font-extrabold text-text tabular-nums min-w-[24px] text-center font-inter">
+                              {(capacities as any)[id]}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateCapacity(id, 1)}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1e293b] border border-white/15 text-white hover:bg-[#334155] transition-all active:scale-90 shadow-sm"
+                            >
+                              <span className="material-symbols-outlined text-[16px] text-white font-bold">add</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* ERD Database Relationship Lines & Single Synchronized Counter Overlay */}
+                    {isSyncEnabled && (
+                      <>
+                        <svg 
+                          className="absolute left-[130px] sm:left-[145px] right-[130px] sm:right-[145px] top-0 bottom-0 w-auto h-full pointer-events-none z-0 text-white/30" 
+                          viewBox="0 0 100 228" 
+                          preserveAspectRatio="none"
+                        >
+                          {/* ERD Relationship Bezier curves from each row to center target */}
+                          <path d="M 0 28 C 50 28, 50 114, 96 114" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+                          <path d="M 0 85 C 50 85, 50 114, 96 114" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+                          <path d="M 0 142 C 50 142, 50 114, 96 114" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+                          <path d="M 0 200 C 50 200, 50 114, 96 114" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+
+                          {/* Row Entity Connection Dots */}
+                          <circle cx="2" cy="28" r="2.5" fill="currentColor" />
+                          <circle cx="2" cy="85" r="2.5" fill="currentColor" />
+                          <circle cx="2" cy="142" r="2.5" fill="currentColor" />
+                          <circle cx="2" cy="200" r="2.5" fill="currentColor" />
+
+                          {/* Target Relation Node */}
+                          <circle cx="96" cy="114" r="3.5" fill="#0f172a" stroke="currentColor" strokeWidth="1.5" />
+                        </svg>
+
+                        <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 flex items-center gap-3 shrink-0 z-10">
+                          <button
+                            type="button"
+                            onClick={() => updateCapacity('T1', -1)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1e293b] border border-white/15 text-white hover:bg-[#334155] transition-all active:scale-90 shadow-sm"
+                          >
+                            <span className="material-symbols-outlined text-[16px] text-white font-bold">remove</span>
+                          </button>
+                          <span className="text-base sm:text-lg font-extrabold text-text tabular-nums min-w-[24px] text-center font-inter">
+                            {capacities.T1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateCapacity('T1', 1)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1e293b] border border-white/15 text-white hover:bg-[#334155] transition-all active:scale-90 shadow-sm"
+                          >
+                            <span className="material-symbols-outlined text-[16px] text-white font-bold">add</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <p className="text-[10px] sm:text-xs text-text-dim max-w-md font-inter">
+                      Determina los umbrales de alerta (Déficit / Crítico) en los tableros globales.
+                    </p>
+                    <div className="flex justify-end w-full sm:w-auto">
+                      <Button
+                        onClick={handleSaveRequirements}
+                        disabled={isSavingConfig}
+                        className="bg-white hover:bg-white/90 text-black font-bold px-6 h-9 shadow-lg active:scale-[0.97] transition-all rounded-full text-xs"
+                      >
+                        {isSavingConfig ? 'Guardando...' : 'Guardar Requerimientos'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
+
         </motion.div>
-      )}
 
-      <Toast 
-        message={toast.message} 
-        type={toast.type} 
-        isVisible={toast.isVisible} 
-        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
-      />
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          isVisible={toast.isVisible}
+          onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
+        />
       </motion.div>
     </div>
   );

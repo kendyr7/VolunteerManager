@@ -122,6 +122,28 @@ export default function CoordinatorDashboard() {
       });
     }
 
+    // Fetch committee_shift_requirements from Supabase and merge with defaults
+    const { data: reqsData } = await supabase
+      .from('committee_shift_requirements')
+      .select('*, committees(name)');
+
+    if (reqsData && reqsData.length > 0 && commsData) {
+      const updatedReqs: Record<string, Record<string, number>> = {};
+      reqsData.forEach((r: any) => {
+        const commName = r.committees?.name || commsData.find((c: any) => c.id === r.committee_id)?.name;
+        if (commName) {
+          if (!updatedReqs[commName]) updatedReqs[commName] = {};
+          updatedReqs[commName][r.shift_key] = r.required;
+        }
+      });
+      // Merge into localStorage for client-side consistency
+      const stored = localStorage.getItem("committee_requirements");
+      let allReqs: any = stored ? JSON.parse(stored) : {};
+      Object.assign(allReqs, updatedReqs);
+      localStorage.setItem("committee_requirements", JSON.stringify(allReqs));
+      setCommitteeRequirements(prev => ({ ...prev, ...updatedReqs }));
+    }
+
     setGlobalShifts(gShifts);
     setDbCheckedInMap(cMap);
 
@@ -260,19 +282,20 @@ export default function CoordinatorDashboard() {
     const globalCoveragePercentage = totalRequired > 0 ? Math.round((totalAssignedInRequired / totalRequired) * 100) : 100;
     
     let totalGlobalAssigned = 0;
-    let totalGlobalConfirmed = 0;
+    let totalGlobalCheckedIn = 0;
     Object.entries(globalShifts).forEach(([volId, days]) => {
       Object.entries(days).forEach(([day, shifts]) => {
         shifts.forEach(shift => {
           totalGlobalAssigned++;
           if (dbCheckedInMap[`${volId}-${day}-${shift}`]) {
-            totalGlobalConfirmed++;
+            totalGlobalCheckedIn++;
           }
         });
       });
     });
-    
-    const averageReliability = totalGlobalAssigned > 0 ? Math.round((totalGlobalConfirmed / totalGlobalAssigned) * 100) : 0;
+
+    const attendanceRate = totalGlobalAssigned > 0
+      ? Math.round((totalGlobalCheckedIn / totalGlobalAssigned) * 100) : 0;
 
     return {
       totalRecruited,
@@ -280,7 +303,9 @@ export default function CoordinatorDashboard() {
       recruitmentPercentage,
       globalCoveragePercentage,
       criticalAlerts,
-      averageReliability
+      attendanceRate,
+      checkedInCount: totalGlobalCheckedIn,
+      totalAssigned: totalGlobalAssigned,
     };
   }, [volunteers, committeesList, globalShifts, committeeRequirements, dbCheckedInMap]);
 
@@ -483,14 +508,6 @@ export default function CoordinatorDashboard() {
               </h3>
               <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Voluntarios Reclutados</p>
             </div>
-            <div className="w-full h-1.5 bg-dark3 mt-3 sm:mt-6 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${globalStats.recruitmentPercentage}%` }}
-                transition={{ duration: 1, ease: "circOut" }}
-                className="h-full bg-[#0084d1] rounded-full"
-              />
-            </div>
           </div>
 
           {/* Card 2 */}
@@ -511,9 +528,9 @@ export default function CoordinatorDashboard() {
               <h3 className="text-text font-bold tracking-tighter">
                 {globalStats.globalCoveragePercentage}%
               </h3>
-              <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Cobertura de Turnos</p>
+              <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Turnos Registrados</p>
             </div>
-            <p className="text-[10px] text-text-dim mt-3 sm:mt-6 font-inter font-bold uppercase tracking-[0.1em]">Análisis Global del Evento</p>
+            <p className="text-[10px] text-text-dim mt-3 sm:mt-6 font-inter font-bold uppercase tracking-[0.1em]">% de turnos registrados</p>
           </div>
 
           {/* Card 3 */}
@@ -540,213 +557,198 @@ export default function CoordinatorDashboard() {
             </p>
           </div>
 
-          {/* Card 4 */}
-          <div className="bg-dark2 p-4 sm:p-7 group relative overflow-hidden transition-colors hover:bg-dark3">
-            <div className="relative z-10">
-              <div className="flex items-start justify-between mb-3 sm:mb-6">
-                <div className="p-3 bg-dark3 rounded-sm group-hover:bg-blue-500 transition-colors duration-300 text-text">
-                  <span className="material-symbols-outlined text-[20px]">person_check</span>
-                </div>
-                <span className="material-symbols-outlined text-[20px] text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity">trending_up</span>
-              </div>
-              <div className="space-y-1">
-                <h3 className="font-bold tracking-tighter text-text">
-                  {globalStats.averageReliability}%
-                </h3>
-                <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Asistencia General</p>
-              </div>
-              <div className="mt-3 sm:mt-6 flex items-center gap-2">
-                <p className="text-[10px] text-text-dim font-inter font-bold uppercase tracking-widest">
-                  Confirmaciones por QR hoy
-                </p>
+          {/* Card 4 — Asistencia General */}
+          <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3">
+            <div className="flex items-start justify-between mb-3 sm:mb-6">
+              <div className="p-3 bg-dark3 rounded-sm group-hover:bg-emerald-500 transition-colors duration-300 text-text">
+                <span className="material-symbols-outlined text-[20px]">person_check</span>
               </div>
             </div>
-            {/* Visual Flare */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-[#0084d1]/10 rounded-full blur-[60px] group-hover:bg-[#0084d1]/20 transition-colors" />
+            <div className="space-y-1">
+              <h3 className="font-bold tracking-tighter text-text">
+                {globalStats.attendanceRate}%
+              </h3>
+              <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Asistencia General</p>
+            </div>
+            <div className="mt-3 sm:mt-6 flex flex-col gap-0.5">
+              <p className="text-[13px] font-inter font-extrabold text-text tabular-nums leading-none">
+                {globalStats.checkedInCount}
+                {globalStats.totalAssigned > 0 && (
+                  <span className="text-white/30">/{globalStats.totalAssigned}</span>
+                )}
+              </p>
+              <p className="text-[10px] text-text-dim font-inter font-bold uppercase tracking-widest">
+                QR Confirmado{globalStats.checkedInCount !== 1 ? 's' : ''}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Middle Row: Chart & Committee Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 mb-8 min-w-0">
-        {/* Left: Daily Volunteer Distribution Chart */}
-        <motion.div variants={itemVariants} className="lg:col-span-3 min-w-0">
-          <Card className="card-premium h-full flex flex-col min-w-0 border-none">
-            <CardContent className="p-4 pt-3 sm:p-7 flex-1 flex flex-col justify-between min-w-0">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-xl font-bold text-text tracking-tighter leading-none tabular-nums">
-                    {totalVolsWithShifts.toLocaleString()}
-                  </p>
-                  <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider leading-tight max-w-none mt-0.5">Voluntarios con turnos</p>
-                </div>
-                <div className="flex items-center px-2 py-1 rounded-sm border border-border bg-dark3 text-[10px] font-bold text-text-dim shrink-0 mt-0.5">
-                  10 – 26 Sep
-                </div>
-              </div>
+      {/* Bar Chart — edge to edge, no card */}
+      <motion.div variants={itemVariants} className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/[0.02]">
+        {/* Header */}
+        <div className="px-5 sm:px-8 py-4 flex items-center justify-between border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <p className="text-xl font-bold text-text tracking-tighter leading-none tabular-nums">
+              {totalVolsWithShifts.toLocaleString()}
+            </p>
+            <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider leading-tight mt-0.5">Voluntarios con turnos</p>
+          </div>
+          <div className="flex items-center px-2 py-1 rounded-sm border border-border bg-dark3 text-[10px] font-bold text-text-dim shrink-0">
+            10 – 26 Sep
+          </div>
+        </div>
 
-              <div className="relative flex-1 flex flex-col overflow-x-auto w-full pb-2">
-                <div className="min-w-[400px] flex flex-col h-full"><div className="flex-1 flex items-end gap-1.5 min-h-[220px] mt-1 pt-8">
-                  {(() => {
-                    const maxCount = Math.max(...Object.values(volsPerDay), 1);
-                    return EVENT_DAYS.map((day, idx) => {
-                      const count = volsPerDay[day.key] || 0;
-                      const heightPct = maxCount > 0 ? Math.max((count / maxCount) * 100, count > 0 ? 5 : 2) : 2;
-                      const isHovered = hoveredDay === day.key;
-                      return (
-                        <div
-                          key={day.key}
-                          className="flex-1 flex flex-col items-center justify-end h-full group cursor-pointer"
-                          onMouseEnter={() => setHoveredDay(day.key)}
-                          onMouseLeave={() => setHoveredDay(null)}
-                        >
-                          <motion.div
-                            initial={{ height: 0 }}
-                            animate={{ height: `${heightPct}%` }}
-                            transition={{ duration: 0.7, delay: idx * 0.025, ease: "circOut" }}
-                            className={`w-full rounded-[3px] transition-colors duration-150 relative ${isHovered
-                              ? 'bg-[#4d7cfe] shadow-[0_0_12px_rgba(77,124,254,0.4)]'
-                              : 'bg-[#4d7cfe]/20 hover:bg-[#4d7cfe]/50'
-                              }`}
-                          >
-                            {isHovered && (
-                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 bg-dark2 border border-border text-text text-[10px] font-bold px-2 py-0.5 rounded-sm whitespace-nowrap shadow-sm pointer-events-none z-50">
-                                {count}
-                              </div>
-                            )}
-                          </motion.div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-
-                  <div className="flex gap-1.5 mt-2">
-                    {EVENT_DAYS.map(day => (
-                      <div key={day.key} className="flex-1 text-center">
-                        <span className={`text-[10px] font-bold transition-colors ${hoveredDay === day.key ? 'text-[#4d7cfe]' : 'text-text-dim'
-                          }`}>{day.dateNum}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                </div><div className="mt-1.5">
-                  <span className="text-[11px] font-bold text-text-dim uppercase tracking-widest">Septiembre 2026</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Right: Committee Status Ranking */}
-        <motion.div variants={itemVariants} className="lg:col-span-1 min-w-0">
-          <Card className="card-premium h-full flex flex-col border-none">
-            <CardContent className="p-0 flex-1 flex flex-col">
-              <div className="divide-y divide-border flex-1 flex flex-col justify-evenly h-full">
-                {committeeStatus.map((committee, idx) => (
-                  <motion.div
-                    key={committee.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 + idx * 0.05 }}
-                    className="px-6 py-1.5 flex items-center justify-between hover:bg-dark3 transition-colors group cursor-default"
-                  >
-                    <div className="flex-1 w-full min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider group-hover:text-text transition-colors truncate" title={committee.name}>{committee.name}</p>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="flex-1 h-1.5 bg-dark3 rounded-full overflow-hidden border border-border">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${committee.coverage}%` }}
-                            transition={{ duration: 1, delay: 0.5 + idx * 0.05 }}
-                            className={`h-full rounded-full ${committee.status === 'success' ? 'bg-accent' :
-                              committee.status === 'warning' ? 'bg-amber-400' : 'bg-red'
-                              }`}
-                          />
-                        </div>
-                        <span className="text-[11px] font-bold text-text-dim w-10 tabular-nums">{committee.coverage}%</span>
-                      </div>
+        {/* Chart area */}
+        <div className="px-5 sm:px-8 py-5 overflow-x-auto">
+          <div className="min-w-[400px] flex flex-col">
+            <div className="flex items-end gap-1.5 min-h-[200px] pt-6">
+              {(() => {
+                const maxCount = Math.max(...Object.values(volsPerDay), 1);
+                return EVENT_DAYS.map((day, idx) => {
+                  const count = volsPerDay[day.key] || 0;
+                  const heightPct = maxCount > 0 ? Math.max((count / maxCount) * 100, count > 0 ? 5 : 2) : 2;
+                  const isHovered = hoveredDay === day.key;
+                  return (
+                    <div
+                      key={day.key}
+                      className="flex-1 flex flex-col items-center justify-end h-full group cursor-pointer"
+                      onMouseEnter={() => setHoveredDay(day.key)}
+                      onMouseLeave={() => setHoveredDay(null)}
+                    >
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${heightPct}%` }}
+                        transition={{ duration: 0.7, delay: idx * 0.025, ease: "circOut" }}
+                        className={`w-full rounded-[3px] transition-colors duration-150 relative ${isHovered
+                          ? 'bg-[#4d7cfe] shadow-[0_0_12px_rgba(77,124,254,0.4)]'
+                          : 'bg-[#4d7cfe]/20 hover:bg-[#4d7cfe]/50'
+                          }`}
+                      >
+                        {isHovered && (
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 bg-dark2 border border-border text-text text-[10px] font-bold px-2 py-0.5 rounded-sm whitespace-nowrap shadow-sm pointer-events-none z-50">
+                            {count}
+                          </div>
+                        )}
+                      </motion.div>
                     </div>
-                  </motion.div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
+                  );
+                });
+              })()}
+            </div>
 
-      {/* Bottom Row: Mapa de Calor Operativo */}
-      <motion.div variants={itemVariants} className="w-full min-w-0">
-        <Card className="card-premium border-none shadow-inner rounded-sm overflow-hidden flex flex-col min-w-0">
-          <div className="px-5 sm:px-8 py-5 sm:py-7 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <h3 className="text-text tracking-tight leading-none">Mapa de Calor Operativo</h3>
-              <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-widest">Cobertura por Día y Turno</p>
+            <div className="flex gap-1.5 mt-2">
+              {EVENT_DAYS.map(day => (
+                <div key={day.key} className="flex-1 text-center">
+                  <span className={`text-[10px] font-bold transition-colors ${hoveredDay === day.key ? 'text-[#4d7cfe]' : 'text-text-dim'}`}>{day.dateNum}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-1.5">
+              <span className="text-[11px] font-bold text-text-dim uppercase tracking-widest">Septiembre 2026</span>
             </div>
           </div>
-          <CardContent className="p-0 flex-1 min-w-0">
-            <div className="overflow-x-auto w-full">
-              <div className="min-w-full flex">
-                <div className="w-16 sm:w-20 shrink-0 bg-dark3 border-r border-border flex flex-col pt-8">
-                  {heatmapMatrix.map((dayData) => (
-                    <div key={dayData.day} className="flex-1 min-h-[60px] flex items-center justify-center border-b border-border last:border-0 px-1 text-center">
-                      <span className="text-[10px] sm:text-xs font-bold text-text-dim leading-none">{dayData.shortLabel}</span>
-                    </div>
-                  ))}
+        </div>
+
+        {/* Committee status — inline below chart, full width, divided rows */}
+        <div className="border-t border-white/5 divide-y divide-white/5">
+          {committeeStatus.map((committee, idx) => (
+            <motion.div
+              key={committee.id}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 + idx * 0.05 }}
+              className="px-5 sm:px-8 py-3 flex items-center justify-between hover:bg-white/[0.02] transition-colors group cursor-default"
+            >
+              <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider group-hover:text-text transition-colors truncate" title={committee.name}>{committee.name}</p>
+              <div className="flex items-center gap-4 shrink-0">
+                <div className="w-32 sm:w-48 h-1.5 bg-dark3 rounded-full overflow-hidden border border-border">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${committee.coverage}%` }}
+                    transition={{ duration: 1, delay: 0.5 + idx * 0.05 }}
+                    className={`h-full rounded-full ${committee.status === 'success' ? 'bg-accent' :
+                      committee.status === 'warning' ? 'bg-amber-400' : 'bg-red'
+                      }`}
+                  />
                 </div>
-                <div className="flex-1 grid grid-cols-4">
-                  {['T1', 'T2', 'T3', 'T4'].map((shiftId, shiftIdx) => (
-                    <div key={shiftId} className="flex flex-col border-r border-border last:border-0 min-w-0">
-                      <div className="h-8 flex flex-col items-center justify-center bg-dark3 border-b border-border">
-                        <span className="text-[10px] font-bold text-text">{shiftId}</span>
+                <span className="text-[11px] font-bold text-text-dim w-10 tabular-nums text-right">{committee.coverage}%</span>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Mapa de Calor Operativo — edge to edge, no card */}
+      <motion.div variants={itemVariants} className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/[0.02]">
+        {/* Header */}
+        <div className="px-5 sm:px-8 py-4 border-b border-white/5">
+          <h3 className="text-text tracking-tight leading-none text-sm font-bold">Mapa de Calor Operativo</h3>
+          <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-widest mt-0.5">Cobertura por Día y Turno</p>
+        </div>
+
+        {/* Grid */}
+        <div className="overflow-x-auto w-full">
+          <div className="min-w-full flex">
+            <div className="w-16 sm:w-20 shrink-0 bg-dark3 border-r border-border flex flex-col pt-8">
+              {heatmapMatrix.map((dayData) => (
+                <div key={dayData.day} className="flex-1 min-h-[60px] flex items-center justify-center border-b border-border last:border-0 px-1 text-center">
+                  <span className="text-[10px] sm:text-xs font-bold text-text-dim leading-none">{dayData.shortLabel}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex-1 grid grid-cols-4">
+              {['T1', 'T2', 'T3', 'T4'].map((shiftId, shiftIdx) => (
+                <div key={shiftId} className="flex flex-col border-r border-border last:border-0 min-w-0">
+                  <div className="h-8 flex flex-col items-center justify-center bg-dark3 border-b border-border">
+                    <span className="text-[10px] font-bold text-text">{shiftId}</span>
+                  </div>
+                  {heatmapMatrix.map((dayData) => {
+                    const shift = dayData.shifts[shiftIdx];
+                    return (
+                      <div
+                        key={dayData.day}
+                        className="flex-1 min-h-[60px] flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-1 transition-all duration-300"
+                        style={{
+                          backgroundColor: shift.required === 0 ? 'var(--dark3)' :
+                            shift.coverage >= 1 ? 'rgba(20, 184, 166, 0.15)' :
+                              shift.coverage >= 0.7 ? 'rgba(251, 191, 36, 0.15)' :
+                                'rgba(248, 113, 113, 0.15)'
+                        }}
+                      >
+                        {shift.required > 0 ? (
+                          <>
+                            <span className="text-xs font-inter font-bold text-text">{Math.round(shift.coverage * 100)}%</span>
+                            <span className="text-[10px] font-inter font-bold text-text-dim mt-0.5">{shift.assigned}/{shift.required}</span>
+                          </>
+                        ) : (
+                          <span className="text-[10px] text-muted">-</span>
+                        )}
                       </div>
-                      {heatmapMatrix.map((dayData) => {
-                        const shift = dayData.shifts[shiftIdx];
-                        return (
-                          <div
-                            key={dayData.day}
-                            className="flex-1 min-h-[60px] flex flex-col items-center justify-center border-b border-dark2 border-r border-dark2 last:border-b-0 p-1 transition-all duration-300 relative group"
-                            style={{
-                              backgroundColor: shift.required === 0 ? 'var(--dark3)' :
-                                shift.coverage >= 1 ? 'rgba(20, 184, 166, 0.15)' :
-                                  shift.coverage >= 0.7 ? 'rgba(251, 191, 36, 0.15)' :
-                                    'rgba(248, 113, 113, 0.15)'
-                            }}
-                          >
-                            {shift.required > 0 ? (
-                              <>
-                                <span className="text-xs font-inter font-bold text-text">{Math.round(shift.coverage * 100)}%</span>
-                                <span className="text-[10px] font-inter font-bold text-text-dim mt-0.5">{shift.assigned}/{shift.required}</span>
-                              </>
-                            ) : (
-                              <span className="text-[10px] text-muted">-</span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-              </div>
+              ))}
             </div>
-            <div className="flex items-center justify-center gap-4 sm:gap-8 mt-6 flex-wrap shrink-0 pb-6">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-sm border" style={{ backgroundColor: 'rgba(248, 113, 113, 0.15)', borderColor: 'rgba(248, 113, 113, 0.3)' }} />
-                <span className="text-[10px] font-inter font-bold text-text-dim uppercase tracking-widest">Crítico</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-sm border" style={{ backgroundColor: 'rgba(251, 191, 36, 0.15)', borderColor: 'rgba(251, 191, 36, 0.3)' }} />
-                <span className="text-[10px] font-inter font-bold text-text-dim uppercase tracking-widest">Riesgo</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-sm border" style={{ backgroundColor: 'rgba(20, 184, 166, 0.15)', borderColor: 'rgba(20, 184, 166, 0.3)' }} />
-                <span className="text-[10px] font-inter font-bold text-text-dim uppercase tracking-widest">Óptimo</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div className="flex items-center justify-center gap-4 sm:gap-8 py-5 border-t border-white/5 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-sm border" style={{ backgroundColor: 'rgba(248, 113, 113, 0.15)', borderColor: 'rgba(248, 113, 113, 0.3)' }} />
+            <span className="text-[10px] font-inter font-bold text-text-dim uppercase tracking-widest">Crítico</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-sm border" style={{ backgroundColor: 'rgba(251, 191, 36, 0.15)', borderColor: 'rgba(251, 191, 36, 0.3)' }} />
+            <span className="text-[10px] font-inter font-bold text-text-dim uppercase tracking-widest">Riesgo</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-sm border" style={{ backgroundColor: 'rgba(20, 184, 166, 0.15)', borderColor: 'rgba(20, 184, 166, 0.3)' }} />
+            <span className="text-[10px] font-inter font-bold text-text-dim uppercase tracking-widest">Óptimo</span>
+          </div>
+        </div>
       </motion.div>
 
       </motion.div>

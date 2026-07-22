@@ -25,11 +25,34 @@ export interface ReportItem {
   durationMinutes: number;
 }
 
+export interface CommitteeAttendance {
+  committeeId: string;
+  committeeName: string;
+  assigned: number;
+  checkedIn: number;
+  absent: number;
+  required: number;  // sum of all shift requirements for this committee
+  attendanceRate: number;
+  coverageRate: number; // checked-in / required
+}
+
+export interface AttendanceSummary {
+  totalAssigned: number;
+  totalCheckedIn: number;
+  totalAbsent: number;
+  totalRequired: number;
+  attendanceRate: number;   // checkedIn / assigned
+  coverageRate: number;     // checkedIn / required
+  byCommittee: CommitteeAttendance[];
+  byShift: { shiftKey: string; assigned: number; checkedIn: number; required: number; rate: number }[];
+}
+
 export interface ReportsData {
   items: ReportItem[];
   uniqueNeighborhoods: string[];
   uniqueStakes: string[];
   uniqueCommittees: { id: string; name: string }[];
+  attendanceSummary: AttendanceSummary;
 }
 
 
@@ -128,6 +151,23 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
       return { error: "Error al consultar los turnos." };
     }
 
+    // 3. Fetch committee_shift_requirements (server-side authoritative source)
+    const { data: reqsData } = await supabase
+      .from('committee_shift_requirements')
+      .select('committee_id, shift_key, required');
+
+    // Build requirements map: committeeId -> shiftKey -> required
+    const reqsMap: Record<string, Record<string, number>> = {};
+    (reqsData || []).forEach((r: any) => {
+      if (!reqsMap[r.committee_id]) reqsMap[r.committee_id] = {};
+      reqsMap[r.committee_id][r.shift_key] = r.required;
+    });
+
+    // Default requirements if table is empty
+    const DEFAULT_REQ = 4;
+    const getRequired = (commId: string, shiftKey: string) =>
+      reqsMap[commId]?.[shiftKey] ?? DEFAULT_REQ;
+
     // 3. Process data in memory
     const items: ReportItem[] = [];
     const neighborhoodsSet = new Set<string>();
@@ -204,12 +244,73 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
     const uniqueStakes = Array.from(stakesSet).sort();
     const uniqueCommittees = Array.from(committeesMap.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
 
+    // Build attendance summary
+    const commAttMap: Record<string, CommitteeAttendance> = {};
+    const shiftAttMap: Record<string, { assigned: number; checkedIn: number; required: number }> = {};
+    for (const sk of ['T1', 'T2', 'T3', 'T4']) {
+      shiftAttMap[sk] = { assigned: 0, checkedIn: 0, required: 0 };
+    }
+
+    items.forEach(item => {
+      const cId = item.committeeId;
+      if (!commAttMap[cId]) {
+        commAttMap[cId] = {
+          committeeId: cId,
+          committeeName: item.committeeName,
+          assigned: 0, checkedIn: 0, absent: 0, required: 0,
+          attendanceRate: 0, coverageRate: 0,
+        };
+      }
+      const sk = `T${item.shiftNumber}`;
+      const req = getRequired(cId, sk);
+      commAttMap[cId].assigned++;
+      commAttMap[cId].required += req;
+      shiftAttMap[sk].assigned++;
+      shiftAttMap[sk].required += req;
+      if (item.status === 'confirmed') {
+        commAttMap[cId].checkedIn++;
+        shiftAttMap[sk].checkedIn++;
+      } else if (item.status === 'absent') {
+        commAttMap[cId].absent++;
+      }
+    });
+
+    const byCommittee: CommitteeAttendance[] = Object.values(commAttMap).map(c => ({
+      ...c,
+      attendanceRate: c.assigned > 0 ? Math.round((c.checkedIn / c.assigned) * 100) : 0,
+      coverageRate: c.required > 0 ? Math.round((c.checkedIn / c.required) * 100) : 0,
+    }));
+
+    const byShift = ['T1', 'T2', 'T3', 'T4'].map(sk => ({
+      shiftKey: sk,
+      ...shiftAttMap[sk],
+      rate: shiftAttMap[sk].assigned > 0
+        ? Math.round((shiftAttMap[sk].checkedIn / shiftAttMap[sk].assigned) * 100) : 0,
+    }));
+
+    const totalCheckedIn = items.filter(i => i.status === 'confirmed').length;
+    const totalAbsent = items.filter(i => i.status === 'absent').length;
+    const totalAssigned = items.length;
+    const totalRequired = Object.values(commAttMap).reduce((s, c) => s + c.required, 0);
+
+    const attendanceSummary: AttendanceSummary = {
+      totalAssigned,
+      totalCheckedIn,
+      totalAbsent,
+      totalRequired,
+      attendanceRate: totalAssigned > 0 ? Math.round((totalCheckedIn / totalAssigned) * 100) : 0,
+      coverageRate: totalRequired > 0 ? Math.round((totalCheckedIn / totalRequired) * 100) : 0,
+      byCommittee,
+      byShift,
+    };
+
     return {
       data: {
         items,
         uniqueNeighborhoods,
         uniqueStakes,
-        uniqueCommittees
+        uniqueCommittees,
+        attendanceSummary,
       }
     };
   } catch (err: any) {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useTransition } from "react";
-import { getReportsData, ReportItem, ReportsData } from "@/app/actions/reports";
+import { getReportsData, ReportItem, ReportsData, AttendanceSummary } from "@/app/actions/reports";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -173,13 +173,17 @@ export default function ReportsPage() {
     return matchesSearch && matchesCommittee && matchesNeighborhood && matchesStake && matchesStatus && matchesDate;
   });
 
-  // Calculate KPIs
+  // Calculate KPIs from filtered items (local) and attendanceSummary from server
+  const summary = data?.attendanceSummary;
   const totalShifts = filteredItems.length;
   const confirmedShifts = filteredItems.filter(i => i.status === 'confirmed').length;
   const absentShifts = filteredItems.filter(i => i.status === 'absent').length;
   const pendingShifts = filteredItems.filter(i => i.status === 'registered').length;
   const totalMinutes = filteredItems.reduce((acc, i) => i.status === 'confirmed' ? acc + i.durationMinutes : acc, 0);
   const attendanceRate = totalShifts > 0 ? Math.round((confirmedShifts / (totalShifts - filteredItems.filter(i => i.status === 'replaced').length || totalShifts)) * 100) : 0;
+  // Global attendance from server summary (not filtered — represents actual event data)
+  const globalAttendanceRate = summary?.attendanceRate ?? attendanceRate;
+  const globalCoverageRate = summary?.coverageRate ?? 0;
 
   // Process volunteer summary ranking
   const volunteerMap = new Map<string, {
@@ -608,7 +612,7 @@ export default function ReportsPage() {
                 <div className="flex flex-col items-end">
                   <span className="text-[10px] font-inter font-bold uppercase tracking-[0.15em] text-text-dim">Asistencia</span>
                   <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 font-inter font-bold border-none text-[9px] px-2 h-4.5 mt-1">
-                    Tasa
+                    QR Scan
                   </Badge>
                 </div>
               </div>
@@ -616,7 +620,9 @@ export default function ReportsPage() {
                 <p className="text-2xl sm:text-3xl font-inter font-bold text-emerald-400 tracking-tight">
                   {attendanceRate}%
                 </p>
-                <p className="text-[10px] text-text-dim font-inter font-bold">Confirmados vs total</p>
+                <p className="text-[10px] text-text-dim font-inter font-bold">
+                  Check-in confirmados: {confirmedShifts}
+                </p>
               </div>
             </div>
 
