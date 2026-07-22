@@ -9,15 +9,43 @@ export interface SessionData {
 
 const SECRET = process.env.JWT_SECRET;
 
+function base64urlEncode(str: string | Buffer): string {
+  const buf = typeof str === 'string' ? Buffer.from(str, 'utf8') : str;
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
 export function signSession(data: SessionData): string {
   if (!SECRET) {
     throw new Error("La variable de entorno JWT_SECRET no está configurada.");
   }
-  const payload = Buffer.from(JSON.stringify(data)).toString('base64');
+  
+  const header = { alg: "HS256", typ: "JWT" };
+  
+  // Expiración: 7 días
+  const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + (7 * 24 * 60 * 60);
+
+  // Payload estándar compatible con Supabase (RLS)
+  const payload = {
+    role: "authenticated",
+    aud: "authenticated",
+    sub: data.userId,     // auth.uid()
+    iat,
+    exp,
+    // Claims personalizados
+    userType: data.userType,
+    app_role: data.role,  // para diferenciar del role de Supabase
+    committee: data.committee
+  };
+
+  const encodedHeader = base64urlEncode(JSON.stringify(header));
+  const encodedPayload = base64urlEncode(JSON.stringify(payload));
+  
   const hmac = crypto.createHmac('sha256', SECRET);
-  hmac.update(payload);
-  const signature = hmac.digest('base64url');
-  return `${payload}.${signature}`;
+  hmac.update(`${encodedHeader}.${encodedPayload}`);
+  const signature = base64urlEncode(hmac.digest());
+  
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
 export function verifySessionToken(token: string): SessionData | null {
@@ -25,17 +53,31 @@ export function verifySessionToken(token: string): SessionData | null {
     throw new Error("La variable de entorno JWT_SECRET no está configurada.");
   }
   try {
-    const [payloadB64, signature] = token.split('.');
-    if (!payloadB64 || !signature) return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    
+    const [encodedHeader, encodedPayload, signature] = parts;
 
     const hmac = crypto.createHmac('sha256', SECRET);
-    hmac.update(payloadB64);
-    const expectedSignature = hmac.digest('base64url');
+    hmac.update(`${encodedHeader}.${encodedPayload}`);
+    const expectedSignature = base64urlEncode(hmac.digest());
 
     if (signature !== expectedSignature) return null;
 
-    const dataJson = Buffer.from(payloadB64, 'base64').toString('utf-8');
-    return JSON.parse(dataJson) as SessionData;
+    const payloadJson = Buffer.from(encodedPayload, 'base64').toString('utf-8');
+    const payload = JSON.parse(payloadJson);
+    
+    // Validar expiración
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+      return null;
+    }
+
+    return {
+      userId: payload.sub,
+      userType: payload.userType,
+      role: payload.app_role,
+      committee: payload.committee
+    };
   } catch (e) {
     return null;
   }

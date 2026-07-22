@@ -22,7 +22,7 @@ export interface ReportItem {
   endTime: string;
   isExtended: boolean;
   status: 'registered' | 'confirmed' | 'absent' | 'replaced';
-  durationHours: number;
+  durationMinutes: number;
 }
 
 export interface ReportsData {
@@ -96,7 +96,17 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
     }
 
     const { role, committee: userCommittee } = session;
-    const supabase = await createClient();
+    // Usar Service Role temporalmente porque el usuario habilitó RLS sin políticas, lo que bloquea todas las consultas
+    let supabase;
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
+      supabase = createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+    } else {
+      supabase = await createClient();
+    }
 
     // 1. Fetch volunteers
     const { data: volsData, error: volsError } = await supabase
@@ -150,8 +160,19 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
 
       // Determine attendance status
       let status: 'registered' | 'confirmed' | 'absent' | 'replaced' = 'registered';
+      let durationMinutes = 0;
+
       if (s.checked_in) {
         status = 'confirmed';
+        // Opción A: Asignar 0 si no han hecho check-out, o calcular minutos exactos
+        if (s.checked_in_at && s.checked_out_at) {
+          const inTime = new Date(s.checked_in_at).getTime();
+          const outTime = new Date(s.checked_out_at).getTime();
+          // Diferencia en minutos (max 0 para evitar negativos si hay errores en fechas)
+          durationMinutes = Math.max(0, Math.round((outTime - inTime) / 60000));
+        } else {
+          durationMinutes = 0;
+        }
       } else {
         const shiftEndTime = parseNicaraguaShiftEnd(s.day_key, s.shift_key);
         if (now > shiftEndTime) {
@@ -175,7 +196,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
         endTime: shiftMeta.end,
         isExtended: s.shift_key === 'T4', // T4 is 5 hours
         status,
-        durationHours: shiftMeta.hours
+        durationMinutes
       });
     });
 

@@ -38,12 +38,17 @@ export const metadata: Metadata = {
 };
 
 import { AutoLogout } from "@/components/AutoLogout";
+import { TokenProvider } from "@/components/TokenProvider";
+import { cookies } from "next/headers";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get('session')?.value || null;
+
   return (
     <html
       lang="es"
@@ -54,6 +59,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/app-icon-192.png" />
       </head>
       <body className="min-h-full flex flex-col font-sans bg-dark text-text tracking-[-0.01em]">
+        <TokenProvider token={sessionToken} />
         <AutoLogout />
         {children}
         <Script

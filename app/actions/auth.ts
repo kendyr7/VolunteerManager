@@ -26,7 +26,18 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     return { error: 'Por favor, ingresa tu teléfono y PIN.' };
   }
 
-  const supabase = await createClient();
+  // Para el login necesitamos bypassear RLS porque el usuario aún no tiene token.
+  // Usamos el SERVICE_ROLE_KEY (si está disponible) o el cliente normal (si la política lo permite).
+  let supabase;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
+    supabase = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+  } else {
+    supabase = await createClient();
+  }
 
   // 0. Verificar Rate Limiting (Fuerza Bruta)
   const { data: attempt } = await supabase
