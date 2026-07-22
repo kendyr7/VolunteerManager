@@ -383,12 +383,23 @@ export default function ImportPage() {
           <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
             Importación
           </h1>
-          {step === 2 && (
-            <Button variant="ghost" onClick={() => { setParsedData([]); setStep(1); }} className="text-text-dim hover:text-text font-bold border border-border/50 bg-dark3 rounded-xl px-4 py-2 flex items-center gap-1">
-              <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-              Volver
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {step === 1 && (
+              <Button 
+                onClick={downloadExcelTemplate}
+                className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">download</span>
+                <span>Plantilla</span>
+              </Button>
+            )}
+            {step === 2 && (
+              <Button variant="ghost" onClick={() => { setParsedData([]); setStep(1); }} className="text-text-dim hover:text-text font-bold border border-border/50 bg-dark3 rounded-xl px-4 py-2 flex items-center gap-1">
+                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                Volver
+              </Button>
+            )}
+          </div>
         </motion.div>
       </div>
 
@@ -396,37 +407,8 @@ export default function ImportPage() {
         {step === 1 && (
           <motion.div variants={itemVariants} className="w-full space-y-5">
 
-            {/* Compact template + instructions row */}
-            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center bg-dark2 border border-white/5 rounded-2xl p-4 sm:p-4">
-              {/* Step indicator */}
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-8 h-8 shrink-0 rounded-lg bg-[#4d7cfe]/10 text-[#4d7cfe] flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[18px]">looks_one</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-text leading-tight">Descarga la plantilla Excel</p>
-                  <p className="text-[11px] text-text-dim mt-0.5 leading-tight">Incluye columnas formateadas y una fila de ejemplo destacada</p>
-                </div>
-              </div>
-              {/* Download button */}
-              <Button
-                onClick={downloadExcelTemplate}
-                className="shrink-0 bg-[#4d7cfe]/10 hover:bg-[#4d7cfe]/20 text-[#4d7cfe] border border-[#4d7cfe]/20 font-bold rounded-xl h-9 px-4 text-xs transition-all whitespace-nowrap"
-              >
-                <span className="material-symbols-outlined text-[16px] mr-1.5">download</span>
-                Plantilla .xlsx
-              </Button>
-            </div>
-
-            {/* Step 2 indicator + Drag & Drop File Zone */}
+            {/* Drag & Drop File Zone */}
             <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 shrink-0 rounded-lg bg-[#4d7cfe]/10 text-[#4d7cfe] flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[18px]">looks_two</span>
-                </div>
-                <p className="text-xs font-bold text-text">Sube la plantilla con los datos completados</p>
-              </div>
-
               <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}

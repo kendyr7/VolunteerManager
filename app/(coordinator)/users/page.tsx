@@ -540,67 +540,100 @@ export default function UsersPage() {
         </motion.div>
       </div>
 
-      <div className="flex flex-col gap-4 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
-        {isInviteOpen && (
-          <motion.div 
-            variants={itemVariants} 
-            className="w-full bg-dark2 border border-white/10 rounded-[20px] shadow-md overflow-hidden mb-2 animate-in fade-in slide-in-from-top-4"
-          >
-            <div className="p-6 border-b border-white/10 flex items-center justify-between bg-dark3">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[20px] text-[#4d7cfe]">verified_user</span>
-                <h3 className="font-bold text-text tracking-tight">Nueva Invitación</h3>
-              </div>
-              <button onClick={resetInviteForm} className="text-text-dim hover:text-text transition-colors">
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
+      {/* Drawer Lateral (Invitar Usuario) - Custom Fixed Drawer */}
+      <div className={cn("fixed inset-0 z-[100] flex transition-all duration-300", isMobile ? "flex-col justify-end" : "justify-end", isInviteOpen ? "pointer-events-auto" : "pointer-events-none")}>
+        {/* Backdrop */}
+        <div
+          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isInviteOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={resetInviteForm}
+        />
 
+        {/* Drawer Content */}
+        <div
+          id="invite-user-drawer"
+          className={cn(
+            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-[#0a101d] text-white shadow-2xl",
+            isMobile
+              ? `w-full h-[92dvh] rounded-t-[40px] border-0 ${isInviteOpen ? 'translate-y-0' : 'translate-y-full'}`
+              : `border-l border-white/10 w-[450px] sm:w-[480px] h-full ${isInviteOpen ? 'translate-x-0' : 'translate-x-full'}`
+          )}
+          style={{ willChange: 'transform' }}
+        >
+          {/* Mobile Handle */}
+          {isMobile && (
+            <div className="w-full pt-3 pb-1 flex justify-center shrink-0">
+              <div className="w-12 h-1.5 rounded-full bg-white/20" />
+            </div>
+          )}
+
+          {/* Drawer Header */}
+          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/15 shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[20px]">person_add</span>
+              </div>
+              <div>
+                <h3 className="font-extrabold text-white text-base leading-tight">Invitar Usuario</h3>
+                <p className="text-[11px] text-white/60 font-inter">Crea un acceso para coordinadores o administradores</p>
+              </div>
+            </div>
+            <button
+              onClick={resetInviteForm}
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white flex items-center justify-center transition-all"
+            >
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
+
+          {/* Drawer Body (Scrollable) */}
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 font-inter">
             {!generatedInvite ? (
-              <form onSubmit={handleInvite} className="p-6 space-y-5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div className="space-y-2">
-                    <label className="block mb-2 text-xs font-semibold text-text">Nombre completo</label>
-                    <input 
-                      required 
-                      value={newName} 
+              <form onSubmit={handleInvite} className="space-y-5">
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-white/90">Nombre completo</label>
+                    <input
+                      required
+                      value={newName}
                       onChange={e => setNewName(e.target.value)}
-                      placeholder="Ej. Juan Pérez"
-                      className="w-full h-10 px-3 rounded-[10px] border border-white/10 bg-dark2 text-sm text-text focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                      placeholder="Ej: Juan Pérez"
+                      className="w-full h-11 px-3.5 rounded-xl border border-white/20 bg-white/10 text-white font-bold text-sm placeholder:text-white/40 focus:border-[#4d7cfe] outline-none transition-all"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="block mb-2 text-xs font-semibold text-text">Teléfono WhatsApp</label>
-                    <input 
-                      required 
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-white/90">Teléfono (WhatsApp)</label>
+                    <input
+                      required
                       pattern="[0-9]{8}"
                       maxLength={8}
                       onKeyPress={(e) => {
                         if (!/[0-9]/.test(e.key)) e.preventDefault();
                       }}
-                      value={newPhone} 
+                      value={newPhone}
                       onChange={e => setNewPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                      placeholder="Ej. 88881111"
-                      className="w-full h-10 px-3 rounded-[10px] border border-white/10 bg-dark2 text-sm text-text font-mono focus-border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                      placeholder="Ej: 88881111"
+                      className="w-full h-11 px-3.5 rounded-xl border border-white/20 bg-white/10 text-white font-mono font-bold text-sm placeholder:text-white/40 focus:border-[#4d7cfe] outline-none transition-all"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="block mb-2 text-xs font-semibold text-text">Rol en la plataforma</label>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-white/90">Rol en la plataforma</label>
                     <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
-                      <SelectTrigger className="w-full h-10 bg-dark2 border-white/10 text-text flex items-center justify-between rounded-[10px]">
+                      <SelectTrigger className="w-full h-11 bg-white/10 border-white/20 text-white font-bold rounded-xl px-3.5">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
+                      <SelectContent className="bg-[#0f172a] border border-white/20 text-white font-bold shadow-2xl z-[200]">
                         <SelectItem value="Admin">
                           <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-[18px] text-text-dim">admin_panel_settings</span>
-                            <span>Admin</span>
+                            <span className="material-symbols-outlined text-[18px] text-white/70">admin_panel_settings</span>
+                            <span>Administrador (Admin)</span>
                           </div>
                         </SelectItem>
                         <SelectItem value="Editor">
                           <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-[18px] text-text-dim">manage_accounts</span>
-                            <span>Editor</span>
+                            <span className="material-symbols-outlined text-[18px] text-white/70">manage_accounts</span>
+                            <span>Coordinador (Editor)</span>
                           </div>
                         </SelectItem>
                       </SelectContent>
@@ -608,15 +641,15 @@ export default function UsersPage() {
                   </div>
 
                   {newRole === 'Editor' && (
-                    <div className="space-y-2 animate-in fade-in zoom-in-95">
-                      <label className="block mb-2 text-xs font-semibold text-text">Comité Asignado</label>
+                    <div className="space-y-1.5 animate-in fade-in zoom-in-95">
+                      <label className="text-xs font-extrabold text-white/90">Comité Asignado</label>
                       <Select value={newCommittee} onValueChange={(v) => setNewCommittee(v || '')}>
-                        <SelectTrigger className="w-full bg-dark2 justify-between h-10 border-white/10 rounded-[10px] text-text font-inter font-bold">
+                        <SelectTrigger className="w-full bg-white/10 h-11 border-white/20 rounded-xl text-white font-bold px-3.5">
                           <SelectValue placeholder="Selecciona un comité" />
                         </SelectTrigger>
-                        <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
+                        <SelectContent className="bg-[#0f172a] border border-white/20 text-white font-bold shadow-2xl z-[200]">
                           {committeesList.map(c => (
-                            <SelectItem key={c.id} value={c.name} className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">
+                            <SelectItem key={c.id} value={c.name} className="font-bold text-sm text-white py-2">
                               {c.name}
                             </SelectItem>
                           ))}
@@ -627,57 +660,67 @@ export default function UsersPage() {
                 </div>
 
                 {errorMsg && (
-                  <div className="p-3 text-sm text-red bg-red-50 border border-red-200 rounded-sm">
+                  <div className="p-3 text-xs font-bold text-red-300 bg-red-500/15 border border-red-500/30 rounded-xl">
                     {errorMsg}
                   </div>
                 )}
 
-                <div className="pt-5 flex justify-end gap-3">
-                  <Button type="button" variant="ghost" onClick={resetInviteForm} className="text-text-dim hover:text-text">
+                <div className="pt-6 flex items-center gap-3 border-t border-white/15">
+                  <Button type="button" variant="outline" onClick={resetInviteForm} className="flex-1 h-11 rounded-full text-xs font-bold border-white/20 text-white hover:bg-white/10">
                     Cancelar
                   </Button>
-                  <Button type="submit" className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold shadow-sm rounded-full px-5">
+                  <Button type="submit" className="flex-1 h-11 bg-white hover:bg-white/90 text-black font-bold shadow-lg rounded-full text-xs transition-all active:scale-95">
                     Generar Enlace
                   </Button>
                 </div>
               </form>
             ) : (
-              <div className="p-8 flex flex-col items-center text-center space-y-4 animate-in fade-in zoom-in-95">
-                <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-accent mb-2">
-                  <span className="material-symbols-outlined text-[24px]">check_circle</span>
+              <div className="py-6 flex flex-col items-center text-center space-y-5 animate-in fade-in zoom-in-95">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shadow-lg">
+                  <span className="material-symbols-outlined text-[32px]">check_circle</span>
                 </div>
                 <div>
-                  <h4 className="font-bold text-text">Enlace Generado Exitosamente</h4>
-                  <p className="text-sm text-text-dim mt-1 max-w-md mx-auto">
-                    Envía este enlace único a <span className="font-semibold text-text">{generatedInvite.name}</span>. Al ingresar, validará su número y creará su PIN de acceso de 4 dígitos.
+                  <h4 className="font-extrabold text-white text-lg">¡Enlace Generado!</h4>
+                  <p className="text-xs text-white/70 mt-1.5 leading-relaxed px-2">
+                    Envía este enlace único a <span className="font-bold text-white">{generatedInvite.name}</span>. Al ingresar, validará su número de WhatsApp para acceder.
                   </p>
                 </div>
 
-                <div className="w-full max-w-md bg-dark3 border border-white/10 rounded-[12px] p-3 flex items-center justify-between gap-3 mt-4">
-                  <code className="text-xs text-text font-mono truncate">{generatedInvite.inviteLink}</code>
-                  <button 
+                <div className="w-full bg-black/30 border border-white/15 rounded-2xl p-3.5 flex items-center justify-between gap-3">
+                  <code className="text-xs text-white/90 font-mono truncate">{generatedInvite.inviteLink}</code>
+                  <button
                     onClick={() => copyToClipboard(generatedInvite.inviteLink!)}
-                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-dark2 hover:bg-dark3 border border-white/10 text-xs font-semibold text-text-dim transition-colors shadow-sm"
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-bold text-white transition-all active:scale-95"
                   >
-                    {copied ? <span className="material-symbols-outlined text-[16px] text-accent">check_circle</span> : <span className="material-symbols-outlined text-[16px] text-text-dim">content_copy</span>}
+                    {copied ? <span className="material-symbols-outlined text-[15px] text-emerald-400">check_circle</span> : <span className="material-symbols-outlined text-[15px]">content_copy</span>}
                     {copied ? 'Copiado' : 'Copiar'}
                   </button>
                 </div>
 
-                <a 
+                <a
                   href={getWaLink(generatedInvite)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-6 flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#25D366] hover:bg-[#1ebd5a] text-white font-bold text-sm transition-all shadow-sm"
+                  className="w-full h-11 flex items-center justify-center gap-2 rounded-full bg-[#25D366] hover:bg-[#1ebd5a] text-white font-bold text-xs transition-all shadow-lg active:scale-95 mt-2"
                 >
                   <span className="material-symbols-outlined text-[18px]">send</span>
                   Enviar por WhatsApp
                 </a>
+
+                <Button
+                  variant="outline"
+                  onClick={resetInviteForm}
+                  className="w-full h-11 rounded-full text-xs font-bold border-white/20 text-white hover:bg-white/10 mt-2"
+                >
+                  Cerrar y Crear Otra Invitación
+                </Button>
               </div>
             )}
-          </motion.div>
-        )}
+          </div>
+        </div>
+      </div>
 
+      <div className="flex flex-col gap-4 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
         {/* Users Table Card */}
         <motion.div 
           variants={itemVariants} 

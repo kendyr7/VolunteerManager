@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { cn, normalizeSearch } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { createClient } from "@/lib/supabase/client";
@@ -28,8 +28,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { USER_TABLE_STYLES } from "@/app/(coordinator)/users/page";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
-import { normalizeSearch } from "@/lib/utils";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
+import { canEditShifts } from "@/lib/permissions";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -311,7 +311,12 @@ export default function RemindersPage() {
   };
 
   const toggleShift = (day: string, turno: string) => {
-    if (!isEditingShifts) return;
+    if (!isEditingShifts || !canEditShifts()) {
+      if (!canEditShifts()) {
+        showToast("No tienes permiso para editar turnos", "error");
+      }
+      return;
+    }
     setShiftsByDay(prev => {
       const current = prev[day] ?? [];
       return {
@@ -1700,7 +1705,23 @@ export default function RemindersPage() {
                             Guardar
                           </button>
                         ) : (
-                          <button onClick={() => { setIsEditingShifts(true); setSaved(false); }} className="h-7 px-4 bg-black/20 backdrop-blur-sm border border-white/10 hover:bg-black/30 text-white rounded-full font-bold text-[11px] transition-all active:scale-[0.97]">
+                          <button
+                            onClick={() => {
+                              if (!canEditShifts()) {
+                                showToast("No tienes permiso para editar turnos", "error");
+                                return;
+                              }
+                              setIsEditingShifts(true);
+                              setSaved(false);
+                            }}
+                            className={cn(
+                              "h-7 px-4 backdrop-blur-sm border font-bold text-[11px] transition-all rounded-full",
+                              canEditShifts()
+                                ? "bg-black/20 border-white/10 hover:bg-black/30 text-white active:scale-[0.97]"
+                                : "bg-white/5 border-white/5 text-white/40 cursor-not-allowed"
+                            )}
+                            title={canEditShifts() ? "Editar turnos" : "Permiso deshabilitado por el administrador"}
+                          >
                             Editar
                           </button>
                         )}
@@ -1764,12 +1785,12 @@ export default function RemindersPage() {
                                   return (
                                     <button
                                       key={t}
-                                      disabled={!isEditingShifts || isCheckedIn || isCheckedOut}
+                                      disabled={!isEditingShifts || isCheckedIn || isCheckedOut || !canEditShifts()}
                                       onClick={() => toggleShift(d.key, t)}
                                       className={cn(
                                         "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all",
                                         statusStyle,
-                                        isEditingShifts && !isCheckedIn && !isCheckedOut && "hover:bg-white/10 hover:border-white/20 cursor-pointer active:scale-95"
+                                        isEditingShifts && !isCheckedIn && !isCheckedOut && canEditShifts() && "hover:bg-white/10 hover:border-white/20 cursor-pointer active:scale-95"
                                       )}
                                     >
                                       <div className="h-4 flex items-center justify-center">

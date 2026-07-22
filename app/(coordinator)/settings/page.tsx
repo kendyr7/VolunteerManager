@@ -10,6 +10,8 @@ import { motion } from "framer-motion";
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { startRegistration } from "@simplewebauthn/browser";
 
+import { isCoordinatorShiftEditAllowed, setCoordinatorShiftEditAllowed } from "@/lib/permissions";
+
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -53,6 +55,23 @@ export default function SettingsPage() {
   const [isSyncEnabled, setIsSyncEnabled] = useState(false);
   const [capacities, setCapacities] = useState({ T1: 0, T2: 0, T3: 0, T4: 0 });
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  // Shift edit permission state for coordinators
+  const [allowCoordinatorShiftEdit, setAllowCoordinatorShiftEdit] = useState<boolean>(false);
+
+  useEffect(() => {
+    setAllowCoordinatorShiftEdit(isCoordinatorShiftEditAllowed());
+  }, []);
+
+  const handleToggleCoordinatorShiftEdit = (allowed: boolean) => {
+    if (currentRole !== 'Admin') {
+      showToast("Solo los administradores pueden cambiar este permiso", "error");
+      return;
+    }
+    setCoordinatorShiftEditAllowed(allowed);
+    setAllowCoordinatorShiftEdit(allowed);
+    showToast(allowed ? "Permiso de edición de turnos HABILITADO para Coordinadores" : "Permiso de edición de turnos DESHABILITADO para Coordinadores");
+  };
 
   // Toast State
   const [toast, setToast] = useState({ message: '', type: 'success' as 'success' | 'error', isVisible: false });
@@ -424,7 +443,47 @@ export default function SettingsPage() {
         </div>
       </motion.div>
 
-      {/* Permissions Section (Toggles) */}
+      {/* Permisos de Edición de Turnos */}
+      <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden mb-8">
+        <div className="p-6 md:p-8 border-b border-white/5 bg-dark3 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <h3 className="font-bold text-text tracking-tight leading-none mb-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[#4d7cfe] text-[22px]">edit_calendar</span>
+              Edición de Turnos para Coordinadores
+            </h3>
+            <p className="text-xs md:text-sm font-inter font-bold text-text-dim max-w-xl">
+              Por defecto, los voluntarios no pueden editar sus turnos y esta función está deshabilitada para los coordinadores. Solo los Administradores pueden modificar asignaciones a menos que se habilite este permiso.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-xs font-bold text-text-dim">
+              {allowCoordinatorShiftEdit ? "Habilitado" : "Deshabilitado (Por defecto)"}
+            </span>
+            <button
+              type="button"
+              disabled={currentRole !== 'Admin'}
+              onClick={() => handleToggleCoordinatorShiftEdit(!allowCoordinatorShiftEdit)}
+              className={`w-12 h-7 rounded-full transition-all relative flex-shrink-0 ${
+                allowCoordinatorShiftEdit ? 'bg-emerald-500' : 'bg-white/10'
+              } ${currentRole !== 'Admin' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+            >
+              <motion.span 
+                initial={false}
+                animate={{ x: allowCoordinatorShiftEdit ? 24 : 4 }}
+                style={{ left: 0 }}
+                className="absolute top-[4px] w-5 h-5 rounded-full bg-white shadow-md" 
+              />
+            </button>
+          </div>
+        </div>
+        {currentRole !== 'Admin' && (
+          <div className="px-6 py-3 bg-dark3/50 border-t border-white/5 text-[11px] text-amber-400 font-bold flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[14px]">lock</span>
+            Solo un Administrador puede activar o desactivar la edición de turnos para coordinadores.
+          </div>
+        )}
+      </motion.div>
       <motion.div variants={itemVariants} className="bg-dark2 border border-white/5 rounded-[20px] shadow-sm overflow-hidden">
         <div className="p-6 md:p-8 border-b border-white/5 bg-dark3">
           <h3 className="font-bold text-text tracking-tight leading-none mb-2">Permisos</h3>
