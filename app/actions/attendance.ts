@@ -5,9 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
-const SECRET = process.env.JWT_SECRET;
-if (!SECRET) {
-  throw new Error("La variable de entorno JWT_SECRET no está configurada.");
+function getSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("La variable de entorno JWT_SECRET no está configurada.");
+  }
+  return secret;
 }
 
 // Parse day key to actual Date representing the end of the shift in Nicaragua timezone (UTC-6)
@@ -61,7 +64,7 @@ function isCurrentTimeInShiftWindow(dayKey: string, shiftKey: string): boolean {
 // 1. Generate Dynamic Pass Token
 export async function generateEntryPassToken(volunteerId: string) {
   const timestamp = Date.now();
-  const hmac = crypto.createHmac("sha256", SECRET!);
+  const hmac = crypto.createHmac("sha256", getSecret());
   hmac.update(`${volunteerId}:${timestamp}`);
   const signature = hmac.digest("hex");
 
@@ -187,7 +190,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
     }
 
     // Verify signature
-    const hmac = crypto.createHmac("sha256", SECRET!);
+    const hmac = crypto.createHmac("sha256", getSecret());
     hmac.update(`${id}:${ts}`);
     const expectedSig = hmac.digest("hex");
 

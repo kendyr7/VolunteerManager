@@ -7,7 +7,13 @@ export interface SessionData {
   committee: string;
 }
 
-const SECRET = process.env.JWT_SECRET;
+function getSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("La variable de entorno JWT_SECRET no está configurada.");
+  }
+  return secret;
+}
 
 function base64urlEncode(str: string | Buffer): string {
   const buf = typeof str === 'string' ? Buffer.from(str, 'utf8') : str;
@@ -15,9 +21,7 @@ function base64urlEncode(str: string | Buffer): string {
 }
 
 export function signSession(data: SessionData): string {
-  if (!SECRET) {
-    throw new Error("La variable de entorno JWT_SECRET no está configurada.");
-  }
+  const secret = getSecret();
   
   const header = { alg: "HS256", typ: "JWT" };
   
@@ -41,7 +45,7 @@ export function signSession(data: SessionData): string {
   const encodedHeader = base64urlEncode(JSON.stringify(header));
   const encodedPayload = base64urlEncode(JSON.stringify(payload));
   
-  const hmac = crypto.createHmac('sha256', SECRET);
+  const hmac = crypto.createHmac('sha256', secret);
   hmac.update(`${encodedHeader}.${encodedPayload}`);
   const signature = base64urlEncode(hmac.digest());
   
@@ -49,16 +53,14 @@ export function signSession(data: SessionData): string {
 }
 
 export function verifySessionToken(token: string): SessionData | null {
-  if (!SECRET) {
-    throw new Error("La variable de entorno JWT_SECRET no está configurada.");
-  }
+  const secret = getSecret();
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     
     const [encodedHeader, encodedPayload, signature] = parts;
 
-    const hmac = crypto.createHmac('sha256', SECRET);
+    const hmac = crypto.createHmac('sha256', secret);
     hmac.update(`${encodedHeader}.${encodedPayload}`);
     const expectedSignature = base64urlEncode(hmac.digest());
 
