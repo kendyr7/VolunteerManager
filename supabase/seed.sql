@@ -19,9 +19,9 @@ VALUES
 -- 3. Insertar Admin y Coordinadores Básicos
 INSERT INTO volunteers (id, phone, pin_hash, first_name, last_name, role, committee_id, neighborhood)
 VALUES
-  ('99999999-9999-9999-9999-999999999999', '8888 0000', '1234', 'Admin', 'Sistema', 'admin', NULL, 'Central'),
-  ('88888888-8888-8888-8888-888888888881', '8888 1111', '1234', 'Laura', 'Coordinadora Historia', 'coordinator', (SELECT id FROM committees WHERE slug='historia'), 'Norte'),
-  ('88888888-8888-8888-8888-888888888882', '8888 2222', '1234', 'Andrés', 'Coordinador Seguridad', 'coordinator', (SELECT id FROM committees WHERE slug='seguridad'), 'Sur');
+  ('99999999-9999-9999-9999-999999999999', '+50588880000', '1234', 'Admin', 'Sistema', 'admin', NULL, 'Central'),
+  ('88888888-8888-8888-8888-888888888881', '+50588881111', '1234', 'Laura', 'Coordinadora Historia', 'coordinator', (SELECT id FROM committees WHERE slug='historia'), 'Norte'),
+  ('88888888-8888-8888-8888-888888888882', '+50588882222', '1234', 'Andrés', 'Coordinador Seguridad', 'coordinator', (SELECT id FROM committees WHERE slug='seguridad'), 'Sur');
 
 -- 4. Generar Voluntarios para Historia (20)
 WITH names AS (
@@ -31,7 +31,7 @@ WITH names AS (
 gen_h AS (
   INSERT INTO volunteers (phone, pin_hash, first_name, last_name, role, committee_id)
   SELECT 
-    '1000' || LPAD(seq::text, 4, '0'), 
+    '+5051000' || LPAD(seq::text, 4, '0'), 
     '1234', 
     (SELECT n[1 + (seq % 20)] FROM names), 
     (SELECT l[1 + ((seq * 7) % 20)] FROM names), 
@@ -52,7 +52,7 @@ WITH names AS (
 gen_s AS (
   INSERT INTO volunteers (phone, pin_hash, first_name, last_name, role, committee_id)
   SELECT 
-    '2000' || LPAD(seq::text, 4, '0'), 
+    '+5052000' || LPAD(seq::text, 4, '0'), 
     '1234', 
     (SELECT n[1 + ((seq + 5) % 20)] FROM names), 
     (SELECT l[1 + ((seq * 3) % 20)] FROM names), 
@@ -73,7 +73,7 @@ WITH names AS (
 gen_g AS (
   INSERT INTO volunteers (phone, pin_hash, first_name, last_name, role, committee_id)
   SELECT 
-    '3000' || LPAD(seq::text, 4, '0'), 
+    '+5053000' || LPAD(seq::text, 4, '0'), 
     '1234', 
     (SELECT n[1 + ((seq + 11) % 20)] FROM names), 
     (SELECT l[1 + ((seq * 13) % 20)] FROM names), 

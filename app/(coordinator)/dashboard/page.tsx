@@ -8,6 +8,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/supabase-helpers";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -43,6 +44,7 @@ export default function CoordinatorDashboard() {
   const [volunteers, setVolunteers] = useState<any[]>([]);
   const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
+  const [chartMetric, setChartMetric] = useState<'volunteers' | 'shifts'>('volunteers');
   const [activeKpiInfo, setActiveKpiInfo] = useState<{ title: string; explanation: string; formula: string } | null>(null);
   const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
   const [greeting, setGreeting] = useState<React.ReactNode>("Monitor central de operaciones para el programa de Puertas Abiertas.");
@@ -85,9 +87,7 @@ export default function CoordinatorDashboard() {
   const supabase = createClient();
 
   const loadData = async () => {
-    const { data: volsData } = await supabase
-      .from('volunteers')
-      .select('*, committees(name)');
+    const volsData = await fetchAllRows(supabase, 'volunteers', '*, committees(name)');
 
     const { data: commsData } = await supabase
       .from('committees')
@@ -97,9 +97,7 @@ export default function CoordinatorDashboard() {
       setCommitteesList(commsData);
     }
 
-    const { data: shiftsData } = await supabase
-      .from('shifts')
-      .select('*');
+    const shiftsData = await fetchAllRows(supabase, 'shifts', '*');
 
     const gShifts: Record<string, Record<string, string[]>> = {};
     const cMap: Record<string, boolean> = {};
@@ -124,9 +122,7 @@ export default function CoordinatorDashboard() {
     }
 
     // Fetch committee_shift_requirements from Supabase and merge with defaults
-    const { data: reqsData } = await supabase
-      .from('committee_shift_requirements')
-      .select('*, committees(name)');
+    const reqsData = await fetchAllRows(supabase, 'committee_shift_requirements', '*, committees(name)');
 
     if (reqsData && reqsData.length > 0 && commsData) {
       const updatedReqs: Record<string, Record<string, number>> = {};
@@ -426,6 +422,22 @@ export default function CoordinatorDashboard() {
     return counts;
   }, [volunteers, globalShifts]);
 
+  // Total shifts assigned per event day (sum of T1+T2+T3+T4 slots)
+  const shiftsPerDay = useMemo(() => {
+    const counts: Record<string, number> = {};
+    EVENT_DAYS.forEach(day => {
+      let total = 0;
+      volunteers.forEach(vol => {
+        const shifts = globalShifts[vol.id];
+        if (shifts && shifts[day.key]) {
+          total += shifts[day.key].length;
+        }
+      });
+      counts[day.key] = total;
+    });
+    return counts;
+  }, [volunteers, globalShifts]);
+
   const totalVolsWithShifts = useMemo(() => {
     const unique = new Set<string>();
     volunteers.forEach(vol => {
@@ -643,34 +655,79 @@ export default function CoordinatorDashboard() {
       {/* Bar Chart — edge to edge, no card */}
       <motion.div variants={itemVariants} className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/[0.02] mb-8">
         {/* Header */}
-        <div className="px-5 sm:px-8 py-4 flex items-center justify-between border-b border-white/5">
+        <div className="px-5 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5">
           <div className="flex items-center gap-3">
             <p className="text-xl font-bold text-text tracking-tighter leading-none tabular-nums">
-              {totalVolsWithShifts.toLocaleString()}
+              {chartMetric === 'volunteers' ? totalVolsWithShifts.toLocaleString() : globalStats.totalAssigned.toLocaleString()}
             </p>
-            <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider leading-tight mt-0.5">Voluntarios con turnos</p>
+            <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider leading-tight mt-0.5">
+              {chartMetric === 'volunteers' ? 'Voluntarios Únicos con Turnos' : 'Total Turnos Cubiertos'}
+            </p>
           </div>
-          <div className="flex items-center px-2 py-1 rounded-sm border border-border bg-dark3 text-[10px] font-bold text-text-dim shrink-0">
-            10 – 26 Sep
+
+          <div className="flex items-center gap-2">
+            <div className="bg-dark3 p-1 rounded-lg border border-white/10 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setChartMetric('volunteers')}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${
+                  chartMetric === 'volunteers'
+                    ? 'bg-[#4d7cfe] text-white shadow-sm'
+                    : 'text-text-dim hover:text-white'
+                }`}
+              >
+                Personas Únicas
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartMetric('shifts')}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${
+                  chartMetric === 'shifts'
+                    ? 'bg-[#4d7cfe] text-white shadow-sm'
+                    : 'text-text-dim hover:text-white'
+                }`}
+              >
+                Turnos Cubiertos
+              </button>
+            </div>
+
+            <div className="hidden md:flex items-center px-2 py-1 rounded-sm border border-border bg-dark3 text-[10px] font-bold text-text-dim shrink-0">
+              10 – 26 Sep
+            </div>
           </div>
         </div>
 
         {/* Chart area */}
         <div className="px-3 sm:px-8 py-5">
           <div className="w-full flex flex-col">
-            <div className="flex items-end gap-0.5 sm:gap-1.5 h-[200px] pt-6">
+            <div className="flex items-end gap-0.5 sm:gap-1.5 h-[230px] pt-14 relative">
               {(() => {
-                const maxCount = Math.max(...Object.values(volsPerDay), 1);
+                const targetData = chartMetric === 'volunteers' ? volsPerDay : shiftsPerDay;
+                const maxCount = Math.max(...Object.values(targetData), 1);
+                const totalDays = EVENT_DAYS.length;
+
                 return EVENT_DAYS.map((day, idx) => {
-                  const count = volsPerDay[day.key] || 0;
+                  const count = targetData[day.key] || 0;
+                  const volsCount = volsPerDay[day.key] || 0;
+                  const shiftsCount = shiftsPerDay[day.key] || 0;
                   const heightPct = maxCount > 0 ? Math.max((count / maxCount) * 100, count > 0 ? 5 : 2) : 2;
                   const isHovered = hoveredDay === day.key;
+
+                  // Smart tooltip alignment to prevent screen edge overflow
+                  let alignClass = "left-1/2 -translate-x-1/2";
+                  if (idx < 3) {
+                    alignClass = "left-0 translate-x-0";
+                  } else if (idx >= totalDays - 3) {
+                    alignClass = "right-0 left-auto translate-x-0";
+                  }
+
                   return (
                     <div
                       key={day.key}
                       className="flex-1 flex flex-col items-center justify-end h-full group cursor-pointer"
                       onMouseEnter={() => setHoveredDay(day.key)}
                       onMouseLeave={() => setHoveredDay(null)}
+                      onClick={() => setHoveredDay(prev => prev === day.key ? null : day.key)}
                     >
                       <motion.div
                         initial={{ height: 0 }}
@@ -681,9 +738,12 @@ export default function CoordinatorDashboard() {
                           : 'bg-[#4d7cfe]/20 hover:bg-[#4d7cfe]/50'
                           }`}
                       >
+                        {/* Floating detailed tooltip popup (clamped within viewport) */}
                         {isHovered && (
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 bg-dark2 border border-border text-text text-[10px] font-bold px-2 py-0.5 rounded-sm whitespace-nowrap shadow-sm pointer-events-none z-50">
-                            {count}
+                          <div className={`absolute bottom-full ${alignClass} mb-2 bg-dark2 border border-white/20 text-text text-[10px] font-bold px-3 py-2 rounded-lg whitespace-nowrap shadow-2xl pointer-events-none z-50 flex flex-col gap-0.5 text-center min-w-[110px]`}>
+                            <span className="text-[#4d7cfe] font-black text-[11px]">{day.label} {day.dateNum}</span>
+                            <span className="text-white">{volsCount} personas únicas</span>
+                            <span className="text-text-dim text-[9px]">{shiftsCount} turnos cubiertos</span>
                           </div>
                         )}
                       </motion.div>
@@ -700,8 +760,14 @@ export default function CoordinatorDashboard() {
                 </div>
               ))}
             </div>
-            <div className="mt-1.5">
+
+            {/* Mobile-friendly active day breakdown banner */}
+            <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/5 pt-2">
               <span className="text-[11px] font-bold text-text-dim uppercase tracking-widest">Septiembre 2026</span>
+              <div className="sm:hidden flex items-center gap-1.5 text-[10px] font-bold text-[#4d7cfe] bg-dark3 px-2.5 py-1 rounded-full border border-white/10">
+                <span className="material-symbols-outlined text-[14px]">touch_app</span>
+                <span>{hoveredDay ? `${EVENT_DAYS.find(d => d.key === hoveredDay)?.label} ${EVENT_DAYS.find(d => d.key === hoveredDay)?.dateNum}: ${volsPerDay[hoveredDay] || 0} p. / ${shiftsPerDay[hoveredDay] || 0} turnos` : 'Toca una barra para ver detalle'}</span>
+              </div>
             </div>
           </div>
         </div>

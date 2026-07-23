@@ -1,20 +1,95 @@
-export function formatPhoneNumber(phone: string): string {
-  // Remover todos los caracteres no numéricos
-  const cleanPhone = phone.replace(/\D/g, '');
-  
-  // Asumimos que si no tiene código de país, es de Nicaragua (+505)
-  // Ajusta esto según las necesidades reales del proyecto
-  if (cleanPhone.length === 8) {
-    return `505${cleanPhone}`;
+/**
+ * Formatea y sanitiza un número de teléfono al formato E.164 estricto (+[Código de País][Número Local]).
+ * Elimina espacios, guiones, paréntesis y ceros iniciales (00).
+ * Agrega el prefijo de país por defecto (+505 para Nicaragua si falta).
+ * 
+ * @example
+ * formatE164("8888-9999") // "+50588889999"
+ * formatE164("+505 8888 9999") // "+50588889999"
+ * formatE164("0050588889999") // "+50588889999"
+ */
+export function formatE164(phone: string, defaultCountryCode: string = '505'): string {
+  if (!phone) return '';
+
+  const trimmed = phone.trim();
+  if (!trimmed) return '';
+
+  // Verificar si la entrada ya venía explícitamente con '+' (indica que trae su propio código de país)
+  const hadPlus = trimmed.startsWith('+');
+  let cleaned = hadPlus ? trimmed.slice(1) : trimmed;
+
+  // Quitar cualquier caracter que no sea dígito
+  cleaned = cleaned.replace(/\D/g, '');
+
+  // Eliminar prefijo de salida internacional "00" si está presente (ej: 0050588889999 -> 50588889999)
+  if (cleaned.startsWith('00')) {
+    cleaned = cleaned.slice(2);
   }
-  
-  return cleanPhone;
+
+  if (!cleaned) return '';
+
+  // Si no traía '+' y tampoco empieza con el código de país por defecto (505), agregarlo
+  if (!hadPlus && !cleaned.startsWith(defaultCountryCode)) {
+    cleaned = `${defaultCountryCode}${cleaned}`;
+  }
+
+  return `+${cleaned}`;
+}
+
+/**
+ * Valida que un número telefónico tenga exactamente 8 dígitos en su número local (ej. Nicaragua).
+ * Devuelve un objeto con isValid, error y el número sanitizado en formato E.164.
+ * 
+ * @example
+ * validatePhone8Digits("88889999") // { isValid: true, formatted: "+50588889999" }
+ * validatePhone8Digits("+50588889999") // { isValid: true, formatted: "+50588889999" }
+ * validatePhone8Digits("8888999") // { isValid: false, error: "El número telefónico debe tener exactamente 8 dígitos." }
+ */
+export function validatePhone8Digits(phone: string, defaultCountryCode: string = '505'): {
+  isValid: boolean;
+  error?: string;
+  formatted: string;
+} {
+  if (!phone || !phone.trim()) {
+    return {
+      isValid: false,
+      error: "El número telefónico es obligatorio.",
+      formatted: ""
+    };
+  }
+
+  const formatted = formatE164(phone, defaultCountryCode);
+  const digitsOnly = formatted.replace(/\D/g, '');
+
+  // Extraer la parte del número local quitando el código de país si está presente
+  let localDigits = digitsOnly;
+  if (digitsOnly.startsWith(defaultCountryCode)) {
+    localDigits = digitsOnly.slice(defaultCountryCode.length);
+  }
+
+  if (localDigits.length !== 8) {
+    return {
+      isValid: false,
+      error: "El número telefónico debe tener exactamente 8 dígitos.",
+      formatted
+    };
+  }
+
+  return {
+    isValid: true,
+    formatted
+  };
+}
+
+export function formatPhoneNumber(phone: string): string {
+  const e164 = formatE164(phone);
+  return e164.replace('+', '');
 }
 
 export function generateWaMeLink(phone: string, message: string): string {
-  const formattedPhone = formatPhoneNumber(phone);
+  const cleanPhone = formatPhoneNumber(phone);
   const encodedMessage = encodeURIComponent(message);
-  return `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
+  return `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
 }
 
 export function generatePinMessage(name: string, pin: string, appUrl: string): string {

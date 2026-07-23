@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase-helpers";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/auth";
 import { getActiveEventDays, SHIFT_TIMES } from "@/lib/dates";
@@ -131,30 +132,14 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
       supabase = await createClient();
     }
 
-    // 1. Fetch volunteers
-    const { data: volsData, error: volsError } = await supabase
-      .from('volunteers')
-      .select('*, committees(id, name)');
+    // 1. Fetch volunteers (bypassing 1000 row limit)
+    const volsData = await fetchAllRows(supabase, 'volunteers', '*, committees(id, name)');
 
-    if (volsError) {
-      console.error("Error loading volunteers for reports:", volsError);
-      return { error: "Error al consultar los voluntarios." };
-    }
-
-    // 2. Fetch shifts
-    const { data: shiftsData, error: shiftsError } = await supabase
-      .from('shifts')
-      .select('*');
-
-    if (shiftsError) {
-      console.error("Error loading shifts for reports:", shiftsError);
-      return { error: "Error al consultar los turnos." };
-    }
+    // 2. Fetch shifts (bypassing 1000 row limit)
+    const shiftsData = await fetchAllRows(supabase, 'shifts', '*');
 
     // 3. Fetch committee_shift_requirements (server-side authoritative source)
-    const { data: reqsData } = await supabase
-      .from('committee_shift_requirements')
-      .select('committee_id, shift_key, required');
+    const reqsData = await fetchAllRows(supabase, 'committee_shift_requirements', 'committee_id, shift_key, required');
 
     // Build requirements map: committeeId -> shiftKey -> required
     const reqsMap: Record<string, Record<string, number>> = {};

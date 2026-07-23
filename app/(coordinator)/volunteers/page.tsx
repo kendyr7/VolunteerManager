@@ -22,6 +22,8 @@ import { useSearch } from "@/lib/search-context";
 import { USER_TABLE_STYLES } from "../users/page";
 import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
+import { fetchAllRows } from "@/lib/supabase-helpers";
+import { formatE164, validatePhone8Digits } from "@/lib/whatsapp";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 
 const containerVariants = {
@@ -263,10 +265,8 @@ export default function VolunteersPage() {
     const committee = localStorage.getItem('mock_committee') || '';
 
     // 2. Fetch volunteers with server-side filtering for Editors
-    let query = supabase.from('volunteers').select('*, committees(name)');
-
+    let commIdFilter: string | null = null;
     if (role === 'Editor' && committee) {
-      // Find committee ID first
       const { data: commObj } = await supabase
         .from('committees')
         .select('id')
@@ -274,15 +274,16 @@ export default function VolunteersPage() {
         .maybeSingle();
 
       if (commObj) {
-        query = query.eq('committee_id', commObj.id);
+        commIdFilter = commObj.id;
       }
     }
 
-    const { data: volsData, error: volsError } = await query;
-
-    if (volsError) {
-      console.error("Error loading volunteers:", volsError);
-    }
+    const volsData = await fetchAllRows(
+      supabase,
+      'volunteers',
+      '*, committees(name)',
+      q => commIdFilter ? q.eq('committee_id', commIdFilter) : q
+    );
 
     // Fetch committees
     const { data: commsData, error: commsError } = await supabase
@@ -295,10 +296,8 @@ export default function VolunteersPage() {
       setCommitteesList(commsData);
     }
 
-    // Fetch shifts
-    const { data: shiftsData, error: shiftsError } = await supabase
-      .from('shifts')
-      .select('*');
+    // Fetch shifts (bypassing 1000 row limit)
+    const shiftsData = await fetchAllRows(supabase, 'shifts', '*');
 
     const sCounts: Record<string, number> = {};
     const gShifts: Record<string, Record<string, string[]>> = {};
@@ -418,11 +417,12 @@ export default function VolunteersPage() {
       return;
     }
 
-    const phoneDigits = trimmedPhone.replace(/[^\d]/g, '');
-    if (!trimmedPhone || phoneDigits.length < 7) {
-      showToast("Ingresa un número de teléfono válido (mínimo 7 dígitos)", "error");
+    const phoneValidation = validatePhone8Digits(trimmedPhone);
+    if (!phoneValidation.isValid) {
+      showToast(phoneValidation.error || "Ingresa un número de teléfono válido (8 dígitos)", "error");
       return;
     }
+    const sanitizedPhone = phoneValidation.formatted;
 
     let ageNum: number | null = null;
     if (trimmedAge) {
@@ -446,7 +446,7 @@ export default function VolunteersPage() {
       .update({
         first_name: trimmedFirstName,
         last_name: trimmedLastName,
-        phone: trimmedPhone,
+        phone: sanitizedPhone,
         stake: trimmedStake,
         neighborhood: trimmedWard,
         committee_id: commObj ? commObj.id : (editCommitteeId || null),
@@ -533,12 +533,13 @@ export default function VolunteersPage() {
       return;
     }
 
-    // Sanitizar y validar teléfono
-    const cleanPhone = newPhone.replace(/[^0-9]/g, '');
-    if (cleanPhone.length !== 8) {
-      showToast("El celular debe tener exactamente 8 dígitos.", "error");
+    // Sanitizar y validar teléfono E.164 (8 dígitos)
+    const phoneValidation = validatePhone8Digits(newPhone);
+    if (!phoneValidation.isValid) {
+      showToast(phoneValidation.error || "El celular debe tener exactamente 8 dígitos.", "error");
       return;
     }
+    const sanitizedPhone = phoneValidation.formatted;
 
     const { error } = await supabase
       .from('volunteers')
@@ -546,7 +547,7 @@ export default function VolunteersPage() {
         {
           first_name,
           last_name,
-          phone: cleanPhone,
+          phone: sanitizedPhone,
           committee_id: newCommitteeId || null,
           stake: newStake,
           neighborhood: newWard,

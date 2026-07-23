@@ -21,6 +21,7 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn, normalizeSearch } from "@/lib/utils";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { canEditShifts } from "@/lib/permissions";
+import { fetchAllRows } from "@/lib/supabase-helpers";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -209,8 +210,7 @@ export default function ShiftsPage() {
     const role = localStorage.getItem('mock_role') || 'Admin';
     const committee = localStorage.getItem('mock_committee') || '';
 
-    let query = supabase.from('volunteers').select('*, committees(name)');
-
+    let commIdFilter: string | null = null;
     if (role === 'Editor' && committee) {
       const { data: commObj } = await supabase
         .from('committees')
@@ -219,15 +219,16 @@ export default function ShiftsPage() {
         .maybeSingle();
 
       if (commObj) {
-        query = query.eq('committee_id', commObj.id);
+        commIdFilter = commObj.id;
       }
     }
 
-    const { data: volsData, error: volsError } = await query;
-
-    if (volsError) {
-      console.error("Error loading volunteers:", volsError);
-    }
+    const volsData = await fetchAllRows(
+      supabase,
+      'volunteers',
+      '*, committees(name)',
+      q => commIdFilter ? q.eq('committee_id', commIdFilter) : q
+    );
 
     // Fetch committees
     const { data: commsData, error: commsError } = await supabase
@@ -240,10 +241,8 @@ export default function ShiftsPage() {
       setCommitteesList(commsData);
     }
 
-    // Fetch shifts
-    const { data: shiftsData, error: shiftsError } = await supabase
-      .from('shifts')
-      .select('*');
+    // Fetch shifts (bypassing 1000 row limit)
+    const shiftsData = await fetchAllRows(supabase, 'shifts', '*');
 
     const sCounts: Record<string, number> = {};
     const gShifts: Record<string, Record<string, string[]>> = {};

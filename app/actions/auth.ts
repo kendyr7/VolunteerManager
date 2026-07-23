@@ -3,6 +3,7 @@
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { signSession } from '@/lib/auth'
+import { formatE164 } from '@/lib/whatsapp'
 
 export type AuthState = {
   error?: string;
@@ -17,12 +18,22 @@ export type AuthState = {
 }
 
 export async function loginWithPin(prevState: AuthState, formData: FormData): Promise<AuthState> {
-  const phone = (formData.get('phone') as string || '').replace(/\s+/g, '');
+  const rawPhoneInput = (formData.get('phone') as string || '').trim();
   const pin = formData.get('pin') as string;
 
-  console.log("AUTH_LOG: Received login request", { phone, pin_length: pin?.length });
+  const formattedPhone = formatE164(rawPhoneInput);
+  const rawDigits = rawPhoneInput.replace(/\D/g, '');
+  const targetPhones = Array.from(new Set([
+    formattedPhone,
+    rawPhoneInput.replace(/\s+/g, ''),
+    formattedPhone.replace('+', ''),
+    rawDigits,
+    rawDigits.length === 8 ? `505${rawDigits}` : rawDigits
+  ])).filter(Boolean);
 
-  if (!phone || !pin) {
+  console.log("AUTH_LOG: Received login request", { rawPhoneInput, formattedPhone, pin_length: pin?.length });
+
+  if (!rawPhoneInput || !pin) {
     return { error: 'Por favor, ingresa tu teléfono y PIN.' };
   }
 
@@ -43,7 +54,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
   const { data: attempt } = await supabase
     .from('login_attempts')
     .select('*')
-    .eq('phone', phone)
+    .in('phone', targetPhones)
     .maybeSingle();
 
   if (attempt) {
@@ -58,13 +69,13 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
   const { data: profile } = await supabase
     .from('profiles')
     .select('*, committees(name)')
-    .eq('phone', phone)
+    .in('phone', targetPhones)
     .eq('pin', pin)
     .maybeSingle();
 
   if (profile) {
     // Resetear Rate Limiting tras login exitoso
-    await supabase.from('login_attempts').delete().eq('phone', phone);
+    await supabase.from('login_attempts').delete().in('phone', targetPhones);
 
     // Check if it's first login (assigned PIN 1234)
     if (pin === '1234') {
@@ -112,13 +123,13 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
   const { data: volunteer } = await supabase
     .from('volunteers')
     .select('*, committees(name)')
-    .eq('phone', phone)
+    .in('phone', targetPhones)
     .eq('pin', pin)
     .maybeSingle();
 
   if (volunteer) {
     // Resetear Rate Limiting tras login exitoso
-    await supabase.from('login_attempts').delete().eq('phone', phone);
+    await supabase.from('login_attempts').delete().in('phone', targetPhones);
 
     // Check if it's first login (assigned PIN 1234)
     if (pin === '1234') {
@@ -168,12 +179,12 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
         locked_until: lockedUntil,
         last_attempt: new Date().toISOString()
       })
-      .eq('phone', phone);
+      .eq('id', attempt.id);
   } else {
     await supabase
       .from('login_attempts')
       .insert({
-        phone: phone,
+        phone: formattedPhone || rawPhoneInput,
         attempts_count: 1,
         last_attempt: new Date().toISOString()
       });

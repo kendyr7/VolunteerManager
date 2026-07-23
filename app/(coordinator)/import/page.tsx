@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { generatePinMessage, generateWaMeLink } from "@/lib/whatsapp";
+import { generatePinMessage, generateWaMeLink, formatE164, validatePhone8Digits } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -192,7 +192,7 @@ export default function ImportPage() {
         // Fetch current volunteers to pre-validate duplicate phone numbers
         const supabase = createClient();
         const { data: existingVols } = await supabase.from('volunteers').select('phone');
-        const existingPhones = new Set(existingVols?.map(v => (v.phone || '').replace(/\s+/g, '')) || []);
+        const existingPhones = new Set(existingVols?.map(v => formatE164(v.phone || '')) || []);
 
         const parsedList: ParsedVolunteer[] = [];
 
@@ -211,7 +211,7 @@ export default function ImportPage() {
           const age = ageIdx !== -1 ? cleanVal(row[ageIdx]) : '';
           const ward = wardIdx !== -1 ? cleanVal(row[wardIdx]) : '';
           const stake = stakeIdx !== -1 ? cleanVal(row[stakeIdx]) : '';
-          const phone = phoneIdx !== -1 ? cleanVal(row[phoneIdx]) : '';
+          const phoneRaw = phoneIdx !== -1 ? cleanVal(row[phoneIdx]) : '';
           const committeeName = committeeIdx !== -1 ? cleanVal(row[committeeIdx]) : '';
 
           const match = committees.find(c => c.name.toLowerCase() === committeeName.toLowerCase());
@@ -219,14 +219,18 @@ export default function ImportPage() {
           const isMyCommittee = match?.name.toLowerCase() === userCommittee.toLowerCase();
           const isValidCommittee = isRoleAdmin || isMyCommittee;
           
-          const cleanPhone = phone.replace(/\s+/g, '');
-          const isDuplicate = existingPhones.has(cleanPhone);
+          // Validar que el teléfono sea válido E.164 y tenga 8 dígitos
+          const phoneValidation = validatePhone8Digits(phoneRaw);
+          const formattedPhone = phoneValidation.formatted;
+          const isDuplicate = formattedPhone ? existingPhones.has(formattedPhone) : false;
 
           let errorMsg = '';
           if (!fullName) {
             errorMsg = "El nombre es obligatorio.";
-          } else if (!phone) {
+          } else if (!phoneRaw) {
             errorMsg = "El número telefónico es obligatorio.";
+          } else if (!phoneValidation.isValid) {
+            errorMsg = phoneValidation.error || "El número telefónico debe tener exactamente 8 dígitos.";
           } else if (!committeeName) {
             errorMsg = "El nombre del comité es obligatorio.";
           } else if (!match) {
@@ -242,7 +246,7 @@ export default function ImportPage() {
             age,
             ward,
             stake,
-            phone,
+            phone: formattedPhone || phoneRaw,
             committeeName: match?.name || committeeName,
             committeeId: isValidCommittee ? match?.id : undefined,
             error: errorMsg || undefined,
@@ -313,6 +317,7 @@ export default function ImportPage() {
 
       for (const vol of toImport) {
         const pin = String(Math.floor(1000 + Math.random() * 9000)); // Generate a random 4-digit PIN for improved security
+        const sanitizedPhone = formatE164(vol.phone);
         
         const { data: inserted, error } = await supabase
           .from('volunteers')
@@ -322,7 +327,7 @@ export default function ImportPage() {
             age: parseInt(vol.age) || null,
             neighborhood: vol.ward,
             stake: vol.stake,
-            phone: vol.phone,
+            phone: sanitizedPhone,
             committee_id: vol.committeeId,
             pin: pin,
             status: 'active'
@@ -336,8 +341,8 @@ export default function ImportPage() {
         }
 
         const message = generatePinMessage(`${vol.firstName} ${vol.lastName}`, pin, "https://app.templomanagua.org");
-        const waLink = generateWaMeLink(vol.phone, message);
-        results.push({ ...vol, pin, waLink });
+        const waLink = generateWaMeLink(sanitizedPhone, message);
+        results.push({ ...vol, phone: sanitizedPhone, pin, waLink });
       }
 
       const totalDuplicatesCount = parsedData.filter(v => v.isDuplicate).length;
