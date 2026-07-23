@@ -54,9 +54,9 @@ export function LoginPageClient() {
         </div>
         <div className="flex-1 flex items-center justify-center p-6 md:p-12 lg:p-16 z-10 relative">
           <div className="w-full max-w-sm">
-            <div className="mb-10 flex flex-col">
-              <AnimatedLogo className="w-12 h-12 mb-5" />
-              <div className="text-[18px] tracking-wider text-white mb-2 uppercase whitespace-nowrap font-bold">
+            <div className="mb-10 flex flex-col items-center text-center">
+              <AnimatedLogo className="w-16 h-16 mb-5" />
+              <div className="text-[18px] tracking-wider text-white mb-2 uppercase whitespace-nowrap font-black">
                 Bienvenido de nuevo
               </div>
               <p className="text-slate-400 font-inter font-bold text-[13px]">
@@ -66,7 +66,7 @@ export function LoginPageClient() {
 
             <LoginForm />
 
-            <div className="mt-10 pt-8 border-t border-slate-800">
+            <div className="mt-10 pt-8 border-t border-slate-800 text-center">
               <p className="text-sm text-slate-400 font-inter font-bold">
                 ¿Tienes problemas para ingresar? <br />
                 <button className="text-[#0084d1] font-inter font-bold hover:underline mt-1">
@@ -149,9 +149,9 @@ export function LoginPageClient() {
             <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
             <div className="relative z-10 flex min-h-full flex-col justify-center px-6 py-12">
               <div className="mx-auto w-full max-w-sm">
-                <div className="mb-10 flex flex-col">
-                  <AnimatedLogo className="w-10 h-10 mb-4" />
-                  <div className="text-[16px] tracking-wider text-white mb-1 uppercase whitespace-nowrap font-bold">
+                <div className="mb-10 flex flex-col items-center text-center">
+                  <AnimatedLogo className="w-14 h-14 mb-4" />
+                  <div className="text-[16px] tracking-wider text-white mb-1 uppercase whitespace-nowrap font-black">
                     Bienvenido de nuevo
                   </div>
                   <p className="text-slate-400 font-inter font-bold text-[12px]">
@@ -161,7 +161,7 @@ export function LoginPageClient() {
 
                 <LoginForm />
 
-                <div className="mt-10 pt-8 border-t border-slate-800">
+                <div className="mt-10 pt-8 border-t border-slate-800 text-center">
                   <p className="text-sm text-slate-400 font-inter font-bold">
                     ¿Tienes problemas para ingresar? <br />
                     <button className="text-[#0084d1] font-inter font-bold hover:underline mt-1">

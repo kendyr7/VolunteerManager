@@ -19,6 +19,7 @@ export function LoginForm() {
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   // New PIN States
   const [needsNewPin, setNeedsNewPin] = useState(false);
@@ -31,20 +32,31 @@ export function LoginForm() {
   const [savedUserMode, setSavedUserMode] = useState(false);
   const [savedName, setSavedName] = useState("");
   const [isMounted, setIsMounted] = useState(false);
+  const [authMode, setAuthMode] = useState<'biometrics' | 'pin'>('pin');
+
+  // Auto-dismiss error banner after 4 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   useEffect(() => {
     const savedPhone = localStorage.getItem("volunteer_phone");
     if (savedPhone) {
       setPhone(savedPhone);
     }
-    const savedMethod = localStorage.getItem("preferred_auth_method");
-    if (savedMethod === 'biometrics') {
-      setPreferredAuthMethod('biometrics');
-    }
     const savedName = localStorage.getItem("volunteer_name");
     if (savedName && savedPhone) {
       setSavedUserMode(true);
       setSavedName(savedName);
+      // Para usuarios recordados, mostrar por defecto ÚNICAMENTE la vista de huella dactilar
+      setAuthMode('biometrics');
+    } else {
+      setAuthMode('pin');
     }
     setIsMounted(true);
   }, []);
@@ -111,14 +123,19 @@ export function LoginForm() {
     e.preventDefault();
     setError(null);
 
-    if (pin.length < 4) {
-      setError("El PIN debe tener al menos 4 dígitos.");
+    if (phone.length < 8) {
+      setError("El número de teléfono debe tener 8 dígitos.");
+      return;
+    }
+
+    if (pin.length !== 4) {
+      setError("El PIN debe tener exactamente 4 dígitos.");
       return;
     }
 
     startTransition(async () => {
       try {
-        const minDelay = new Promise(resolve => setTimeout(resolve, 2500));
+        const minDelay = new Promise(resolve => setTimeout(resolve, 600));
         const formData = new FormData();
         formData.append("phone", phone);
         formData.append("pin", pin);
@@ -145,8 +162,8 @@ export function LoginForm() {
     e.preventDefault();
     setError(null);
 
-    if (newPin.length < 4) {
-      setError("El nuevo PIN debe tener al menos 4 dígitos.");
+    if (newPin.length !== 4) {
+      setError("El nuevo PIN debe tener exactamente 4 dígitos.");
       return;
     }
 
@@ -162,7 +179,7 @@ export function LoginForm() {
 
     startTransition(async () => {
       try {
-        const minDelay = new Promise(resolve => setTimeout(resolve, 2500));
+        const minDelay = new Promise(resolve => setTimeout(resolve, 600));
         const [result] = await Promise.all([updateInitialPin(userData!.id, userData!.type, newPin), minDelay]);
 
         if (result.error) {
@@ -178,6 +195,7 @@ export function LoginForm() {
   };
 
   const finishLogin = (result: any) => {
+    setIsRedirecting(true);
     localStorage.setItem("volunteer_phone", phone || result.phone);
     if (result.name) {
       localStorage.setItem("volunteer_name", result.name);
@@ -199,8 +217,8 @@ export function LoginForm() {
 
   return (
     <div className="relative">
-      {(isPending || isBiometricLoading) && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] bg-dark flex items-center justify-center animate-in fade-in duration-300">
+      {(isPending || isRedirecting) && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-dark flex items-center justify-center animate-in fade-in duration-200">
           <AnimatedLogo className="w-16 h-16 md:w-20 md:h-20 text-text" isLooping={true} />
         </div>,
         document.body
@@ -216,111 +234,206 @@ export function LoginForm() {
             onSubmit={handleSubmit} 
             className="space-y-5"
           >
-            {savedUserMode ? (
-              <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#4d7cfe]/20 text-[#4d7cfe] flex items-center justify-center font-bold font-inter">
-                    {savedName.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white font-inter">{savedName}</p>
-                    <p className="text-[11px] text-slate-400 font-inter">{phone}</p>
+            {!savedUserMode ? (
+              /* Usuario nuevo / No recordado: Solo Teléfono + PIN + Ingresar */
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
+                    Número de Teléfono
+                  </Label>
+                  <div className="relative group">
+                    <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">call</span>
+                    <input
+                      id="phone"
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="username tel"
+                      maxLength={8}
+                      placeholder="88888888"
+                      required
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                      className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all placeholder:text-slate-500"
+                      disabled={isPending}
+                    />
                   </div>
                 </div>
-                <button 
-                  type="button"
-                  onClick={() => { 
-                    setSavedUserMode(false); 
-                    localStorage.removeItem('volunteer_name'); 
-                    localStorage.removeItem('volunteer_phone');
-                    setPhone(''); 
-                  }}
-                  className="text-xs font-bold text-slate-400 hover:text-white transition-colors"
-                >
-                  Cambiar
-                </button>
-              </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="pin" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
+                    PIN de Acceso
+                  </Label>
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex-1 group">
+                      <span className="material-symbols-outlined text-[20px] absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">vpn_key</span>
+                      <input
+                        id="pin"
+                        type="password"
+                        inputMode="numeric"
+                        autoComplete="current-password"
+                        maxLength={4}
+                        placeholder="••••"
+                        required
+                        value={pin}
+                        onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                        className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-11 pr-3 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
+                        disabled={isPending}
+                      />
+                    </div>
+
+                    <button 
+                      type="submit" 
+                      className="flex-1 h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center group shrink-0 text-center"
+                      disabled={isPending}
+                      onClick={() => {
+                        localStorage.setItem("preferred_auth_method", "pin");
+                      }}
+                    >
+                      {isPending ? (
+                        <span>Verificando...</span>
+                      ) : (
+                        <span>Ingresar</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                    <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
+                    <p className="text-sm font-inter font-bold text-red">{error}</p>
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
-                  Número de Teléfono
-                </Label>
-                <div className="relative group">
-                  <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">call</span>
-                  <input
-                    id="phone"
-                    type="tel"
-                    placeholder="8888 8888"
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all placeholder:text-slate-500"
-                    disabled={isPending}
-                  />
+              /* Usuario Recordado (savedUserMode === true) */
+              <>
+                <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#4d7cfe]/20 text-[#4d7cfe] flex items-center justify-center font-bold font-inter">
+                      {savedName.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-white font-inter">{savedName}</p>
+                      <p className="text-[11px] text-slate-400 font-inter">{phone}</p>
+                    </div>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={() => { 
+                      setSavedUserMode(false); 
+                      localStorage.removeItem('volunteer_name'); 
+                      localStorage.removeItem('volunteer_phone');
+                      setPhone(''); 
+                      setAuthMode('pin');
+                    }}
+                    className="text-xs font-bold text-slate-400 hover:text-white transition-colors"
+                  >
+                    Cambiar
+                  </button>
                 </div>
-              </div>
-            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="pin" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
-                PIN de Acceso
-              </Label>
-              <div className="relative group">
-                <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">vpn_key</span>
-                  <input
-                    id="pin"
-                    type="tel"
-                    style={{ WebkitTextSecurity: "disc" } as any}
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={6}
-                    placeholder="••••"
-                    required
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
-                    disabled={isPending}
-                  />
-              </div>
-            </div>
+                {authMode === 'biometrics' ? (
+                  <div className="space-y-3 pt-2 text-center flex flex-col items-center justify-center">
+                    {/* 1. Texto arriba */}
+                    <p className="text-sm font-bold font-inter text-slate-300">
+                      Ingresar con huella
+                    </p>
 
-            {error && (
-              <div className="p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-                <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
-                <p className="text-sm font-inter font-bold text-red">{error}</p>
-              </div>
-            )}
+                    {/* 2. Ícono de huella */}
+                    <button
+                      type="button"
+                      onClick={handleBiometricLogin}
+                      suppressHydrationWarning
+                      className="group flex items-center justify-center p-2 rounded-full transition-all duration-300 active:scale-95 disabled:opacity-40 my-1"
+                      disabled={!isMounted || isPending || isBiometricLoading || !phone}
+                      title="Ingresar con huella"
+                    >
+                      <div className="w-16 h-16 rounded-full bg-[#4d7cfe]/15 border border-[#4d7cfe]/30 flex items-center justify-center text-[#4d7cfe] group-hover:scale-110 group-hover:border-[#4d7cfe] group-hover:bg-[#4d7cfe]/25 transition-all shadow-lg shadow-[#4d7cfe]/10">
+                        <span className="material-symbols-outlined text-[36px]">fingerprint</span>
+                      </div>
+                    </button>
 
-            <div className="flex lg:block gap-2">
-              <button 
-                type="submit" 
-                className="w-full h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 group"
-                disabled={isPending}
-                onClick={() => {
-                  localStorage.setItem("preferred_auth_method", "pin");
-                }}
-              >
-                {isPending ? (
-                  <span>Verificando...</span>
+                    {error && (
+                      <div className="w-full p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2 text-left">
+                        <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
+                        <p className="text-sm font-inter font-bold text-red">{error}</p>
+                      </div>
+                    )}
+
+                    {/* 3. Texto debajo */}
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode('pin')}
+                        className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline underline-offset-4"
+                      >
+                        O ingresa con tu PIN
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <>
-                    <span>Ingresar</span>
-                    <span className="material-symbols-outlined text-[18px] opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all">north_east</span>
+                    <div className="space-y-2">
+                      <Label htmlFor="pin" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
+                        PIN de Acceso
+                      </Label>
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex-1 group">
+                          <span className="material-symbols-outlined text-[20px] absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">vpn_key</span>
+                          <input
+                            id="pin"
+                            type="password"
+                            inputMode="numeric"
+                            autoComplete="current-password"
+                            maxLength={4}
+                            placeholder="••••"
+                            required={authMode === 'pin'}
+                            value={pin}
+                            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                            className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-11 pr-3 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
+                            disabled={isPending}
+                          />
+                        </div>
+
+                        <button 
+                          type="submit" 
+                          className="flex-1 h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center group shrink-0 text-center"
+                          disabled={isPending}
+                          onClick={() => {
+                            localStorage.setItem("preferred_auth_method", "pin");
+                          }}
+                        >
+                          {isPending ? (
+                            <span>Verificando...</span>
+                          ) : (
+                            <span>Ingresar</span>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {error && (
+                      <div className="p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                        <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
+                        <p className="text-sm font-inter font-bold text-red">{error}</p>
+                      </div>
+                    )}
+
+                    <div className="pt-3 flex flex-col items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode('biometrics')}
+                        className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">fingerprint</span>
+                        <span>O ingresa con tu huella dactilar</span>
+                      </button>
+                    </div>
                   </>
                 )}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleBiometricLogin}
-                suppressHydrationWarning
-                className={`lg:hidden h-12 px-4 rounded-sm font-bold shadow-lg transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 shrink-0 border ${preferredAuthMethod === 'biometrics' ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-[#4d7cfe]/20' : 'bg-dark2 border-white/10 text-white hover:bg-white/10'}`}
-                disabled={!isMounted || isPending || isBiometricLoading || !phone}
-                title="Iniciar sesión con huella dactilar"
-              >
-                <span className="material-symbols-outlined text-[20px]">fingerprint</span>
-              </button>
-            </div>
+              </>
+            )}
           </motion.form>
         ) : (
           <motion.form 
@@ -349,15 +462,14 @@ export function LoginForm() {
                 <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">lock</span>
                 <input
                   id="newPin"
-                  type="tel"
-                  style={{ WebkitTextSecurity: "disc" } as any}
+                  type="password"
                   inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  placeholder="Mínimo 4 dígitos"
+                  autoComplete="new-password"
+                  maxLength={4}
+                  placeholder="Exactamente 4 dígitos"
                   required
                   value={newPin}
-                  onChange={(e) => setNewNewPin(e.target.value.replace(/[^0-9]/g, ''))}
+                  onChange={(e) => setNewNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                   className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
                   disabled={isPending}
                 />
@@ -372,15 +484,14 @@ export function LoginForm() {
                 <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">check_circle</span>
                 <input
                   id="confirmPin"
-                  type="tel"
-                  style={{ WebkitTextSecurity: "disc" } as any}
+                  type="password"
                   inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
+                  autoComplete="new-password"
+                  maxLength={4}
                   placeholder="Repite tu nuevo PIN"
                   required
                   value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value.replace(/[^0-9]/g, ''))}
+                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                   className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
                   disabled={isPending}
                 />

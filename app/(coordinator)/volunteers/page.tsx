@@ -1523,7 +1523,7 @@ export default function VolunteersPage() {
                     <Input
                       required
                       type="tel"
-                      pattern="[0-9]{8}"
+                      inputMode="numeric"
                       maxLength={8}
                       onKeyPress={(e) => {
                         if (!/[0-9]/.test(e.key)) e.preventDefault();

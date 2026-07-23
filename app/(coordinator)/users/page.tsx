@@ -605,7 +605,7 @@ export default function UsersPage() {
                     <label className="text-xs font-extrabold text-white/90">Teléfono (WhatsApp)</label>
                     <input
                       required
-                      pattern="[0-9]{8}"
+                      inputMode="numeric"
                       maxLength={8}
                       onKeyPress={(e) => {
                         if (!/[0-9]/.test(e.key)) e.preventDefault();
@@ -969,7 +969,7 @@ export default function UsersPage() {
                     <label className="block mb-2 text-xs font-normal text-white/90">Teléfono WhatsApp</label>
                     <input
                       required
-                      pattern="[0-9]{8}"
+                      inputMode="numeric"
                       maxLength={8}
                       onKeyPress={(e) => {
                         if (!/[0-9]/.test(e.key)) e.preventDefault();

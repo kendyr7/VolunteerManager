@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAllRows } from "@/lib/supabase-helpers";
+import { formatE164 } from "@/lib/whatsapp";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -182,25 +183,43 @@ export default function CoordinatorDashboard() {
     const phone = localStorage.getItem('volunteer_phone');
 
     const fetchUserNameAndSetGreeting = async () => {
-      let userName = 'Coordinador (Sin Teléfono)';
+      let userName = 'Coordinador';
+      const savedName = localStorage.getItem('volunteer_name');
+      if (savedName) {
+        userName = savedName.split(' ')[0];
+      }
 
       if (phone) {
-        const cleanPhone = phone.replace(/\s+/g, '');
-        console.log("Buscando en supabase con el teléfono:", cleanPhone);
-        
-        const { data: user, error } = await supabase
+        const formatted = formatE164(phone);
+        const rawDigits = phone.replace(/\D/g, '');
+        const targetPhones = Array.from(new Set([
+          formatted,
+          phone.replace(/\s+/g, ''),
+          formatted.replace('+', ''),
+          rawDigits,
+          rawDigits.length === 8 ? `505${rawDigits}` : rawDigits
+        ])).filter(Boolean);
+
+        const { data: user } = await supabase
           .from('profiles')
           .select('full_name')
-          .eq('phone', cleanPhone)
+          .in('phone', targetPhones)
           .maybeSingle();
 
-        if (error) {
-          console.error("Error fetching profile:", error);
-          userName = 'Error BD';
-        } else if (user) {
-          userName = user.full_name ? user.full_name.split(' ')[0] : 'Sin Nombre';
+        if (user && user.full_name) {
+          userName = user.full_name.split(' ')[0];
+          localStorage.setItem('volunteer_name', user.full_name);
         } else {
-          userName = 'Coordinador';
+          const { data: vol } = await supabase
+            .from('volunteers')
+            .select('first_name, last_name')
+            .in('phone', targetPhones)
+            .maybeSingle();
+
+          if (vol && vol.first_name) {
+            userName = vol.first_name;
+            localStorage.setItem('volunteer_name', `${vol.first_name} ${vol.last_name || ''}`.trim());
+          }
         }
       }
 
