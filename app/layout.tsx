@@ -21,6 +21,11 @@ export const metadata: Metadata = {
   title: "Volunteer Manager",
   description: "Gestión de voluntarios para Puertas Abiertas del Templo",
   manifest: "/manifest.json",
+  verification: {
+    other: {
+      "facebook-domain-verification": ["p85nbgrccc871olpq4fug39saag8if"],
+    },
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -51,6 +56,7 @@ export default async function RootLayout({
       style={{ colorScheme: 'dark', backgroundColor: '#050505' }}
     >
       <head>
+        <meta name="facebook-domain-verification" content="p85nbgrccc871olpq4fug39saag8if" />
         <link rel="apple-touch-icon" href="/app-icon-192.png" />
       </head>
       <body className="min-h-full flex flex-col font-sans bg-dark text-text tracking-[-0.01em]">

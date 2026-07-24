@@ -24,15 +24,26 @@ async function handleReminders(req: NextRequest) {
 
     const supabase = createClient();
 
-    // 1. Fetch volunteers (bypassing 1000 row limit)
-    const volunteers = await fetchAllRows(supabase, 'volunteers', 'id, first_name, last_name, phone, committees(name)');
+    let volunteers: any[] = [];
+    try {
+      volunteers = await fetchAllRows(supabase, 'volunteers', 'id, first_name, last_name, phone');
+    } catch (e) {
+      console.warn("Could not fetch volunteers from DB:", e);
+    }
 
-    if (!volunteers || volunteers.length === 0) {
+    if (!isTestMode && (!volunteers || volunteers.length === 0)) {
       return NextResponse.json({ error: "Error cargando voluntarios de la base de datos." }, { status: 500 });
     }
 
     // 2. Fetch shifts (bypassing 1000 row limit)
-    const shifts = await fetchAllRows(supabase, 'shifts', '*');
+    let shifts: any[] = [];
+    if (!isTestMode) {
+      try {
+        shifts = await fetchAllRows(supabase, 'shifts', '*');
+      } catch (e) {
+        console.warn("Could not fetch shifts from DB:", e);
+      }
+    }
 
     // Determine target date (48 hours in the future)
     const targetDate = new Date();
@@ -44,17 +55,21 @@ async function handleReminders(req: NextRequest) {
     if (isTestMode && testPhone) {
       // TEST MODE: Send immediate test reminder to specified phone
       const formattedTestPhone = formatE164Phone(testPhone);
-      const testVol = volunteers.find(v => v.phone && formatE164Phone(v.phone).endsWith(formattedTestPhone.slice(-8))) || volunteers[0];
+      const testVol = (volunteers || []).find(v => v.phone && formatE164Phone(v.phone).endsWith(formattedTestPhone.slice(-8))) || {
+        id: null,
+        first_name: 'Hermano(a)',
+        phone: formattedTestPhone
+      };
 
       const volName = testVol ? `${testVol.first_name}` : 'Hermano(a)';
       const commName = (testVol?.committees as any)?.name || (Array.isArray(testVol?.committees) ? (testVol?.committees as any)[0]?.name : 'Asignado');
 
-      // Send WhatsApp message
+      const isHelloWorld = templateName === 'hello_world';
       const apiResult = await sendWhatsAppTemplate({
         to: formattedTestPhone,
         templateName: templateName,
-        languageCode: 'es',
-        components: [
+        languageCode: isHelloWorld ? 'en_US' : 'es',
+        components: isHelloWorld ? undefined : [
           {
             type: 'body',
             parameters: [
@@ -78,7 +93,7 @@ async function handleReminders(req: NextRequest) {
       }
 
       // Log reminder to Supabase
-      if (testVol) {
+      if (testVol && testVol.id) {
         await supabase.from('reminder_logs').insert([{
           volunteer_id: testVol.id,
           shift_key: 'T1',
