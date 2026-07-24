@@ -37,6 +37,7 @@ export const metadata: Metadata = {
   },
 };
 
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AutoLogout } from "@/components/AutoLogout";
 import { TokenProvider } from "@/components/TokenProvider";
 import { cookies } from "next/headers";
@@ -63,6 +64,7 @@ export default async function RootLayout({
         <TokenProvider token={sessionToken} />
         <AutoLogout />
         {children}
+        <SpeedInsights />
         <Script
           id="service-worker-registration"
           strategy="afterInteractive"
