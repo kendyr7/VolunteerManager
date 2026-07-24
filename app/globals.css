@@ -398,7 +398,7 @@ body[data-scroll-locked] {
   font-family: "Material Symbols Outlined";
   font-style: normal;
   font-weight: 100 700;
-  font-display: block;
+  font-display: swap;
   src: url("/material-symbols-outlined.woff2") format("woff2");
 }
 .material-symbols-outlined {

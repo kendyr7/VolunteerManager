@@ -26,54 +26,62 @@ export function MeshGradientBackground({
   const duration4 = 18 / speed
 
   return (
-    <div className={cn("absolute inset-0 overflow-hidden", className)} style={{ backgroundColor }}>
+    <div className={cn("absolute inset-0 overflow-hidden pointer-events-none", className)} style={{ backgroundColor, contain: "strict" }}>
       {/* Gradient orbs */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0 pointer-events-none">
         {/* Orb 1 - Top left */}
         <div
-          className="absolute h-[60%] w-[60%] rounded-full"
+          className="absolute h-[60%] w-[60%] rounded-full pointer-events-none"
           style={{
             left: "-10%",
             top: "-10%",
             background: `radial-gradient(circle, ${colors[0]}90 0%, transparent 70%)`,
-            filter: "blur(80px)",
+            filter: "blur(60px)",
             animation: `meshMove1 ${duration1}s ease-in-out infinite`,
+            willChange: "transform",
+            transform: "translateZ(0)",
           }}
         />
 
         {/* Orb 2 - Top right */}
         <div
-          className="absolute h-[50%] w-[50%] rounded-full"
+          className="absolute h-[50%] w-[50%] rounded-full pointer-events-none"
           style={{
             right: "-5%",
             top: "10%",
             background: `radial-gradient(circle, ${colors[1]}80 0%, transparent 70%)`,
-            filter: "blur(100px)",
+            filter: "blur(70px)",
             animation: `meshMove2 ${duration2}s ease-in-out infinite`,
+            willChange: "transform",
+            transform: "translateZ(0)",
           }}
         />
 
         {/* Orb 3 - Bottom center */}
         <div
-          className="absolute h-[55%] w-[70%] rounded-full"
+          className="absolute h-[55%] w-[70%] rounded-full pointer-events-none"
           style={{
             left: "20%",
             bottom: "-15%",
             background: `radial-gradient(circle, ${colors[2]}70 0%, transparent 70%)`,
-            filter: "blur(120px)",
+            filter: "blur(80px)",
             animation: `meshMove3 ${duration3}s ease-in-out infinite`,
+            willChange: "transform",
+            transform: "translateZ(0)",
           }}
         />
 
         {/* Orb 4 - Center accent */}
         <div
-          className="absolute h-[40%] w-[40%] rounded-full"
+          className="absolute h-[40%] w-[40%] rounded-full pointer-events-none"
           style={{
             left: "40%",
             top: "30%",
             background: `radial-gradient(circle, ${colors[3] || colors[0]}60 0%, transparent 70%)`,
-            filter: "blur(90px)",
+            filter: "blur(60px)",
             animation: `meshMove4 ${duration4}s ease-in-out infinite`,
+            willChange: "transform",
+            transform: "translateZ(0)",
           }}
         />
       </div>
