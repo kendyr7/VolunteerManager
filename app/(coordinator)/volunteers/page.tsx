@@ -99,7 +99,8 @@ function HighlightText({ text, term }: { text: string; term: string }) {
 
 export default function VolunteersPage() {
   const supabase = createClient();
-  const { searchTerm, setSearchTerm } = useSearch();
+  const [inputValue, setInputValue] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
@@ -318,10 +319,10 @@ export default function VolunteersPage() {
           if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
             gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
           }
-          if (s.checked_in) {
+          if (s.checked_in || s.checked_in_at || s.checked_out || s.checked_out_at) {
             cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
           }
-          if (s.checked_out) {
+          if (s.checked_out || s.checked_out_at) {
             coMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
           }
         }
@@ -625,14 +626,16 @@ export default function VolunteersPage() {
       if (!matchesStatus) return false;
 
       // 3. User search and dynamic filters
-      const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+      const searchTerms = appliedSearch.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
       const normName = normalizeSearch(v.name);
+      const normPhone = v.phone || '';
       const normCommittee = normalizeSearch(v.committee);
       const normStake = normalizeSearch(v.stake);
       const normWard = normalizeSearch(v.ward);
 
       const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
         normName.includes(term) ||
+        normPhone.includes(appliedSearch) ||
         normCommittee.includes(term) ||
         normStake.includes(term) ||
         normWard.includes(term)
@@ -645,7 +648,7 @@ export default function VolunteersPage() {
       return matchesSearch && matchesCommittee && matchesStake && matchesWard;
     });
     return result;
-  }, [augmentedVolunteers, searchTerm, selectedCommittees, selectedStakes, selectedWards, showArchived, currentRole, currentCommittee]);
+  }, [augmentedVolunteers, appliedSearch, selectedCommittees, selectedStakes, selectedWards, showArchived, currentRole, currentCommittee]);
 
   const { activeCount, archivedCount } = useMemo(() => {
     const baseList = augmentedVolunteers.filter(v => {
@@ -670,7 +673,7 @@ export default function VolunteersPage() {
   }, [filteredVolunteers]);
   const sortedLetters = Object.keys(groupedVolunteers).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
 
-  const handleEditClick = (vol: VolunteerType) => {
+  const handleEditClick = (vol: VolunteerType, startInEditMode = false) => {
     setEditingVolunteer(vol);
     setIsSheetOpen(true);
     setIsEditingShifts(false);
@@ -678,6 +681,12 @@ export default function VolunteersPage() {
 
     const volShifts = globalShifts[vol.id] || Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
     setShiftsByDay(volShifts);
+
+    if (startInEditMode) {
+      handleStartEditProfile(vol);
+    } else {
+      setDrawerMode('view');
+    }
   };
 
   if (loading) {
@@ -736,31 +745,59 @@ export default function VolunteersPage() {
         </motion.div>
 
         {/* Search Input and Controls Row */}
-        <motion.div variants={itemVariants} className="w-full flex items-center gap-2.5 relative z-10">
-          <div className="relative flex-1 min-w-0">
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+        <motion.div variants={itemVariants} className="w-full relative z-10 flex items-center gap-2.5">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (appliedSearch && inputValue === appliedSearch) {
+                setInputValue('');
+                setAppliedSearch('');
+              } else if (inputValue.trim()) {
+                setAppliedSearch(inputValue.trim());
+              }
+            }}
+            className="relative flex-1 min-w-0 flex items-center"
+          >
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
               <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
             </div>
             <input
               type="text"
-              placeholder="Buscar voluntarios por nombre, estaca o barrio..."
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar voluntarios por nombre, teléfono, estaca o barrio..."
+              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-32 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               autoComplete="off"
             />
-            {searchTerm.trim() !== '' && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-black/40 hover:text-black dark:text-white/60 dark:hover:text-white transition-colors"
-              >
-                <span className="material-symbols-outlined text-[18px]">close</span>
-              </button>
-            )}
-          </div>
+            <div className="absolute inset-y-0 right-1.5 flex items-center z-10">
+              {appliedSearch !== '' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputValue('');
+                    setAppliedSearch('');
+                  }}
+                  className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                  <span>Limpiar</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!inputValue.trim()}
+                  className="h-9 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:opacity-40 text-white rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-md shadow-blue-500/20"
+                >
+                  <span className="material-symbols-outlined text-[16px]">search</span>
+                  <span>Buscar</span>
+                </button>
+              )}
+            </div>
+          </form>
 
           {/* Añadir button next to search bar with matching height */}
           <Button
+            type="button"
             onClick={() => setIsAddSheetOpen(true)}
             className="flex bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-4 sm:px-5 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
           >
@@ -800,7 +837,7 @@ export default function VolunteersPage() {
                         >
                           <td className="px-5 py-4 w-full">
                             <p className={USER_TABLE_STYLES.name}>
-                              <HighlightText text={vol.name} term={searchTerm} />
+                              <HighlightText text={vol.name} term={appliedSearch} />
                             </p>
                           </td>
                           <td className="px-3 py-4 text-center font-inter font-bold text-[13px] text-text-dim w-px whitespace-nowrap">{vol.ward}</td>
@@ -832,7 +869,7 @@ export default function VolunteersPage() {
                                 size="icon"
                                 className="h-8 w-8 text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90"
                                 title="Editar Perfil"
-                                onClick={(e) => { e.stopPropagation(); handleEditClick(vol); }}
+                                onClick={(e) => { e.stopPropagation(); handleEditClick(vol, true); }}
                               >
                                 <span className="material-symbols-outlined text-[18px]">edit</span>
                               </Button>
@@ -885,8 +922,8 @@ export default function VolunteersPage() {
                       <SwipeableMobileCard
                         name={vol.name}
                         phone={vol.phone}
-                        searchTerm={searchTerm}
-                        onEdit={() => handleEditClick(vol)}
+                        searchTerm={appliedSearch}
+                        onEdit={() => handleEditClick(vol, true)}
 
                         onSwipeRight={() => handleResetPin(vol)}
                         swipeRightIcon="lock_reset"

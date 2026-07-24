@@ -108,7 +108,8 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<PlatformUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
-  const { searchTerm, setSearchTerm } = useSearch();
+  const [inputValue, setInputValue] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
 
   const [isMobile, setIsMobile] = useState(false);
   const [showPin, setShowPin] = useState(false);
@@ -445,7 +446,7 @@ export default function UsersPage() {
   };
 
   const filteredUsers = useMemo(() => {
-    const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+    const searchTerms = appliedSearch.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
 
     return users.filter(user => {
       // 1. Filter by archived status
@@ -466,7 +467,7 @@ export default function UsersPage() {
         normStatus.includes(term)
       );
     }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [users, searchTerm, showArchived]);
+  }, [users, appliedSearch, showArchived]);
 
   const groupedUsers = useMemo(() => {
     const groups: Record<string, PlatformUser[]> = {};
@@ -527,31 +528,59 @@ export default function UsersPage() {
         </motion.div>
 
         {/* Search Input and Controls Row */}
-        <motion.div variants={itemVariants} className="w-full flex items-center gap-2.5 relative z-10">
-          <div className="relative flex-1 min-w-0">
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+        <motion.div variants={itemVariants} className="w-full relative z-10 flex items-center gap-2.5">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (appliedSearch && inputValue === appliedSearch) {
+                setInputValue('');
+                setAppliedSearch('');
+              } else if (inputValue.trim()) {
+                setAppliedSearch(inputValue.trim());
+              }
+            }}
+            className="relative flex-1 min-w-0 flex items-center"
+          >
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
               <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
             </div>
             <input
               type="text"
               placeholder="Buscar por nombre, teléfono, rol o comité..."
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-32 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               autoComplete="off"
             />
-            {searchTerm.trim() !== '' && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-black/40 hover:text-black dark:text-white/60 dark:hover:text-white transition-colors"
-              >
-                <span className="material-symbols-outlined text-[18px]">close</span>
-              </button>
-            )}
-          </div>
+            <div className="absolute inset-y-0 right-1.5 flex items-center z-10">
+              {appliedSearch !== '' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputValue('');
+                    setAppliedSearch('');
+                  }}
+                  className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                  <span>Limpiar</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!inputValue.trim()}
+                  className="h-9 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:opacity-40 text-white rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-md shadow-blue-500/20"
+                >
+                  <span className="material-symbols-outlined text-[16px]">search</span>
+                  <span>Buscar</span>
+                </button>
+              )}
+            </div>
+          </form>
 
           {/* Añadir button next to search bar with matching height */}
           <Button 
+            type="button"
             onClick={() => setIsInviteOpen(true)}
             className="flex bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-4 sm:px-5 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
           >
@@ -827,7 +856,7 @@ export default function UsersPage() {
                         >
                           <td className="px-5 py-4">
                             <p className={USER_TABLE_STYLES.name}>
-                              <HighlightText text={user.name} term={searchTerm} />
+                              <HighlightText text={user.name} term={appliedSearch} />
                             </p>
                           </td>
                           <td className={cn("px-3 py-4", USER_TABLE_STYLES.phone)}>
@@ -903,7 +932,7 @@ export default function UsersPage() {
                       <SwipeableMobileCard 
                         name={user.name}
                         phone={user.phone}
-                        searchTerm={searchTerm}
+                        searchTerm={appliedSearch}
                         onEdit={() => handleEditClick(user)}
                         
                         onSwipeRight={() => handleResetPin(user)}

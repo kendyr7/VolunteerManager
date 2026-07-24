@@ -158,7 +158,8 @@ export default function ShiftsPage() {
   }));
 
   // Estados de filtros
-  const { searchTerm, setSearchTerm } = useSearch();
+  const [inputValue, setInputValue] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
@@ -509,6 +510,8 @@ export default function ShiftsPage() {
     });
   };
 
+  const canEditShifts = () => currentRole === 'Admin' || currentRole === 'Editor';
+
   const handleStartEditProfile = (vol: VolunteerType) => {
     const parts = (vol.name || '').trim().split(/\s+/);
     const fn = (vol as any).first_name || (parts.length >= 2 ? parts.slice(0, Math.ceil(parts.length / 2)).join(' ') : parts[0] || '');
@@ -680,7 +683,7 @@ export default function ShiftsPage() {
       const userCommittee = localStorage.getItem('mock_committee');
       if (currentRole === 'Editor' && v.committee !== userCommittee) return false;
 
-      const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+      const searchTerms = appliedSearch.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
       const normName = normalizeSearch(v.name);
       const normCommittee = normalizeSearch(v.committee);
       const normStake = normalizeSearch(v.stake);
@@ -699,7 +702,7 @@ export default function ShiftsPage() {
 
       return matchesSearch && matchesCommittee && matchesStake && matchesWard;
     });
-  }, [volunteers, searchTerm, selectedCommittees, selectedStakes, selectedWards, currentRole]);
+  }, [volunteers, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole]);
 
   const totalActiveCount = useMemo(() => {
     return rawShiftsData.filter(s => s.checked_in && !s.checked_out).length;
@@ -739,14 +742,16 @@ export default function ShiftsPage() {
       const userCommittee = localStorage.getItem('mock_committee');
       if (currentRole === 'Editor' && v.committee !== userCommittee) return false;
 
-      const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+      const searchTerms = appliedSearch.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
       const normName = normalizeSearch(v.name);
+      const normPhone = v.phone || '';
       const normCommittee = normalizeSearch(v.committee);
       const normStake = normalizeSearch(v.stake);
       const normWard = normalizeSearch(v.ward);
 
       const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
         normName.includes(term) ||
+        normPhone.includes(appliedSearch) ||
         normCommittee.includes(term) ||
         normStake.includes(term) ||
         normWard.includes(term)
@@ -758,7 +763,7 @@ export default function ShiftsPage() {
 
       return matchesSearch && matchesCommittee && matchesStake && matchesWard;
     });
-  }, [rawShiftsData, volunteers, currentRole, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
+  }, [rawShiftsData, volunteers, currentRole, appliedSearch, selectedCommittees, selectedStakes, selectedWards]);
 
   const handleConfirmCheckout = async () => {
     if (!checkoutModal.item) return;
@@ -777,6 +782,7 @@ export default function ShiftsPage() {
       await checkOutVolunteer(item.shiftId);
     } else if (volId && dayKey && shiftKey) {
       try {
+        const nowIso = new Date().toISOString();
         await supabase
           .from('shifts')
           .upsert({
@@ -785,7 +791,7 @@ export default function ShiftsPage() {
             shift_key: shiftKey,
             checked_in: true,
             checked_out: true,
-            checked_out_at: new Date().toISOString()
+            checked_out_at: nowIso
           }, { onConflict: 'volunteer_id,day_key,shift_key' });
       } catch (e) {
         console.error("Supabase upsert shift error:", e);
@@ -820,7 +826,13 @@ export default function ShiftsPage() {
     const end = new Date(endIso).getTime();
     if (isNaN(start) || isNaN(end)) return null;
     const diffMs = Math.max(0, end - start);
-    const totalMins = Math.floor(diffMs / (1000 * 60));
+    let totalMins = Math.floor(diffMs / (1000 * 60));
+
+    // Si la diferencia supera 16 horas (ej. marcas de prueba completadas días después), utilizar la duración de 4 horas por defecto
+    if (totalMins > 960) {
+      totalMins = 240;
+    }
+
     const hours = Math.floor(totalMins / 60);
     const minutes = totalMins % 60;
     const isOver8Hours = hours > 8 || (hours === 8 && minutes > 0);
@@ -962,7 +974,7 @@ export default function ShiftsPage() {
     };
     const totalVolsOnDay = (['T1', 'T2', 'T3', 'T4'] as const).reduce((acc, t) => acc + shiftData[t].length, 0);
 
-    const isFiltering = searchTerm.trim() !== '' || selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0;
+    const isFiltering = appliedSearch.trim() !== '' || selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0;
 
     if (totalVolsOnDay === 0) {
       return null;
@@ -1126,7 +1138,7 @@ export default function ShiftsPage() {
                                         <span className={`font-inter font-bold text-[12px] truncate group-hover:text-[#4d7cfe] transition-colors ${
                                           isCheckedOut ? 'text-gray-400 dark:text-gray-400 font-bold' : isCheckedIn ? 'text-emerald-400 font-extrabold' : 'text-text'
                                         }`}>
-                                          <HighlightText text={vol.name} term={searchTerm} />
+                                          <HighlightText text={vol.name} term={appliedSearch} />
                                         </span>
                                         {isCheckedOut ? (
                                           <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOver8Hours ? 'text-red-400 font-extrabold' : 'text-gray-400 dark:text-gray-500'}`}>
@@ -1361,7 +1373,7 @@ export default function ShiftsPage() {
                                 <p className="text-[11px] text-white/40 italic py-1.5 text-center">Sin asignaciones</p>
                               ) : (
                                 (isShiftExpanded ? vols : vols.slice(0, limit)).map(vol => {
-                                  const isMatch = searchTerm.trim() !== '' && vol.name.toLowerCase().includes(searchTerm.toLowerCase());
+                                  const isMatch = appliedSearch.trim() !== '' && vol.name.toLowerCase().includes(appliedSearch.toLowerCase());
                                   const shiftRecord = rawShiftsData.find(s => s.volunteer_id === vol.id && s.day_key === key && s.shift_key === t);
                                   const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
                                   const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
@@ -1392,7 +1404,7 @@ export default function ShiftsPage() {
                                           <span className={`font-inter font-bold text-[12px] truncate ${
                                             isCheckedOut ? 'text-gray-400 font-bold' : isCheckedIn ? 'text-emerald-300 font-extrabold' : 'text-white'
                                           }`}>
-                                            <HighlightText text={vol.name} term={searchTerm} />
+                                            <HighlightText text={vol.name} term={appliedSearch} />
                                           </span>
                                           {isCheckedOut ? (
                                             <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOver8Hours ? 'text-red-400 font-extrabold' : 'text-gray-400 dark:text-gray-400'}`}>
@@ -1550,27 +1562,54 @@ export default function ShiftsPage() {
 
         {/* Search Input matching image */}
         <motion.div variants={itemVariants} className="w-full relative z-10">
-          <div className="relative w-full">
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (appliedSearch && inputValue === appliedSearch) {
+                setInputValue('');
+                setAppliedSearch('');
+              } else if (inputValue.trim()) {
+                setAppliedSearch(inputValue.trim());
+              }
+            }}
+            className="relative w-full flex items-center"
+          >
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
               <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
             </div>
             <input
               type="text"
-              placeholder={viewMode === 'active' ? "Buscar voluntario en turno..." : "Buscar turnos o grupos..."}
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={viewMode === 'active' ? "Buscar voluntario en turno..." : "Buscar por voluntario, grupo o barrio..."}
+              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-32 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               autoComplete="off"
             />
-            {searchTerm.trim() !== '' && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-black/40 hover:text-black dark:text-white/60 dark:hover:text-white transition-colors"
-              >
-                <span className="material-symbols-outlined text-[18px]">close</span>
-              </button>
-            )}
-          </div>
+            <div className="absolute inset-y-0 right-1.5 flex items-center z-10">
+              {appliedSearch !== '' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputValue('');
+                    setAppliedSearch('');
+                  }}
+                  className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                  <span>Limpiar</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!inputValue.trim()}
+                  className="h-9 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:opacity-40 text-white rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-md shadow-blue-500/20"
+                >
+                  <span className="material-symbols-outlined text-[16px]">search</span>
+                  <span>Buscar</span>
+                </button>
+              )}
+            </div>
+          </form>
         </motion.div>
       </div>
 
@@ -1784,12 +1823,192 @@ export default function ShiftsPage() {
                         </Button>
                         <Button
                           variant="outline"
-                          className="h-11 px-1.5 gap-1.5 text-white border-white/25 bg-white/15 hover:bg-white/25 font-bold text-[11px] sm:text-xs rounded-xl shadow-md active:scale-95 transition-all truncate"
+                          className="h-11 px-1.5 gap-1.5 text-white border-white/25 bg-white/15 hover:bg-white/25 font-bold text-[11px] sm:text-xs rounded-md active:scale-95 transition-all truncate"
                           onClick={() => handleStartEditProfile(editingVolunteer)}
                         >
                           <span className="material-symbols-outlined text-[17px] shrink-0">edit_square</span>
                           <span>EDITAR</span>
                         </Button>
+                      </div>
+                    </div>
+
+                    {/* Squad/Schedule / Day Cards List */}
+                    <div className="w-full">
+                      <div className="flex items-center justify-between px-2 mb-4">
+                        <div className="flex items-center gap-2 relative">
+                          <p className="text-drawer-label text-white">Cronograma</p>
+                          
+                          {/* Helper Icon & Legend Popover */}
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setShowLegend(prev => !prev)}
+                              className="text-white/60 hover:text-white transition-colors p-0.5 rounded-full flex items-center justify-center focus:outline-none"
+                              title="Ver leyenda del cronograma"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">help_outline</span>
+                            </button>
+
+                            {showLegend && (
+                              <div className="absolute left-0 top-6 z-50 w-60 bg-[#0f172a] border border-white/20 rounded-xl p-3.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+                                <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10">
+                                  <span className="text-xs font-bold text-white font-inter">Leyenda del Cronograma</span>
+                                  <button onClick={() => setShowLegend(false)} className="text-white/50 hover:text-white flex items-center justify-center">
+                                    <span className="material-symbols-outlined text-[14px]">close</span>
+                                  </button>
+                                </div>
+                                <div className="space-y-2 text-[11px] font-inter">
+                                  <div className="flex items-center gap-2.5">
+                                    <span className="w-6 h-6 rounded-lg bg-[#4d7cfe]/20 border border-[#4d7cfe]/40 text-[#4d7cfe] flex items-center justify-center shrink-0">
+                                      <span className="material-symbols-outlined text-[13px]">check</span>
+                                    </span>
+                                    <div>
+                                      <p className="text-white font-bold leading-tight">Programado</p>
+                                      <p className="text-white/60 text-[10px]">Turno asignado</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2.5">
+                                    <span className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shrink-0">
+                                      <span className="material-symbols-outlined text-[13px]">check</span>
+                                    </span>
+                                    <div>
+                                      <p className="text-emerald-400 font-bold leading-tight">Entrada</p>
+                                      <p className="text-white/60 text-[10px]">Turno registrado con QR</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2.5">
+                                    <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center shrink-0">
+                                      <span className="material-symbols-outlined text-[13px]">check</span>
+                                    </span>
+                                    <div>
+                                      <p className="text-slate-300 font-bold leading-tight">Salida</p>
+                                      <p className="text-white/60 text-[10px]">Turno completado en el sistema</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2.5">
+                                    <span className="w-6 h-6 rounded-lg bg-white/5 border border-white/10 text-white/30 flex items-center justify-center shrink-0 text-[12px] font-bold">
+                                      -
+                                    </span>
+                                    <div>
+                                      <p className="text-white/50 font-medium leading-tight">Sin Turnos</p>
+                                      <p className="text-white/40 text-[10px]">Disponible / No programado</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          {saved && <span className="text-[11px] text-green-300 font-bold animate-pulse">✓ Listo</span>}
+                          {isEditingShifts ? (
+                            <button onClick={handleSaveShifts} className="h-7 px-4 bg-white hover:bg-white/90 text-black rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
+                              Guardar
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                if (!canEditShifts()) {
+                                  showToast("No tienes permiso para editar turnos", "error");
+                                  return;
+                                }
+                                setIsEditingShifts(true);
+                                setSaved(false);
+                              }}
+                              className={cn(
+                                "h-7 px-4 backdrop-blur-sm border font-bold text-[11px] transition-all rounded-full",
+                                canEditShifts()
+                                  ? "bg-black/20 border-white/10 hover:bg-black/30 text-white active:scale-[0.97]"
+                                  : "bg-white/5 border-white/5 text-white/40 cursor-not-allowed"
+                              )}
+                              title={canEditShifts() ? "Editar turnos" : "Permiso deshabilitado por el administrador"}
+                            >
+                              Editar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Shifts Content as Day Cards */}
+                      <div className="flex flex-col gap-2 pb-12">
+                        {EVENT_DAYS.map((d, index) => {
+                          const dayShifts = shiftsByDay[d.key] || [];
+                          const bgColors = [
+                            'bg-[#10a562]',
+                            'bg-[#4aa9df]',
+                            'bg-[#f1c130]',
+                            'bg-[#d54134]',
+                            'bg-[#981e32]',
+                            'bg-[#2c44c2]',
+                            'bg-[#f1c130]',
+                            'bg-[#ed1b24]'
+                          ];
+                          const cardBg = bgColors[index % bgColors.length];
+
+                          return (
+                            <div key={d.key} className={`rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01] bg-white/5 border border-white/10 flex`}>
+                              {/* Etiqueta de color lateral estructural */}
+                              <div className={`w-3 shrink-0 ${cardBg} opacity-90`} />
+                              
+                              <div className="flex-1 flex items-center justify-between px-5 sm:px-6 py-4">
+                                {/* Left: Date */}
+                                <div className="flex-1 min-w-0 pr-4 flex items-center">
+                                  <p className="font-inter font-bold text-white text-[13px] truncate capitalize">
+                                    {d.label} {d.dateNum}
+                                  </p>
+                                </div>
+
+                                {/* Right: 4 Columns (T1 to T4) */}
+                                <div className="flex items-center shrink-0 ml-auto gap-1">
+                                  {(['T1', 'T2', 'T3', 'T4'] as const).map((t) => {
+                                    const active = dayShifts.includes(t);
+                                    const isCheckedIn = checkedInMap[`${editingVolunteer.id}-${d.key}-${t}`];
+                                    const isCheckedOut = checkedOutMap[`${editingVolunteer.id}-${d.key}-${t}`];
+
+                                    let statusStyle = "bg-white/[0.03] border-white/10 text-white/30";
+                                    let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-white/30">-</span>;
+                                    let labelColor = "text-white/40";
+
+                                    if (isCheckedOut) {
+                                      statusStyle = "bg-slate-800/80 border-slate-700/60 text-slate-300 shadow-sm";
+                                      iconContent = <span className="material-symbols-outlined text-[15px] text-slate-400">check</span>;
+                                      labelColor = "text-slate-400 font-bold";
+                                    } else if (isCheckedIn) {
+                                      statusStyle = "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 shadow-sm";
+                                      iconContent = <span className="material-symbols-outlined text-[15px] text-emerald-400">check</span>;
+                                      labelColor = "text-emerald-400 font-bold";
+                                    } else if (active) {
+                                      statusStyle = "bg-[#4d7cfe]/15 border-[#4d7cfe]/35 text-[#4d7cfe] font-bold shadow-sm";
+                                      iconContent = <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">check</span>;
+                                      labelColor = "text-[#4d7cfe] font-bold";
+                                    }
+
+                                    return (
+                                      <button
+                                        key={t}
+                                        disabled={!isEditingShifts || isCheckedIn || isCheckedOut || !canEditShifts()}
+                                        onClick={() => toggleShift(d.key, t)}
+                                        className={cn(
+                                          "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all",
+                                          statusStyle,
+                                          isEditingShifts && !isCheckedIn && !isCheckedOut && canEditShifts() && "hover:bg-white/10 hover:border-white/20 cursor-pointer active:scale-95"
+                                        )}
+                                      >
+                                        <div className="h-4 flex items-center justify-center">
+                                          {iconContent}
+                                        </div>
+                                        <span className={cn("font-inter text-[10px] uppercase tracking-wider mt-0.5", labelColor)}>
+                                          {t}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </motion.div>

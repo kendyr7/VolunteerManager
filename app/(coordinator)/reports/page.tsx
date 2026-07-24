@@ -1,20 +1,22 @@
 'use client'
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useMemo, useDeferredValue } from "react";
 import { getReportsData, ReportItem, ReportsData, AttendanceSummary } from "@/app/actions/reports";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { 
-  DropdownMenu, 
-  DropdownMenuTrigger, 
-  DropdownMenuContent, 
-  DropdownMenuCheckboxItem 
-} from "@/components/ui/dropdown-menu";
+  Select, 
+  SelectTrigger, 
+  SelectValue, 
+  SelectContent, 
+  SelectItem 
+} from "@/components/ui/select";
 import { motion, AnimatePresence } from "framer-motion";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn } from "@/lib/utils";
+import { getActiveEventDays, formatDateShort } from "@/lib/dates";
 
 // Day names for week headers
 const DAY_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -64,14 +66,25 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<'history' | 'volunteers'>('history');
 
   // Filters State (Multi-Selection arrays)
-  const [searchTerm, setSearchTerm] = useState("");
+  const [inputValue, setInputValue] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+
+  const appliedSearchNormalized = useMemo(() => {
+    if (!appliedSearch.trim()) return '';
+    return appliedSearch.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  }, [appliedSearch]);
+
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedNeighborhoods, setSelectedNeighborhoods] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  // Pagination State (30 items per page for instant 1ms DOM rendering)
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 30;
 
   useEffect(() => {
     const checkMobile = () => {
@@ -81,6 +94,11 @@ export default function ReportsPage() {
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
+
+  // Reset page to 1 whenever filters or search submit
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, selectedCommittees, selectedNeighborhoods, selectedStakes, selectedStatuses, selectedDates, appliedSearch]);
 
   const [isPending, startTransition] = useTransition();
 
@@ -99,6 +117,199 @@ export default function ReportsPage() {
     loadData();
   }, []);
 
+  const items = useMemo(() => data?.items || [], [data?.items]);
+
+  // Compute ALL event days (Sep 10–26, excluding Sundays) matching Turnos page
+  const allEventDays = useMemo(() => {
+    return getActiveEventDays().map(date => {
+      const isoDate = date.toISOString().split('T')[0];
+      const dateNum = date.getDate();
+      const monthShort = date.toLocaleString('es', { month: 'short' });
+      const dayShort = formatDateShort(date).split(' ')[0]; // 'jue', 'vie', etc.
+      return {
+        date,
+        isoDate,
+        dateNum,
+        monthShort,
+        dayShort,
+        key: formatDateShort(date)
+      };
+    });
+  }, []);
+
+  // Map dates with active shift registrations in the dataset
+  const datesWithData = useMemo(() => {
+    if (items.length === 0) return new Set<string>();
+    return new Set(items.map(i => i.date));
+  }, [items]);
+
+  // Memoized Item Filtering with applied search term
+  const filteredItems = useMemo(() => {
+    if (items.length === 0) return [];
+
+    const normSearch = appliedSearchNormalized;
+
+    return items.filter(item => {
+      // 1. Search term (matches name, phone, neighborhood, stake)
+      if (normSearch) {
+        const itemVolName = (item.volunteerName || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const itemPhone = item.phone || '';
+        const itemNeigh = (item.neighborhood || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const itemStake = (item.stake || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+        const matchesName = itemVolName.includes(normSearch);
+        const matchesPhone = itemPhone.includes(appliedSearch);
+        const matchesNeigh = itemNeigh.includes(normSearch);
+        const matchesStake = itemStake.includes(normSearch);
+
+        if (!matchesName && !matchesPhone && !matchesNeigh && !matchesStake) {
+          return false;
+        }
+      }
+      
+      // 2. Committee filter (check both ID and Name)
+      if (selectedCommittees.length > 0) {
+        const matchesComm = selectedCommittees.includes(item.committeeId) || selectedCommittees.includes(item.committeeName);
+        if (!matchesComm) return false;
+      }
+
+      // 3. Neighborhood filter
+      if (selectedNeighborhoods.length > 0) {
+        if (!selectedNeighborhoods.includes(item.neighborhood)) return false;
+      }
+
+      // 4. Stake filter
+      if (selectedStakes.length > 0) {
+        if (!selectedStakes.includes(item.stake)) return false;
+      }
+
+      // 5. Status filter
+      if (selectedStatuses.length > 0) {
+        if (!selectedStatuses.includes(item.status)) return false;
+      }
+
+      // 6. Multi-Date filter
+      if (selectedDates.length > 0) {
+        if (!selectedDates.includes(item.date)) return false;
+      }
+
+      return true;
+    });
+  }, [items, appliedSearchNormalized, appliedSearch, selectedCommittees, selectedNeighborhoods, selectedStakes, selectedStatuses, selectedDates]);
+
+  // Single-pass calculation of KPIs from filtered items
+  const kpiStats = useMemo(() => {
+    let confirmed = 0;
+    let absent = 0;
+    let registered = 0;
+    let replaced = 0;
+    let totalMins = 0;
+
+    for (let i = 0; i < filteredItems.length; i++) {
+      const st = filteredItems[i].status;
+      if (st === 'confirmed') {
+        confirmed++;
+        totalMins += filteredItems[i].durationMinutes;
+      } else if (st === 'absent') {
+        absent++;
+      } else if (st === 'registered') {
+        registered++;
+      } else if (st === 'replaced') {
+        replaced++;
+      }
+    }
+
+    const total = filteredItems.length;
+    const completedOrAbsent = confirmed + absent;
+    const attRate = completedOrAbsent > 0 
+      ? Math.round((confirmed / completedOrAbsent) * 100) 
+      : (total > 0 ? Math.round((confirmed / total) * 100) : 0);
+
+    return {
+      totalShifts: total,
+      confirmedShifts: confirmed,
+      absentShifts: absent,
+      pendingShifts: registered,
+      replacedShifts: replaced,
+      totalMinutes: totalMins,
+      attendanceRate: attRate
+    };
+  }, [filteredItems]);
+
+  const { totalShifts, confirmedShifts, absentShifts, pendingShifts, totalMinutes, attendanceRate } = kpiStats;
+
+  const summary = data?.attendanceSummary;
+  const globalAttendanceRate = summary?.attendanceRate ?? attendanceRate;
+  const globalCoverageRate = summary?.coverageRate ?? 0;
+
+  // Memoized volunteer summary ranking calculation
+  const volunteerRanking = useMemo(() => {
+    if (filteredItems.length === 0) return [];
+
+    const volunteerMap = new Map<string, {
+      id: string;
+      name: string;
+      phone: string;
+      neighborhood: string;
+      stake: string;
+      committee: string;
+      totalShifts: number;
+      confirmed: number;
+      absent: number;
+      reliability: number;
+      minutes: number;
+    }>();
+
+    for (let i = 0; i < filteredItems.length; i++) {
+      const item = filteredItems[i];
+      let v = volunteerMap.get(item.volunteerId);
+      if (!v) {
+        v = {
+          id: item.volunteerId,
+          name: item.volunteerName,
+          phone: item.phone,
+          neighborhood: item.neighborhood,
+          stake: item.stake,
+          committee: item.committeeName,
+          totalShifts: 0,
+          confirmed: 0,
+          absent: 0,
+          reliability: 100,
+          minutes: 0
+        };
+        volunteerMap.set(item.volunteerId, v);
+      }
+
+      v.totalShifts += 1;
+      if (item.status === 'confirmed') {
+        v.confirmed += 1;
+        v.minutes += item.durationMinutes;
+      } else if (item.status === 'absent') {
+        v.absent += 1;
+      }
+    }
+
+    return Array.from(volunteerMap.values()).map(v => {
+      const totalCount = v.confirmed + v.absent;
+      v.reliability = totalCount > 0 ? Math.round((v.confirmed / totalCount) * 100) : 100;
+      return v;
+    }).sort((a, b) => b.minutes - a.minutes);
+  }, [filteredItems]);
+
+  const totalPagesHistory = Math.ceil(filteredItems.length / pageSize) || 1;
+  const totalPagesVolunteers = Math.ceil(volunteerRanking.length / pageSize) || 1;
+  const currentTotalPages = activeTab === 'history' ? totalPagesHistory : totalPagesVolunteers;
+
+  const paginatedHistoryItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredItems.slice(start, start + pageSize);
+  }, [filteredItems, currentPage, pageSize]);
+
+  const paginatedVolunteerItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return volunteerRanking.slice(start, start + pageSize);
+  }, [volunteerRanking, currentPage, pageSize]);
+
   if (loading) {
     return (
       <div className="absolute inset-0 flex items-center justify-center z-50">
@@ -116,122 +327,6 @@ export default function ReportsPage() {
       </div>
     );
   }
-
-  const items = data?.items || [];
-
-  // Compute all unique dates that exist in the dataset
-  const availableDates = Array.from(new Set(items.map(i => i.date))).sort();
-
-  // Build the week calendar dynamically around the available dates
-  // Find the earliest and latest date to determine the week span
-  const buildWeekCells = () => {
-    if (availableDates.length === 0) return [];
-    const firstDate = new Date(availableDates[0] + 'T12:00:00');
-    const lastDate = new Date(availableDates[availableDates.length - 1] + 'T12:00:00');
-    
-    // Start from Monday of the first week
-    const startDow = firstDate.getDay(); // 0=Sun,1=Mon...
-    const mondayOffset = startDow === 0 ? -6 : 1 - startDow;
-    const monday = new Date(firstDate);
-    monday.setDate(monday.getDate() + mondayOffset);
-
-    // Generate 7 days (Mon–Sun)
-    const cells: { num: number; date: string | null; month: string }[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(d.getDate() + i);
-      const isoDate = d.toISOString().split('T')[0];
-      const isEvent = availableDates.includes(isoDate);
-      cells.push({
-        num: d.getDate(),
-        date: isEvent ? isoDate : null,
-        month: d.toLocaleString('es', { month: 'short' })
-      });
-    }
-    return cells;
-  };
-
-  const weekCells = buildWeekCells();
-
-  // Utilidad para remover acentos en la búsqueda
-  const normalizeText = (text: string) => 
-    text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
-  // Filter Items
-  const filteredItems = items.filter(item => {
-    const searchNormalized = normalizeText(searchTerm);
-    const matchesSearch = normalizeText(item.volunteerName).includes(searchNormalized) || 
-                          item.phone.includes(searchTerm);
-    
-    // Multi-Selection filtering
-    const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(item.committeeId);
-    const matchesNeighborhood = selectedNeighborhoods.length === 0 || selectedNeighborhoods.includes(item.neighborhood);
-    const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(item.stake);
-    const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
-    const matchesDate = !selectedDate || item.date === selectedDate;
-
-    return matchesSearch && matchesCommittee && matchesNeighborhood && matchesStake && matchesStatus && matchesDate;
-  });
-
-  // Calculate KPIs from filtered items (local) and attendanceSummary from server
-  const summary = data?.attendanceSummary;
-  const totalShifts = filteredItems.length;
-  const confirmedShifts = filteredItems.filter(i => i.status === 'confirmed').length;
-  const absentShifts = filteredItems.filter(i => i.status === 'absent').length;
-  const pendingShifts = filteredItems.filter(i => i.status === 'registered').length;
-  const totalMinutes = filteredItems.reduce((acc, i) => i.status === 'confirmed' ? acc + i.durationMinutes : acc, 0);
-  const attendanceRate = totalShifts > 0 ? Math.round((confirmedShifts / (totalShifts - filteredItems.filter(i => i.status === 'replaced').length || totalShifts)) * 100) : 0;
-  // Global attendance from server summary (not filtered — represents actual event data)
-  const globalAttendanceRate = summary?.attendanceRate ?? attendanceRate;
-  const globalCoverageRate = summary?.coverageRate ?? 0;
-
-  // Process volunteer summary ranking
-  const volunteerMap = new Map<string, {
-    id: string;
-    name: string;
-    phone: string;
-    neighborhood: string;
-    stake: string;
-    committee: string;
-    totalShifts: number;
-    confirmed: number;
-    absent: number;
-    reliability: number;
-    minutes: number;
-  }>();
-
-  filteredItems.forEach(item => {
-    if (!volunteerMap.has(item.volunteerId)) {
-      volunteerMap.set(item.volunteerId, {
-        id: item.volunteerId,
-        name: item.volunteerName,
-        phone: item.phone,
-        neighborhood: item.neighborhood,
-        stake: item.stake,
-        committee: item.committeeName,
-        totalShifts: 0,
-        confirmed: 0,
-        absent: 0,
-        reliability: 100,
-        minutes: 0
-      });
-    }
-
-    const v = volunteerMap.get(item.volunteerId)!;
-    v.totalShifts += 1;
-    if (item.status === 'confirmed') {
-      v.confirmed += 1;
-      v.minutes += item.durationMinutes;
-    } else if (item.status === 'absent') {
-      v.absent += 1;
-    }
-  });
-
-  const volunteerRanking = Array.from(volunteerMap.values()).map(v => {
-    const totalCount = v.confirmed + v.absent;
-    v.reliability = totalCount > 0 ? Math.round((v.confirmed / totalCount) * 100) : 100;
-    return v;
-  }).sort((a, b) => b.minutes - a.minutes);
 
   // CSV Export
   const handleExportCSV = () => {
@@ -287,12 +382,14 @@ export default function ReportsPage() {
   };
 
   const clearFilters = () => {
-    setSearchTerm("");
+    setInputValue("");
+    setAppliedSearch("");
     setSelectedCommittees([]);
     setSelectedNeighborhoods([]);
     setSelectedStakes([]);
     setSelectedStatuses([]);
-    setSelectedDate("");
+    setSelectedDates([]);
+    setCurrentPage(1);
   };
 
   // Helper toggle functions for multi-select
@@ -320,6 +417,12 @@ export default function ReportsPage() {
     );
   };
 
+  const toggleDate = (isoDate: string) => {
+    setSelectedDates(prev =>
+      prev.includes(isoDate) ? prev.filter(d => d !== isoDate) : [...prev, isoDate]
+    );
+  };
+
   const STATUS_LABELS: Record<string, string> = {
     'confirmed': 'Asistió',
     'registered': 'Pendiente',
@@ -329,185 +432,163 @@ export default function ReportsPage() {
 
   const renderFilterControls = () => (
     <div className="space-y-5">
-      {/* Committee Multi-Select Dropdown */}
-      {data?.uniqueCommittees && data.uniqueCommittees.length > 1 && (
+      {/* Committee Select using Shadcn Select */}
+      {data?.uniqueCommittees && data.uniqueCommittees.length > 0 && (
         <div>
           <label className="text-[10px] font-inter font-bold uppercase text-text-dim mb-2 block">Comité</label>
-          <DropdownMenu>
-            <DropdownMenuTrigger className="w-full h-10 bg-dark border border-white/10 text-xs text-white flex items-center justify-between rounded-xl px-3 font-normal font-inter hover:bg-dark3 hover:border-white/20 transition-all outline-none">
-              <span className="truncate">
-                {selectedCommittees.length === 0 ? "Todos" :
-                 selectedCommittees.length === 1 ? data.uniqueCommittees.find(c => c.id === selectedCommittees[0])?.name :
-                 `${selectedCommittees.length} comités`}
-              </span>
-              <span className="material-symbols-outlined text-[16px] text-text-dim">expand_more</span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-[#0b101b] border-white/10 text-white font-inter text-xs w-64 max-h-60 overflow-y-auto z-[150]">
+          <Select
+            value={selectedCommittees[0] || ""}
+            onValueChange={(val) => {
+              setSelectedCommittees(val ? [val] : []);
+            }}
+          >
+            <SelectTrigger className="w-full h-11 bg-dark border-white/10 text-xs text-white rounded-xl px-3 font-medium font-inter hover:border-white/20 transition-all outline-none">
+              <SelectValue placeholder="Todos los comités" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#0b101b] border-white/10 text-white font-inter text-xs z-[200]">
+              <SelectItem value="">Todos los comités</SelectItem>
               {data.uniqueCommittees.map(c => (
-                <DropdownMenuCheckboxItem
-                  key={c.id}
-                  checked={selectedCommittees.includes(c.id)}
-                  onCheckedChange={() => toggleCommittee(c.id)}
-                  closeOnClick={false}
-                  className="focus:bg-white/5 focus:text-white cursor-pointer"
-                >
+                <SelectItem key={c.id} value={c.id}>
                   {c.name}
-                </DropdownMenuCheckboxItem>
+                </SelectItem>
               ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </SelectContent>
+          </Select>
         </div>
       )}
 
-      {/* Stake Multi-Select Dropdown */}
+      {/* Stake Select using Shadcn Select */}
       {data?.uniqueStakes && data.uniqueStakes.length > 0 && (
         <div>
           <label className="text-[10px] font-inter font-bold uppercase text-text-dim mb-2 block">Estaca</label>
-          <DropdownMenu>
-            <DropdownMenuTrigger className="w-full h-10 bg-dark border border-white/10 text-xs text-white flex items-center justify-between rounded-xl px-3 font-normal font-inter hover:bg-dark3 hover:border-white/20 transition-all outline-none">
-              <span className="truncate">
-                {selectedStakes.length === 0 ? "Todas" :
-                 selectedStakes.length === 1 ? selectedStakes[0] :
-                 `${selectedStakes.length} estacas`}
-              </span>
-              <span className="material-symbols-outlined text-[16px] text-text-dim">expand_more</span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-[#0b101b] border-white/10 text-white font-inter text-xs w-64 max-h-60 overflow-y-auto z-[150]">
+          <Select
+            value={selectedStakes[0] || ""}
+            onValueChange={(val) => {
+              setSelectedStakes(val ? [val] : []);
+            }}
+          >
+            <SelectTrigger className="w-full h-11 bg-dark border-white/10 text-xs text-white rounded-xl px-3 font-medium font-inter hover:border-white/20 transition-all outline-none">
+              <SelectValue placeholder="Todas las estacas" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#0b101b] border-white/10 text-white font-inter text-xs z-[200]">
+              <SelectItem value="">Todas las estacas</SelectItem>
               {data.uniqueStakes.map(s => (
-                <DropdownMenuCheckboxItem
-                  key={s}
-                  checked={selectedStakes.includes(s)}
-                  onCheckedChange={() => toggleStake(s)}
-                  closeOnClick={false}
-                  className="focus:bg-white/5 focus:text-white cursor-pointer"
-                >
+                <SelectItem key={s} value={s}>
                   {s}
-                </DropdownMenuCheckboxItem>
+                </SelectItem>
               ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </SelectContent>
+          </Select>
         </div>
       )}
 
-      {/* Neighborhood Multi-Select Dropdown */}
+      {/* Neighborhood Select using Shadcn Select */}
       {data?.uniqueNeighborhoods && data.uniqueNeighborhoods.length > 0 && (
         <div>
-          <label className="text-[10px] font-inter font-bold uppercase text-text-dim mb-2 block">Barrio</label>
-          <DropdownMenu>
-            <DropdownMenuTrigger className="w-full h-10 bg-dark border border-white/10 text-xs text-white flex items-center justify-between rounded-xl px-3 font-normal font-inter hover:bg-dark3 hover:border-white/20 transition-all outline-none">
-              <span className="truncate">
-                {selectedNeighborhoods.length === 0 ? "Todos" :
-                 selectedNeighborhoods.length === 1 ? selectedNeighborhoods[0] :
-                 `${selectedNeighborhoods.length} barrios`}
-              </span>
-              <span className="material-symbols-outlined text-[16px] text-text-dim">expand_more</span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-[#0b101b] border-white/10 text-white font-inter text-xs w-64 max-h-60 overflow-y-auto z-[150]">
+          <label className="text-[10px] font-inter font-bold uppercase text-text-dim mb-2 block">Barrio / Colonia</label>
+          <Select
+            value={selectedNeighborhoods[0] || ""}
+            onValueChange={(val) => {
+              setSelectedNeighborhoods(val ? [val] : []);
+            }}
+          >
+            <SelectTrigger className="w-full h-11 bg-dark border-white/10 text-xs text-white rounded-xl px-3 font-medium font-inter hover:border-white/20 transition-all outline-none">
+              <SelectValue placeholder="Todos los barrios" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#0b101b] border-white/10 text-white font-inter text-xs z-[200]">
+              <SelectItem value="">Todos los barrios</SelectItem>
               {data.uniqueNeighborhoods.map(n => (
-                <DropdownMenuCheckboxItem
-                  key={n}
-                  checked={selectedNeighborhoods.includes(n)}
-                  onCheckedChange={() => toggleNeighborhood(n)}
-                  closeOnClick={false}
-                  className="focus:bg-white/5 focus:text-white cursor-pointer"
-                >
+                <SelectItem key={n} value={n}>
                   {n}
-                </DropdownMenuCheckboxItem>
+                </SelectItem>
               ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </SelectContent>
+          </Select>
         </div>
       )}
 
-      {/* Status Dropdown */}
+      {/* Status Filter Pills */}
       <div>
-        <label className="text-[10px] font-inter font-bold uppercase text-text-dim mb-2 block">Estado</label>
-        <DropdownMenu>
-          <DropdownMenuTrigger className="w-full h-10 bg-dark border border-white/10 text-xs text-white flex items-center justify-between rounded-xl px-3 font-normal font-inter hover:bg-dark3 hover:border-white/20 transition-all outline-none">
-            <span className="truncate">
-              {selectedStatuses.length === 0 ? "Todos" :
-               selectedStatuses.length === 1 ? STATUS_LABELS[selectedStatuses[0]] :
-               `${selectedStatuses.length} estados`}
-            </span>
-            <span className="material-symbols-outlined text-[16px] text-text-dim">expand_more</span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="bg-[#0b101b] border-white/10 text-white font-inter text-xs w-64 max-h-60 overflow-y-auto z-50">
-            {['confirmed', 'registered', 'absent', 'replaced'].map(status => (
-              <DropdownMenuCheckboxItem
-                key={status}
-                checked={selectedStatuses.includes(status)}
-                onCheckedChange={() => toggleStatus(status)}
-                closeOnClick={false}
-                className="focus:bg-white/5 focus:text-white cursor-pointer"
+        <label className="text-[10px] font-inter font-bold uppercase text-text-dim mb-2 block">Estado del Turno</label>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { id: 'confirmed', label: 'Asistió', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' },
+            { id: 'registered', label: 'Pendiente', color: 'border-blue-500/30 text-blue-400 bg-blue-500/10' },
+            { id: 'absent', label: 'Ausente', color: 'border-rose-500/30 text-rose-400 bg-rose-500/10' },
+            { id: 'replaced', label: 'Reemplazado', color: 'border-white/10 text-text-dim bg-white/5' }
+          ].map(st => {
+            const isSelected = selectedStatuses.includes(st.id);
+            return (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => toggleStatus(st.id)}
+                className={cn(
+                  "py-2.5 px-3 rounded-xl border text-xs font-bold font-inter transition-all flex items-center justify-between cursor-pointer",
+                  isSelected
+                    ? "bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md shadow-blue-500/20"
+                    : `${st.color} hover:border-white/20 active:scale-95`
+                )}
               >
-                {STATUS_LABELS[status]}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                <span>{st.label}</span>
+                {isSelected && <span className="material-symbols-outlined text-[16px]">check</span>}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Mini Calendario Visual – Week Picker */}
+      {/* Mini Calendario Visual – Multi-Date Selector */}
       <div className="mt-3 border-t border-white/5 pt-4">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <label className="text-[10px] font-inter font-bold uppercase text-text-dim block">Fecha del Turno</label>
-            <p className="text-[9px] text-text-dim/50 font-inter mt-0.5">
-              {availableDates.length > 0
-                ? `${availableDates.length} día${availableDates.length !== 1 ? 's' : ''} registrados`
-                : 'Sin turnos'}
+            <label className="text-[10px] font-inter font-bold uppercase text-text-dim block">Calendario del Evento (Selección múltiple)</label>
+            <p className="text-[9px] text-text-dim/60 font-inter mt-0.5">
+              {selectedDates.length === 0
+                ? "Mostrando todas las fechas (Sep 10 – Sep 26)"
+                : `${selectedDates.length} día${selectedDates.length !== 1 ? 's' : ''} seleccionado${selectedDates.length !== 1 ? 's' : ''}`}
             </p>
           </div>
-          {selectedDate && (
+          {selectedDates.length > 0 && (
             <button
-              onClick={() => setSelectedDate("")}
-              className="text-[10px] font-inter font-bold text-text-dim hover:text-white transition-colors flex items-center gap-0.5"
+              type="button"
+              onClick={() => setSelectedDates([])}
+              className="text-[10px] font-inter font-bold text-[#4d7cfe] hover:underline flex items-center gap-0.5 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[12px]">close</span>
-              <span>Limpiar</span>
+              <span>Ver todas</span>
             </button>
           )}
         </div>
 
-        {/* Week Grid */}
-        <div className="grid grid-cols-7 gap-1">
-          {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => (
-            <div key={d} className="text-center text-[9px] font-bold text-text-dim/40 uppercase tracking-wider pb-1">
-              {d}
-            </div>
-          ))}
+        {/* All Event Days Grid */}
+        <div className="grid grid-cols-5 gap-1.5">
+          {allEventDays.map((cell) => {
+            const isSelected = selectedDates.includes(cell.isoDate);
+            const hasData = datesWithData.has(cell.isoDate);
 
-          {weekCells.length === 0 ? (
-            <div className="col-span-7 text-center text-xs text-text-dim py-4 font-inter">Sin fechas disponibles</div>
-          ) : weekCells.map(({ num, date, month }) => {
-            const isEvent = date !== null;
-            const isSelected = isEvent && selectedDate === date;
             return (
               <button
-                key={num}
-                onClick={() => { if (date) setSelectedDate(date); }}
-                disabled={!isEvent}
+                key={cell.isoDate}
+                type="button"
+                onClick={() => toggleDate(cell.isoDate)}
                 className={`
-                  relative flex flex-col items-center justify-center rounded-lg py-2 transition-all duration-150
+                  relative flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-150 font-inter cursor-pointer
                   ${
                     isSelected
                       ? "bg-[#4d7cfe] text-white shadow-lg shadow-blue-500/20 scale-[1.05]"
-                      : isEvent
-                        ? "bg-dark border border-white/10 hover:border-[#4d7cfe]/50 hover:bg-[#4d7cfe]/5 cursor-pointer active:scale-95"
-                        : "opacity-20 cursor-not-allowed"
+                      : "bg-dark border border-white/10 hover:border-[#4d7cfe]/50 hover:bg-[#4d7cfe]/5 active:scale-95"
                   }
                 `}
               >
                 <span className="text-xs font-black leading-none text-white">
-                  {num}
+                  {cell.dateNum}
                 </span>
-                {isEvent && (
-                  <span className={`text-[7px] font-bold mt-0.5 leading-none capitalize ${isSelected ? "text-white/70" : "text-text-dim"}`}>
-                    {month}
-                  </span>
-                )}
-                {isSelected && (
-                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-white/60" />
+                <span className={`text-[8px] font-bold mt-0.5 leading-none capitalize ${isSelected ? "text-white/80" : "text-text-dim"}`}>
+                  {cell.dayShort}
+                </span>
+                {hasData && (
+                  <span className={`absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${isSelected ? "bg-white" : "bg-[#4d7cfe]"}`} />
                 )}
               </button>
             );
@@ -537,7 +618,7 @@ export default function ReportsPage() {
             >
               <span className="material-symbols-outlined text-[16px]">filter_alt</span>
               <span className="hidden sm:inline">Filtros</span>
-              {(selectedCommittees.length > 0 || selectedNeighborhoods.length > 0 || selectedStakes.length > 0 || selectedStatuses.length > 0 || selectedDate) && (
+              {(selectedCommittees.length > 0 || selectedNeighborhoods.length > 0 || selectedStakes.length > 0 || selectedStatuses.length > 0 || selectedDates.length > 0) && (
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#4d7cfe] rounded-full border-2 border-dark"></span>
               )}
             </Button>
@@ -552,30 +633,59 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Search Input matching image */}
-        <div className="w-full relative z-10 max-w-7xl mx-auto">
-          <div className="relative w-full">
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+        {/* Search Input with inline Buscar / Limpiar button */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (appliedSearch && inputValue === appliedSearch) {
+              setInputValue('');
+              setAppliedSearch('');
+            } else if (inputValue.trim()) {
+              setAppliedSearch(inputValue.trim());
+            }
+            setCurrentPage(1);
+          }}
+          className="w-full relative z-10 max-w-7xl mx-auto"
+        >
+          <div className="relative w-full flex items-center">
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
               <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
             </div>
             <input
               type="text"
-              placeholder="Buscar voluntario por nombre o teléfono..."
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar voluntario por nombre, teléfono, barrio o estaca..."
+              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-32 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               autoComplete="off"
             />
-            {searchTerm.trim() !== '' && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-3 flex items-center justify-center w-8 text-black/40 hover:text-black dark:text-white/60 dark:hover:text-white transition-colors"
-              >
-                <span className="material-symbols-outlined text-[18px]">close</span>
-              </button>
-            )}
+            <div className="absolute inset-y-0 right-1.5 flex items-center z-10">
+              {appliedSearch !== '' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputValue('');
+                    setAppliedSearch('');
+                    setCurrentPage(1);
+                  }}
+                  className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                  <span>Limpiar</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!inputValue.trim()}
+                  className="h-9 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:opacity-40 text-white rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-md shadow-blue-500/20"
+                >
+                  <span className="material-symbols-outlined text-[16px]">search</span>
+                  <span>Buscar</span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        </form>
       </div>
 
       <div className="flex-1 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
@@ -705,7 +815,7 @@ export default function ReportsPage() {
                 <p className="text-[11px] text-text-dim font-inter">Personaliza el historial y estadísticas</p>
               </div>
 
-              {(selectedCommittees.length > 0 || selectedNeighborhoods.length > 0 || selectedStakes.length > 0 || selectedStatuses.length > 0 || selectedDate) && (
+              {(selectedCommittees.length > 0 || selectedNeighborhoods.length > 0 || selectedStakes.length > 0 || selectedStatuses.length > 0 || selectedDates.length > 0) && (
                 <button
                   onClick={clearFilters}
                   className="text-xs font-inter font-bold text-red-400 hover:text-red-300 transition-colors flex items-center gap-1 bg-red-500/10 px-3 py-1.5 rounded-full border border-red-500/20 active:scale-95"
@@ -817,7 +927,7 @@ export default function ReportsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
-                        {filteredItems.map((item) => (
+                        {paginatedHistoryItems.map((item) => (
                           <tr key={item.registrationId} className="hover:bg-white/[0.02] transition-colors group">
                             <td className="px-5 py-4">
                               <p className="font-inter font-bold text-white text-sm tracking-tight">{item.volunteerName}</p>
@@ -854,7 +964,7 @@ export default function ReportsPage() {
 
                   {/* Mobile Flat List View (Matches Volunteers layout) */}
                   <div className="block lg:hidden divide-y divide-white/5 bg-dark2">
-                    {filteredItems.map((item) => (
+                    {paginatedHistoryItems.map((item) => (
                       <div key={item.registrationId} className="px-4 py-3.5 flex flex-col gap-1.5 hover:bg-white/[0.02] transition-colors">
                         {/* Line 1: Volunteer Name + Committee & Stake Badges */}
                         <div className="flex items-center justify-between gap-2 w-full">
@@ -910,95 +1020,133 @@ export default function ReportsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
-                        {volunteerRanking.map((v, index) => (
-                          <tr key={v.id} className="hover:bg-white/[0.02] transition-colors group">
-                            <td className="px-5 py-4 flex items-center gap-3">
-                              <span className="font-inter font-bold text-text-dim text-sm w-4 shrink-0">#{index + 1}</span>
-                              <div>
-                                <p className="font-inter font-bold text-white text-sm tracking-tight">{v.name}</p>
-                                <p className="text-[11px] text-text-dim font-inter font-bold mt-0.5">{v.neighborhood} · {v.phone}</p>
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 font-inter">
-                              <p className="font-inter font-bold text-white text-[13px] leading-snug">{v.committee}</p>
-                              <p className="text-[11px] text-text-dim font-inter font-bold opacity-70 mt-0.5">{v.stake}</p>
-                            </td>
-                            <td className="px-4 py-4 text-center font-inter font-bold text-[13px] text-text tabular-nums">
-                              {v.confirmed} / {v.totalShifts}
-                            </td>
-                            <td className="px-4 py-4 text-center">
-                              <div className="flex flex-col items-center gap-1">
-                                <span className={`font-inter font-bold text-[13px] tabular-nums ${
-                                  v.reliability >= 85 ? 'text-emerald-400' :
-                                  v.reliability >= 60 ? 'text-amber-400' : 'text-red-400'
-                                }`}>{v.reliability}%</span>
-                                <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
-                                  <div 
-                                    className={`h-full rounded-full ${
-                                      v.reliability >= 85 ? 'bg-emerald-400' :
-                                      v.reliability >= 60 ? 'bg-amber-400' : 'bg-red-500'
-                                    }`}
-                                    style={{ width: `${v.reliability}%` }}
-                                  />
+                        {paginatedVolunteerItems.map((v, index) => {
+                          const globalRank = (currentPage - 1) * pageSize + index + 1;
+                          return (
+                            <tr key={v.id} className="hover:bg-white/[0.02] transition-colors group">
+                              <td className="px-5 py-4 flex items-center gap-3">
+                                <span className="font-inter font-bold text-text-dim text-sm w-4 shrink-0">#{globalRank}</span>
+                                <div>
+                                  <p className="font-inter font-bold text-white text-sm tracking-tight">{v.name}</p>
+                                  <p className="text-[11px] text-text-dim font-inter font-bold mt-0.5">{v.neighborhood} · {v.phone}</p>
                                 </div>
-                              </div>
-                            </td>
-                            <td className="px-5 py-4 text-right font-inter font-bold text-white text-sm tabular-nums">
-                              {formatMinutes(v.minutes)}
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="px-4 py-4 font-inter">
+                                <p className="font-inter font-bold text-white text-[13px] leading-snug">{v.committee}</p>
+                                <p className="text-[11px] text-text-dim font-inter font-bold opacity-70 mt-0.5">{v.stake}</p>
+                              </td>
+                              <td className="px-4 py-4 text-center font-inter font-bold text-[13px] text-text tabular-nums">
+                                {v.confirmed} / {v.totalShifts}
+                              </td>
+                              <td className="px-4 py-4 text-center">
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className={`font-inter font-bold text-[13px] tabular-nums ${
+                                    v.reliability >= 85 ? 'text-emerald-400' :
+                                    v.reliability >= 60 ? 'text-amber-400' : 'text-red-400'
+                                  }`}>{v.reliability}%</span>
+                                  <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
+                                    <div 
+                                      className={`h-full rounded-full ${
+                                        v.reliability >= 85 ? 'bg-emerald-400' :
+                                        v.reliability >= 60 ? 'bg-amber-400' : 'bg-red-500'
+                                      }`}
+                                      style={{ width: `${v.reliability}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-5 py-4 text-right font-inter font-bold text-white text-sm tabular-nums">
+                                {formatMinutes(v.minutes)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
 
                   {/* Mobile Flat List View for Ranking (Matches Volunteers layout) */}
                   <div className="block lg:hidden divide-y divide-white/5 bg-dark2">
-                    {volunteerRanking.map((v, index) => (
-                      <div key={v.id} className="px-4 py-3.5 flex flex-col gap-1.5 hover:bg-white/[0.02] transition-colors">
-                        {/* Line 1: Rank + Volunteer Name + Committee & Stake Badges */}
-                        <div className="flex items-center justify-between gap-2 w-full">
-                          <div className="flex items-center gap-2 truncate">
-                            <span className="font-inter font-bold text-text-dim text-xs shrink-0">#{index + 1}</span>
-                            <p className="font-inter font-bold text-white text-sm tracking-tight truncate">{v.name}</p>
+                    {paginatedVolunteerItems.map((v, index) => {
+                      const globalRank = (currentPage - 1) * pageSize + index + 1;
+                      return (
+                        <div key={v.id} className="px-4 py-3.5 flex flex-col gap-1.5 hover:bg-white/[0.02] transition-colors">
+                          {/* Line 1: Rank + Volunteer Name + Committee & Stake Badges */}
+                          <div className="flex items-center justify-between gap-2 w-full">
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="font-inter font-bold text-text-dim text-xs shrink-0">#{globalRank}</span>
+                              <p className="font-inter font-bold text-white text-sm tracking-tight truncate">{v.name}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {v.committee && (
+                                <Badge variant="outline" className={`font-inter font-bold text-[10px] py-0.5 px-2 border ${getCommitteeColor(v.committee)}`}>
+                                  {v.committee}
+                                </Badge>
+                              )}
+                              {v.stake && (
+                                <Badge variant="outline" className="font-inter font-bold text-[10px] py-0.5 px-2 border bg-dark3 text-text-dim border-white/10">
+                                  {v.stake}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {v.committee && (
-                              <Badge variant="outline" className={`font-inter font-bold text-[10px] py-0.5 px-2 border ${getCommitteeColor(v.committee)}`}>
-                                {v.committee}
-                              </Badge>
-                            )}
-                            {v.stake && (
-                              <Badge variant="outline" className="font-inter font-bold text-[10px] py-0.5 px-2 border bg-dark3 text-text-dim border-white/10">
-                                {v.stake}
-                              </Badge>
-                            )}
+                          
+                          {/* Line 2: Phone & Turnos on left, Reliability & Total Hours on right */}
+                          <div className="flex items-center justify-between gap-2 w-full text-[11px] font-inter font-bold text-text-dim">
+                            <p className="truncate flex items-center gap-1.5 min-w-0">
+                              <span>{v.phone || 'Sin teléfono'}</span>
+                              <span className="opacity-40">·</span>
+                              <span className="text-white/80">{v.confirmed}/{v.totalShifts} turnos</span>
+                            </p>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`text-[11px] font-inter font-bold ${v.reliability >= 85 ? 'text-emerald-400' : v.reliability >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                                {v.reliability}% fiab.
+                              </span>
+                              <span className="font-inter font-bold text-[#4d7cfe] text-sm tabular-nums">{formatMinutes(v.minutes)}</span>
+                            </div>
                           </div>
                         </div>
-                        
-                        {/* Line 2: Phone & Turnos on left, Reliability & Total Hours on right */}
-                        <div className="flex items-center justify-between gap-2 w-full text-[11px] font-inter font-bold text-text-dim">
-                          <p className="truncate flex items-center gap-1.5 min-w-0">
-                            <span>{v.phone || 'Sin teléfono'}</span>
-                            <span className="opacity-40">·</span>
-                            <span className="text-white/80">{v.confirmed}/{v.totalShifts} turnos</span>
-                          </p>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className={`text-[11px] font-inter font-bold ${v.reliability >= 85 ? 'text-emerald-400' : v.reliability >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
-                              {v.reliability}% fiab.
-                            </span>
-                            <span className="font-inter font-bold text-[#4d7cfe] text-sm tabular-nums">{formatMinutes(v.minutes)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
           )}
-          </div>
+
+          {/* Pagination Controls */}
+          {currentTotalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 mt-6 bg-dark2 border border-white/10 rounded-2xl shadow-lg">
+              <p className="text-xs text-text-dim font-inter font-bold">
+                Página <span className="text-white">{currentPage}</span> de <span className="text-white">{currentTotalPages}</span> (
+                {activeTab === 'history' ? filteredItems.length : volunteerRanking.length} registros)
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  className="h-8 px-3 text-xs font-inter font-bold rounded-xl border-white/10 bg-dark text-white hover:bg-dark3 disabled:opacity-30 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px] mr-1">chevron_left</span>
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= currentTotalPages}
+                  onClick={() => setCurrentPage(p => Math.min(currentTotalPages, p + 1))}
+                  className="h-8 px-3 text-xs font-inter font-bold rounded-xl border-white/10 bg-dark text-white hover:bg-dark3 disabled:opacity-30 cursor-pointer"
+                >
+                  Siguiente
+                  <span className="material-symbols-outlined text-[16px] ml-1">chevron_right</span>
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-    );
+    </div>
+  );
 }
