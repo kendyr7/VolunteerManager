@@ -61,8 +61,8 @@ async function handleReminders(req: NextRequest) {
         phone: formattedTestPhone
       };
 
-      const volName = testVol ? `${testVol.first_name}` : 'Hermano(a)';
-      const commName = (testVol?.committees as any)?.name || (Array.isArray(testVol?.committees) ? (testVol?.committees as any)[0]?.name : 'Asignado');
+      const fullName = testVol ? `${testVol.first_name || ''} ${testVol.last_name || ''}`.trim() || 'Hermano(a)' : 'Hermano(a)';
+      const commName = (testVol?.committees as any)?.name || (Array.isArray(testVol?.committees) ? (testVol?.committees as any)[0]?.name : 'Servicio');
 
       const isHelloWorld = templateName === 'hello_world';
       const apiResult = await sendWhatsAppTemplate({
@@ -73,9 +73,9 @@ async function handleReminders(req: NextRequest) {
           {
             type: 'body',
             parameters: [
-              { type: 'text', text: volName },
+              { type: 'text', text: fullName },
               { type: 'text', text: commName },
-              { type: 'text', text: 'Turno 1 (T1)' },
+              { type: 'text', text: 'Turno 1' },
               { type: 'text', text: targetDayKey }
             ]
           }
@@ -88,7 +88,7 @@ async function handleReminders(req: NextRequest) {
         console.warn("Template failed (may not be approved yet). Trying fallback text message...");
         finalResult = await sendWhatsAppText({
           to: formattedTestPhone,
-          text: `Querido(a) ${volName}, le recordamos su turno de servicio (${commName}) para el ${targetDayKey}. Por favor responde a este mensaje para confirmar tu turno.`
+          text: `Querido(a) hermano(a) ${fullName}, le recordamos su turno de servicio voluntario del comité de ${commName} para el Turno 1 el día ${targetDayKey}.\n\nAgradecemos profundamente su apoyo.`
         });
       }
 
@@ -105,7 +105,7 @@ async function handleReminders(req: NextRequest) {
       }
 
       results.push({
-        volunteer: volName,
+        volunteer: fullName,
         phone: formattedTestPhone,
         mode: 'test',
         result: finalResult
@@ -119,8 +119,9 @@ async function handleReminders(req: NextRequest) {
         if (!vol || !vol.phone) continue;
 
         const recipientPhone = formatE164Phone(vol.phone);
-        const volName = vol.first_name || 'Hermano(a)';
+        const fullName = `${vol.first_name || ''} ${vol.last_name || ''}`.trim() || 'Hermano(a)';
         const commName = (vol?.committees as any)?.name || (Array.isArray(vol?.committees) ? (vol?.committees as any)[0]?.name : 'Servicio');
+        const shiftLabel = `Turno ${shift.shift_key.replace('T', '')}`;
 
         const apiResult = await sendWhatsAppTemplate({
           to: recipientPhone,
@@ -130,9 +131,9 @@ async function handleReminders(req: NextRequest) {
             {
               type: 'body',
               parameters: [
-                { type: 'text', text: volName },
+                { type: 'text', text: fullName },
                 { type: 'text', text: commName },
-                { type: 'text', text: `Turno ${shift.shift_key}` },
+                { type: 'text', text: shiftLabel },
                 { type: 'text', text: shift.day_key }
               ]
             }
@@ -152,7 +153,7 @@ async function handleReminders(req: NextRequest) {
 
         results.push({
           volunteerId: vol.id,
-          volunteerName: volName,
+          volunteerName: fullName,
           phone: recipientPhone,
           result: apiResult
         });
