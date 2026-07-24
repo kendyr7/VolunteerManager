@@ -647,6 +647,17 @@ export default function VolunteersPage() {
     return result;
   }, [augmentedVolunteers, searchTerm, selectedCommittees, selectedStakes, selectedWards, showArchived, currentRole, currentCommittee]);
 
+  const { activeCount, archivedCount } = useMemo(() => {
+    const baseList = augmentedVolunteers.filter(v => {
+      if (currentRole === 'Editor' && v.committee !== currentCommittee) return false;
+      if (currentRole === 'Lector') return false;
+      return true;
+    });
+    const active = baseList.filter(v => v.status !== 'archived').length;
+    const archived = baseList.filter(v => v.status === 'archived').length;
+    return { activeCount: active, archivedCount: archived };
+  }, [augmentedVolunteers, currentRole, currentCommittee]);
+
   const groupedVolunteers = useMemo(() => {
     const groups: Record<string, VolunteerType[]> = {};
     filteredVolunteers.forEach(v => {
@@ -687,32 +698,62 @@ export default function VolunteersPage() {
 
       {/* Sticky Header matching users design */}
       <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto shrink-0">
-        <motion.div variants={itemVariants} className="w-full flex items-center justify-between">
-          <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
+        <motion.div variants={itemVariants} className="w-full flex items-center justify-between gap-3">
+          <h1 className="text-[28px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
             Voluntarios
             <span className="text-xs font-bold text-[#4d7cfe] bg-[#4d7cfe]/10 px-2.5 py-1 rounded-full border border-[#4d7cfe]/20">
               {filteredVolunteers.length}
             </span>
           </h1>
+
+          {/* Mobile: Toggle on top right (matches Turnos page) */}
+          <div className="flex sm:hidden bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowArchived(false)}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
+                !showArchived
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                  : "text-text-dim hover:text-text"
+              )}
+            >
+              Activos
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowArchived(true)}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
+                showArchived
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                  : "text-text-dim hover:text-text"
+              )}
+            >
+              Archivados
+            </button>
+          </div>
+
+          {/* Desktop: Añadir button on top right */}
           <Button
             onClick={() => setIsAddSheetOpen(true)}
-            className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5"
+            className="hidden sm:flex bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-5 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
           >
             <span className="material-symbols-outlined text-[16px]">person_add</span>
             <span>Añadir</span>
           </Button>
         </motion.div>
 
-        {/* Search Input matching users design */}
-        <motion.div variants={itemVariants} className="w-full relative z-10">
-          <div className="relative w-full">
+        {/* Search Input and Controls Row */}
+        <motion.div variants={itemVariants} className="w-full flex items-center gap-2.5 relative z-10">
+          <div className="relative flex-1 min-w-0">
             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
               <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
             </div>
             <input
               type="text"
               placeholder="Buscar voluntarios por nombre, estaca o barrio..."
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
+              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               autoComplete="off"
@@ -725,6 +766,43 @@ export default function VolunteersPage() {
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             )}
+          </div>
+
+          {/* Mobile: Añadir button next to search bar with matching height */}
+          <Button
+            onClick={() => setIsAddSheetOpen(true)}
+            className="flex sm:hidden bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-4 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
+          >
+            <span className="material-symbols-outlined text-[18px]">person_add</span>
+            <span>Añadir</span>
+          </Button>
+
+          {/* Desktop: Toggle Activos / Archivados */}
+          <div className="hidden sm:flex bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowArchived(false)}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
+                !showArchived
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                  : "text-text-dim hover:text-text"
+              )}
+            >
+              Activos
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowArchived(true)}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
+                showArchived
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                  : "text-text-dim hover:text-text"
+              )}
+            >
+              Archivados
+            </button>
           </div>
         </motion.div>
       </div>

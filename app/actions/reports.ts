@@ -132,7 +132,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
       supabase = await createClient();
     }
 
-    // 1. Fetch volunteers (bypassing 1000 row limit)
+    // 1. Fetch all volunteers including archived ones for historical data retention
     const volsData = await fetchAllRows(supabase, 'volunteers', '*, committees(id, name)');
 
     // 2. Fetch shifts (bypassing 1000 row limit)

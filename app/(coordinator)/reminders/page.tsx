@@ -244,18 +244,20 @@ export default function RemindersPage() {
     setCheckedOutMap(coMap);
 
     if (volsData) {
-      const mapped = volsData.map((v: any) => ({
-        id: v.id,
-        name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
-        stake: v.stake || '',
-        ward: v.neighborhood || '',
-        phone: v.phone || '',
-        shifts: sCounts[v.id] || 0,
-        reliability: v.reliability_score || 100,
-        committee: v.committees?.name || 'Sin comité',
-        committee_id: v.committee_id,
-        age: v.age
-      }));
+      const mapped = volsData
+        .filter((v: any) => v.status !== 'archived')
+        .map((v: any) => ({
+          id: v.id,
+          name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+          stake: v.stake || '',
+          ward: v.neighborhood || '',
+          phone: v.phone || '',
+          shifts: sCounts[v.id] || 0,
+          reliability: v.reliability_score || 100,
+          committee: v.committees?.name || 'Sin comité',
+          committee_id: v.committee_id,
+          age: v.age
+        }));
       setVolunteers(mapped);
     }
   };

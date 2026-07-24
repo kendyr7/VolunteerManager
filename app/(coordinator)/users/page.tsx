@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
-import { generateWaMeLink } from "@/lib/whatsapp";
+import { generateWaMeLink, validatePhone8Digits } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { useSearch } from "@/lib/search-context";
@@ -83,6 +84,7 @@ interface PlatformUser {
   role: Role;
   committee?: string;
   status: 'pending' | 'active';
+  isArchived?: boolean;
   inviteLink?: string;
   pin?: string;
 }
@@ -98,7 +100,6 @@ export const USER_TABLE_STYLES = {
 };
 
 
-
 export default function UsersPage() {
   const [users, setUsers] = useState<PlatformUser[]>([]);
   const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
@@ -106,6 +107,7 @@ export default function UsersPage() {
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<PlatformUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
   const { searchTerm, setSearchTerm } = useSearch();
 
   const [isMobile, setIsMobile] = useState(false);
@@ -192,7 +194,7 @@ export default function UsersPage() {
     setLoading(true);
     const supabase = createClient();
     
-    // Fetch users (ignoring archived ones locally to prevent DB schema errors)
+    // Fetch users
     const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
       .select('*, committees(name)')
@@ -208,17 +210,16 @@ export default function UsersPage() {
 
     if (profilesData) {
       setUsers(
-        profilesData
-          .filter(p => p.status !== 'archived')
-          .map(p => ({
-            id: p.id,
-            name: p.full_name,
-            phone: p.phone || '',
-            role: p.role as Role,
-            committee: p.committees?.name,
-            status: p.pin ? 'active' : 'pending',
-            pin: p.pin || ''
-          }))
+        profilesData.map(p => ({
+          id: p.id,
+          name: p.full_name,
+          phone: p.phone || '',
+          role: p.role as Role,
+          committee: p.committees?.name,
+          status: p.pin ? 'active' : 'pending',
+          isArchived: p.status === 'archived',
+          pin: p.pin || ''
+        }))
       );
     }
 
@@ -228,7 +229,6 @@ export default function UsersPage() {
         setNewCommittee(commsData[0].name);
       }
     }
-
     setLoading(false);
   };
 
@@ -236,74 +236,73 @@ export default function UsersPage() {
     loadData();
   }, []);
 
+  const { activeCount, archivedCount } = useMemo(() => {
+    const active = users.filter(u => !u.isArchived).length;
+    const archived = users.filter(u => u.isArchived).length;
+    return { activeCount: active, archivedCount: archived };
+  }, [users]);
+
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
     const parts = newName.trim().split(/\s+/);
     if (parts.length < 2 || !parts[1]) {
-      setErrorMsg("Por favor, introduce el nombre completo (nombre y apellido).");
+      setErrorMsg("Por favor, introduce al menos un nombre y un apellido.");
       return;
     }
 
-    const cleanPhone = newPhone.replace(/[^0-9]/g, '');
-    if (cleanPhone.length !== 8) {
-      setErrorMsg("El teléfono de WhatsApp debe tener exactamente 8 dígitos.");
+    const phoneValidation = validatePhone8Digits(newPhone);
+    if (!phoneValidation.isValid) {
+      setErrorMsg(phoneValidation.error || "El celular debe tener exactamente 8 dígitos.");
       return;
     }
+    const sanitizedPhone = phoneValidation.formatted;
 
     const supabase = createClient();
 
-    let committeeId: string | null = null;
+    let commId: string | null = null;
     if (newRole === 'Editor') {
-      const { data: comm } = await supabase
-        .from('committees')
-        .select('id')
-        .eq('name', newCommittee)
-        .maybeSingle();
-      if (comm) {
-        committeeId = comm.id;
+      const targetComm = committeesList.find(c => c.name === newCommittee);
+      if (targetComm) {
+        commId = targetComm.id;
       }
     }
 
-    const pin = '1234'; // Default PIN assigned
-    const shortCode = Math.random().toString(36).substring(2, 6);
-    const link = `https://app.templomanagua.org/invite/${shortCode}`;
+    const pin = Math.floor(1000 + Math.random() * 9000).toString();
 
-    const { data: inserted, error: insertErr } = await supabase
+    const { data: inserted, error } = await supabase
       .from('profiles')
       .insert({
-        full_name: newName,
-        phone: newPhone,
+        full_name: newName.trim(),
+        phone: sanitizedPhone,
         role: newRole,
-        committee_id: committeeId,
-        pin: pin
+        committee_id: commId,
+        pin
       })
       .select('*, committees(name)')
-      .maybeSingle();
+      .single();
 
-    if (insertErr) {
-      console.error("Error inserting user:", insertErr);
-      setErrorMsg("Error al crear el usuario. Posiblemente el teléfono ya esté registrado.");
+    if (error) {
+      console.error("Error creating user:", error);
+      setErrorMsg("Error al crear usuario. Posiblemente el teléfono ya esté registrado.");
       return;
     }
 
-    if (inserted) {
-      const newUser: PlatformUser = {
-        id: inserted.id,
-        name: inserted.full_name,
-        phone: inserted.phone || '',
-        role: inserted.role as Role,
-        committee: inserted.committees?.name,
-        status: 'active',
-        pin: pin,
-        inviteLink: link
-      };
+    const newUser: PlatformUser = {
+      id: inserted.id,
+      name: inserted.full_name,
+      phone: inserted.phone,
+      role: inserted.role as Role,
+      committee: inserted.committees?.name,
+      status: 'pending',
+      pin: inserted.pin,
+      inviteLink: `http://localhost:3000/login`
+    };
 
-      setGeneratedInvite(newUser);
-      loadData();
-      showToast("Invitación generada");
-    }
+    setGeneratedInvite(newUser);
+    showToast("Usuario añadido exitosamente");
+    loadData();
   };
 
   const handleEditClick = (user: PlatformUser) => {
@@ -311,77 +310,65 @@ export default function UsersPage() {
     setNewName(user.name);
     setNewPhone(user.phone);
     setNewRole(user.role);
-    if (user.committee) {
-      setNewCommittee(user.committee);
-    } else {
-      setNewCommittee(COMMITTEES[0]);
-    }
+    setNewCommittee(user.committee || COMMITTEES[0]);
     setIsEditSheetOpen(true);
   };
 
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
-    
+
     const parts = newName.trim().split(/\s+/);
     if (parts.length < 2 || !parts[1]) {
-      setErrorMsg("Por favor, introduce el nombre completo (nombre y apellido).");
+      showToast("Por favor, introduce al menos un nombre y un apellido.", "error");
       return;
     }
 
-    const cleanPhone = newPhone.replace(/[^0-9]/g, '');
-    if (cleanPhone.length !== 8) {
-      setErrorMsg("El teléfono de WhatsApp debe tener exactamente 8 dígitos.");
+    const phoneValidation = validatePhone8Digits(newPhone);
+    if (!phoneValidation.isValid) {
+      showToast(phoneValidation.error || "El celular debe tener exactamente 8 dígitos.", "error");
       return;
     }
+    const sanitizedPhone = phoneValidation.formatted;
 
     setIsUpdating(true);
-    setErrorMsg(null);
-    const supabase = createClient();
 
-    let committeeId: string | null = null;
+    const supabase = createClient();
+    let commId: string | null = null;
+
     if (newRole === 'Editor') {
-      const { data: comm } = await supabase
-        .from('committees')
-        .select('id')
-        .eq('name', newCommittee)
-        .maybeSingle();
-      if (comm) {
-        committeeId = comm.id;
-      }
+      const targetComm = committeesList.find(c => c.name === newCommittee);
+      if (targetComm) commId = targetComm.id;
     }
 
-    const { error: updateErr } = await supabase
+    const { error } = await supabase
       .from('profiles')
       .update({
-        full_name: newName,
-        phone: newPhone,
+        full_name: newName.trim(),
+        phone: sanitizedPhone,
         role: newRole,
-        committee_id: committeeId
+        committee_id: commId
       })
       .eq('id', editingUser.id);
 
-    if (updateErr) {
-      console.error("Error updating user:", updateErr);
-      setErrorMsg("Error al actualizar el usuario.");
-      setIsUpdating(false);
-      return;
+    if (error) {
+      console.error("Error updating user:", error);
+      showToast("Error al actualizar usuario", "error");
+    } else {
+      showToast("Usuario actualizado correctamente");
+      setIsEditSheetOpen(false);
+      loadData();
     }
-
-    await loadData();
-    setIsEditSheetOpen(false);
-    setEditingUser(null);
     setIsUpdating(false);
-    showToast("Perfil actualizado correctamente");
   };
 
   const handleResetPin = async (user: PlatformUser) => {
     setConfirmModal({
       isOpen: true,
       title: 'Resetear PIN',
-      message: `¿Estás seguro de que deseas resetear el PIN de ${user.name}? Se establecerá el PIN temporal '1234'.`,
-      confirmText: 'Resetear PIN',
-      type: 'primary',
+      message: `¿Estás seguro de resetear el PIN de ${user.name} a '1234'?`,
+      confirmText: 'Resetear',
+      type: 'danger',
       onConfirm: async () => {
         const supabase = createClient();
         const { error } = await supabase
@@ -390,10 +377,9 @@ export default function UsersPage() {
           .eq('id', user.id);
 
         if (error) {
-          console.error("Error resetting PIN:", error);
-          showToast("Error al resetear el PIN", "error");
+          showToast("Error al resetear PIN", "error");
         } else {
-          showToast(`PIN de ${user.name} reseteado a '1234'`, "success");
+          showToast(`PIN de ${user.name} reseteado a '1234'`);
           loadData();
         }
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -402,24 +388,29 @@ export default function UsersPage() {
   };
 
   const handleArchiveUser = async (user: PlatformUser) => {
+    const isArchived = !!user.isArchived;
+    const newStatus = isArchived ? 'active' : 'archived';
+
     setConfirmModal({
       isOpen: true,
-      title: 'Archivar Usuario',
-      message: `¿Estás seguro de que deseas archivar a ${user.name}? Podrás gestionarlo más adelante desde Ajustes.`,
-      confirmText: 'Archivar',
-      type: 'danger',
+      title: isArchived ? 'Desarchivar Usuario' : 'Archivar Usuario',
+      message: isArchived
+        ? `¿Estás seguro de que deseas desarchivar a ${user.name}? Volverá a aparecer en la lista activa.`
+        : `¿Estás seguro de que deseas archivar a ${user.name}? Dejará de aparecer en la lista activa.`,
+      confirmText: isArchived ? 'Desarchivar' : 'Archivar',
+      type: isArchived ? 'primary' : 'danger',
       onConfirm: async () => {
         const supabase = createClient();
         const { error } = await supabase
           .from('profiles')
-          .update({ status: 'archived' })
+          .update({ status: newStatus })
           .eq('id', user.id);
 
         if (error) {
-          console.error("Error archiving user:", error);
-          showToast("Error al archivar el usuario", "error");
+          console.error("Error updating user status:", error);
+          showToast(`Error al ${isArchived ? 'desarchivar' : 'archivar'} el usuario`, "error");
         } else {
-          showToast(`${user.name} archivado correctamente`, "success");
+          showToast(`${user.name} ${isArchived ? 'desarchivado' : 'archivado'} correctamente`, "success");
           loadData();
         }
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -448,19 +439,19 @@ export default function UsersPage() {
     setErrorMsg(null);
   };
 
+  const normalizeSearch = (str: string | undefined | null) => {
+    if (!str) return '';
+    return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  };
+
   const filteredUsers = useMemo(() => {
-    if (!searchTerm.trim()) {
-      return users.sort((a, b) => a.name.localeCompare(b.name));
-    }
-
-    const normalizeSearch = (str: string | undefined | null) => {
-      if (!str) return '';
-      return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    };
-
     const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
 
     return users.filter(user => {
+      // 1. Filter by archived status
+      const matchesStatus = showArchived ? user.isArchived : !user.isArchived;
+      if (!matchesStatus) return false;
+
       const normName = normalizeSearch(user.name);
       const normPhone = normalizeSearch(user.phone);
       const normRole = normalizeSearch(user.role);
@@ -475,7 +466,7 @@ export default function UsersPage() {
         normStatus.includes(term)
       );
     }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [users, searchTerm]);
+  }, [users, searchTerm, showArchived]);
 
   const groupedUsers = useMemo(() => {
     const groups: Record<string, PlatformUser[]> = {};
@@ -496,34 +487,64 @@ export default function UsersPage() {
       animate="visible"
       className="w-full mx-auto pb-32 md:pb-12"
     >
-      {/* Sticky Header matching shifts design */}
+      {/* Sticky Header matching volunteers design */}
       <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto">
-        <motion.div variants={itemVariants} className="w-full flex items-center justify-between">
-          <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
+        <motion.div variants={itemVariants} className="w-full flex items-center justify-between gap-3">
+          <h1 className="text-[28px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
             Usuarios 
             <span className="text-xs font-bold text-[#4d7cfe] bg-[#4d7cfe]/10 px-2.5 py-1 rounded-full border border-[#4d7cfe]/20">
               {filteredUsers.length}
             </span>
           </h1>
+
+          {/* Mobile: Toggle on top right (matches Turnos page) */}
+          <div className="flex sm:hidden bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowArchived(false)}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
+                !showArchived
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                  : "text-text-dim hover:text-text"
+              )}
+            >
+              Activos
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowArchived(true)}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
+                showArchived
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                  : "text-text-dim hover:text-text"
+              )}
+            >
+              Archivados
+            </button>
+          </div>
+
+          {/* Desktop: Invitar button on top right */}
           <Button 
             onClick={() => setIsInviteOpen(true)}
-            className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5"
+            className="hidden sm:flex bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-5 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
           >
             <span className="material-symbols-outlined text-[16px]">person_add</span>
             <span>Invitar</span>
           </Button>
         </motion.div>
 
-        {/* Search Input matching shifts design */}
-        <motion.div variants={itemVariants} className="w-full relative z-10">
-          <div className="relative w-full">
+        {/* Search Input and Controls Row */}
+        <motion.div variants={itemVariants} className="w-full flex items-center gap-2.5 relative z-10">
+          <div className="relative flex-1 min-w-0">
             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
               <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
             </div>
             <input
               type="text"
               placeholder="Buscar por nombre, teléfono, rol o comité..."
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter"
+              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               autoComplete="off"
@@ -537,10 +558,47 @@ export default function UsersPage() {
               </button>
             )}
           </div>
+
+          {/* Mobile: Añadir button next to search bar with matching height */}
+          <Button 
+            onClick={() => setIsInviteOpen(true)}
+            className="flex sm:hidden bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-4 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
+          >
+            <span className="material-symbols-outlined text-[18px]">person_add</span>
+            <span>Añadir</span>
+          </Button>
+
+          {/* Desktop: Toggle Activos / Archivados */}
+          <div className="hidden sm:flex bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowArchived(false)}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
+                !showArchived
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                  : "text-text-dim hover:text-text"
+              )}
+            >
+              Activos
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowArchived(true)}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
+                showArchived
+                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                  : "text-text-dim hover:text-text"
+              )}
+            >
+              Archivados
+            </button>
+          </div>
         </motion.div>
       </div>
 
-      {/* Drawer Lateral (Invitar Usuario) - Custom Fixed Drawer */}
+      {/* Drawer Lateral (Añadir Usuario) - Custom Fixed Drawer matching Volunteers design */}
       <div className={cn("fixed inset-0 z-[100] flex transition-all duration-300", isMobile ? "flex-col justify-end" : "justify-end", isInviteOpen ? "pointer-events-auto" : "pointer-events-none")}>
         {/* Backdrop */}
         <div
@@ -550,139 +608,181 @@ export default function UsersPage() {
 
         {/* Drawer Content */}
         <div
-          id="invite-user-drawer"
+          id="add-user-drawer"
           className={cn(
-            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-[#0a101d] text-white shadow-2xl",
+            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl",
             isMobile
-              ? `w-full h-[92dvh] rounded-t-[40px] border-0 ${isInviteOpen ? 'translate-y-0' : 'translate-y-full'}`
-              : `border-l border-white/10 w-[450px] sm:w-[480px] h-full ${isInviteOpen ? 'translate-x-0' : 'translate-x-full'}`
+              ? `w-full h-[94dvh] rounded-t-[40px] shadow-2xl border-0 ${isInviteOpen ? 'translate-y-0' : 'translate-y-full'}`
+              : `border-l border-white/10 w-[450px] h-full ${isInviteOpen ? 'translate-x-0' : 'translate-x-full'}`
           )}
           style={{ willChange: 'transform' }}
         >
-          {/* Mobile Handle */}
-          {isMobile && (
-            <div className="w-full pt-3 pb-1 flex justify-center shrink-0">
-              <div className="w-12 h-1.5 rounded-full bg-white/20" />
-            </div>
-          )}
-
-          {/* Drawer Header */}
-          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/15 shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 flex items-center justify-center">
-                <span className="material-symbols-outlined text-[20px]">person_add</span>
-              </div>
-              <div>
-                <h3 className="font-extrabold text-white text-base leading-tight">Invitar Usuario</h3>
-                <p className="text-[11px] text-white/60 font-inter">Crea un acceso para coordinadores o administradores</p>
-              </div>
-            </div>
-            <button
-              onClick={resetInviteForm}
-              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white flex items-center justify-center transition-all"
-            >
-              <span className="material-symbols-outlined text-[18px]">close</span>
-            </button>
+          {/* Fondo animado (Tema Claro) */}
+          <div className="absolute inset-0 z-0 dark:hidden">
+            <MeshGradientBackground colors={["#60a5fa", "#3b82f6", "#93c5fd", "#4d7cfe"]} backgroundColor="#1e3a8a" />
+          </div>
+          {/* Fondo animado (Tema Oscuro) */}
+          <div className="absolute inset-0 z-0 hidden dark:block">
+            <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
           </div>
 
-          {/* Drawer Body (Scrollable) */}
-          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 font-inter">
+          <div className="relative z-10 flex flex-col h-full w-full">
+            {isMobile && (
+              <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+            )}
+
             {!generatedInvite ? (
-              <form onSubmit={handleInvite} className="space-y-5">
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-extrabold text-white/90">Nombre completo</label>
-                    <input
-                      required
-                      value={newName}
-                      onChange={e => setNewName(e.target.value)}
-                      placeholder="Ej: Juan Pérez"
-                      className="w-full h-11 px-3.5 rounded-xl border border-white/20 bg-white/10 text-white font-bold text-sm placeholder:text-white/40 focus:border-[#4d7cfe] outline-none transition-all"
-                    />
+              <form
+                id="add-user-form"
+                onSubmit={handleInvite}
+                className="flex-1 flex flex-col overflow-hidden"
+              >
+                <div className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4 text-white font-light" : "p-7 space-y-7")}>
+                  <div className={cn(isMobile ? "mb-6" : "")}>
+                    <h2 className={cn("font-medium tracking-tight leading-none mb-2", isMobile ? "text-white text-lg" : "text-text")}>Añadir Usuario</h2>
+                    <p className={cn("text-sm font-inter font-bold", isMobile ? "text-white/80" : "text-text-dim")}>Registra un nuevo usuario en la plataforma.</p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-extrabold text-white/90">Teléfono (WhatsApp)</label>
-                    <input
-                      required
-                      inputMode="numeric"
-                      maxLength={8}
-                      onKeyPress={(e) => {
-                        if (!/[0-9]/.test(e.key)) e.preventDefault();
-                      }}
-                      value={newPhone}
-                      onChange={e => setNewPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                      placeholder="Ej: 88881111"
-                      className="w-full h-11 px-3.5 rounded-xl border border-white/20 bg-white/10 text-white font-mono font-bold text-sm placeholder:text-white/40 focus:border-[#4d7cfe] outline-none transition-all"
-                    />
-                  </div>
+                  <div className="space-y-6 pb-6">
+                    <div className="space-y-5">
+                      <div className="space-y-2">
+                        <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Nombre Completo</label>
+                        <Input
+                          required
+                          minLength={3}
+                          className={cn(
+                            "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all",
+                            isMobile
+                              ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
+                              : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
+                          )}
+                          placeholder="Ej. Juan Pérez"
+                          value={newName}
+                          onChange={(e) => setNewName(e.target.value)}
+                        />
+                      </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-extrabold text-white/90">Rol en la plataforma</label>
-                    <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
-                      <SelectTrigger className="w-full h-11 bg-white/10 border-white/20 text-white font-bold rounded-xl px-3.5">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#0f172a] border border-white/20 text-white font-bold shadow-2xl z-[200]">
-                        <SelectItem value="Admin">
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-[18px] text-white/70">admin_panel_settings</span>
-                            <span>Administrador (Admin)</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="Editor">
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-[18px] text-white/70">manage_accounts</span>
-                            <span>Coordinador (Editor)</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      <div className="space-y-2">
+                        <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Teléfono (WhatsApp)</label>
+                        <Input
+                          required
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={8}
+                          onKeyPress={(e) => {
+                            if (!/[0-9]/.test(e.key)) e.preventDefault();
+                          }}
+                          className={cn(
+                            "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all",
+                            isMobile
+                              ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
+                              : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
+                          )}
+                          placeholder="Ej. 88888888"
+                          value={newPhone}
+                          onChange={(e) => setNewPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                        />
+                        <p className={cn("text-[11px] italic font-inter", isMobile ? "text-white/70" : "text-text-dim")}>Solo 8 dígitos, sin código de país o espacios.</p>
+                      </div>
 
-                  {newRole === 'Editor' && (
-                    <div className="space-y-1.5 animate-in fade-in zoom-in-95">
-                      <label className="text-xs font-extrabold text-white/90">Comité Asignado</label>
-                      <Select value={newCommittee} onValueChange={(v) => setNewCommittee(v || '')}>
-                        <SelectTrigger className="w-full bg-white/10 h-11 border-white/20 rounded-xl text-white font-bold px-3.5">
-                          <SelectValue placeholder="Selecciona un comité" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-[#0f172a] border border-white/20 text-white font-bold shadow-2xl z-[200]">
-                          {committeesList.map(c => (
-                            <SelectItem key={c.id} value={c.name} className="font-bold text-sm text-white py-2">
-                              {c.name}
+                      <div className="space-y-2">
+                        <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Rol en la plataforma</label>
+                        <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
+                          <SelectTrigger
+                            className={cn(
+                              "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all flex items-center justify-between",
+                              isMobile
+                                ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
+                                : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
+                            )}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
+                            <SelectItem value="Admin" className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[18px] text-white/70">admin_panel_settings</span>
+                                <span>Administrador (Admin)</span>
+                              </div>
                             </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                            <SelectItem value="Editor" className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[18px] text-white/70">manage_accounts</span>
+                                <span>Coordinador (Editor)</span>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {newRole === 'Editor' && (
+                        <div className="space-y-2 animate-in fade-in zoom-in-95">
+                          <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Comité Asignado</label>
+                          <Select value={newCommittee} onValueChange={(v) => setNewCommittee(v || '')}>
+                            <SelectTrigger
+                              className={cn(
+                                "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all flex items-center justify-between",
+                                isMobile
+                                  ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
+                                  : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
+                              )}
+                            >
+                              <SelectValue placeholder="Selecciona un comité" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
+                              {committeesList.map(c => (
+                                <SelectItem key={c.id} value={c.name} className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">
+                                  {c.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
-                  )}
+
+                    {errorMsg && (
+                      <div className="p-3 text-xs font-bold text-red-300 bg-red-500/15 border border-red-500/30 rounded-xl">
+                        {errorMsg}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {errorMsg && (
-                  <div className="p-3 text-xs font-bold text-red-300 bg-red-500/15 border border-red-500/30 rounded-xl">
-                    {errorMsg}
-                  </div>
-                )}
-
-                <div className="pt-6 flex items-center gap-3 border-t border-white/15">
-                  <Button type="button" variant="outline" onClick={resetInviteForm} className="flex-1 h-11 rounded-full text-xs font-bold border-white/20 text-white hover:bg-white/10">
+                <div
+                  className={cn("flex flex-row w-full mt-auto shrink-0 gap-3", isMobile ? "px-6 pt-2" : "p-7 pt-4 border-t border-white/5")}
+                  style={isMobile ? { paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' } : undefined}
+                >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetInviteForm}
+                    className={cn(
+                      "flex-1 rounded-full shadow-lg h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97]",
+                      isMobile
+                        ? "bg-white/10 hover:bg-white/20 text-white border-white/20"
+                        : "bg-dark2 hover:bg-dark3 text-text border-white/10"
+                    )}
+                  >
                     Cancelar
                   </Button>
-                  <Button type="submit" className="flex-1 h-11 bg-white hover:bg-white/90 text-black font-bold shadow-lg rounded-full text-xs transition-all active:scale-95">
-                    Generar Enlace
+                  <Button
+                    type="submit"
+                    className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97]"
+                  >
+                    Añadir
                   </Button>
                 </div>
               </form>
             ) : (
-              <div className="py-6 flex flex-col items-center text-center space-y-5 animate-in fade-in zoom-in-95">
+              <div className="flex-1 flex flex-col p-6 space-y-5 animate-in fade-in zoom-in-95 justify-center items-center text-center">
                 <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shadow-lg">
                   <span className="material-symbols-outlined text-[32px]">check_circle</span>
                 </div>
                 <div>
-                  <h4 className="font-extrabold text-white text-lg">¡Enlace Generado!</h4>
+                  <h4 className="font-extrabold text-white text-lg">¡Usuario Añadido!</h4>
                   <p className="text-xs text-white/70 mt-1.5 leading-relaxed px-2">
-                    Envía este enlace único a <span className="font-bold text-white">{generatedInvite.name}</span>. Al ingresar, validará su número de WhatsApp para acceder.
+                    Envía los detalles de acceso a <span className="font-bold text-white">{generatedInvite.name}</span>. Al ingresar, validará su número de WhatsApp para acceder.
                   </p>
                 </div>
 
@@ -806,10 +906,10 @@ export default function UsersPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 text-amber-500/70 hover:bg-amber-500/10 hover:text-amber-500 transition-all active:scale-90"
-                                title="Archivar"
+                                title={user.isArchived ? 'Desarchivar' : 'Archivar'}
                                 onClick={(e) => { e.stopPropagation(); handleArchiveUser(user); }}
                               >
-                                <span className="material-symbols-outlined text-[18px]">archive</span>
+                                <span className="material-symbols-outlined text-[18px]">{user.isArchived ? 'unarchive' : 'archive'}</span>
                               </Button>
                             </div>
                           </td>
@@ -850,10 +950,10 @@ export default function UsersPage() {
                         swipeRightBgColor="rgba(245, 158, 11, 0.2)"
                         
                         onSwipeLeft={() => handleArchiveUser(user)}
-                        swipeLeftIcon="archive"
-                        swipeLeftText="Archivar"
-                        swipeLeftColorClass="text-amber-500"
-                        swipeLeftBgColor="rgba(245, 158, 11, 0.2)"
+                        swipeLeftIcon={user.isArchived ? 'unarchive' : 'archive'}
+                        swipeLeftText={user.isArchived ? 'Desarchivar' : 'Archivar'}
+                        swipeLeftColorClass={user.isArchived ? 'text-blue-500' : 'text-amber-500'}
+                        swipeLeftBgColor={user.isArchived ? 'rgba(59, 130, 246, 0.2)' : 'rgba(245, 158, 11, 0.2)'}
                         
                         badges={
                           <>

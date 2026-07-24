@@ -27,9 +27,10 @@ export default async function AdminDashboard() {
     .from('shifts')
     .select('*');
 
-  const volunteers = volunteersData || [];
+  const volunteers = (volunteersData || []).filter(v => v.status !== 'archived');
   const committees = committeesData || [];
   const shifts = shiftsData || [];
+  const activeVolIds = new Set(volunteers.map(v => v.id));
 
   const EVENT_DAYS_RAW = getActiveEventDays();
   const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
@@ -48,10 +49,10 @@ export default async function AdminDashboard() {
     'Primeros Auxilios': { T1: 2, T2: 2, T3: 2, T4: 2 }
   };
 
-  // Build global shifts map
+  // Build global shifts map for active volunteers
   const globalShifts: Record<string, Record<string, string[]>> = {};
   shifts.forEach(s => {
-    if (s.volunteer_id) {
+    if (s.volunteer_id && activeVolIds.has(s.volunteer_id)) {
       if (!globalShifts[s.volunteer_id]) {
         globalShifts[s.volunteer_id] = {};
       }
@@ -66,9 +67,10 @@ export default async function AdminDashboard() {
 
   // Calculate KPIs
   const totalVolunteers = volunteers.length;
-  const volsWithShift = new Set(shifts.map(s => s.volunteer_id));
+  const activeShifts = shifts.filter(s => s.volunteer_id && activeVolIds.has(s.volunteer_id));
+  const volsWithShift = new Set(activeShifts.map(s => s.volunteer_id));
   const volunteersNoShift = volunteers.filter(v => !volsWithShift.has(v.id)).length;
-  const coveredShifts = shifts.length;
+  const coveredShifts = activeShifts.length;
 
   let totalRequired = 0;
   let totalAssignedInRequired = 0;

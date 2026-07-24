@@ -150,7 +150,8 @@ export default function CoordinatorDashboard() {
         id: v.id,
         name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
         committee: v.committees?.name || 'Sin comité',
-        reliability: v.reliability_score ?? 100
+        reliability: v.reliability_score ?? 100,
+        status: v.status || 'active'
       }));
       setVolunteers(mapped);
     }
@@ -263,6 +264,14 @@ export default function CoordinatorDashboard() {
     }
   }, [router]);
 
+  const activeVolunteers = useMemo(() => {
+    return volunteers.filter(v => v.status !== 'archived');
+  }, [volunteers]);
+
+  const activeVolunteerIds = useMemo(() => {
+    return new Set(activeVolunteers.map(v => v.id));
+  }, [activeVolunteers]);
+
   const globalStats = useMemo(() => {
     let totalRequired = 0;
     let totalAssignedInRequired = 0;
@@ -276,7 +285,7 @@ export default function CoordinatorDashboard() {
           const req = committeeRequirements[comm]?.[shiftId] ?? 0;
           totalRequired += req;
 
-          const count = volunteers.filter(vol => {
+          const count = activeVolunteers.filter(vol => {
             if (vol.committee !== comm) return false;
             const shifts = globalShifts[vol.id];
             return shifts && shifts[day.key] && shifts[day.key].includes(shiftId);
@@ -291,7 +300,7 @@ export default function CoordinatorDashboard() {
       });
     });
 
-    const totalRecruited = volunteers.length;
+    const totalRecruited = activeVolunteers.length;
     // Dynamic Meta: Sum of requirements across all committees and shift slots
     const targetVolunteers = totalRequired;
     const recruitmentPercentage = targetVolunteers > 0 ? Math.round((totalRecruited / targetVolunteers) * 100) : 0;
@@ -300,6 +309,7 @@ export default function CoordinatorDashboard() {
     let totalGlobalAssigned = 0;
     let totalGlobalCheckedIn = 0;
     Object.entries(globalShifts).forEach(([volId, days]) => {
+      if (!activeVolunteerIds.has(volId)) return;
       Object.entries(days).forEach(([day, shifts]) => {
         shifts.forEach(shift => {
           totalGlobalAssigned++;
@@ -323,7 +333,7 @@ export default function CoordinatorDashboard() {
       checkedInCount: totalGlobalCheckedIn,
       totalAssigned: totalGlobalAssigned,
     };
-  }, [volunteers, committeesList, globalShifts, committeeRequirements, dbCheckedInMap]);
+  }, [activeVolunteers, activeVolunteerIds, committeesList, globalShifts, committeeRequirements, dbCheckedInMap]);
 
   const committeeStatus = useMemo(() => {
     return committeesList.map((c, index) => {
@@ -336,7 +346,7 @@ export default function CoordinatorDashboard() {
           const req = committeeRequirements[c.name]?.[shiftId] ?? 0;
           totalReq += req;
 
-          const count = volunteers.filter(vol => {
+          const count = activeVolunteers.filter(vol => {
             if (vol.committee !== c.name) return false;
             const shifts = globalShifts[vol.id];
             return shifts && shifts[day.key] && shifts[day.key].includes(shiftId);
@@ -362,7 +372,7 @@ export default function CoordinatorDashboard() {
         status
       };
     }).sort((a, b) => a.coverage - b.coverage);
-  }, [volunteers, committeesList, globalShifts, committeeRequirements]);
+  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements]);
 
   const criticalShifts = useMemo(() => {
     const list: any[] = [];
@@ -374,7 +384,7 @@ export default function CoordinatorDashboard() {
           const req = committeeRequirements[comm]?.[shiftId] ?? 0;
           if (req === 0) return;
 
-          const count = volunteers.filter(vol => {
+          const count = activeVolunteers.filter(vol => {
             if (vol.committee !== comm) return false;
             const shifts = globalShifts[vol.id];
             return shifts && shifts[day.key] && shifts[day.key].includes(shiftId);
@@ -400,7 +410,7 @@ export default function CoordinatorDashboard() {
       .sort((a, b) => b.missing - a.missing)
       .slice(0, 5)
       .map((item, index) => ({ id: index + 1, ...item }));
-  }, [volunteers, committeesList, globalShifts, committeeRequirements]);
+  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements]);
 
   const heatmapMatrix = useMemo(() => {
     return EVENT_DAYS.map(day => {
@@ -411,7 +421,7 @@ export default function CoordinatorDashboard() {
           const reqs = committeeRequirements[commName];
           if (reqs && reqs[shiftId] > 0) {
             totalReq += reqs[shiftId];
-            const assigned = volunteers.filter(v => {
+            const assigned = activeVolunteers.filter(v => {
               if (v.committee !== commName) return false;
               const vShifts = globalShifts[v.id];
               return vShifts && vShifts[day.key] && vShifts[day.key].includes(shiftId);
@@ -423,14 +433,14 @@ export default function CoordinatorDashboard() {
       });
       return { day: day.key, shortLabel: day.label, dayLabel: day.dateNum, shifts: shiftsData };
     });
-  }, [committeeRequirements, volunteers, globalShifts]);
+  }, [committeeRequirements, activeVolunteers, globalShifts]);
 
   // Volunteers per event day (unique volunteers with ≥1 shift that day)
   const volsPerDay = useMemo(() => {
     const counts: Record<string, number> = {};
     EVENT_DAYS.forEach(day => {
       const uniqueVols = new Set<string>();
-      volunteers.forEach(vol => {
+      activeVolunteers.forEach(vol => {
         const shifts = globalShifts[vol.id];
         if (shifts && shifts[day.key] && shifts[day.key].length > 0) {
           uniqueVols.add(vol.id);
@@ -439,14 +449,14 @@ export default function CoordinatorDashboard() {
       counts[day.key] = uniqueVols.size;
     });
     return counts;
-  }, [volunteers, globalShifts]);
+  }, [activeVolunteers, globalShifts]);
 
   // Total shifts assigned per event day (sum of T1+T2+T3+T4 slots)
   const shiftsPerDay = useMemo(() => {
     const counts: Record<string, number> = {};
     EVENT_DAYS.forEach(day => {
       let total = 0;
-      volunteers.forEach(vol => {
+      activeVolunteers.forEach(vol => {
         const shifts = globalShifts[vol.id];
         if (shifts && shifts[day.key]) {
           total += shifts[day.key].length;
@@ -455,18 +465,18 @@ export default function CoordinatorDashboard() {
       counts[day.key] = total;
     });
     return counts;
-  }, [volunteers, globalShifts]);
+  }, [activeVolunteers, globalShifts]);
 
   const totalVolsWithShifts = useMemo(() => {
     const unique = new Set<string>();
-    volunteers.forEach(vol => {
+    activeVolunteers.forEach(vol => {
       const shifts = globalShifts[vol.id];
       if (shifts && Object.values(shifts).some(arr => arr.length > 0)) {
         unique.add(vol.id);
       }
     });
     return unique.size;
-  }, [volunteers, globalShifts]);
+  }, [activeVolunteers, globalShifts]);
 
   if (!isAuthorized) return null;
 
