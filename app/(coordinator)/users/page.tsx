@@ -497,8 +497,8 @@ export default function UsersPage() {
             </span>
           </h1>
 
-          {/* Mobile: Toggle on top right (matches Turnos page) */}
-          <div className="flex sm:hidden bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10 shrink-0">
+          {/* Toggle on top right (matches Turnos page) */}
+          <div className="flex bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10 shrink-0">
             <button
               type="button"
               onClick={() => setShowArchived(false)}
@@ -524,15 +524,6 @@ export default function UsersPage() {
               Archivados
             </button>
           </div>
-
-          {/* Desktop: Invitar button on top right */}
-          <Button 
-            onClick={() => setIsInviteOpen(true)}
-            className="hidden sm:flex bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-5 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
-          >
-            <span className="material-symbols-outlined text-[16px]">person_add</span>
-            <span>Invitar</span>
-          </Button>
         </motion.div>
 
         {/* Search Input and Controls Row */}
@@ -559,42 +550,14 @@ export default function UsersPage() {
             )}
           </div>
 
-          {/* Mobile: Añadir button next to search bar with matching height */}
+          {/* Añadir button next to search bar with matching height */}
           <Button 
             onClick={() => setIsInviteOpen(true)}
-            className="flex sm:hidden bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-4 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
+            className="flex bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-4 sm:px-5 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
           >
             <span className="material-symbols-outlined text-[18px]">person_add</span>
             <span>Añadir</span>
           </Button>
-
-          {/* Desktop: Toggle Activos / Archivados */}
-          <div className="hidden sm:flex bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowArchived(false)}
-              className={cn(
-                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
-                !showArchived
-                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
-                  : "text-text-dim hover:text-text"
-              )}
-            >
-              Activos
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowArchived(true)}
-              className={cn(
-                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
-                showArchived
-                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
-                  : "text-text-dim hover:text-text"
-              )}
-            >
-              Archivados
-            </button>
-          </div>
         </motion.div>
       </div>
 
