@@ -25,6 +25,7 @@ import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { fetchAllRows } from "@/lib/supabase-helpers";
 import { formatE164, validatePhone8Digits } from "@/lib/whatsapp";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
+import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -147,6 +148,7 @@ export default function VolunteersPage() {
   const [newStake, setNewStake] = useState('');
   const [newWard, setNewWard] = useState('');
   const [newCommitteeId, setNewCommitteeId] = useState('');
+  const [sendWelcomeMessage, setSendWelcomeMessage] = useState(true);
 
   const [editingVolunteer, setEditingVolunteer] = useState<VolunteerType | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -541,6 +543,7 @@ export default function VolunteersPage() {
       return;
     }
     const sanitizedPhone = phoneValidation.formatted;
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
 
     const { error } = await supabase
       .from('volunteers')
@@ -552,7 +555,7 @@ export default function VolunteersPage() {
           committee_id: newCommitteeId || null,
           stake: newStake,
           neighborhood: newWard,
-          pin: '1234',
+          pin: pin,
           status: 'active'
         }
       ]);
@@ -563,7 +566,16 @@ export default function VolunteersPage() {
       return;
     }
 
-    showToast("Voluntario añadido");
+    if (sendWelcomeMessage) {
+      const waResult = await sendWelcomeWhatsAppAction(sanitizedPhone, first_name, pin);
+      if (!waResult.success) {
+        showToast("Voluntario añadido, pero falló el envío de WhatsApp", "info");
+      } else {
+        showToast("Voluntario añadido y credenciales enviadas");
+      }
+    } else {
+      showToast("Voluntario añadido");
+    }
 
     setNewName('');
     setNewPhone('');
@@ -1672,6 +1684,33 @@ export default function VolunteersPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  
+                  {/* WhatsApp Checkbox */}
+                  <div className="pt-2">
+                    <label className={cn(
+                      "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                      isMobile 
+                        ? (sendWelcomeMessage ? "bg-[#4d7cfe]/10 border-[#4d7cfe]/30" : "bg-white/5 border-white/10")
+                        : (sendWelcomeMessage ? "bg-[#4d7cfe]/5 border-[#4d7cfe]/30" : "bg-dark2 border-border")
+                    )}>
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={sendWelcomeMessage}
+                          onChange={(e) => setSendWelcomeMessage(e.target.checked)}
+                          className="w-4 h-4 rounded border-white/20 bg-white/10 text-[#4d7cfe] focus:ring-[#4d7cfe] focus:ring-offset-0 focus:ring-offset-transparent cursor-pointer"
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className={cn("text-xs font-bold leading-none", isMobile ? "text-white" : "text-text")}>
+                          Enviar credenciales por WhatsApp
+                        </span>
+                        <span className={cn("text-[10px] mt-1", isMobile ? "text-white/60" : "text-text-dim")}>
+                          Enviará un PIN temporal al número registrado.
+                        </span>
+                      </div>
+                    </label>
                   </div>
                 </div>
               </div>

@@ -11,6 +11,7 @@ import { DataTableFilter } from "@/components/DataTableFilter";
 import { startRegistration } from "@simplewebauthn/browser";
 
 import { isCoordinatorShiftEditAllowed, setCoordinatorShiftEditAllowed } from "@/lib/permissions";
+import { changeUserPin } from "@/app/actions/update-pin";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -88,6 +89,11 @@ export default function SettingsPage() {
   const [editPhone, setEditPhone] = useState('');
   const [editCommittee, setEditCommittee] = useState('');
   const [editRole, setEditRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
+
+  // PIN states
+  const [currentPin, setCurrentPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [isChangingPin, setIsChangingPin] = useState(false);
 
   // Committee Requirements State - NONE selected by default
   const [selectedConfigCommittees, setSelectedConfigCommittees] = useState<string[]>([]);
@@ -411,6 +417,27 @@ export default function SettingsPage() {
     }
   };
 
+  const handleChangePin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsChangingPin(true);
+    
+    if (newPin.length < 4 || newPin.length > 6) {
+      showToast("El nuevo PIN debe tener entre 4 y 6 dígitos", "error");
+      setIsChangingPin(false);
+      return;
+    }
+    
+    const res = await changeUserPin(currentPin, newPin);
+    if (res.success) {
+      showToast("PIN actualizado correctamente");
+      setCurrentPin('');
+      setNewPin('');
+    } else {
+      showToast(res.error || "Error al actualizar el PIN", "error");
+    }
+    setIsChangingPin(false);
+  };
+
   // Permissions Data
   const ALL_PERMISSIONS = ['Ver voluntarios', 'Editar turnos', 'Enviar mensajes', 'Ver reportes', 'Importar datos', 'Configurar ajustes'];
   const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -565,8 +592,8 @@ export default function SettingsPage() {
                   <span className="material-symbols-outlined text-[18px]">fingerprint</span>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Huellas digitales</h3>
-                  <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">Autenticación biométrica o Face ID para acceder sin PIN</p>
+                  <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Seguridad y Acceso</h3>
+                  <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">Cambio de PIN y autenticación biométrica</p>
                 </div>
               </div>
 
@@ -607,6 +634,46 @@ export default function SettingsPage() {
                       {isRegisteringPasskey ? 'Registrando...' : 'Vincular Dispositivo'}
                     </Button>
                   )}
+                </div>
+
+                {/* Change PIN Section */}
+                <div className="mt-8 pt-6 border-t border-white/5">
+                  <h4 className="font-bold text-text text-xs mb-4">Cambiar PIN de Acceso</h4>
+                  <form onSubmit={handleChangePin} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-text">PIN Actual</label>
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={currentPin}
+                          onChange={e => setCurrentPin(e.target.value.replace(/\D/g, ''))}
+                          className="w-full h-10 px-3 rounded-xl border border-white/15 bg-white/5 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-xs font-inter font-bold outline-none transition-all"
+                          placeholder="••••"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-text">Nuevo PIN</label>
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={newPin}
+                          onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
+                          className="w-full h-10 px-3 rounded-xl border border-white/15 bg-white/5 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-xs font-inter font-bold outline-none transition-all"
+                          placeholder="••••"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end pt-2">
+                      <Button type="submit" disabled={isChangingPin || !currentPin || !newPin} className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-6 h-9 shadow-lg shadow-blue-500/10 active:scale-[0.97] transition-all rounded-full text-xs">
+                        {isChangingPin ? 'Cambiando...' : 'Cambiar PIN'}
+                      </Button>
+                    </div>
+                  </form>
                 </div>
               </div>
             )}

@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from 'xlsx';
+import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
 
 interface ParsedVolunteer {
   rowNum: number;
@@ -49,6 +50,7 @@ export default function ImportPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'valid' | 'error' | 'duplicate'>('all');
+  const [sendWelcomeMessage, setSendWelcomeMessage] = useState(true);
   const [toast, setToast] = useState({ message: '', type: 'success' as 'success' | 'error' | 'info', isVisible: false });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -340,8 +342,14 @@ export default function ImportPage() {
           continue;
         }
 
-        const message = generatePinMessage(`${vol.firstName} ${vol.lastName}`, pin, "https://app.templomanagua.org");
+        const message = generatePinMessage(`${vol.firstName} ${vol.lastName}`, pin, "https://volunteermanager.org");
         const waLink = generateWaMeLink(sanitizedPhone, message);
+        
+        if (sendWelcomeMessage) {
+          // Send automatic WhatsApp message
+          await sendWelcomeWhatsAppAction(sanitizedPhone, vol.firstName, pin);
+        }
+        
         results.push({ ...vol, phone: sanitizedPhone, pin, waLink });
       }
 
@@ -662,17 +670,31 @@ export default function ImportPage() {
                   {totalErrors > 0 && <span className="block text-red font-medium">Existen {totalErrors} registros con errores que deben corregirse en tu archivo.</span>}
                 </div>
                 
-                <Button 
-                  onClick={handleImport} 
-                  disabled={isImporting || totalValids === 0} 
-                  className="w-full sm:w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-white/5 disabled:text-text-dim/50 text-white rounded-xl h-11 px-8 font-bold shadow-lg shadow-blue-500/10 transition-all active:scale-[0.98]"
-                >
-                  {isImporting ? (
-                    <><span className="material-symbols-outlined text-[18px] mr-2 animate-spin">progress_activity</span> Importando...</>
-                  ) : (
-                    <><span className="material-symbols-outlined text-[18px] mr-2">cloud_upload</span> Cargar {totalValids} Válidos</>
-                  )}
-                </Button>
+                <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+                  <label className="flex items-center gap-2 cursor-pointer bg-dark2 border border-white/10 px-4 py-2.5 rounded-xl transition-all hover:bg-dark3 w-full sm:w-auto">
+                    <input
+                      type="checkbox"
+                      checked={sendWelcomeMessage}
+                      onChange={(e) => setSendWelcomeMessage(e.target.checked)}
+                      className="w-4 h-4 rounded border-white/20 bg-white/10 text-[#4d7cfe] focus:ring-[#4d7cfe] focus:ring-offset-0 focus:ring-offset-transparent cursor-pointer"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-text">Enviar WhatsApp Automático</span>
+                    </div>
+                  </label>
+
+                  <Button 
+                    onClick={handleImport} 
+                    disabled={isImporting || totalValids === 0} 
+                    className="w-full sm:w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-white/5 disabled:text-text-dim/50 text-white rounded-xl h-11 px-8 font-bold shadow-lg shadow-blue-500/10 transition-all active:scale-[0.98]"
+                  >
+                    {isImporting ? (
+                      <><span className="material-symbols-outlined text-[18px] mr-2 animate-spin">progress_activity</span> Importando...</>
+                    ) : (
+                      <><span className="material-symbols-outlined text-[18px] mr-2">cloud_upload</span> Cargar {totalValids} Válidos</>
+                    )}
+                  </Button>
+                </div>
               </CardFooter>
             </Card>
 

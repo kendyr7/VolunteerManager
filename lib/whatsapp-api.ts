@@ -206,3 +206,30 @@ export async function sendWhatsAppInteractiveButton(options: {
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Send Welcome Template to a newly created Volunteer
+ */
+export async function sendVolunteerWelcomeTemplate(options: {
+  to: string;
+  name: string;
+  pin: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  // Using the requested template name and parameters.
+  // {{1}} = name, {{2}} = pin
+  // Note: The template must be approved in Meta Business Manager.
+  return sendWhatsAppTemplate({
+    to: options.to,
+    templateName: 'volunteer_welcome_pin', // Default template name
+    languageCode: 'es',
+    components: [
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: options.name },
+          { type: 'text', text: options.pin }
+        ]
+      }
+    ]
+  });
+}

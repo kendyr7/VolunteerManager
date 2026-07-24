@@ -118,3 +118,69 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
 
   return { error: "Error de sesión tras actualizar PIN." };
 }
+
+export async function changeUserPin(currentPin: string, newPin: string) {
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session');
+    
+    if (!sessionCookie?.value) {
+      return { success: false, error: "No autorizado" };
+    }
+
+    const { verifySessionToken } = await import('@/lib/auth');
+    const session = verifySessionToken(sessionCookie.value);
+    
+    if (!session) {
+      return { success: false, error: "Sesión inválida" };
+    }
+
+    // Validar formato del nuevo PIN
+    const isNumeric = /^[0-9]+$/.test(newPin);
+    if (!newPin || newPin.length < 4 || newPin.length > 6 || !isNumeric) {
+      return { success: false, error: "El nuevo PIN debe ser únicamente numérico y tener entre 4 y 6 dígitos." };
+    }
+    if (newPin === '1234') {
+      return { success: false, error: "No puedes elegir el PIN por defecto '1234' por motivos de seguridad." };
+    }
+    if (isRepetitive(newPin)) {
+      return { success: false, error: "Por motivos de seguridad, no utilices un PIN repetitivo (ej: 1111, 2222)." };
+    }
+    if (isSequential(newPin)) {
+      return { success: false, error: "Por motivos de seguridad, no utilices un PIN secuencial (ej: 1234, 4321)." };
+    }
+
+    const supabase = await createClient();
+    const table = session.userType === 'profile' ? 'profiles' : 'volunteers';
+    
+    // Verificar que el PIN actual sea correcto
+    const { data: user, error: fetchError } = await supabase
+      .from(table)
+      .select('id, pin')
+      .eq('id', session.userId)
+      .single();
+
+    if (fetchError || !user) {
+      return { success: false, error: "Usuario no encontrado" };
+    }
+
+    if (user.pin !== currentPin) {
+      return { success: false, error: "El PIN actual ingresado es incorrecto" };
+    }
+
+    // Actualizar el PIN
+    const { error: updateError } = await supabase
+      .from(table)
+      .update({ pin: newPin })
+      .eq('id', session.userId);
+
+    if (updateError) {
+      return { success: false, error: "Error al actualizar el PIN" };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error en changeUserPin:", error);
+    return { success: false, error: "Error interno del servidor" };
+  }
+}
