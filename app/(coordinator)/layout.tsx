@@ -276,13 +276,28 @@ function CoordinatorLayoutInner({
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', scrollSnapType: 'x mandatory' }}
             >
               {allMobileNavItems.map((item, index) => {
-                const isActive = pathname === item.href;
+                const isActive = pathname.startsWith(item.href) && item.href !== '#logout';
                 const isLogout = item.href === '#logout';
                 const isPageStart = index % ITEMS_PER_PAGE === 0;
                 const sharedStyle = { width: 'calc((100vw - 32px) / 5)', scrollSnapAlign: isPageStart ? 'start' as const : undefined };
+                
+                const TAB_COLORS: Record<string, { activeClass: string; iconClass: string }> = {
+                  "/dashboard": { activeClass: "bg-[#4d7cfe]/20 text-[#4d7cfe] border border-[#4d7cfe]/40 shadow-[0_0_14px_rgba(77,124,254,0.35)]", iconClass: "text-[#4d7cfe]" },
+                  "/volunteers": { activeClass: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_14px_rgba(16,185,129,0.35)]", iconClass: "text-emerald-400" },
+                  "/shifts": { activeClass: "bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_14px_rgba(245,158,11,0.35)]", iconClass: "text-amber-400" },
+                  "/check-in": { activeClass: "bg-pink-500/20 text-pink-400 border border-pink-500/40 shadow-[0_0_14px_rgba(236,72,153,0.35)]", iconClass: "text-pink-400" },
+                  "/reminders": { activeClass: "bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_14px_rgba(139,92,246,0.35)]", iconClass: "text-purple-400" },
+                  "/reports": { activeClass: "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-[0_0_14px_rgba(6,182,212,0.35)]", iconClass: "text-cyan-400" },
+                  "/users": { activeClass: "bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-[0_0_14px_rgba(59,130,246,0.35)]", iconClass: "text-blue-400" },
+                  "/import": { activeClass: "bg-orange-500/20 text-orange-400 border border-orange-500/40 shadow-[0_0_14px_rgba(249,115,22,0.35)]", iconClass: "text-orange-400" },
+                  "/settings": { activeClass: "bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 shadow-[0_0_14px_rgba(99,102,241,0.35)]", iconClass: "text-indigo-400" },
+                };
+
+                const tabColor = TAB_COLORS[item.href] || { activeClass: "bg-white/20 text-white border border-white/30", iconClass: "text-white" };
+
                 const sharedClass = cn(
-                  "flex flex-col items-center justify-center py-2 rounded-full transition-all duration-200 shrink-0 px-0.5",
-                  isActive ? "bg-black/10 dark:bg-white/25 text-black dark:text-white shadow-sm" : "text-black/50 dark:text-white/60 hover:text-black dark:hover:text-white"
+                  "flex flex-col items-center justify-center py-2 rounded-full transition-all duration-300 shrink-0 px-0.5 relative",
+                  isActive ? tabColor.activeClass : "text-white/60 hover:text-white"
                 );
                 if (isLogout) {
                   return (
@@ -290,10 +305,10 @@ function CoordinatorLayoutInner({
                       key="logout"
                       onClick={handleLogout}
                       style={sharedStyle}
-                      className={cn(sharedClass, "text-red-400 hover:text-red-300")}
+                      className={cn(sharedClass, "text-red-400 hover:text-red-300 hover:bg-red-500/10")}
                     >
                       <Icon name="logout" size={20} className="mb-1 text-red-400" />
-                      <span className="font-inter text-[9px] sm:text-[10px] font-semibold whitespace-nowrap truncate max-w-full">Salir</span>
+                      <span className="font-inter text-[9px] sm:text-[10px] font-bold whitespace-nowrap truncate max-w-full">Salir</span>
                     </button>
                   );
                 }
@@ -304,8 +319,8 @@ function CoordinatorLayoutInner({
                     style={sharedStyle}
                     className={sharedClass}
                   >
-                    <Icon name={item.icon} size={20} className={cn("mb-1", isActive ? "text-black dark:text-white" : "text-black/50 dark:text-white/60")} />
-                    <span className="font-inter text-[9px] sm:text-[10px] font-semibold whitespace-nowrap truncate max-w-full">{item.name}</span>
+                    <Icon name={item.icon} size={20} className={cn("mb-1 transition-transform duration-200", isActive ? `${tabColor.iconClass} scale-110` : "text-white/60")} />
+                    <span className={cn("font-inter text-[9px] sm:text-[10px] whitespace-nowrap truncate max-w-full", isActive ? "font-extrabold" : "font-semibold")}>{item.name}</span>
                   </Link>
                 );
               })}

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function POST(request: Request) {
@@ -11,48 +10,37 @@ export async function POST(request: Request) {
     const session = verifySessionToken(sessionCookie);
     
     if (!session) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+      return NextResponse.json({ error: 'No autorizado. Inicia sesión primero.' }, { status: 401 });
     }
     
-    const body = await request.json();
-    const { userId, userType, phone } = body; // from the client
-
-    if (!userId || !userType || !phone) {
-      return NextResponse.json({ error: 'Faltan datos del usuario' }, { status: 400 });
-    }
-
-    // Validar que el token de sesión corresponda al usuario de la solicitud
-    if (session.userId !== userId) {
-      return NextResponse.json({ error: 'Prohibido: Token de sesión no coincide con el usuario.' }, { status: 403 });
-    }
+    const body = await request.json().catch(() => ({}));
+    const userId = session.userId;
+    const userType = session.userType || body.userType || 'profile';
+    const phone = body.phone || session.userId;
 
     const rpName = 'Volunteer Manager';
-    // Use the host header for RP ID
     const host = request.headers.get('host') || 'localhost:3000';
-    const rpID = host.split(':')[0]; // get domain without port
+    const rpID = host.split(':')[0];
 
     const options = await generateRegistrationOptions({
       rpName,
       rpID,
-      userID: new TextEncoder().encode(userId), // SimpleWebAuthn expects Uint8Array
+      userID: new TextEncoder().encode(userId),
       userName: phone,
-      // Require user verification (biometrics)
       authenticatorSelection: {
-        residentKey: 'required',
-        userVerification: 'required',
+        residentKey: 'preferred',
+        userVerification: 'preferred',
       },
       attestationType: 'none',
     });
 
-    // Save the challenge in a cookie for the verification step
     cookieStore.set('webauthn_challenge', options.challenge, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 5, // 5 minutes
+      maxAge: 60 * 5,
       path: '/',
     });
 
-    // Save user info for verification
     cookieStore.set('webauthn_user_info', JSON.stringify({ userId, userType }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

@@ -9,6 +9,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { createPortal } from "react-dom";
 import { startAuthentication } from "@simplewebauthn/browser";
+import Image from "next/image";
+
+const isMobileDevice = () => {
+  if (typeof window === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+  return isMobileUA || (isTouch && window.innerWidth < 1024);
+};
 
 export function LoginForm() {
   const router = useRouter();
@@ -26,13 +35,14 @@ export function LoginForm() {
   const [newPin, setNewNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [userData, setUserData] = useState<{ id: string, type: 'profile' | 'volunteer' } | null>(null);
-  const [preferredAuthMethod, setPreferredAuthMethod] = useState<'pin' | 'biometrics'>('pin');
 
   // Remember User State
   const [savedUserMode, setSavedUserMode] = useState(false);
   const [savedName, setSavedName] = useState("");
   const [isMounted, setIsMounted] = useState(false);
   const [authMode, setAuthMode] = useState<'biometrics' | 'pin'>('pin');
+  const [hasPasskey, setHasPasskey] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   // Auto-dismiss error banner after 4 seconds
   useEffect(() => {
@@ -45,6 +55,9 @@ export function LoginForm() {
   }, [error]);
 
   useEffect(() => {
+    const mobileCheck = isMobileDevice();
+    setIsMobile(mobileCheck);
+
     const savedPhone = localStorage.getItem("volunteer_phone");
     if (savedPhone) {
       setPhone(savedPhone);
@@ -53,15 +66,48 @@ export function LoginForm() {
     if (savedName && savedPhone) {
       setSavedUserMode(true);
       setSavedName(savedName);
-      // Para usuarios recordados, mostrar por defecto ÚNICAMENTE la vista de huella dactilar
-      setAuthMode('biometrics');
-    } else {
-      setAuthMode('pin');
     }
+
     setIsMounted(true);
   }, []);
 
+  // Check if current phone has registered passkeys (huella/Face ID)
+  useEffect(() => {
+    if (!phone || phone.length < 8) {
+      setHasPasskey(false);
+      setAuthMode('pin');
+      return;
+    }
+
+    let isSubscribed = true;
+    fetch(`/api/webauthn/check-has-passkey?phone=${encodeURIComponent(phone)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!isSubscribed) return;
+        const passkeyAvailable = !!data.hasPasskey && isMobileDevice();
+        setHasPasskey(passkeyAvailable);
+        if (passkeyAvailable && savedUserMode) {
+          setAuthMode('biometrics');
+        } else {
+          setAuthMode('pin');
+        }
+      })
+      .catch(() => {
+        if (isSubscribed) {
+          setHasPasskey(false);
+          setAuthMode('pin');
+        }
+      });
+
+    return () => { isSubscribed = false; };
+  }, [phone, savedUserMode]);
+
   const handleBiometricLogin = async () => {
+    if (!isMobile) {
+      setError("El ingreso con huella solo está disponible desde dispositivos móviles.");
+      return;
+    }
+
     if (!phone) {
       setError("Ingresa tu número de teléfono primero.");
       return;
@@ -210,8 +256,6 @@ export function LoginForm() {
       localStorage.setItem("mock_committee", result.committee);
     }
     
-    // Forzamos navegación dura mediante window.location.href para evitar que Next.js use caché del cliente
-    // y para garantizar que las cookies de sesión se envíen de inmediato en la primera solicitud al servidor.
     window.location.href = result.redirectTo || "/calendar";
   };
 
@@ -333,24 +377,35 @@ export function LoginForm() {
                   </button>
                 </div>
 
-                {authMode === 'biometrics' ? (
+                {authMode === 'biometrics' && isMobile && hasPasskey ? (
                   <div className="space-y-3 pt-2 text-center flex flex-col items-center justify-center">
                     {/* 1. Texto arriba */}
                     <p className="text-sm font-bold font-inter text-slate-300">
                       Ingresar con huella
                     </p>
 
-                    {/* 2. Ícono de huella */}
+                    {/* 2. Ícono con Logo de la App + Insignia de Huella */}
                     <button
                       type="button"
                       onClick={handleBiometricLogin}
                       suppressHydrationWarning
-                      className="group flex items-center justify-center p-2 rounded-full transition-all duration-300 active:scale-95 disabled:opacity-40 my-1"
+                      className="group flex flex-col items-center justify-center p-3 rounded-2xl transition-all duration-300 active:scale-95 disabled:opacity-40 my-1 hover:bg-white/5"
                       disabled={!isMounted || isPending || isBiometricLoading || !phone}
-                      title="Ingresar con huella"
+                      title="Ingresar con Huella / Face ID"
                     >
-                      <div className="w-16 h-16 rounded-full bg-[#4d7cfe]/15 border border-[#4d7cfe]/30 flex items-center justify-center text-[#4d7cfe] group-hover:scale-110 group-hover:border-[#4d7cfe] group-hover:bg-[#4d7cfe]/25 transition-all shadow-lg shadow-[#4d7cfe]/10">
-                        <span className="material-symbols-outlined text-[36px]">fingerprint</span>
+                      <div className="relative mb-2">
+                        <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/20 shadow-xl bg-dark2 flex items-center justify-center group-hover:scale-105 transition-all">
+                          <Image
+                            src="/icon-192.png"
+                            alt="Volunteer Manager"
+                            width={56}
+                            height={56}
+                            className="object-contain"
+                          />
+                        </div>
+                        <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#4d7cfe] border-2 border-dark flex items-center justify-center text-white shadow-md">
+                          <span className="material-symbols-outlined text-[15px]">fingerprint</span>
+                        </div>
                       </div>
                     </button>
 
@@ -388,7 +443,7 @@ export function LoginForm() {
                             autoComplete="current-password"
                             maxLength={4}
                             placeholder="••••"
-                            required={authMode === 'pin'}
+                            required
                             value={pin}
                             onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                             className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-11 pr-3 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
@@ -420,16 +475,18 @@ export function LoginForm() {
                       </div>
                     )}
 
-                    <div className="pt-3 flex flex-col items-center justify-center">
-                      <button
-                        type="button"
-                        onClick={() => setAuthMode('biometrics')}
-                        className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">fingerprint</span>
-                        <span>O ingresa con tu huella dactilar</span>
-                      </button>
-                    </div>
+                    {isMobile && hasPasskey && (
+                      <div className="pt-3 flex flex-col items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => setAuthMode('biometrics')}
+                          className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">fingerprint</span>
+                          <span>O ingresa con tu huella dactilar</span>
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </>
@@ -473,14 +530,14 @@ export function LoginForm() {
                   className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
                   disabled={isPending}
                 />
-                </div>
-                </div>
+              </div>
+            </div>
 
-                <div className="space-y-2">
-                <Label htmlFor="confirmPin" className="text-xs font-inter font-bold uppercase tracking-wider text-slate-400 ml-1">
+            <div className="space-y-2">
+              <Label htmlFor="confirmPin" className="text-xs font-inter font-bold uppercase tracking-wider text-slate-400 ml-1">
                 Confirmar Nuevo PIN
-                </Label>
-                <div className="relative group">
+              </Label>
+              <div className="relative group">
                 <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">check_circle</span>
                 <input
                   id="confirmPin"

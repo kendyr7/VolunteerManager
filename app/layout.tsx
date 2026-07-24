@@ -58,7 +58,9 @@ export default async function RootLayout({
     >
       <head>
         <meta name="facebook-domain-verification" content="p85nbgrccc871olpq4fug39saag8if" />
-        <link rel="apple-touch-icon" href="/app-icon-192.png" />
+        <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+        <link rel="shortcut icon" href="/icon-192.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
         <link rel="preload" href="/material-symbols-outlined.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       </head>
       <body className="min-h-full flex flex-col font-sans bg-dark text-text tracking-[-0.01em]">

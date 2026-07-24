@@ -1000,7 +1000,43 @@ export default function UsersPage() {
           <div className="relative z-10 flex flex-col h-full w-full">
             {/* Handle solo en móvil */}
             {isMobile && (
-              <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+              <div 
+                className="w-full pt-4 pb-2 flex justify-center shrink-0 touch-none"
+                onTouchStart={(e) => {
+                  const drawer = document.getElementById("edit-user-drawer");
+                  if (!drawer) return;
+                  drawer.dataset.startY = e.touches[0].clientY.toString();
+                  drawer.style.transition = 'none';
+                }}
+                onTouchMove={(e) => {
+                  const drawer = document.getElementById("edit-user-drawer");
+                  if (!drawer) return;
+                  const startY = parseFloat(drawer.dataset.startY || '0');
+                  const deltaY = e.touches[0].clientY - startY;
+                  if (deltaY > 0) {
+                    drawer.style.transform = `translateY(${deltaY}px)`;
+                    drawer.dataset.swiping = 'true';
+                  }
+                }}
+                onTouchEnd={(e) => {
+                  const drawer = document.getElementById("edit-user-drawer");
+                  if (!drawer) return;
+                  drawer.style.transition = 'transform 0.3s ease-out';
+                  if (drawer.dataset.swiping === 'true') {
+                    const startY = parseFloat(drawer.dataset.startY || '0');
+                    const deltaY = e.changedTouches[0].clientY - startY;
+                    drawer.dataset.swiping = 'false';
+                    if (deltaY > 80) {
+                      setIsEditSheetOpen(false);
+                      setTimeout(() => { drawer.style.transform = ''; }, 300);
+                    } else {
+                      drawer.style.transform = '';
+                    }
+                  }
+                }}
+              >
+                <div className="w-12 h-1.5 bg-white/30 rounded-full" />
+              </div>
             )}
 
             <form onSubmit={handleUpdateUser} className="flex-1 flex flex-col overflow-hidden">
@@ -1030,11 +1066,11 @@ export default function UsersPage() {
                     const startY = parseFloat(drawer.dataset.startY || '0');
                     const deltaY = e.changedTouches[0].clientY - startY;
                     drawer.dataset.swiping = 'false';
-                    if (deltaY > 150) {
+                    if (deltaY > 80) {
                       setIsEditSheetOpen(false);
                       setTimeout(() => { drawer.style.transform = ''; }, 300);
                     } else {
-                      drawer.style.transform = `translateY(0)`;
+                      drawer.style.transform = '';
                     }
                   } else {
                     drawer.style.transform = '';

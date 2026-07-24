@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     const options = await generateAuthenticationOptions({
       rpID,
       allowCredentials,
-      userVerification: 'required',
+      userVerification: 'preferred',
     });
 
     const cookieStore = await cookies();
