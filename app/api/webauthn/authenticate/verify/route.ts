@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
+import { getAdminSupabase } from '@/lib/supabase/admin';
 import { signSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
     const { userId, userType, phone } = JSON.parse(authUserInfo);
     
-    const supabase = await createClient();
+    const supabase = await getAdminSupabase();
     
     // Buscar la credencial enviada por el cliente
     const { data: passkey } = await supabase

@@ -300,23 +300,14 @@ export function LoginForm() {
                       type="button"
                       onClick={handleBiometricLogin}
                       suppressHydrationWarning
-                      className="group flex flex-col items-center justify-center p-3 rounded-2xl transition-all duration-300 active:scale-95 disabled:opacity-40 my-1 hover:bg-white/5"
+                      className="group flex flex-col items-center justify-center p-4 rounded-3xl transition-all duration-300 active:scale-95 disabled:opacity-40 my-2"
                       disabled={!isMounted || isSubmittingPin || isBiometricLoading || isRedirecting || !phone}
-                      title="Ingresar con Huella / Face ID"
+                      title="Ingresar con Huella / Passkey"
                     >
-                      <div className="relative mb-2">
-                        <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/20 shadow-xl bg-dark2 flex items-center justify-center group-hover:scale-105 transition-all">
-                          <Image
-                            src="/icon-192.png"
-                            alt="Volunteer Manager"
-                            width={56}
-                            height={56}
-                            className="object-contain"
-                          />
-                        </div>
-                        <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#4d7cfe] border-2 border-dark flex items-center justify-center text-white shadow-md">
-                          <span className="material-symbols-outlined text-[15px]">fingerprint</span>
-                        </div>
+                      <div className="w-20 h-20 rounded-full bg-[#4d7cfe]/10 border-2 border-[#4d7cfe]/30 flex items-center justify-center text-[#4d7cfe] group-hover:bg-[#4d7cfe]/20 group-hover:scale-105 group-hover:border-[#4d7cfe]/60 shadow-lg shadow-[#4d7cfe]/10 transition-all">
+                        <span className="material-symbols-outlined text-[42px] group-hover:scale-110 transition-transform">
+                          fingerprint
+                        </span>
                       </div>
                     </button>
 
@@ -431,33 +422,22 @@ export function LoginForm() {
 
                 {authMode === 'biometrics' && hasPasskey ? (
                   <div className="space-y-3 pt-2 text-center flex flex-col items-center justify-center">
-                    {/* 1. Texto arriba */}
                     <p className="text-sm font-bold font-inter text-slate-300">
                       {isMobile ? 'Ingresar con huella' : 'Ingresar con passkey'}
                     </p>
 
-                    {/* 2. Ícono con Logo de la App + Insignia de Huella */}
                     <button
                       type="button"
                       onClick={handleBiometricLogin}
                       suppressHydrationWarning
-                      className="group flex flex-col items-center justify-center p-3 rounded-2xl transition-all duration-300 active:scale-95 disabled:opacity-40 my-1 hover:bg-white/5"
+                      className="group flex flex-col items-center justify-center p-4 rounded-3xl transition-all duration-300 active:scale-95 disabled:opacity-40 my-2"
                       disabled={!isMounted || isSubmittingPin || isBiometricLoading || isRedirecting || !phone}
-                      title="Ingresar con Huella / Face ID"
+                      title="Ingresar con Huella / Passkey"
                     >
-                      <div className="relative mb-2">
-                        <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/20 shadow-xl bg-dark2 flex items-center justify-center group-hover:scale-105 transition-all">
-                          <Image
-                            src="/icon-192.png"
-                            alt="Volunteer Manager"
-                            width={56}
-                            height={56}
-                            className="object-contain"
-                          />
-                        </div>
-                        <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#4d7cfe] border-2 border-dark flex items-center justify-center text-white shadow-md">
-                          <span className="material-symbols-outlined text-[15px]">fingerprint</span>
-                        </div>
+                      <div className="w-20 h-20 rounded-full bg-[#4d7cfe]/10 border-2 border-[#4d7cfe]/30 flex items-center justify-center text-[#4d7cfe] group-hover:bg-[#4d7cfe]/20 group-hover:scale-105 group-hover:border-[#4d7cfe]/60 shadow-lg shadow-[#4d7cfe]/10 transition-all">
+                        <span className="material-symbols-outlined text-[42px] group-hover:scale-110 transition-transform">
+                          fingerprint
+                        </span>
                       </div>
                     </button>
 
@@ -468,7 +448,6 @@ export function LoginForm() {
                       </div>
                     )}
 
-                    {/* 3. Texto debajo */}
                     <div className="pt-1">
                       <button
                         type="button"

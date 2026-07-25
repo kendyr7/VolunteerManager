@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
+import { getAdminSupabase } from '@/lib/supabase/admin';
 import { formatE164 } from '@/lib/whatsapp';
 
 export async function POST(request: Request) {
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       rawDigits.startsWith('505') && rawDigits.length > 8 ? rawDigits.slice(3) : rawDigits
     ])).filter(Boolean);
 
-    const supabase = await createClient();
+    const supabase = await getAdminSupabase();
 
     // Buscar si existe el teléfono en Profiles o Volunteers
     let userId = null;

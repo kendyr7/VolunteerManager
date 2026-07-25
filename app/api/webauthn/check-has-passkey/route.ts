@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { getAdminSupabase } from '@/lib/supabase/admin';
 import { formatE164 } from '@/lib/whatsapp';
 
 export async function GET(request: Request) {
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       rawDigits.startsWith('505') && rawDigits.length > 8 ? rawDigits.slice(3) : rawDigits
     ])).filter(Boolean);
 
-    const supabase = await createClient();
+    const supabase = await getAdminSupabase();
 
     let userId: string | null = null;
 
