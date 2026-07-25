@@ -207,96 +207,102 @@ export default function ShiftsPage() {
   const committees = committeesList.map(c => c.name);
 
   const loadData = async () => {
-    // 1. Role-based strict isolation
-    const role = localStorage.getItem('mock_role') || 'Admin';
-    const committee = localStorage.getItem('mock_committee') || '';
+    try {
+      // 1. Role-based strict isolation
+      const role = localStorage.getItem('mock_role') || 'Admin';
+      const committee = localStorage.getItem('mock_committee') || '';
 
-    let commIdFilter: string | null = null;
-    if (role === 'Editor' && committee) {
-      const { data: commObj } = await supabase
-        .from('committees')
-        .select('id')
-        .eq('name', committee)
-        .maybeSingle();
+      let commIdFilter: string | null = null;
+      if (role === 'Editor' && committee) {
+        const { data: commObj } = await supabase
+          .from('committees')
+          .select('id')
+          .eq('name', committee)
+          .maybeSingle();
 
-      if (commObj) {
-        commIdFilter = commObj.id;
-      }
-    }
-
-    const volsData = await fetchAllRows(
-      supabase,
-      'volunteers',
-      '*, committees(name)',
-      q => commIdFilter ? q.eq('committee_id', commIdFilter) : q
-    );
-
-    // Fetch committees
-    const { data: commsData, error: commsError } = await supabase
-      .from('committees')
-      .select('id, name');
-
-    if (commsError) {
-      console.error("Error loading committees:", commsError);
-    } else if (commsData) {
-      setCommitteesList(commsData);
-    }
-
-    // Fetch shifts (bypassing 1000 row limit)
-    const shiftsData = await fetchAllRows(supabase, 'shifts', '*');
-
-    const sCounts: Record<string, number> = {};
-    const gShifts: Record<string, Record<string, string[]>> = {};
-    const cMap: Record<string, boolean> = {};
-    const coMap: Record<string, boolean> = {};
-
-    if (shiftsData) {
-      setRawShiftsData(shiftsData);
-      shiftsData.forEach(s => {
-        if (s.volunteer_id) {
-          sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
-
-          if (!gShifts[s.volunteer_id]) {
-            gShifts[s.volunteer_id] = Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
-          }
-          if (!gShifts[s.volunteer_id][s.day_key]) {
-            gShifts[s.volunteer_id][s.day_key] = [];
-          }
-          if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
-            gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
-          }
-
-          if (s.checked_in) {
-            cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
-          }
-          if (s.checked_out) {
-            coMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
-          }
+        if (commObj) {
+          commIdFilter = commObj.id;
         }
-      });
-    }
+      }
 
-    setGlobalShifts(gShifts);
-    setCheckedInMap(cMap);
-    setCheckedOutMap(coMap);
+      const volsData = await fetchAllRows(
+        supabase,
+        'volunteers',
+        '*, committees(name)',
+        q => commIdFilter ? q.eq('committee_id', commIdFilter) : q
+      );
 
-    if (volsData) {
-      const mapped = volsData.map((v: any) => ({
-        id: v.id,
-        name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
-        first_name: v.first_name || '',
-        last_name: v.last_name || '',
-        stake: v.stake || '',
-        ward: v.neighborhood || '',
-        phone: v.phone || '',
-        shifts: sCounts[v.id] || 0,
-        reliability: v.reliability_score || 100,
-        committee: v.committees?.name || 'Sin comité',
-        committee_id: v.committee_id,
-        status: v.status,
-        age: v.age
-      }));
-      setVolunteers(mapped);
+      // Fetch committees
+      const { data: commsData, error: commsError } = await supabase
+        .from('committees')
+        .select('id, name');
+
+      if (commsError) {
+        console.error("Error loading committees:", commsError);
+      } else if (commsData) {
+        setCommitteesList(commsData);
+      }
+
+      // Fetch shifts (bypassing 1000 row limit)
+      const shiftsData = await fetchAllRows(supabase, 'shifts', '*');
+
+      const sCounts: Record<string, number> = {};
+      const gShifts: Record<string, Record<string, string[]>> = {};
+      const cMap: Record<string, boolean> = {};
+      const coMap: Record<string, boolean> = {};
+
+      if (shiftsData) {
+        setRawShiftsData(shiftsData);
+        shiftsData.forEach(s => {
+          if (s.volunteer_id) {
+            sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
+
+            if (!gShifts[s.volunteer_id]) {
+              gShifts[s.volunteer_id] = Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
+            }
+            if (!gShifts[s.volunteer_id][s.day_key]) {
+              gShifts[s.volunteer_id][s.day_key] = [];
+            }
+            if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
+              gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
+            }
+
+            if (s.checked_in) {
+              cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
+            }
+            if (s.checked_out) {
+              coMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
+            }
+          }
+        });
+      }
+
+      setGlobalShifts(gShifts);
+      setCheckedInMap(cMap);
+      setCheckedOutMap(coMap);
+
+      if (volsData) {
+        const mapped = volsData.map((v: any) => ({
+          id: v.id,
+          name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+          first_name: v.first_name || '',
+          last_name: v.last_name || '',
+          stake: v.stake || '',
+          ward: v.neighborhood || '',
+          phone: v.phone || '',
+          shifts: sCounts[v.id] || 0,
+          reliability: v.reliability_score || 100,
+          committee: v.committees?.name || 'Sin comité',
+          committee_id: v.committee_id,
+          status: v.status,
+          age: v.age
+        }));
+        setVolunteers(mapped);
+      }
+    } catch (err) {
+      console.error("Error loading shifts data:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -307,8 +313,9 @@ export default function ShiftsPage() {
     if (committee && role !== 'Admin') {
       setSelectedCommittees([committee]);
     }
-    loadData().then(() => setLoading(false));
+    loadData();
   }, []);
+
 
   const [isMobile, setIsMobile] = useState(false);
 

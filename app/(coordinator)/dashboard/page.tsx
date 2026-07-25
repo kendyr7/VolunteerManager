@@ -86,71 +86,75 @@ export default function CoordinatorDashboard() {
   const [dbCheckedInMap, setDbCheckedInMap] = useState<Record<string, boolean>>({});
 
   const supabase = createClient();
-
   const loadData = async () => {
-    const [volsData, commsRes, shiftsData, reqsData] = await Promise.all([
-      fetchAllRows(supabase, 'volunteers', '*, committees(name)'),
-      supabase.from('committees').select('id, name'),
-      fetchAllRows(supabase, 'shifts', '*'),
-      fetchAllRows(supabase, 'committee_shift_requirements', '*, committees(name)')
-    ]);
+    try {
+      const [volsData, commsRes, shiftsData, reqsData] = await Promise.all([
+        fetchAllRows(supabase, 'volunteers', '*, committees(name)'),
+        supabase.from('committees').select('id, name'),
+        fetchAllRows(supabase, 'shifts', '*'),
+        fetchAllRows(supabase, 'committee_shift_requirements', '*, committees(name)')
+      ]);
 
-    const commsData = commsRes.data;
-    if (commsData) {
-      setCommitteesList(commsData);
-    }
+      const commsData = commsRes.data;
+      if (commsData) {
+        setCommitteesList(commsData);
+      }
 
-    const gShifts: Record<string, Record<string, string[]>> = {};
-    const cMap: Record<string, boolean> = {};
+      const gShifts: Record<string, Record<string, string[]>> = {};
+      const cMap: Record<string, boolean> = {};
 
-    if (shiftsData) {
-      shiftsData.forEach(s => {
-        if (s.volunteer_id) {
-          if (!gShifts[s.volunteer_id]) {
-            gShifts[s.volunteer_id] = buildEmptyShifts();
+      if (shiftsData) {
+        shiftsData.forEach(s => {
+          if (s.volunteer_id) {
+            if (!gShifts[s.volunteer_id]) {
+              gShifts[s.volunteer_id] = buildEmptyShifts();
+            }
+            if (!gShifts[s.volunteer_id][s.day_key]) {
+              gShifts[s.volunteer_id][s.day_key] = [];
+            }
+            if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
+              gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
+            }
+            if (s.checked_in) {
+              cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
+            }
           }
-          if (!gShifts[s.volunteer_id][s.day_key]) {
-            gShifts[s.volunteer_id][s.day_key] = [];
-          }
-          if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
-            gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
-          }
-          if (s.checked_in) {
-            cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
-          }
-        }
-      });
-    }
+        });
+      }
 
-    if (reqsData && reqsData.length > 0 && commsData) {
-      const updatedReqs: Record<string, Record<string, number>> = {};
-      reqsData.forEach((r: any) => {
-        const commName = r.committees?.name || commsData.find((c: any) => c.id === r.committee_id)?.name;
-        if (commName) {
-          if (!updatedReqs[commName]) updatedReqs[commName] = {};
-          updatedReqs[commName][r.shift_key] = r.required;
-        }
-      });
-      // Merge into localStorage for client-side consistency
-      const stored = localStorage.getItem("committee_requirements");
-      let allReqs: any = stored ? JSON.parse(stored) : {};
-      Object.assign(allReqs, updatedReqs);
-      localStorage.setItem("committee_requirements", JSON.stringify(allReqs));
-      setCommitteeRequirements(prev => ({ ...prev, ...updatedReqs }));
-    }
+      if (reqsData && reqsData.length > 0 && commsData) {
+        const updatedReqs: Record<string, Record<string, number>> = {};
+        reqsData.forEach((r: any) => {
+          const commName = r.committees?.name || commsData.find((c: any) => c.id === r.committee_id)?.name;
+          if (commName) {
+            if (!updatedReqs[commName]) updatedReqs[commName] = {};
+            updatedReqs[commName][r.shift_key] = r.required;
+          }
+        });
+        const stored = localStorage.getItem("committee_requirements");
+        let allReqs: any = stored ? JSON.parse(stored) : {};
+        Object.assign(allReqs, updatedReqs);
+        localStorage.setItem("committee_requirements", JSON.stringify(allReqs));
+        setCommitteeRequirements(prev => ({ ...prev, ...updatedReqs }));
+      }
 
-    setGlobalShifts(gShifts);
-    setDbCheckedInMap(cMap);
+      setGlobalShifts(gShifts);
+      setDbCheckedInMap(cMap);
 
-    if (volsData) {
-      const mapped = volsData.map((v: any) => ({
-        id: v.id,
-        name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
-        committee: v.committees?.name || 'Sin comité',
-        reliability: v.reliability_score ?? 100,
-        status: v.status || 'active'
-      }));
-      setVolunteers(mapped);
+      if (volsData) {
+        const mapped = volsData.map((v: any) => ({
+          id: v.id,
+          name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+          committee: v.committees?.name || 'Sin comité',
+          reliability: v.reliability_score ?? 100,
+          status: v.status || 'active'
+        }));
+        setVolunteers(mapped);
+      }
+    } catch (err) {
+      console.error("Error loading dashboard data:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -221,7 +225,6 @@ export default function CoordinatorDashboard() {
         }
       }
 
-      // Generar saludo dinámico
       const hour = new Date().getHours();
       let timeOfDay = 'Buenas noches';
       let emoji = '🌙';
@@ -257,7 +260,7 @@ export default function CoordinatorDashboard() {
     } else {
       setIsAuthorized(true);
       fetchUserNameAndSetGreeting();
-      loadData().then(() => setLoading(false));
+      loadData();
     }
   }, [router]);
 
