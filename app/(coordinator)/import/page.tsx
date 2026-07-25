@@ -11,7 +11,8 @@ import { generatePinMessage, generateWaMeLink, formatE164, validatePhone8Digits 
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
 import { motion, AnimatePresence } from "framer-motion";
-import * as XLSX from 'xlsx';
+// xlsx is loaded dynamically inside downloadExcelTemplate() and processFile()
+// to avoid bundling ~800 KB into the initial JS chunk for this route.
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
 
 interface ParsedVolunteer {
@@ -147,7 +148,7 @@ export default function ImportPage() {
     fetchCommittees();
   }, []);
 
-  const downloadExcelTemplate = () => {
+  const downloadExcelTemplate = async () => {
     const committeeExample = userCommittee || "Seguridad";
 
     // Row data — 7 data cols + 1 note col
@@ -162,6 +163,7 @@ export default function ImportPage() {
       "⚠ EJEMPLO — PUEDES BORRAR ESTA FILA",
     ];
 
+    const XLSX = await import('xlsx');
     const ws = XLSX.utils.aoa_to_sheet([headerRow, sampleRow]);
 
     // --- Column widths ---
@@ -233,6 +235,7 @@ export default function ImportPage() {
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
+        const XLSX = await import('xlsx');
         const data = e.target?.result;
         if (!data) return;
         const workbook = XLSX.read(data, { type: 'binary' });

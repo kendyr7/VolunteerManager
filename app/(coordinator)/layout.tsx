@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { logout } from "@/app/actions/auth";
 import Image from "next/image";
 import { SearchProvider, useSearch } from "@/lib/search-context";
+import { CoordinatorDataProvider } from "@/lib/coordinator-data-context";
 
 // Helper component for Material Symbols
 function Icon({ name, size = 20, className = "" }: { name: string, size?: number, className?: string }) {
@@ -350,7 +351,9 @@ export default function CoordinatorLayout({
 }) {
   return (
     <SearchProvider>
-      <CoordinatorLayoutInner>{children}</CoordinatorLayoutInner>
+      <CoordinatorDataProvider>
+        <CoordinatorLayoutInner>{children}</CoordinatorLayoutInner>
+      </CoordinatorDataProvider>
     </SearchProvider>
   );
 }

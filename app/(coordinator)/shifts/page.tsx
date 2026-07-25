@@ -21,7 +21,7 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn, normalizeSearch } from "@/lib/utils";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { canEditShifts } from "@/lib/permissions";
-import { fetchAllRows } from "@/lib/supabase-helpers";
+import { useCoordinatorData } from "@/lib/coordinator-data-context";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -165,7 +165,6 @@ export default function ShiftsPage() {
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [viewMode, setViewMode] = useState<'turnos' | 'active' | 'completed'>('active');
-  const [rawShiftsData, setRawShiftsData] = useState<any[]>([]);
   const [checkoutModal, setCheckoutModal] = useState<{ isOpen: boolean; item: any | null }>({ isOpen: false, item: null });
 
   // Reassign State
@@ -177,9 +176,43 @@ export default function ShiftsPage() {
   const [reassignShiftId, setReassignShiftId] = useState<string>("");
 
   const supabase = createClient();
-  const [volunteers, setVolunteers] = useState<VolunteerType[]>([]);
-  const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  // ── Shared context cache (no per-page fetch) ──────────────────────────────
+  const {
+    rawVolunteers,
+    committeesList,
+    shiftsData: contextShiftsData,
+    globalShifts: contextGlobalShifts,
+    checkedInMap: contextCheckedInMap,
+    checkedOutMap: contextCheckedOutMap,
+    shiftCounts: contextShiftCounts,
+    loading,
+    refresh,
+  } = useCoordinatorData();
+
+  // Map raw volunteers to the local VolunteerType shape
+  const volunteers = useMemo<VolunteerType[]>(
+    () =>
+      rawVolunteers.map((v: any) => ({
+        id: v.id,
+        name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+        first_name: v.first_name || '',
+        last_name: v.last_name || '',
+        stake: v.stake || '',
+        ward: v.neighborhood || '',
+        phone: v.phone || '',
+        shifts: contextShiftCounts[v.id] || 0,
+        reliability: v.reliability_score || 100,
+        committee: v.committees?.name || 'Sin comité',
+        committee_id: v.committee_id,
+        status: v.status,
+        age: v.age,
+      })),
+    [rawVolunteers, contextShiftCounts]
+  );
+
+  // rawShiftsData comes directly from the shared coordinator context (no local fetch)
+  const rawShiftsData = contextShiftsData;
 
   // Toast State
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({
@@ -206,106 +239,6 @@ export default function ShiftsPage() {
 
   const committees = committeesList.map(c => c.name);
 
-  const loadData = async () => {
-    try {
-      // 1. Role-based strict isolation
-      const role = localStorage.getItem('mock_role') || 'Admin';
-      const committee = localStorage.getItem('mock_committee') || '';
-
-      let commIdFilter: string | null = null;
-      if (role === 'Editor' && committee) {
-        const { data: commObj } = await supabase
-          .from('committees')
-          .select('id')
-          .eq('name', committee)
-          .maybeSingle();
-
-        if (commObj) {
-          commIdFilter = commObj.id;
-        }
-      }
-
-      const volsData = await fetchAllRows(
-        supabase,
-        'volunteers',
-        '*, committees(name)',
-        q => commIdFilter ? q.eq('committee_id', commIdFilter) : q
-      );
-
-      // Fetch committees
-      const { data: commsData, error: commsError } = await supabase
-        .from('committees')
-        .select('id, name');
-
-      if (commsError) {
-        console.error("Error loading committees:", commsError);
-      } else if (commsData) {
-        setCommitteesList(commsData);
-      }
-
-      // Fetch shifts (bypassing 1000 row limit)
-      const shiftsData = await fetchAllRows(supabase, 'shifts', '*');
-
-      const sCounts: Record<string, number> = {};
-      const gShifts: Record<string, Record<string, string[]>> = {};
-      const cMap: Record<string, boolean> = {};
-      const coMap: Record<string, boolean> = {};
-
-      if (shiftsData) {
-        setRawShiftsData(shiftsData);
-        shiftsData.forEach(s => {
-          if (s.volunteer_id) {
-            sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
-
-            if (!gShifts[s.volunteer_id]) {
-              gShifts[s.volunteer_id] = Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
-            }
-            if (!gShifts[s.volunteer_id][s.day_key]) {
-              gShifts[s.volunteer_id][s.day_key] = [];
-            }
-            if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
-              gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
-            }
-
-            if (s.checked_in) {
-              cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
-            }
-            if (s.checked_out) {
-              coMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
-            }
-          }
-        });
-      }
-
-      setGlobalShifts(gShifts);
-      setCheckedInMap(cMap);
-      setCheckedOutMap(coMap);
-
-      if (volsData) {
-        const mapped = volsData.map((v: any) => ({
-          id: v.id,
-          name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
-          first_name: v.first_name || '',
-          last_name: v.last_name || '',
-          stake: v.stake || '',
-          ward: v.neighborhood || '',
-          phone: v.phone || '',
-          shifts: sCounts[v.id] || 0,
-          reliability: v.reliability_score || 100,
-          committee: v.committees?.name || 'Sin comité',
-          committee_id: v.committee_id,
-          status: v.status,
-          age: v.age
-        }));
-        setVolunteers(mapped);
-      }
-    } catch (err) {
-      console.error("Error loading shifts data:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     const role = localStorage.getItem('mock_role') as any;
     const committee = localStorage.getItem('mock_committee');
@@ -313,7 +246,6 @@ export default function ShiftsPage() {
     if (committee && role !== 'Admin') {
       setSelectedCommittees([committee]);
     }
-    loadData();
   }, []);
 
 
@@ -357,12 +289,10 @@ export default function ShiftsPage() {
   const buildEmptyShifts = () =>
     Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
 
-  // Global state for mock assignments so they can be edited and persisted within the session
-  const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
-  
-  // Track shifts that are already checked in / out
-  const [checkedInMap, setCheckedInMap] = useState<Record<string, boolean>>({});
-  const [checkedOutMap, setCheckedOutMap] = useState<Record<string, boolean>>({});
+  // checkedInMap, checkedOutMap, and globalShifts come from CoordinatorDataProvider
+  const globalShifts = contextGlobalShifts;
+  const checkedInMap = contextCheckedInMap;
+  const checkedOutMap = contextCheckedOutMap;
 
   // Track completed shifts in local storage / state
   const [completedShiftsMap, setCompletedShiftsMap] = useState<Record<string, { checkedOutAt: string }>>({});
@@ -612,7 +542,7 @@ export default function ShiftsPage() {
 
       setEditingVolunteer(updatedVol);
       setDrawerMode('view');
-      loadData();
+      await refresh(true);
     }
     setIsSavingProfile(false);
   };
@@ -659,7 +589,7 @@ export default function ShiftsPage() {
     setSaved(true);
     showToast("Turnos actualizados");
     setTimeout(() => setSaved(false), 2500);
-    await loadData();
+    await refresh(true);
   };
 
   const isVolunteerAssignedToShift = (vol: VolunteerType, dateKey: string, shiftId: string) => {
@@ -806,7 +736,7 @@ export default function ShiftsPage() {
     }
 
     showToast(`Turno completado para ${item.volunteer.name}`);
-    await loadData();
+    await refresh(true);
   };
 
   const totalCompletedCount = useMemo(() => {
@@ -904,8 +834,6 @@ export default function ShiftsPage() {
       return;
     }
 
-    setLoading(true);
-
     if (reassignSourceDayKey && reassignSourceShiftId) {
       await supabase
         .from('shifts')
@@ -930,9 +858,8 @@ export default function ShiftsPage() {
       showToast(`Turno de ${reassignVolunteer.name} reasignado a ${reassignShiftId} el ${reassignDayKey}`);
       setIsReassignSheetOpen(false);
       setReassignVolunteer(null);
-      await loadData();
+      await refresh(true);
     }
-    setLoading(false);
   };
 
   // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales

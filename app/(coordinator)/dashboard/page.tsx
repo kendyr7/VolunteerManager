@@ -8,8 +8,8 @@ import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { fetchAllRows } from "@/lib/supabase-helpers";
 import { formatE164 } from "@/lib/whatsapp";
+import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -40,15 +40,15 @@ const itemVariants = {
 
 export default function CoordinatorDashboard() {
   const router = useRouter();
+  const {
+    rawVolunteers,
+    committeesList,
+    globalShifts,
+    checkedInMap: dbCheckedInMap,
+    requirementsByCommittee,
+    loading,
+  } = useCoordinatorData();
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [volunteers, setVolunteers] = useState<any[]>([]);
-  const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
-  const [hoveredDay, setHoveredDay] = useState<string | null>(null);
-  const [chartMetric, setChartMetric] = useState<'volunteers' | 'shifts'>('volunteers');
-  const [activeKpiInfo, setActiveKpiInfo] = useState<{ title: string; explanation: string; formula: string } | null>(null);
-  const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
-  const [greeting, setGreeting] = useState<React.ReactNode>("Monitor central de operaciones para el programa de Puertas Abiertas.");
 
   const EVENT_DAYS_RAW = getActiveEventDays();
   const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
@@ -83,82 +83,31 @@ export default function CoordinatorDashboard() {
     return defaults;
   });
 
-  const [dbCheckedInMap, setDbCheckedInMap] = useState<Record<string, boolean>>({});
+  const [hoveredDay, setHoveredDay] = useState<string | null>(null);
+  const [chartMetric, setChartMetric] = useState<'volunteers' | 'shifts'>('volunteers');
+  const [activeKpiInfo, setActiveKpiInfo] = useState<{ title: string; explanation: string; formula: string } | null>(null);
+  const [greeting, setGreeting] = useState<React.ReactNode>("Monitor central de operaciones para el programa de Puertas Abiertas.");
+  const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
 
   const supabase = createClient();
-  const loadData = async () => {
-    try {
-      const [volsData, commsRes, shiftsData, reqsData] = await Promise.all([
-        fetchAllRows(supabase, 'volunteers', '*, committees(name)'),
-        supabase.from('committees').select('id, name'),
-        fetchAllRows(supabase, 'shifts', '*'),
-        fetchAllRows(supabase, 'committee_shift_requirements', '*, committees(name)')
-      ]);
 
-      const commsData = commsRes.data;
-      if (commsData) {
-        setCommitteesList(commsData);
-      }
+  const volunteers = useMemo(
+    () =>
+      rawVolunteers.map((v: any) => ({
+        id: v.id,
+        name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+        committee: v.committees?.name || 'Sin comité',
+        reliability: v.reliability_score ?? 100,
+        status: v.status || 'active',
+      })),
+    [rawVolunteers]
+  );
 
-      const gShifts: Record<string, Record<string, string[]>> = {};
-      const cMap: Record<string, boolean> = {};
-
-      if (shiftsData) {
-        shiftsData.forEach(s => {
-          if (s.volunteer_id) {
-            if (!gShifts[s.volunteer_id]) {
-              gShifts[s.volunteer_id] = buildEmptyShifts();
-            }
-            if (!gShifts[s.volunteer_id][s.day_key]) {
-              gShifts[s.volunteer_id][s.day_key] = [];
-            }
-            if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
-              gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
-            }
-            if (s.checked_in) {
-              cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
-            }
-          }
-        });
-      }
-
-      if (reqsData && reqsData.length > 0 && commsData) {
-        const updatedReqs: Record<string, Record<string, number>> = {};
-        reqsData.forEach((r: any) => {
-          const commName = r.committees?.name || commsData.find((c: any) => c.id === r.committee_id)?.name;
-          if (commName) {
-            if (!updatedReqs[commName]) updatedReqs[commName] = {};
-            updatedReqs[commName][r.shift_key] = r.required;
-          }
-        });
-        const stored = localStorage.getItem("committee_requirements");
-        let allReqs: any = stored ? JSON.parse(stored) : {};
-        Object.assign(allReqs, updatedReqs);
-        localStorage.setItem("committee_requirements", JSON.stringify(allReqs));
-        setCommitteeRequirements(prev => ({ ...prev, ...updatedReqs }));
-      }
-
-      setGlobalShifts(gShifts);
-      setDbCheckedInMap(cMap);
-
-      if (volsData) {
-        const mapped = volsData.map((v: any) => ({
-          id: v.id,
-          name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
-          committee: v.committees?.name || 'Sin comité',
-          reliability: v.reliability_score ?? 100,
-          status: v.status || 'active'
-        }));
-        setVolunteers(mapped);
-      }
-    } catch (err) {
-      console.error("Error loading dashboard data:", err);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (Object.keys(requirementsByCommittee).length > 0) {
+      setCommitteeRequirements((prev) => ({ ...prev, ...requirementsByCommittee }));
     }
-  };
-
-  const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
+  }, [requirementsByCommittee]);
 
   useEffect(() => {
     const loadConfirmations = () => {
@@ -260,7 +209,6 @@ export default function CoordinatorDashboard() {
     } else {
       setIsAuthorized(true);
       fetchUserNameAndSetGreeting();
-      loadData();
     }
   }, [router]);
 

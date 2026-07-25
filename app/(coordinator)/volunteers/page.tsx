@@ -19,10 +19,10 @@ import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { useSearch } from "@/lib/search-context";
+import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { USER_TABLE_STYLES } from "../users/page";
 import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
-import { fetchAllRows } from "@/lib/supabase-helpers";
 import { formatE164, validatePhone8Digits } from "@/lib/whatsapp";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
@@ -100,18 +100,41 @@ function HighlightText({ text, term }: { text: string; term: string }) {
 
 export default function VolunteersPage() {
   const supabase = createClient();
+  const {
+    rawVolunteers,
+    committeesList,
+    globalShifts,
+    checkedInMap,
+    checkedOutMap,
+    shiftCounts,
+    loading,
+    refresh,
+  } = useCoordinatorData();
   const [inputValue, setInputValue] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
 
-  const [volunteers, setVolunteers] = useState<VolunteerType[]>([]);
-  const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
-  const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
-  const [checkedInMap, setCheckedInMap] = useState<Record<string, boolean>>({});
-  const [checkedOutMap, setCheckedOutMap] = useState<Record<string, boolean>>({});
-  const [loading, setLoading] = useState(true);
+  const volunteers = useMemo<VolunteerType[]>(
+    () =>
+      rawVolunteers.map((v: any) => ({
+        id: v.id,
+        name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+        first_name: v.first_name || '',
+        last_name: v.last_name || '',
+        stake: v.stake || '',
+        ward: v.neighborhood || '',
+        phone: v.phone || '',
+        shifts: shiftCounts[v.id] || 0,
+        reliability: v.reliability_score || 100,
+        committee: v.committees?.name || 'Sin comité',
+        committee_id: v.committee_id,
+        status: v.status || 'active',
+        age: v.age,
+      })),
+    [rawVolunteers, shiftCounts]
+  );
   const [showArchived, setShowArchived] = useState(false);
 
   // Toast State
@@ -243,7 +266,7 @@ export default function VolunteersPage() {
       showToast(`Error al ${newStatus === 'archived' ? 'archivar' : 'desarchivar'}`, "error");
     } else {
       showToast(`Voluntario ${newStatus === 'archived' ? 'archivado' : 'desarchivado'}`);
-      await loadData();
+      await refresh();
     }
 
     setIsArchiveModalOpen(false);
@@ -262,110 +285,10 @@ export default function VolunteersPage() {
 
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>(buildEmptyShifts);
 
-  const loadData = async () => {
-    try {
-      // 1. Fetch current user role and committee for strict isolation
-      const role = localStorage.getItem('mock_role') || 'Admin';
-      const committee = localStorage.getItem('mock_committee') || '';
-
-      // 2. Fetch volunteers with server-side filtering for Editors
-      let commIdFilter: string | null = null;
-      if (role === 'Editor' && committee) {
-        const { data: commObj } = await supabase
-          .from('committees')
-          .select('id')
-          .eq('name', committee)
-          .maybeSingle();
-
-        if (commObj) {
-          commIdFilter = commObj.id;
-        }
-      }
-
-      const volsData = await fetchAllRows(
-        supabase,
-        'volunteers',
-        '*, committees(name)',
-        q => commIdFilter ? q.eq('committee_id', commIdFilter) : q
-      );
-
-      // Fetch committees
-      const { data: commsData, error: commsError } = await supabase
-        .from('committees')
-        .select('id, name');
-
-      if (commsError) {
-        console.error("Error loading committees:", commsError);
-      } else if (commsData) {
-        setCommitteesList(commsData);
-      }
-
-      // Fetch shifts (bypassing 1000 row limit)
-      const shiftsData = await fetchAllRows(supabase, 'shifts', '*');
-
-      const sCounts: Record<string, number> = {};
-      const gShifts: Record<string, Record<string, string[]>> = {};
-      const cMap: Record<string, boolean> = {};
-      const coMap: Record<string, boolean> = {};
-
-      if (shiftsData) {
-        shiftsData.forEach(s => {
-          if (s.volunteer_id) {
-            sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
-
-            if (!gShifts[s.volunteer_id]) {
-              gShifts[s.volunteer_id] = Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
-            }
-            if (!gShifts[s.volunteer_id][s.day_key]) {
-              gShifts[s.volunteer_id][s.day_key] = [];
-            }
-            if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
-              gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
-            }
-            if (s.checked_in || s.checked_in_at || s.checked_out || s.checked_out_at) {
-              cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
-            }
-            if (s.checked_out || s.checked_out_at) {
-              coMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
-            }
-          }
-        });
-      }
-
-      setGlobalShifts(gShifts);
-      setCheckedInMap(cMap);
-      setCheckedOutMap(coMap);
-
-      if (volsData) {
-        const mapped = volsData.map((v: any) => ({
-          id: v.id,
-          name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
-          first_name: v.first_name || '',
-          last_name: v.last_name || '',
-          stake: v.stake || '',
-          ward: v.neighborhood || '',
-          phone: v.phone || '',
-          shifts: sCounts[v.id] || 0,
-          reliability: v.reliability_score || 100,
-          committee: v.committees?.name || 'Sin comité',
-          committee_id: v.committee_id,
-          status: v.status || 'active',
-          age: v.age
-        }));
-        setVolunteers(mapped);
-      }
-    } catch (err) {
-      console.error("Error loading volunteers data:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     const role = localStorage.getItem('mock_role') as any;
     const committee = localStorage.getItem('mock_committee');
     if (role) setCurrentRole(role);
-    loadData();
   }, []);
 
 
@@ -480,8 +403,8 @@ export default function VolunteersPage() {
       };
 
       setEditingVolunteer(updatedVol);
-      setVolunteers(prev => prev.map(v => v.id === updatedVol.id ? updatedVol : v));
       setDrawerMode('view');
+      void refresh();
     }
     setIsSavingProfile(false);
   };
@@ -528,7 +451,7 @@ export default function VolunteersPage() {
     setSaved(true);
     showToast("Turnos actualizados");
     setTimeout(() => setSaved(false), 2500);
-    await loadData();
+    await refresh();
   };
 
   const handleAddVolunteer = async (e: React.FormEvent) => {
@@ -591,7 +514,7 @@ export default function VolunteersPage() {
     setNewCommitteeId('');
     setIsAddSheetOpen(false);
 
-    await loadData();
+    await refresh();
   };
 
   const stakes = useMemo(() => {

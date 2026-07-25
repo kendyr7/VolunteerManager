@@ -30,6 +30,7 @@ import { USER_TABLE_STYLES } from "@/app/(coordinator)/users/page";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { canEditShifts } from "@/lib/permissions";
+import { useCoordinatorData } from "@/lib/coordinator-data-context";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -69,10 +70,41 @@ export default function RemindersPage() {
   const buildEmptyShifts = () =>
     Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
 
-  const [volunteers, setVolunteers] = useState<VolunteerType[]>([]);
-  const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
-  const [globalShifts, setGlobalShifts] = useState<Record<string, Record<string, string[]>>>({});
-  const [loading, setLoading] = useState(true);
+  // ── Shared context (no per-page fetch) ────────────────────────────────────
+  const {
+    rawVolunteers,
+    committeesList,
+    globalShifts: contextGlobalShifts,
+    checkedInMap: contextCheckedInMap,
+    checkedOutMap: contextCheckedOutMap,
+    shiftCounts: contextShiftCounts,
+    loading,
+    refresh,
+  } = useCoordinatorData();
+
+  // Map raw volunteers to the local VolunteerType shape
+  const volunteers = useMemo<VolunteerType[]>(
+    () =>
+      rawVolunteers
+        .filter((v: any) => v.status !== 'archived')
+        .map((v: any) => ({
+          id: v.id,
+          name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
+          stake: v.stake || '',
+          ward: v.neighborhood || '',
+          phone: v.phone || '',
+          shifts: contextShiftCounts[v.id] || 0,
+          reliability: v.reliability_score || 100,
+          committee: v.committees?.name || 'Sin comité',
+          committee_id: v.committee_id,
+          age: v.age,
+        })),
+    [rawVolunteers, contextShiftCounts]
+  );
+
+  const globalShifts = contextGlobalShifts;
+  const checkedInMap = contextCheckedInMap;
+  const checkedOutMap = contextCheckedOutMap;
   const [isMobile, setIsMobile] = useState(false);
   const [isMobileSelectorExpanded, setIsMobileSelectorExpanded] = useState(true);
 
@@ -107,9 +139,8 @@ export default function RemindersPage() {
     setToast({ message, type, isVisible: true });
   };
 
-  // Track shifts that are checked in / out
-  const [checkedInMap, setCheckedInMap] = useState<Record<string, boolean>>({});
-  const [checkedOutMap, setCheckedOutMap] = useState<Record<string, boolean>>({});
+  // Track shifts that are checked in / out (from shared context)
+  // checkedInMap and checkedOutMap are already aliased above from context
 
   // Cargar confirmaciones de localStorage
   const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>(() => {
@@ -170,97 +201,9 @@ export default function RemindersPage() {
   const [reassignDayKey, setReassignDayKey] = useState<string>("");
   const [reassignShiftId, setReassignShiftId] = useState<string>("");
 
-  const loadData = async () => {
-    const role = localStorage.getItem('mock_role') || 'Admin';
-    const committee = localStorage.getItem('mock_committee') || '';
-
-    let query = supabase.from('volunteers').select('*, committees(name)');
-
-    if (role === 'Editor' && committee) {
-      const { data: commObj } = await supabase
-        .from('committees')
-        .select('id')
-        .eq('name', committee)
-        .maybeSingle();
-
-      if (commObj) {
-        query = query.eq('committee_id', commObj.id);
-      }
-    }
-
-    const { data: volsData, error: volsError } = await query;
-
-    if (volsError) {
-      console.error("Error loading volunteers:", volsError);
-    }
-
-    // Fetch committees
-    const { data: commsData, error: commsError } = await supabase
-      .from('committees')
-      .select('id, name');
-
-    if (commsError) {
-      console.error("Error loading committees:", commsError);
-    } else if (commsData) {
-      setCommitteesList(commsData);
-    }
-
-    // Fetch shifts
-    const { data: shiftsData, error: shiftsError } = await supabase
-      .from('shifts')
-      .select('*');
-
-    const sCounts: Record<string, number> = {};
-    const gShifts: Record<string, Record<string, string[]>> = {};
-    const cMap: Record<string, boolean> = {};
-    const coMap: Record<string, boolean> = {};
-
-    if (shiftsData) {
-      shiftsData.forEach(s => {
-        if (s.volunteer_id) {
-          sCounts[s.volunteer_id] = (sCounts[s.volunteer_id] || 0) + 1;
-
-          if (!gShifts[s.volunteer_id]) {
-            gShifts[s.volunteer_id] = Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
-          }
-          if (!gShifts[s.volunteer_id][s.day_key]) {
-            gShifts[s.volunteer_id][s.day_key] = [];
-          }
-          if (!gShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
-            gShifts[s.volunteer_id][s.day_key].push(s.shift_key);
-          }
-          if (s.checked_in) {
-            cMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
-          }
-          if (s.checked_out) {
-            coMap[`${s.volunteer_id}-${s.day_key}-${s.shift_key}`] = true;
-          }
-        }
-      });
-    }
-
-    setGlobalShifts(gShifts);
-    setCheckedInMap(cMap);
-    setCheckedOutMap(coMap);
-
-    if (volsData) {
-      const mapped = volsData
-        .filter((v: any) => v.status !== 'archived')
-        .map((v: any) => ({
-          id: v.id,
-          name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
-          stake: v.stake || '',
-          ward: v.neighborhood || '',
-          phone: v.phone || '',
-          shifts: sCounts[v.id] || 0,
-          reliability: v.reliability_score || 100,
-          committee: v.committees?.name || 'Sin comité',
-          committee_id: v.committee_id,
-          age: v.age
-        }));
-      setVolunteers(mapped);
-    }
-  };
+  // loadData was removed — volunteers, committees, and shifts now come
+  // from the shared CoordinatorDataProvider. Mutations call refresh(true)
+  // to revalidate the cache across all tabs.
 
   // Estado del turno seleccionado (ninguno por defecto)
   const [selectedDayKey, setSelectedDayKey] = useState<string>("");
@@ -370,7 +313,7 @@ export default function RemindersPage() {
     setSaved(true);
     showToast("Turnos actualizados");
     setTimeout(() => setSaved(false), 2500);
-    await loadData();
+    await refresh(true);
   };
 
 
@@ -420,9 +363,6 @@ export default function RemindersPage() {
     };
   }, []);
 
-  useEffect(() => {
-    loadData().then(() => setLoading(false));
-  }, []);
 
   // Calcular cantidad de voluntarios asignados por turno/día (respetando filtros)
   const shiftCounts = useMemo(() => {
@@ -689,8 +629,6 @@ export default function RemindersPage() {
       return;
     }
 
-    setLoading(true);
-    
     // Process reassignments
     const insertRows: any[] = [];
     const deletePromises = Array.from(selectedVolunteers).map(volId => {
@@ -721,9 +659,8 @@ export default function RemindersPage() {
       showToast(`Reasignados a ${reassignShiftId} el ${reassignDayKey}`);
       setIsReassignSheetOpen(false);
       setSelectedVolunteers(new Set());
-      await loadData();
+      await refresh(true);
     }
-    setLoading(false);
   };
 
   const handleArchiveVolunteer = async (vol: VolunteerType) => {
@@ -739,7 +676,7 @@ export default function RemindersPage() {
       showToast(`Error al archivar a ${vol.name}`, "error");
     } else {
       showToast(`${vol.name} archivado con éxito`);
-      await loadData();
+      await refresh(true);
     }
   };
 
