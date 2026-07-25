@@ -75,7 +75,6 @@ export function LoginForm() {
   useEffect(() => {
     if (!phone || phone.length < 8) {
       setHasPasskey(false);
-      setAuthMode('pin');
       return;
     }
 
@@ -86,16 +85,14 @@ export function LoginForm() {
         if (!isSubscribed) return;
         const passkeyAvailable = !!data.hasPasskey;
         setHasPasskey(passkeyAvailable);
-        if (passkeyAvailable && savedUserMode) {
+        const preferredMethod = typeof window !== 'undefined' ? localStorage.getItem("preferred_auth_method") : null;
+        if (passkeyAvailable && (savedUserMode || preferredMethod === "biometrics")) {
           setAuthMode('biometrics');
-        } else {
-          setAuthMode('pin');
         }
       })
       .catch(() => {
         if (isSubscribed) {
           setHasPasskey(false);
-          setAuthMode('pin');
         }
       });
 
@@ -269,7 +266,7 @@ export function LoginForm() {
             className="space-y-5"
           >
             {!savedUserMode ? (
-              /* Usuario nuevo / No recordado: Solo Teléfono + PIN + Ingresar */
+              /* Usuario nuevo / No recordado */
               <>
                 <div className="space-y-2">
                   <Label htmlFor="phone" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
@@ -293,53 +290,118 @@ export function LoginForm() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="pin" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
-                    PIN de Acceso
-                  </Label>
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex-1 group">
-                      <span className="material-symbols-outlined text-[20px] absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">vpn_key</span>
-                      <input
-                        id="pin"
-                        type="password"
-                        inputMode="numeric"
-                        autoComplete="current-password"
-                        maxLength={4}
-                        placeholder="••••"
-                        required
-                        value={pin}
-                        onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                        className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-11 pr-3 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
-                        disabled={isSubmittingPin || isRedirecting}
-                      />
+                {authMode === 'biometrics' && hasPasskey ? (
+                  <div className="space-y-3 pt-2 text-center flex flex-col items-center justify-center">
+                    <p className="text-sm font-bold font-inter text-slate-300">
+                      {isMobile ? 'Ingresar con huella' : 'Ingresar con passkey'}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={handleBiometricLogin}
+                      suppressHydrationWarning
+                      className="group flex flex-col items-center justify-center p-3 rounded-2xl transition-all duration-300 active:scale-95 disabled:opacity-40 my-1 hover:bg-white/5"
+                      disabled={!isMounted || isSubmittingPin || isBiometricLoading || isRedirecting || !phone}
+                      title="Ingresar con Huella / Face ID"
+                    >
+                      <div className="relative mb-2">
+                        <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/20 shadow-xl bg-dark2 flex items-center justify-center group-hover:scale-105 transition-all">
+                          <Image
+                            src="/icon-192.png"
+                            alt="Volunteer Manager"
+                            width={56}
+                            height={56}
+                            className="object-contain"
+                          />
+                        </div>
+                        <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#4d7cfe] border-2 border-dark flex items-center justify-center text-white shadow-md">
+                          <span className="material-symbols-outlined text-[15px]">fingerprint</span>
+                        </div>
+                      </div>
+                    </button>
+
+                    {error && (
+                      <div className="w-full p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2 text-left">
+                        <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
+                        <p className="text-sm font-inter font-bold text-red">{error}</p>
+                      </div>
+                    )}
+
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode('pin')}
+                        className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline underline-offset-4"
+                      >
+                        O ingresa con tu PIN
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="pin" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
+                        PIN de Acceso
+                      </Label>
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex-1 group">
+                          <span className="material-symbols-outlined text-[20px] absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">vpn_key</span>
+                          <input
+                            id="pin"
+                            type="password"
+                            inputMode="numeric"
+                            autoComplete="current-password"
+                            maxLength={4}
+                            placeholder="••••"
+                            required
+                            value={pin}
+                            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                            className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-11 pr-3 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
+                            disabled={isSubmittingPin || isRedirecting}
+                          />
+                        </div>
+
+                        <button 
+                          type="submit" 
+                          className="flex-1 h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center group shrink-0 text-center"
+                          disabled={isSubmittingPin || isRedirecting}
+                          onClick={() => {
+                            localStorage.setItem("preferred_auth_method", "pin");
+                          }}
+                        >
+                          {isSubmittingPin ? (
+                            <span>Verificando...</span>
+                          ) : (
+                            <span>Ingresar</span>
+                          )}
+                        </button>
+                      </div>
                     </div>
 
-                    <button 
-                      type="submit" 
-                      className="flex-1 h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center group shrink-0 text-center"
-                      disabled={isSubmittingPin || isRedirecting}
-                      onClick={() => {
-                        localStorage.setItem("preferred_auth_method", "pin");
-                      }}
-                    >
-                      {isSubmittingPin ? (
-                        <span>Verificando...</span>
-                      ) : (
-                        <span>Ingresar</span>
-                      )}
-                    </button>
-                  </div>
-                </div>
+                    {error && (
+                      <div className="p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                        <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
+                        <p className="text-sm font-inter font-bold text-red">{error}</p>
+                      </div>
+                    )}
 
-                {error && (
-                  <div className="p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-                    <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
-                    <p className="text-sm font-inter font-bold text-red">{error}</p>
-                  </div>
+                    {hasPasskey && (
+                      <div className="pt-3 flex flex-col items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => setAuthMode('biometrics')}
+                          className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">fingerprint</span>
+                          <span>{isMobile ? 'O ingresa con tu huella dactilar' : 'O ingresa con passkey / Windows Hello'}</span>
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             ) : (
+
               /* Usuario Recordado (savedUserMode === true) */
               <>
                 <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-sm">

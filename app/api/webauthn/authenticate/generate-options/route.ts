@@ -2,15 +2,29 @@ import { NextResponse } from 'next/server';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { formatE164 } from '@/lib/whatsapp';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const phone = body.phone?.replace(/\s+/g, '');
+    const rawPhoneInput = body.phone?.trim() || '';
 
-    if (!phone) {
+    if (!rawPhoneInput) {
       return NextResponse.json({ error: 'Número de teléfono es requerido' }, { status: 400 });
     }
+
+    const formattedPhone = formatE164(rawPhoneInput);
+    const rawDigits = rawPhoneInput.replace(/\D/g, '');
+    const targetPhones = Array.from(new Set([
+      rawPhoneInput,
+      formattedPhone,
+      rawPhoneInput.replace(/\s+/g, ''),
+      formattedPhone.replace('+', ''),
+      rawDigits,
+      rawDigits.length === 8 ? `505${rawDigits}` : rawDigits,
+      rawDigits.length === 8 ? `+505${rawDigits}` : rawDigits,
+      rawDigits.startsWith('505') && rawDigits.length > 8 ? rawDigits.slice(3) : rawDigits
+    ])).filter(Boolean);
 
     const supabase = await createClient();
 
@@ -18,12 +32,12 @@ export async function POST(request: Request) {
     let userId = null;
     let userType = null;
 
-    const { data: profile } = await supabase.from('profiles').select('id').eq('phone', phone).maybeSingle();
+    const { data: profile } = await supabase.from('profiles').select('id').in('phone', targetPhones).maybeSingle();
     if (profile) {
       userId = profile.id;
       userType = 'profile';
     } else {
-      const { data: volunteer } = await supabase.from('volunteers').select('id').eq('phone', phone).maybeSingle();
+      const { data: volunteer } = await supabase.from('volunteers').select('id').in('phone', targetPhones).maybeSingle();
       if (volunteer) {
         userId = volunteer.id;
         userType = 'volunteer';
@@ -31,7 +45,7 @@ export async function POST(request: Request) {
     }
 
     if (!userId) {
-      return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
+      return NextResponse.json({ error: 'Usuario no encontrado con ese teléfono' }, { status: 404 });
     }
 
     // Buscar si este usuario tiene passkeys
@@ -66,7 +80,7 @@ export async function POST(request: Request) {
       path: '/',
     });
 
-    cookieStore.set('webauthn_auth_user', JSON.stringify({ userId, userType, phone }), {
+    cookieStore.set('webauthn_auth_user', JSON.stringify({ userId, userType, phone: rawPhoneInput }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 5,
