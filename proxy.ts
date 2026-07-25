@@ -5,22 +5,34 @@ import { verifySessionToken } from '@/lib/auth'
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const origin = request.headers.get('origin')
-  const allowedOrigin = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
   // 1. Proteger APIs de CORS no autorizados
   if (pathname.startsWith('/api/')) {
-    if (origin && origin !== allowedOrigin) {
-      return new NextResponse(
-        JSON.stringify({ error: 'CORS: Origen no permitido.' }),
-        {
-          status: 403,
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': allowedOrigin
-          },
-        }
-      )
+    if (origin) {
+      // Build list of allowed origins: env var + production domain + localhost variants
+      const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL || '';
+      const allowedOrigins = new Set([
+        configuredOrigin,
+        'https://volunteermanager.org',
+        'https://www.volunteermanager.org',
+        'http://localhost:3000',
+        'http://localhost:3001',
+      ].filter(Boolean));
+
+      if (!allowedOrigins.has(origin)) {
+        return new NextResponse(
+          JSON.stringify({ error: 'CORS: Origen no permitido.' }),
+          {
+            status: 403,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': configuredOrigin || 'https://volunteermanager.org'
+            },
+          }
+        )
+      }
     }
+    // No origin header = same-origin request or server-to-server — allow through
   }
 
   // 2. Control de Acceso de Servidor (Session & Role Checking / Admin Check)
