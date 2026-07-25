@@ -602,25 +602,16 @@ export default function UsersPage() {
         <div
           id="add-user-drawer"
           className={cn(
-            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl",
+            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl border-l border-border",
             isMobile
-              ? `w-full h-[94dvh] rounded-t-[40px] shadow-2xl border-0 ${isInviteOpen ? 'translate-y-0' : 'translate-y-full'}`
-              : `border-l border-white/10 w-[450px] h-full ${isInviteOpen ? 'translate-x-0' : 'translate-x-full'}`
+              ? `w-full h-[94dvh] rounded-t-[40px] border-0 ${isInviteOpen ? 'translate-y-0' : 'translate-y-full'}`
+              : `w-[450px] h-full ${isInviteOpen ? 'translate-x-0' : 'translate-x-full'}`
           )}
           style={{ willChange: 'transform' }}
         >
-          {/* Fondo animado (Tema Claro) */}
-          <div className="absolute inset-0 z-0 dark:hidden">
-            <MeshGradientBackground colors={["#60a5fa", "#3b82f6", "#93c5fd", "#4d7cfe"]} backgroundColor="#1e3a8a" />
-          </div>
-          {/* Fondo animado (Tema Oscuro) */}
-          <div className="absolute inset-0 z-0 hidden dark:block">
-            <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
-          </div>
-
           <div className="relative z-10 flex flex-col h-full w-full">
             {isMobile && (
-              <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+              <div className="w-12 h-1.5 bg-text-dim/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
             )}
 
             {!generatedInvite ? (
@@ -629,25 +620,20 @@ export default function UsersPage() {
                 onSubmit={handleInvite}
                 className="flex-1 flex flex-col overflow-hidden"
               >
-                <div className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4 text-white font-light" : "p-7 space-y-7")}>
-                  <div className={cn(isMobile ? "mb-6" : "")}>
-                    <h2 className={cn("font-medium tracking-tight leading-none mb-2", isMobile ? "text-white text-lg" : "text-text")}>Añadir Usuario</h2>
-                    <p className={cn("text-sm font-inter font-bold", isMobile ? "text-white/80" : "text-text-dim")}>Registra un nuevo usuario en la plataforma.</p>
+                <div className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4" : "p-7 space-y-7")}>
+                  <div className="mb-6">
+                    <h2 className="text-xl font-black text-text tracking-tight leading-none mb-1.5">Añadir Usuario</h2>
+                    <p className="text-xs font-inter font-bold text-text-dim">Registra un nuevo usuario en la plataforma.</p>
                   </div>
 
                   <div className="space-y-6 pb-6">
                     <div className="space-y-5">
                       <div className="space-y-2">
-                        <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Nombre Completo</label>
+                        <label className="block mb-1.5 text-xs font-extrabold text-text">Nombre Completo</label>
                         <Input
                           required
                           minLength={3}
-                          className={cn(
-                            "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all",
-                            isMobile
-                              ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
-                              : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
-                          )}
+                          className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text placeholder:text-text-dim focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all"
                           placeholder="Ej. Juan Pérez"
                           value={newName}
                           onChange={(e) => setNewName(e.target.value)}
@@ -655,7 +641,7 @@ export default function UsersPage() {
                       </div>
 
                       <div className="space-y-2">
-                        <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Teléfono (WhatsApp)</label>
+                        <label className="block mb-1.5 text-xs font-extrabold text-text">Teléfono (WhatsApp)</label>
                         <Input
                           required
                           type="tel"
@@ -664,42 +650,30 @@ export default function UsersPage() {
                           onKeyPress={(e) => {
                             if (!/[0-9]/.test(e.key)) e.preventDefault();
                           }}
-                          className={cn(
-                            "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all",
-                            isMobile
-                              ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
-                              : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
-                          )}
+                          className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text placeholder:text-text-dim focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all"
                           placeholder="Ej. 88888888"
                           value={newPhone}
                           onChange={(e) => setNewPhone(e.target.value.replace(/[^0-9]/g, ''))}
                         />
-                        <p className={cn("text-[11px] italic font-inter", isMobile ? "text-white/70" : "text-text-dim")}>Solo 8 dígitos, sin código de país o espacios.</p>
+                        <p className="text-[11px] italic font-inter text-text-dim">Solo 8 dígitos, sin código de país o espacios.</p>
                       </div>
 
                       <div className="space-y-2">
-                        <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Rol en la plataforma</label>
+                        <label className="block mb-1.5 text-xs font-extrabold text-text">Rol en la plataforma</label>
                         <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
-                          <SelectTrigger
-                            className={cn(
-                              "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all flex items-center justify-between",
-                              isMobile
-                                ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
-                                : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
-                            )}
-                          >
+                          <SelectTrigger className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all flex items-center justify-between">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
-                            <SelectItem value="Admin" className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">
+                          <SelectContent className="bg-dark2 border border-border text-text shadow-2xl z-[200]">
+                            <SelectItem value="Admin" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">
                               <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[18px] text-white/70">admin_panel_settings</span>
+                                <span className="material-symbols-outlined text-[18px] text-text-dim">admin_panel_settings</span>
                                 <span>Administrador (Admin)</span>
                               </div>
                             </SelectItem>
-                            <SelectItem value="Editor" className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">
+                            <SelectItem value="Editor" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">
                               <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[18px] text-white/70">manage_accounts</span>
+                                <span className="material-symbols-outlined text-[18px] text-text-dim">manage_accounts</span>
                                 <span>Coordinador (Editor)</span>
                               </div>
                             </SelectItem>
@@ -709,21 +683,14 @@ export default function UsersPage() {
 
                       {newRole === 'Editor' && (
                         <div className="space-y-2 animate-in fade-in zoom-in-95">
-                          <label className={cn("block mb-2 text-xs font-normal", isMobile ? "text-white/90" : "text-text")}>Comité Asignado</label>
+                          <label className="block mb-1.5 text-xs font-extrabold text-text">Comité Asignado</label>
                           <Select value={newCommittee} onValueChange={(v) => setNewCommittee(v || '')}>
-                            <SelectTrigger
-                              className={cn(
-                                "w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all flex items-center justify-between",
-                                isMobile
-                                  ? "border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
-                                  : "border-border bg-dark2 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]"
-                              )}
-                            >
+                            <SelectTrigger className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all flex items-center justify-between">
                               <SelectValue placeholder="Selecciona un comité" />
                             </SelectTrigger>
-                            <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
+                            <SelectContent className="bg-dark2 border border-border text-text shadow-2xl z-[200]">
                               {committeesList.map(c => (
-                                <SelectItem key={c.id} value={c.name} className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">
+                                <SelectItem key={c.id} value={c.name} className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">
                                   {c.name}
                                 </SelectItem>
                               ))}
@@ -734,7 +701,7 @@ export default function UsersPage() {
                     </div>
 
                     {errorMsg && (
-                      <div className="p-3 text-xs font-bold text-red-300 bg-red-500/15 border border-red-500/30 rounded-xl">
+                      <div className="p-3 text-xs font-bold text-red bg-red/10 border border-red/20 rounded-xl">
                         {errorMsg}
                       </div>
                     )}
@@ -742,25 +709,20 @@ export default function UsersPage() {
                 </div>
 
                 <div
-                  className={cn("flex flex-row w-full mt-auto shrink-0 gap-3", isMobile ? "px-6 pt-2" : "p-7 pt-4 border-t border-white/5")}
+                  className={cn("flex flex-row w-full mt-auto shrink-0 gap-3 border-t border-border p-7 pt-4", isMobile && "px-6 pt-3")}
                   style={isMobile ? { paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' } : undefined}
                 >
                   <Button
                     type="button"
                     variant="outline"
                     onClick={resetInviteForm}
-                    className={cn(
-                      "flex-1 rounded-full shadow-lg h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97]",
-                      isMobile
-                        ? "bg-white/10 hover:bg-white/20 text-white border-white/20"
-                        : "bg-dark2 hover:bg-dark3 text-text border-white/10"
-                    )}
+                    className="flex-1 rounded-full shadow-md h-11 px-4 text-xs sm:text-sm font-bold bg-dark3 hover:bg-dark text-text border border-border transition-all active:scale-[0.97]"
                   >
                     Cancelar
                   </Button>
                   <Button
                     type="submit"
-                    className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97]"
+                    className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/20 h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97]"
                   >
                     Añadir
                   </Button>
@@ -768,23 +730,23 @@ export default function UsersPage() {
               </form>
             ) : (
               <div className="flex-1 flex flex-col p-6 space-y-5 animate-in fade-in zoom-in-95 justify-center items-center text-center">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shadow-lg">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-500 flex items-center justify-center shadow-lg">
                   <span className="material-symbols-outlined text-[32px]">check_circle</span>
                 </div>
                 <div>
-                  <h4 className="font-extrabold text-white text-lg">¡Usuario Añadido!</h4>
-                  <p className="text-xs text-white/70 mt-1.5 leading-relaxed px-2">
-                    Envía los detalles de acceso a <span className="font-bold text-white">{generatedInvite.name}</span>. Al ingresar, validará su número de WhatsApp para acceder.
+                  <h4 className="font-extrabold text-text text-lg">¡Usuario Añadido!</h4>
+                  <p className="text-xs text-text-dim mt-1.5 leading-relaxed px-2">
+                    Envía los detalles de acceso a <span className="font-bold text-text">{generatedInvite.name}</span>. Al ingresar, validará su número de WhatsApp para acceder.
                   </p>
                 </div>
 
-                <div className="w-full bg-black/30 border border-white/15 rounded-2xl p-3.5 flex items-center justify-between gap-3">
-                  <code className="text-xs text-white/90 font-mono truncate">{generatedInvite.inviteLink}</code>
+                <div className="w-full bg-dark3 border border-border rounded-2xl p-3.5 flex items-center justify-between gap-3">
+                  <code className="text-xs text-text font-mono truncate">{generatedInvite.inviteLink}</code>
                   <button
                     onClick={() => copyToClipboard(generatedInvite.inviteLink!)}
-                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-bold text-white transition-all active:scale-95"
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-dark2 hover:bg-dark border border-border text-xs font-bold text-text transition-all active:scale-95"
                   >
-                    {copied ? <span className="material-symbols-outlined text-[15px] text-emerald-400">check_circle</span> : <span className="material-symbols-outlined text-[15px]">content_copy</span>}
+                    {copied ? <span className="material-symbols-outlined text-[15px] text-emerald-500">check_circle</span> : <span className="material-symbols-outlined text-[15px]">content_copy</span>}
                     {copied ? 'Copiado' : 'Copiar'}
                   </button>
                 </div>
@@ -802,7 +764,7 @@ export default function UsersPage() {
                 <Button
                   variant="outline"
                   onClick={resetInviteForm}
-                  className="w-full h-11 rounded-full text-xs font-bold border-white/20 text-white hover:bg-white/10 mt-2"
+                  className="w-full h-11 rounded-full text-xs font-bold bg-dark3 hover:bg-dark text-text border border-border mt-2"
                 >
                   Cerrar y Crear Otra Invitación
                 </Button>
@@ -981,22 +943,13 @@ export default function UsersPage() {
         <div
           id="edit-user-drawer"
           className={cn(
-            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-[#0a101d]",
+            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl border-l border-border",
             isMobile
-              ? `w-full max-h-[94dvh] rounded-t-[40px] shadow-2xl ${isEditSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
-              : `w-[400px] h-full shadow-2xl border-l border-white/10 ${isEditSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
+              ? `w-full max-h-[94dvh] rounded-t-[40px] border-0 ${isEditSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
+              : `w-[400px] h-full ${isEditSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
           )}
           style={{ willChange: 'transform' }}
         >
-          {/* Fondo animado (Tema Claro) */}
-          <div className="absolute inset-0 z-0 dark:hidden">
-            <MeshGradientBackground colors={["#60a5fa", "#3b82f6", "#93c5fd", "#4d7cfe"]} backgroundColor="#1e3a8a" />
-          </div>
-          {/* Fondo animado (Tema Oscuro) */}
-          <div className="absolute inset-0 z-0 hidden dark:block">
-            <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
-          </div>
-
           <div className="relative z-10 flex flex-col h-full w-full">
             {/* Handle solo en móvil */}
             {isMobile && (
@@ -1035,13 +988,13 @@ export default function UsersPage() {
                   }
                 }}
               >
-                <div className="w-12 h-1.5 bg-white/30 rounded-full" />
+                <div className="w-12 h-1.5 bg-text-dim/30 rounded-full" />
               </div>
             )}
 
             <form onSubmit={handleUpdateUser} className="flex-1 flex flex-col overflow-hidden">
               <div
-                className={cn("flex-1 overflow-y-auto scrollbar-hide text-white font-light overscroll-contain", isMobile ? "px-6 pb-6 pt-4" : "p-8 space-y-7 pt-12")}
+                className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4" : "p-8 space-y-7 pt-12")}
                 onTouchStart={(e) => {
                   const drawer = document.getElementById("edit-user-drawer");
                   if (!drawer) return;
@@ -1078,23 +1031,23 @@ export default function UsersPage() {
                 }}
               >
                 <div className="mb-6">
-                  <h2 className="font-medium tracking-tight leading-none mb-2 text-white text-lg">Editar Perfil</h2>
-                  <p className="text-sm font-inter font-bold text-white/80">Modifica los datos de acceso y el rol del usuario en la plataforma.</p>
+                  <h2 className="font-black text-text tracking-tight leading-none mb-1.5 text-xl">Editar Perfil</h2>
+                  <p className="text-xs font-inter font-bold text-text-dim">Modifica los datos de acceso y el rol del usuario en la plataforma.</p>
                 </div>
 
                 <div className="space-y-6">
                   <div className="space-y-5">
                   <div className="space-y-2">
-                    <label className="block mb-2 text-xs font-normal text-white/90">Nombre completo</label>
+                    <label className="block mb-1.5 text-xs font-extrabold text-text">Nombre completo</label>
                     <input
                       required
                       value={newName}
                       onChange={e => setNewName(e.target.value)}
-                      className="w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text placeholder:text-text-dim focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="block mb-2 text-xs font-normal text-white/90">Teléfono WhatsApp</label>
+                    <label className="block mb-1.5 text-xs font-extrabold text-text">Teléfono WhatsApp</label>
                     <input
                       required
                       inputMode="numeric"
@@ -1104,33 +1057,33 @@ export default function UsersPage() {
                       }}
                       value={newPhone}
                       onChange={e => setNewPhone(e.target.value.replace(/[^0-9]/g, ''))}
-                      className="w-full h-10 px-3 rounded-sm border text-sm font-inter font-bold outline-none transition-all border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text placeholder:text-text-dim focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="block mb-2 text-xs font-normal text-white/90">Rol en la plataforma</label>
+                    <label className="block mb-1.5 text-xs font-extrabold text-text">Rol en la plataforma</label>
                     <Select value={newRole} onValueChange={(v) => v && setNewRole(v as Role)}>
-                      <SelectTrigger className="w-full h-10 border font-inter font-bold flex items-center justify-between border-white/20 bg-white/10 text-white">
+                      <SelectTrigger className="w-full h-10 border border-border bg-dark3 text-text font-inter font-bold flex items-center justify-between px-3 rounded-lg">
                         <SelectValue placeholder="Selecciona un rol" />
                       </SelectTrigger>
-                      <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
-                        <SelectItem value="Admin" className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">Admin (Acceso total)</SelectItem>
-                        <SelectItem value="Editor" className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">Editor (Coordinador de comité)</SelectItem>
-                        <SelectItem value="Lector" className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">Lector (Solo lectura)</SelectItem>
+                      <SelectContent className="bg-dark2 border border-border text-text shadow-2xl z-[200]">
+                        <SelectItem value="Admin" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">Admin (Acceso total)</SelectItem>
+                        <SelectItem value="Editor" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">Editor (Coordinador de comité)</SelectItem>
+                        <SelectItem value="Lector" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">Lector (Solo lectura)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   {newRole === 'Editor' && (
                     <div className="space-y-2">
-                      <label className="block mb-2 text-xs font-normal text-white/90">Comité Asignado</label>
+                      <label className="block mb-1.5 text-xs font-extrabold text-text">Comité Asignado</label>
                       <Select value={newCommittee} onValueChange={(v) => v && setNewCommittee(v)}>
-                        <SelectTrigger className="w-full h-10 border font-inter font-bold flex items-center justify-between border-white/20 bg-white/10 text-white">
+                        <SelectTrigger className="w-full h-10 border border-border bg-dark3 text-text font-inter font-bold flex items-center justify-between px-3 rounded-lg">
                           <SelectValue placeholder="Selecciona un comité" />
                         </SelectTrigger>
-                        <SelectContent className="bg-[#050a15] border border-white/20 text-white shadow-2xl z-[200]">
+                        <SelectContent className="bg-dark2 border border-border text-text shadow-2xl z-[200]">
                           {committeesList.map(c => (
-                            <SelectItem key={c.id} value={c.name} className="font-inter font-bold text-sm text-white focus:bg-white/15 focus:text-white cursor-pointer py-2">{c.name}</SelectItem>
+                            <SelectItem key={c.id} value={c.name} className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">{c.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1138,7 +1091,7 @@ export default function UsersPage() {
                   )}
 
                   <div className="space-y-2">
-                    <label className="block mb-2 text-xs font-normal text-white/90">PIN de Acceso Actual</label>
+                    <label className="block mb-1.5 text-xs font-extrabold text-text">PIN de Acceso Actual</label>
                     <div className="flex gap-2">
                       <div className="relative w-32 shrink-0">
                         <input
@@ -1150,13 +1103,13 @@ export default function UsersPage() {
                                   ? editingUser.pin : '****')
                               : ''
                           }
-                          className="w-full h-10 pl-3 pr-8 rounded-sm border text-sm font-inter font-bold outline-none tracking-widest text-left border-white/20 bg-white/5 text-white/70"
+                          className="w-full h-10 pl-3 pr-8 rounded-lg border border-border bg-dark text-text-dim font-inter font-bold outline-none tracking-widest text-left"
                         />
                         {(currentUserRole?.toLowerCase() === 'admin' || (currentUserRole?.toLowerCase() === 'editor' && editingUser?.committee === currentUserCommittee)) && editingUser?.pin && (
                           <button
                             type="button"
                             onClick={() => setShowPin(!showPin)}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 transition-colors flex items-center justify-center text-white/50 hover:text-white"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 transition-colors flex items-center justify-center text-text-dim hover:text-text"
                           >
                             <span className="material-symbols-outlined text-[18px]">
                               {showPin ? 'visibility_off' : 'visibility'}
@@ -1168,18 +1121,18 @@ export default function UsersPage() {
                         type="button"
                         variant="outline"
                         onClick={() => handleResetPin(editingUser!)}
-                        className="flex-1 h-10 px-4 p-0 flex items-center justify-center gap-2 border rounded-sm text-white border-white/20 bg-white/10 hover:bg-white/25"
+                        className="flex-1 h-10 px-4 p-0 flex items-center justify-center gap-2 border border-border rounded-lg text-text bg-dark3 hover:bg-dark font-bold font-inter text-sm"
                       >
                         <span className="material-symbols-outlined text-[18px]">lock_reset</span>
-                        <span className="font-bold font-inter text-sm">Resetear PIN</span>
+                        <span>Resetear PIN</span>
                       </Button>
                     </div>
-                    <p className="text-[10px] italic font-inter text-white/70">El PIN por defecto tras un reseteo es '1234'.</p>
+                    <p className="text-[10px] italic font-inter text-text-dim">El PIN por defecto tras un reseteo es '1234'.</p>
                   </div>
                 </div>
 
                 {errorMsg && (
-                  <div className="p-3 text-sm rounded-sm border text-white bg-white/10 border-white/20 mt-4">
+                  <div className="p-3 text-xs font-bold text-red bg-red/10 border border-red/20 rounded-xl mt-4">
                     {errorMsg}
                   </div>
                 )}
@@ -1189,21 +1142,21 @@ export default function UsersPage() {
 
               {/* Botones */}
               <div
-                className="flex flex-row w-full mt-auto shrink-0 gap-3 px-6 pt-0"
+                className="flex flex-row w-full mt-auto shrink-0 gap-3 border-t border-border p-7 pt-4"
                 style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}
               >
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setIsEditSheetOpen(false)}
-                  className="flex-1 rounded-full shadow-lg h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97] bg-white/10 hover:!bg-red-500 hover:!text-white hover:!border-red-500 text-white border-white/20"
+                  className="flex-1 rounded-full shadow-md h-11 px-4 text-xs sm:text-sm font-bold bg-dark3 hover:bg-dark text-text border border-border transition-all active:scale-[0.97]"
                 >
                   Cancelar
                 </Button>
                 <Button
                   type="submit"
                   disabled={isUpdating}
-                  className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97] flex items-center justify-center gap-1.5"
+                  className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/20 h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97] flex items-center justify-center gap-1.5"
                 >
                   {isUpdating ? (
                     <>

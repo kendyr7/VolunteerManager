@@ -257,7 +257,7 @@ function CoordinatorLayoutInner({
           {navPage > 0 && (
             <button
               onPointerDown={(e) => { e.preventDefault(); goToNavPage(navPage - 1); }}
-              className="absolute -left-3 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-white/55 text-black shadow-md transition-all backdrop-blur-xl backdrop-saturate-150 border border-black/10 supports-[backdrop-filter]:bg-white/42 dark:border-white/15 dark:bg-black/40 dark:text-white dark:supports-[backdrop-filter]:bg-black/28"
+              className="absolute -left-3 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-dark2 text-text shadow-lg transition-all backdrop-blur-xl border border-border"
               style={{ top: '50%', transform: 'translateY(-50%)' }}
             >
               <Icon name="chevron_left" size={18} />
@@ -268,7 +268,7 @@ function CoordinatorLayoutInner({
           <div className="relative w-full overflow-hidden rounded-full">
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 rounded-full border border-white/10 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl shadow-lg"
+              className="pointer-events-none absolute inset-0 rounded-full border border-border bg-dark2/90 dark:bg-dark2/80 backdrop-blur-xl shadow-2xl"
             />
             <div
               ref={navScrollRef}
@@ -282,22 +282,22 @@ function CoordinatorLayoutInner({
                 const sharedStyle = { width: 'calc((100vw - 32px) / 5)', scrollSnapAlign: isPageStart ? 'start' as const : undefined };
                 
                 const TAB_COLORS: Record<string, { activeClass: string; iconClass: string }> = {
-                  "/dashboard": { activeClass: "bg-[#4d7cfe]/20 text-[#4d7cfe] border border-[#4d7cfe]/40 shadow-[0_0_14px_rgba(77,124,254,0.35)]", iconClass: "text-[#4d7cfe]" },
-                  "/volunteers": { activeClass: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_14px_rgba(16,185,129,0.35)]", iconClass: "text-emerald-400" },
-                  "/shifts": { activeClass: "bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_14px_rgba(245,158,11,0.35)]", iconClass: "text-amber-400" },
-                  "/check-in": { activeClass: "bg-pink-500/20 text-pink-400 border border-pink-500/40 shadow-[0_0_14px_rgba(236,72,153,0.35)]", iconClass: "text-pink-400" },
-                  "/reminders": { activeClass: "bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_14px_rgba(139,92,246,0.35)]", iconClass: "text-purple-400" },
-                  "/reports": { activeClass: "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-[0_0_14px_rgba(6,182,212,0.35)]", iconClass: "text-cyan-400" },
-                  "/users": { activeClass: "bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-[0_0_14px_rgba(59,130,246,0.35)]", iconClass: "text-blue-400" },
-                  "/import": { activeClass: "bg-orange-500/20 text-orange-400 border border-orange-500/40 shadow-[0_0_14px_rgba(249,115,22,0.35)]", iconClass: "text-orange-400" },
-                  "/settings": { activeClass: "bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 shadow-[0_0_14px_rgba(99,102,241,0.35)]", iconClass: "text-indigo-400" },
+                  "/dashboard": { activeClass: "bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/40 shadow-[0_0_14px_rgba(77,124,254,0.2)]", iconClass: "text-[#4d7cfe]" },
+                  "/volunteers": { activeClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 shadow-[0_0_14px_rgba(16,185,129,0.2)]", iconClass: "text-emerald-600 dark:text-emerald-400" },
+                  "/shifts": { activeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/40 shadow-[0_0_14px_rgba(245,158,11,0.2)]", iconClass: "text-amber-600 dark:text-amber-400" },
+                  "/check-in": { activeClass: "bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/40 shadow-[0_0_14px_rgba(236,72,153,0.2)]", iconClass: "text-pink-600 dark:text-pink-400" },
+                  "/reminders": { activeClass: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/40 shadow-[0_0_14px_rgba(139,92,246,0.2)]", iconClass: "text-purple-600 dark:text-purple-400" },
+                  "/reports": { activeClass: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/40 shadow-[0_0_14px_rgba(6,182,212,0.2)]", iconClass: "text-cyan-600 dark:text-cyan-400" },
+                  "/users": { activeClass: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/40 shadow-[0_0_14px_rgba(59,130,246,0.2)]", iconClass: "text-blue-600 dark:text-blue-400" },
+                  "/import": { activeClass: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/40 shadow-[0_0_14px_rgba(249,115,22,0.2)]", iconClass: "text-orange-600 dark:text-orange-400" },
+                  "/settings": { activeClass: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/40 shadow-[0_0_14px_rgba(99,102,241,0.2)]", iconClass: "text-indigo-600 dark:text-indigo-400" },
                 };
 
-                const tabColor = TAB_COLORS[item.href] || { activeClass: "bg-white/20 text-white border border-white/30", iconClass: "text-white" };
+                const tabColor = TAB_COLORS[item.href] || { activeClass: "bg-dark3 text-text border border-border", iconClass: "text-text" };
 
                 const sharedClass = cn(
                   "flex flex-col items-center justify-center py-2 rounded-full transition-all duration-300 shrink-0 px-0.5 relative",
-                  isActive ? tabColor.activeClass : "text-white/60 hover:text-white"
+                  isActive ? tabColor.activeClass : "text-text-dim hover:text-text hover:bg-dark3/50"
                 );
                 if (isLogout) {
                   return (
@@ -305,9 +305,9 @@ function CoordinatorLayoutInner({
                       key="logout"
                       onClick={handleLogout}
                       style={sharedStyle}
-                      className={cn(sharedClass, "text-red-400 hover:text-red-300 hover:bg-red-500/10")}
+                      className={cn(sharedClass, "text-red-500 dark:text-red-400 hover:text-red-600 hover:bg-red-500/10")}
                     >
-                      <Icon name="logout" size={20} className="mb-1 text-red-400" />
+                      <Icon name="logout" size={20} className="mb-1 text-red-500 dark:text-red-400" />
                       <span className="font-inter text-[9px] sm:text-[10px] font-bold whitespace-nowrap truncate max-w-full">Salir</span>
                     </button>
                   );
@@ -319,7 +319,7 @@ function CoordinatorLayoutInner({
                     style={sharedStyle}
                     className={sharedClass}
                   >
-                    <Icon name={item.icon} size={20} className={cn("mb-1 transition-transform duration-200", isActive ? `${tabColor.iconClass} scale-110` : "text-white/60")} />
+                    <Icon name={item.icon} size={20} className={cn("mb-1 transition-transform duration-200", isActive ? `${tabColor.iconClass} scale-110` : "text-text-dim")} />
                     <span className={cn("font-inter text-[9px] sm:text-[10px] whitespace-nowrap truncate max-w-full", isActive ? "font-extrabold" : "font-semibold")}>{item.name}</span>
                   </Link>
                 );
@@ -331,7 +331,7 @@ function CoordinatorLayoutInner({
           {navPage < totalNavPages - 1 && (
             <button
               onPointerDown={(e) => { e.preventDefault(); goToNavPage(navPage + 1); }}
-              className="absolute -right-3 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-white/55 text-black shadow-md transition-all backdrop-blur-xl backdrop-saturate-150 border border-black/10 supports-[backdrop-filter]:bg-white/42 dark:border-white/15 dark:bg-black/40 dark:text-white dark:supports-[backdrop-filter]:bg-black/28"
+              className="absolute -right-3 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-dark2 text-text shadow-lg transition-all backdrop-blur-xl border border-border"
               style={{ top: '50%', transform: 'translateY(-50%)' }}
             >
               <Icon name="chevron_right" size={18} />

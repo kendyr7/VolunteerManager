@@ -442,10 +442,10 @@ export default function ReportsPage() {
               setSelectedCommittees(val ? [val] : []);
             }}
           >
-            <SelectTrigger className="w-full h-11 bg-dark border-white/10 text-xs text-white rounded-xl px-3 font-medium font-inter hover:border-white/20 transition-all outline-none">
+            <SelectTrigger className="w-full h-11 bg-dark2 border-border text-xs text-text rounded-xl px-3 font-medium font-inter hover:border-border-strong transition-all outline-none">
               <SelectValue placeholder="Todos los comités" />
             </SelectTrigger>
-            <SelectContent className="bg-[#0b101b] border-white/10 text-white font-inter text-xs z-[200]">
+            <SelectContent className="bg-dark2 border-border text-text font-inter text-xs z-[200]">
               <SelectItem value="">Todos los comités</SelectItem>
               {data.uniqueCommittees.map(c => (
                 <SelectItem key={c.id} value={c.id}>
@@ -467,10 +467,10 @@ export default function ReportsPage() {
               setSelectedStakes(val ? [val] : []);
             }}
           >
-            <SelectTrigger className="w-full h-11 bg-dark border-white/10 text-xs text-white rounded-xl px-3 font-medium font-inter hover:border-white/20 transition-all outline-none">
+            <SelectTrigger className="w-full h-11 bg-dark2 border-border text-xs text-text rounded-xl px-3 font-medium font-inter hover:border-border-strong transition-all outline-none">
               <SelectValue placeholder="Todas las estacas" />
             </SelectTrigger>
-            <SelectContent className="bg-[#0b101b] border-white/10 text-white font-inter text-xs z-[200]">
+            <SelectContent className="bg-dark2 border-border text-text font-inter text-xs z-[200]">
               <SelectItem value="">Todas las estacas</SelectItem>
               {data.uniqueStakes.map(s => (
                 <SelectItem key={s} value={s}>
@@ -492,10 +492,10 @@ export default function ReportsPage() {
               setSelectedNeighborhoods(val ? [val] : []);
             }}
           >
-            <SelectTrigger className="w-full h-11 bg-dark border-white/10 text-xs text-white rounded-xl px-3 font-medium font-inter hover:border-white/20 transition-all outline-none">
+            <SelectTrigger className="w-full h-11 bg-dark2 border-border text-xs text-text rounded-xl px-3 font-medium font-inter hover:border-border-strong transition-all outline-none">
               <SelectValue placeholder="Todos los barrios" />
             </SelectTrigger>
-            <SelectContent className="bg-[#0b101b] border-white/10 text-white font-inter text-xs z-[200]">
+            <SelectContent className="bg-dark2 border-border text-text font-inter text-xs z-[200]">
               <SelectItem value="">Todos los barrios</SelectItem>
               {data.uniqueNeighborhoods.map(n => (
                 <SelectItem key={n} value={n}>
@@ -512,10 +512,10 @@ export default function ReportsPage() {
         <label className="text-[10px] font-inter font-bold uppercase text-text-dim mb-2 block">Estado del Turno</label>
         <div className="grid grid-cols-2 gap-2">
           {[
-            { id: 'confirmed', label: 'Asistió', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' },
-            { id: 'registered', label: 'Pendiente', color: 'border-blue-500/30 text-blue-400 bg-blue-500/10' },
-            { id: 'absent', label: 'Ausente', color: 'border-rose-500/30 text-rose-400 bg-rose-500/10' },
-            { id: 'replaced', label: 'Reemplazado', color: 'border-white/10 text-text-dim bg-white/5' }
+            { id: 'confirmed', label: 'Asistió', color: 'border-emerald-500/30 text-emerald-500 bg-emerald-500/10' },
+            { id: 'registered', label: 'Pendiente', color: 'border-blue-500/30 text-blue-500 bg-blue-500/10' },
+            { id: 'absent', label: 'Ausente', color: 'border-rose-500/30 text-rose-500 bg-rose-500/10' },
+            { id: 'replaced', label: 'Reemplazado', color: 'border-border text-text-dim bg-dark3' }
           ].map(st => {
             const isSelected = selectedStatuses.includes(st.id);
             return (
@@ -527,7 +527,7 @@ export default function ReportsPage() {
                   "py-2.5 px-3 rounded-xl border text-xs font-bold font-inter transition-all flex items-center justify-between cursor-pointer",
                   isSelected
                     ? "bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md shadow-blue-500/20"
-                    : `${st.color} hover:border-white/20 active:scale-95`
+                    : `${st.color} hover:border-border-strong active:scale-95`
                 )}
               >
                 <span>{st.label}</span>
@@ -539,7 +539,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Mini Calendario Visual – Multi-Date Selector */}
-      <div className="mt-3 border-t border-white/5 pt-4">
+      <div className="mt-3 border-t border-border pt-4">
         <div className="flex items-center justify-between mb-3">
           <div>
             <label className="text-[10px] font-inter font-bold uppercase text-text-dim block">Calendario del Evento (Selección múltiple)</label>
@@ -577,11 +577,11 @@ export default function ReportsPage() {
                   ${
                     isSelected
                       ? "bg-[#4d7cfe] text-white shadow-lg shadow-blue-500/20 scale-[1.05]"
-                      : "bg-dark border border-white/10 hover:border-[#4d7cfe]/50 hover:bg-[#4d7cfe]/5 active:scale-95"
+                      : "bg-dark3 border border-border hover:border-[#4d7cfe]/50 hover:bg-[#4d7cfe]/5 active:scale-95"
                   }
                 `}
               >
-                <span className="text-xs font-black leading-none text-white">
+                <span className={`text-xs font-black leading-none ${isSelected ? "text-white" : "text-text"}`}>
                   {cell.dateNum}
                 </span>
                 <span className={`text-[8px] font-bold mt-0.5 leading-none capitalize ${isSelected ? "text-white/80" : "text-text-dim"}`}>
@@ -614,12 +614,12 @@ export default function ReportsPage() {
             <Button
               onClick={() => setIsFilterDrawerOpen(true)}
               variant="outline"
-              className="rounded-full shadow-lg h-9 px-4 text-xs font-bold font-inter transition-all active:scale-[0.97] flex items-center gap-1.5 bg-dark border-white/10 text-white hover:bg-dark3 relative"
+              className="rounded-full shadow-lg h-9 px-4 text-xs font-bold font-inter transition-all active:scale-[0.97] flex items-center gap-1.5 bg-dark2 border-border text-text hover:bg-dark3 relative"
             >
               <span className="material-symbols-outlined text-[16px]">filter_alt</span>
               <span className="hidden sm:inline">Filtros</span>
               {(selectedCommittees.length > 0 || selectedNeighborhoods.length > 0 || selectedStakes.length > 0 || selectedStatuses.length > 0 || selectedDates.length > 0) && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#4d7cfe] rounded-full border-2 border-dark"></span>
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#4d7cfe] rounded-full border-2 border-dark2"></span>
               )}
             </Button>
             <Button
@@ -649,12 +649,12 @@ export default function ReportsPage() {
         >
           <div className="relative w-full flex items-center">
             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
-              <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
+              <span className="material-symbols-outlined text-text-dim text-[20px]">search</span>
             </div>
             <input
               type="text"
               placeholder="Buscar voluntario por nombre, teléfono, barrio o estaca..."
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-32 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
+              className="w-full bg-dark2 border border-border text-text placeholder:text-text-dim rounded-full pl-12 pr-32 py-3.5 focus:outline-none focus:ring-2 focus:ring-[#4d7cfe]/30 transition-all text-[13px] font-bold font-inter h-[48px]"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               autoComplete="off"
@@ -690,7 +690,7 @@ export default function ReportsPage() {
 
       <div className="flex-1 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
         {/* Primary KPIs - Edge to Edge Fine Line Grid matching Dashboard */}
-        <div className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/5 mb-8">
+        <div className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-border bg-dark3/40 mb-8">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-[1px]">
             {/* KPI 1: Horas de Servicio */}
             <div className="bg-dark2 p-4 sm:p-6 group transition-colors hover:bg-dark3">
@@ -792,7 +792,7 @@ export default function ReportsPage() {
         <div
           id="drawer-filters"
           className={cn(
-            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-[#0b101b] border-white/10",
+            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 border-border",
             isMobile
               ? `w-full h-[90dvh] rounded-t-[40px] shadow-2xl border-t ${isFilterDrawerOpen ? 'translate-y-0' : 'translate-y-full'}`
               : `w-[440px] h-full shadow-2xl border-l ${isFilterDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`
@@ -806,9 +806,9 @@ export default function ReportsPage() {
             )}
 
             {/* Drawer Header without close button */}
-            <div className={cn("flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/10 shrink-0", !isMobile && "pt-8")}>
+            <div className={cn("flex items-center justify-between px-6 pt-5 pb-4 border-b border-border shrink-0", !isMobile && "pt-8")}>
               <div>
-                <h2 className="text-lg font-black text-white flex items-center gap-2">
+                <h2 className="text-lg font-black text-text flex items-center gap-2">
                   <span className="material-symbols-outlined text-[#4d7cfe] text-[22px]">filter_alt</span>
                   Filtros del Reporte
                 </h2>
@@ -869,11 +869,11 @@ export default function ReportsPage() {
       </div>
 
         {/* Tab Selection */}
-        <div className="flex border-b border-white/5 mb-6 gap-2 sm:gap-6">
+        <div className="flex border-b border-border mb-6 gap-2 sm:gap-6">
           <button
             onClick={() => setActiveTab('history')}
             className={`pb-3 font-inter font-bold text-xs sm:text-sm transition-all border-b-2 flex items-center gap-1.5 ${
-              activeTab === 'history' ? 'border-[#4d7cfe] text-[#4d7cfe]' : 'border-transparent text-text-dim hover:text-white'
+              activeTab === 'history' ? 'border-[#4d7cfe] text-[#4d7cfe]' : 'border-transparent text-text-dim hover:text-text'
             }`}
           >
             <span className="material-symbols-outlined text-[16px]">history</span>
@@ -883,7 +883,7 @@ export default function ReportsPage() {
           <button
             onClick={() => setActiveTab('volunteers')}
             className={`pb-3 font-inter font-bold text-xs sm:text-sm transition-all border-b-2 flex items-center gap-1.5 ${
-              activeTab === 'volunteers' ? 'border-[#4d7cfe] text-[#4d7cfe]' : 'border-transparent text-text-dim hover:text-white'
+              activeTab === 'volunteers' ? 'border-[#4d7cfe] text-[#4d7cfe]' : 'border-transparent text-text-dim hover:text-text'
             }`}
           >
             <span className="material-symbols-outlined text-[16px]">bar_chart</span>
@@ -895,9 +895,9 @@ export default function ReportsPage() {
         {/* Tab Contents */}
         <div className="min-h-[400px]">
           {filteredItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center bg-dark2/40 rounded-3xl border border-white/5">
-              <span className="material-symbols-outlined text-[48px] text-white/10 mb-4 animate-pulse">database</span>
-              <p className="text-sm font-bold text-white mb-1">Sin registros</p>
+            <div className="flex flex-col items-center justify-center py-20 text-center bg-dark2/40 rounded-3xl border border-border">
+              <span className="material-symbols-outlined text-[48px] text-text-dim mb-4 animate-pulse">database</span>
+              <p className="text-sm font-bold text-text mb-1">Sin registros</p>
               <p className="text-xs text-text-dim max-w-xs font-inter leading-relaxed">
                 Ninguna asistencia o registro coincide con los filtros aplicados en este momento.
               </p>
@@ -911,7 +911,7 @@ export default function ReportsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 5 }}
                   transition={{ duration: 0.2 }}
-                  className="bg-dark2 border border-white/10 rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full"
+                  className="bg-dark2 border border-border rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full"
                 >
                   {/* Desktop Table View */}
                   <div className="hidden lg:block overflow-x-auto">
@@ -926,29 +926,29 @@ export default function ReportsPage() {
                           <th className="px-5 py-4 text-right font-inter font-bold">Estado</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/5">
+                      <tbody className="divide-y divide-border">
                         {paginatedHistoryItems.map((item) => (
-                          <tr key={item.registrationId} className="hover:bg-white/[0.02] transition-colors group">
+                          <tr key={item.registrationId} className="hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors group">
                             <td className="px-5 py-4">
-                              <p className="font-inter font-bold text-white text-sm tracking-tight">{item.volunteerName}</p>
+                              <p className="font-inter font-bold text-text text-sm tracking-tight">{item.volunteerName}</p>
                               <p className="text-[11px] text-text-dim font-inter font-bold mt-0.5">{item.phone}</p>
                             </td>
                             <td className="px-4 py-4 font-inter font-bold text-[13px] text-text-dim">{item.committeeName}</td>
                             <td className="px-4 py-4 font-inter">
-                              <p className="leading-snug text-white font-inter font-bold text-[13px]">{item.neighborhood}</p>
+                              <p className="leading-snug text-text font-inter font-bold text-[13px]">{item.neighborhood}</p>
                               <p className="text-[11px] font-inter font-bold text-text-dim opacity-70 mt-0.5">{item.stake}</p>
                             </td>
                             <td className="px-4 py-4 text-center font-inter">
-                              <p className="font-inter font-bold text-white text-[13px]">{formatDateDDMMYYYY(item.date)}</p>
+                              <p className="font-inter font-bold text-text text-[13px]">{formatDateDDMMYYYY(item.date)}</p>
                               <p className="text-[11px] text-text-dim font-inter font-bold mt-0.5">T{item.shiftNumber}</p>
                             </td>
                             <td className="px-4 py-4 text-center font-inter font-bold text-[13px] text-text tabular-nums">{formatMinutes(item.durationMinutes)}</td>
                             <td className="px-5 py-4 text-right">
                               <Badge variant="outline" className={`font-inter font-bold text-[10px] py-0.5 px-2 border ${
-                                item.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                item.status === 'registered' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                                item.status === 'absent' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                'bg-white/5 text-text-dim border-white/10'
+                                item.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                                item.status === 'registered' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                item.status === 'absent' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                                'bg-dark3 text-text-dim border-border'
                               }`}>
                                 {item.status === 'confirmed' && 'Asistió'}
                                 {item.status === 'registered' && 'Inscrito'}
@@ -963,12 +963,12 @@ export default function ReportsPage() {
                   </div>
 
                   {/* Mobile Flat List View (Matches Volunteers layout) */}
-                  <div className="block lg:hidden divide-y divide-white/5 bg-dark2">
+                  <div className="block lg:hidden divide-y divide-border bg-dark2">
                     {paginatedHistoryItems.map((item) => (
-                      <div key={item.registrationId} className="px-4 py-3.5 flex flex-col gap-1.5 hover:bg-white/[0.02] transition-colors">
+                      <div key={item.registrationId} className="px-4 py-3.5 flex flex-col gap-1.5 hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                         {/* Line 1: Volunteer Name + Committee & Stake Badges */}
                         <div className="flex items-center justify-between gap-2 w-full">
-                          <p className="font-inter font-bold text-white text-sm tracking-tight truncate">{item.volunteerName}</p>
+                          <p className="font-inter font-bold text-text text-sm tracking-tight truncate">{item.volunteerName}</p>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {item.committeeName && (
                               <Badge variant="outline" className={`font-inter font-bold text-[10px] py-0.5 px-2 border ${getCommitteeColor(item.committeeName)}`}>
@@ -976,7 +976,7 @@ export default function ReportsPage() {
                               </Badge>
                             )}
                             {item.stake && (
-                              <Badge variant="outline" className="font-inter font-bold text-[10px] py-0.5 px-2 border bg-dark3 text-text-dim border-white/10">
+                              <Badge variant="outline" className="font-inter font-bold text-[10px] py-0.5 px-2 border bg-dark3 text-text-dim border-border">
                                 {item.stake}
                               </Badge>
                             )}
@@ -988,11 +988,11 @@ export default function ReportsPage() {
                           <p className="truncate flex items-center gap-1.5">
                             <span>{item.phone || 'Sin teléfono'}</span>
                             <span className="opacity-40">·</span>
-                            <span className="text-white/90">T{item.shiftNumber}</span>
+                            <span className="text-text">T{item.shiftNumber}</span>
                             <span className="opacity-40">·</span>
                             <span className="text-[#4d7cfe]">{formatDateDDMMYYYY(item.date)}</span>
                           </p>
-                          <span className="text-xs font-inter font-bold text-white tabular-nums shrink-0">{formatMinutes(item.durationMinutes)}</span>
+                          <span className="text-xs font-inter font-bold text-text tabular-nums shrink-0">{formatMinutes(item.durationMinutes)}</span>
                         </div>
                       </div>
                     ))}
@@ -1005,7 +1005,7 @@ export default function ReportsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 5 }}
                   transition={{ duration: 0.2 }}
-                  className="bg-dark2 border border-white/10 rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full"
+                  className="bg-dark2 border border-border rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full"
                 >
                   {/* Desktop Table View */}
                   <div className="hidden lg:block overflow-x-auto">
@@ -1019,20 +1019,20 @@ export default function ReportsPage() {
                           <th className="px-5 py-4 text-right font-inter font-bold">Horas Acumuladas</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/5">
+                      <tbody className="divide-y divide-border">
                         {paginatedVolunteerItems.map((v, index) => {
                           const globalRank = (currentPage - 1) * pageSize + index + 1;
                           return (
-                            <tr key={v.id} className="hover:bg-white/[0.02] transition-colors group">
+                            <tr key={v.id} className="hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors group">
                               <td className="px-5 py-4 flex items-center gap-3">
                                 <span className="font-inter font-bold text-text-dim text-sm w-4 shrink-0">#{globalRank}</span>
                                 <div>
-                                  <p className="font-inter font-bold text-white text-sm tracking-tight">{v.name}</p>
+                                  <p className="font-inter font-bold text-text text-sm tracking-tight">{v.name}</p>
                                   <p className="text-[11px] text-text-dim font-inter font-bold mt-0.5">{v.neighborhood} · {v.phone}</p>
                                 </div>
                               </td>
                               <td className="px-4 py-4 font-inter">
-                                <p className="font-inter font-bold text-white text-[13px] leading-snug">{v.committee}</p>
+                                <p className="font-inter font-bold text-text text-[13px] leading-snug">{v.committee}</p>
                                 <p className="text-[11px] text-text-dim font-inter font-bold opacity-70 mt-0.5">{v.stake}</p>
                               </td>
                               <td className="px-4 py-4 text-center font-inter font-bold text-[13px] text-text tabular-nums">
@@ -1041,21 +1041,21 @@ export default function ReportsPage() {
                               <td className="px-4 py-4 text-center">
                                 <div className="flex flex-col items-center gap-1">
                                   <span className={`font-inter font-bold text-[13px] tabular-nums ${
-                                    v.reliability >= 85 ? 'text-emerald-400' :
-                                    v.reliability >= 60 ? 'text-amber-400' : 'text-red-400'
+                                    v.reliability >= 85 ? 'text-emerald-500' :
+                                    v.reliability >= 60 ? 'text-amber-500' : 'text-rose-500'
                                   }`}>{v.reliability}%</span>
-                                  <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
+                                  <div className="w-16 h-1 bg-dark3 border border-border rounded-full overflow-hidden">
                                     <div 
                                       className={`h-full rounded-full ${
-                                        v.reliability >= 85 ? 'bg-emerald-400' :
-                                        v.reliability >= 60 ? 'bg-amber-400' : 'bg-red-500'
+                                        v.reliability >= 85 ? 'bg-emerald-500' :
+                                        v.reliability >= 60 ? 'bg-amber-500' : 'bg-rose-500'
                                       }`}
                                       style={{ width: `${v.reliability}%` }}
                                     />
                                   </div>
                                 </div>
                               </td>
-                              <td className="px-5 py-4 text-right font-inter font-bold text-white text-sm tabular-nums">
+                              <td className="px-5 py-4 text-right font-inter font-bold text-text text-sm tabular-nums">
                                 {formatMinutes(v.minutes)}
                               </td>
                             </tr>
@@ -1066,16 +1066,16 @@ export default function ReportsPage() {
                   </div>
 
                   {/* Mobile Flat List View for Ranking (Matches Volunteers layout) */}
-                  <div className="block lg:hidden divide-y divide-white/5 bg-dark2">
+                  <div className="block lg:hidden divide-y divide-border bg-dark2">
                     {paginatedVolunteerItems.map((v, index) => {
                       const globalRank = (currentPage - 1) * pageSize + index + 1;
                       return (
-                        <div key={v.id} className="px-4 py-3.5 flex flex-col gap-1.5 hover:bg-white/[0.02] transition-colors">
+                        <div key={v.id} className="px-4 py-3.5 flex flex-col gap-1.5 hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                           {/* Line 1: Rank + Volunteer Name + Committee & Stake Badges */}
                           <div className="flex items-center justify-between gap-2 w-full">
                             <div className="flex items-center gap-2 truncate">
                               <span className="font-inter font-bold text-text-dim text-xs shrink-0">#{globalRank}</span>
-                              <p className="font-inter font-bold text-white text-sm tracking-tight truncate">{v.name}</p>
+                              <p className="font-inter font-bold text-text text-sm tracking-tight truncate">{v.name}</p>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
                               {v.committee && (
@@ -1084,7 +1084,7 @@ export default function ReportsPage() {
                                 </Badge>
                               )}
                               {v.stake && (
-                                <Badge variant="outline" className="font-inter font-bold text-[10px] py-0.5 px-2 border bg-dark3 text-text-dim border-white/10">
+                                <Badge variant="outline" className="font-inter font-bold text-[10px] py-0.5 px-2 border bg-dark3 text-text-dim border-border">
                                   {v.stake}
                                 </Badge>
                               )}
@@ -1096,10 +1096,10 @@ export default function ReportsPage() {
                             <p className="truncate flex items-center gap-1.5 min-w-0">
                               <span>{v.phone || 'Sin teléfono'}</span>
                               <span className="opacity-40">·</span>
-                              <span className="text-white/80">{v.confirmed}/{v.totalShifts} turnos</span>
+                              <span className="text-text">{v.confirmed}/{v.totalShifts} turnos</span>
                             </p>
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className={`text-[11px] font-inter font-bold ${v.reliability >= 85 ? 'text-emerald-400' : v.reliability >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                              <span className={`text-[11px] font-inter font-bold ${v.reliability >= 85 ? 'text-emerald-500' : v.reliability >= 60 ? 'text-amber-500' : 'text-rose-500'}`}>
                                 {v.reliability}% fiab.
                               </span>
                               <span className="font-inter font-bold text-[#4d7cfe] text-sm tabular-nums">{formatMinutes(v.minutes)}</span>
@@ -1116,9 +1116,9 @@ export default function ReportsPage() {
 
           {/* Pagination Controls */}
           {currentTotalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 mt-6 bg-dark2 border border-white/10 rounded-2xl shadow-lg">
+            <div className="flex items-center justify-between px-4 py-3 mt-6 bg-dark2 border border-border rounded-2xl shadow-lg">
               <p className="text-xs text-text-dim font-inter font-bold">
-                Página <span className="text-white">{currentPage}</span> de <span className="text-white">{currentTotalPages}</span> (
+                Página <span className="text-text">{currentPage}</span> de <span className="text-text">{currentTotalPages}</span> (
                 {activeTab === 'history' ? filteredItems.length : volunteerRanking.length} registros)
               </p>
               <div className="flex items-center gap-2">
@@ -1127,7 +1127,7 @@ export default function ReportsPage() {
                   size="sm"
                   disabled={currentPage === 1}
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  className="h-8 px-3 text-xs font-inter font-bold rounded-xl border-white/10 bg-dark text-white hover:bg-dark3 disabled:opacity-30 cursor-pointer"
+                  className="h-8 px-3 text-xs font-inter font-bold rounded-xl border-border bg-dark2 text-text hover:bg-dark3 disabled:opacity-30 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[16px] mr-1">chevron_left</span>
                   Anterior
@@ -1137,7 +1137,7 @@ export default function ReportsPage() {
                   size="sm"
                   disabled={currentPage >= currentTotalPages}
                   onClick={() => setCurrentPage(p => Math.min(currentTotalPages, p + 1))}
-                  className="h-8 px-3 text-xs font-inter font-bold rounded-xl border-white/10 bg-dark text-white hover:bg-dark3 disabled:opacity-30 cursor-pointer"
+                  className="h-8 px-3 text-xs font-inter font-bold rounded-xl border-border bg-dark2 text-text hover:bg-dark3 disabled:opacity-30 cursor-pointer"
                 >
                   Siguiente
                   <span className="material-symbols-outlined text-[16px] ml-1">chevron_right</span>

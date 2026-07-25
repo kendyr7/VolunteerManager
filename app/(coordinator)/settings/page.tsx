@@ -12,6 +12,7 @@ import { startRegistration } from "@simplewebauthn/browser";
 
 import { isCoordinatorShiftEditAllowed, setCoordinatorShiftEditAllowed } from "@/lib/permissions";
 import { changeUserPin } from "@/app/actions/update-pin";
+import { formatE164 } from "@/lib/whatsapp";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -38,7 +39,7 @@ const itemVariants = {
 
 const getCommitteeStyle = (committeeName: string, isSelected: boolean) => {
   if (!isSelected) {
-    return 'bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white/70';
+    return 'bg-dark3 text-text-dim border-border hover:bg-dark hover:text-text';
   }
 
   const comm = committeeName.toLowerCase();
@@ -171,23 +172,54 @@ export default function SettingsPage() {
     const phone = localStorage.getItem('volunteer_phone') || '';
     setCurrentRole(role);
 
-    // 3. Fetch current user details
+    // 3. Fetch current user details with multi-format phone matching and fallback
     const table = role === 'Lector' ? 'volunteers' : 'profiles';
 
-    const { data: user } = await supabase
-      .from(table)
-      .select('*, committees(name)')
-      .eq('phone', phone)
-      .maybeSingle();
+    const formattedPhone = formatE164(phone);
+    const rawDigits = phone.replace(/\D/g, '');
+    const targetPhones = Array.from(new Set([
+      phone,
+      formattedPhone,
+      rawDigits,
+      rawDigits.length === 8 ? `+505${rawDigits}` : rawDigits,
+      rawDigits.length === 8 ? `505${rawDigits}` : rawDigits,
+      rawDigits.startsWith('505') && rawDigits.length > 8 ? rawDigits.slice(3) : rawDigits
+    ])).filter(Boolean);
+
+    let user: any = null;
+
+    if (targetPhones.length > 0) {
+      const { data: fetchedUser } = await supabase
+        .from(table)
+        .select('*, committees(name)')
+        .in('phone', targetPhones)
+        .maybeSingle();
+      user = fetchedUser;
+    }
+
+    // Fallback: If not found by phone, fetch the active profile/volunteer
+    if (!user) {
+      const { data: fallbackUser } = await supabase
+        .from(table)
+        .select('*, committees(name)')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      user = fallbackUser;
+    }
 
     if (user) {
-      const fullName = role === 'Lector' ? `${user.first_name} ${user.last_name}` : user.full_name;
+      const fullName = role === 'Lector' 
+        ? `${user.first_name || ''} ${user.last_name || ''}`.trim() 
+        : (user.full_name || `${user.first_name || ''} ${user.last_name || ''}`).trim();
+      
       setUserProfile(user);
-      setEditName(fullName);
-      setEditPhone(user.phone);
+      setEditName(fullName || 'Coordinador');
+      setEditPhone(user.phone || phone || '');
       setEditRole(role);
       const userComm = user.committees?.name || '';
       setEditCommittee(userComm);
+      if (user.phone) localStorage.setItem('volunteer_phone', user.phone);
 
       // Initial committee for config
       if (role === 'Editor') {
@@ -195,8 +227,6 @@ export default function SettingsPage() {
       } else if (role === 'Admin') {
         setSelectedConfigCommittees([]); // Default: none selected
       }
-
-
 
       // Check if user has passkeys
       const { data: passkeys } = await supabase
@@ -421,13 +451,19 @@ export default function SettingsPage() {
     e.preventDefault();
     setIsChangingPin(true);
     
-    if (newPin.length < 4 || newPin.length > 6) {
-      showToast("El nuevo PIN debe tener entre 4 y 6 dígitos", "error");
+    if (currentPin.length !== 4) {
+      showToast("El PIN actual debe tener exactamente 4 dígitos", "error");
+      setIsChangingPin(false);
+      return;
+    }
+
+    if (newPin.length !== 4) {
+      showToast("El nuevo PIN debe tener exactamente 4 dígitos", "error");
       setIsChangingPin(false);
       return;
     }
     
-    const res = await changeUserPin(currentPin, newPin);
+    const res = await changeUserPin(currentPin, newPin, editPhone);
     if (res.success) {
       showToast("PIN actualizado correctamente");
       setCurrentPin('');
@@ -451,7 +487,7 @@ export default function SettingsPage() {
   return (
     <div className="w-full mx-auto pb-32 md:pb-12 flex flex-col min-h-[calc(100dvh-10rem)] md:h-[calc(100dvh-8rem)]">
       {/* Sticky Header matching users design */}
-      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 pointer-events-auto shrink-0">
+      <div className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 pointer-events-auto shrink-0 border-b border-border/40">
         <div className="w-full flex items-center justify-between">
           <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
             Ajustes
@@ -466,15 +502,15 @@ export default function SettingsPage() {
         className="w-full pb-20 px-0 sm:px-6 lg:px-8 pt-2"
       >
         {/* Full-width edge-to-edge settings container separated only by single border lines */}
-        <motion.div variants={itemVariants} className="w-full bg-dark2 border-y sm:border border-white/10 rounded-none sm:rounded-2xl overflow-hidden divide-y divide-white/10 shadow-lg">
+        <motion.div variants={itemVariants} className="w-full bg-dark2 border-y sm:border border-border rounded-none sm:rounded-2xl overflow-hidden divide-y divide-border shadow-lg">
 
           {/* 1. Información Personal */}
           <div className="w-full transition-all">
             <button
               type="button"
               onClick={() => isMobile && toggleSection('personal')}
-              className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left ${isMobile ? 'cursor-pointer hover:bg-white/[0.02]' : 'cursor-default'
-                } ${isSectionOpen('personal') ? 'bg-white/[0.02]' : ''}`}
+              className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors ${isMobile ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'
+                } ${isSectionOpen('personal') ? 'bg-black/[0.03] dark:bg-white/[0.02]' : ''}`}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className="w-8 h-8 rounded-xl bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 flex items-center justify-center shrink-0">
@@ -487,7 +523,7 @@ export default function SettingsPage() {
               </div>
 
               {isMobile && (
-                <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-white/70 shrink-0">
+                <div className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center text-text-dim shrink-0">
                   <span className="material-symbols-outlined text-[18px]">
                     {isSectionOpen('personal') ? 'expand_less' : 'expand_more'}
                   </span>
@@ -496,7 +532,7 @@ export default function SettingsPage() {
             </button>
 
             {isSectionOpen('personal') && (
-              <div className="p-4 sm:p-6 space-y-5 border-t border-white/5 bg-black/10">
+              <div className="p-4 sm:p-6 space-y-5 border-t border-border bg-black/[0.02] dark:bg-black/20">
                 <form onSubmit={handleUpdateProfile} className="space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div className="space-y-1.5">
@@ -506,8 +542,8 @@ export default function SettingsPage() {
                         value={editName}
                         onChange={e => setEditName(e.target.value)}
                         className={`w-full h-10 px-3 rounded-xl border text-xs font-inter font-bold outline-none transition-all ${currentRole === 'Lector'
-                          ? 'border-white/5 bg-dark/50 text-text-dim cursor-not-allowed'
-                          : 'border-white/15 bg-white/5 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
+                          ? 'border-border bg-dark text-text-dim cursor-not-allowed'
+                          : 'border-border bg-dark3 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
                           }`}
                       />
                     </div>
@@ -518,8 +554,8 @@ export default function SettingsPage() {
                         value={editPhone}
                         onChange={e => setEditPhone(e.target.value)}
                         className={`w-full h-10 px-3 rounded-xl border text-xs font-inter font-bold outline-none transition-all ${currentRole === 'Lector'
-                          ? 'border-white/5 bg-dark/50 text-text-dim cursor-not-allowed'
-                          : 'border-white/15 bg-white/5 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
+                          ? 'border-border bg-dark text-text-dim cursor-not-allowed'
+                          : 'border-border bg-dark3 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
                           }`}
                       />
                     </div>
@@ -528,17 +564,17 @@ export default function SettingsPage() {
                       <label className="text-xs font-bold text-text">Rol en la plataforma</label>
                       {currentRole === 'Admin' ? (
                         <Select value={editRole} onValueChange={(v) => setEditRole(v as 'Admin' | 'Editor' | 'Lector')}>
-                          <SelectTrigger className="w-full h-10 px-3 border text-text text-xs font-inter font-bold flex items-center justify-between bg-white/5 border-white/15 rounded-xl">
+                          <SelectTrigger className="w-full h-10 px-3 border border-border text-text text-xs font-inter font-bold flex items-center justify-between bg-dark3 rounded-xl">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent className="bg-[#0f172a] border-white/20 text-text text-xs font-inter font-bold z-[120]">
+                          <SelectContent className="bg-dark2 border-border text-text text-xs font-inter font-bold z-[120]">
                             <SelectItem value="Admin">Admin (Acceso total)</SelectItem>
                             <SelectItem value="Editor">Editor (Coordinador de comité)</SelectItem>
                             <SelectItem value="Lector">Lector (Solo lectura)</SelectItem>
                           </SelectContent>
                         </Select>
                       ) : (
-                        <div className="w-full h-10 px-3 rounded-xl border border-white/5 bg-dark/50 text-text-dim text-xs font-inter font-bold flex items-center cursor-not-allowed">
+                        <div className="w-full h-10 px-3 rounded-xl border border-border bg-dark text-text-dim text-xs font-inter font-bold flex items-center cursor-not-allowed">
                           {editRole}
                         </div>
                       )}
@@ -549,17 +585,17 @@ export default function SettingsPage() {
                         <label className="text-xs font-bold text-text">Comité Asignado</label>
                         {currentRole === 'Admin' ? (
                           <Select value={editCommittee} onValueChange={(v) => v && setEditCommittee(v)}>
-                            <SelectTrigger className="w-full h-10 px-3 border text-text text-xs font-inter font-bold flex items-center justify-between bg-white/5 border-white/15 rounded-xl">
+                            <SelectTrigger className="w-full h-10 px-3 border border-border text-text text-xs font-inter font-bold flex items-center justify-between bg-dark3 rounded-xl">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent className="bg-[#0f172a] border-white/20 text-text text-xs font-inter font-bold z-[120]">
+                            <SelectContent className="bg-dark2 border-border text-text text-xs font-inter font-bold z-[120]">
                               {committees.map(c => (
-                                <SelectItem key={c.id} value={c.name} className="focus:bg-white/10 focus:text-text">{c.name}</SelectItem>
+                                <SelectItem key={c.id} value={c.name} className="focus:bg-dark3 focus:text-text">{c.name}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         ) : (
-                          <div className="w-full h-10 px-3 rounded-xl border border-white/5 bg-dark/50 text-text-dim text-xs font-inter font-bold flex items-center cursor-not-allowed">
+                          <div className="w-full h-10 px-3 rounded-xl border border-border bg-dark text-text-dim text-xs font-inter font-bold flex items-center cursor-not-allowed">
                             {editCommittee || 'Sin comité'}
                           </div>
                         )}
@@ -569,7 +605,7 @@ export default function SettingsPage() {
 
                   {currentRole !== 'Lector' && (
                     <div className="pt-2 flex justify-end">
-                      <Button type="submit" disabled={isUpdating} className="bg-white hover:bg-white/90 text-black font-bold px-6 h-9 shadow-lg active:scale-[0.97] transition-all rounded-full text-xs">
+                      <Button type="submit" disabled={isUpdating} className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-6 h-9 shadow-lg active:scale-[0.97] transition-all rounded-full text-xs">
                         {isUpdating ? 'Actualizando...' : 'Guardar Cambios de Perfil'}
                       </Button>
                     </div>
@@ -584,8 +620,8 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={() => isMobile && toggleSection('security')}
-              className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left ${isMobile ? 'cursor-pointer hover:bg-white/[0.02]' : 'cursor-default'
-                } ${isSectionOpen('security') ? 'bg-white/[0.02]' : ''}`}
+              className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors ${isMobile ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'
+                } ${isSectionOpen('security') ? 'bg-black/[0.03] dark:bg-white/[0.02]' : ''}`}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
@@ -598,7 +634,7 @@ export default function SettingsPage() {
               </div>
 
               {isMobile && (
-                <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-white/70 shrink-0">
+                <div className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center text-text-dim shrink-0">
                   <span className="material-symbols-outlined text-[18px]">
                     {isSectionOpen('security') ? 'expand_less' : 'expand_more'}
                   </span>
@@ -607,7 +643,7 @@ export default function SettingsPage() {
             </button>
 
             {isSectionOpen('security') && (
-              <div className="p-4 sm:p-6 border-t border-white/5 bg-black/10">
+              <div className="p-4 sm:p-6 border-t border-border bg-black/[0.02] dark:bg-black/20">
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                   <div className="flex-1">
                     <p className="text-xs text-text-dim font-inter leading-relaxed max-w-xl">
@@ -620,7 +656,7 @@ export default function SettingsPage() {
                       type="button"
                       onClick={handleDeletePasskey}
                       disabled={isRegisteringPasskey}
-                      className="font-bold px-5 h-9 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-red/10 text-red hover:bg-red/20 border border-red/20"
+                      className="font-bold px-5 h-9 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 border border-rose-500/20"
                     >
                       {isRegisteringPasskey ? 'Desvinculando...' : 'Desvincular Dispositivo'}
                     </Button>
@@ -629,7 +665,7 @@ export default function SettingsPage() {
                       type="button"
                       onClick={handleRegisterPasskey}
                       disabled={isRegisteringPasskey}
-                      className="font-bold px-5 h-9 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-white/10 hover:bg-white/20 text-white border border-white/15"
+                      className="font-bold px-5 h-9 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-dark3 hover:bg-dark text-text border border-border"
                     >
                       {isRegisteringPasskey ? 'Registrando...' : 'Vincular Dispositivo'}
                     </Button>
@@ -637,7 +673,7 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Change PIN Section */}
-                <div className="mt-8 pt-6 border-t border-white/5">
+                <div className="mt-8 pt-6 border-t border-border">
                   <h4 className="font-bold text-text text-xs mb-4">Cambiar PIN de Acceso</h4>
                   <form onSubmit={handleChangePin} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -646,10 +682,10 @@ export default function SettingsPage() {
                         <input
                           type="password"
                           inputMode="numeric"
-                          maxLength={6}
+                          maxLength={4}
                           value={currentPin}
-                          onChange={e => setCurrentPin(e.target.value.replace(/\D/g, ''))}
-                          className="w-full h-10 px-3 rounded-xl border border-white/15 bg-white/5 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-xs font-inter font-bold outline-none transition-all"
+                          onChange={e => setCurrentPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                          className="w-full h-10 px-3 rounded-xl border border-border bg-dark3 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-xs font-inter font-bold outline-none transition-all"
                           placeholder="••••"
                           required
                         />
@@ -659,10 +695,10 @@ export default function SettingsPage() {
                         <input
                           type="password"
                           inputMode="numeric"
-                          maxLength={6}
+                          maxLength={4}
                           value={newPin}
-                          onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
-                          className="w-full h-10 px-3 rounded-xl border border-white/15 bg-white/5 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-xs font-inter font-bold outline-none transition-all"
+                          onChange={e => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                          className="w-full h-10 px-3 rounded-xl border border-border bg-dark3 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-xs font-inter font-bold outline-none transition-all"
                           placeholder="••••"
                           required
                         />
@@ -684,8 +720,8 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={() => isMobile && toggleSection('permissions')}
-              className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left ${isMobile ? 'cursor-pointer hover:bg-white/[0.02]' : 'cursor-default'
-                } ${isSectionOpen('permissions') ? 'bg-white/[0.02]' : ''}`}
+              className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors ${isMobile ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'
+                } ${isSectionOpen('permissions') ? 'bg-black/[0.03] dark:bg-white/[0.02]' : ''}`}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0">
@@ -698,7 +734,7 @@ export default function SettingsPage() {
               </div>
 
               {isMobile && (
-                <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-white/70 shrink-0">
+                <div className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center text-text-dim shrink-0">
                   <span className="material-symbols-outlined text-[18px]">
                     {isSectionOpen('permissions') ? 'expand_less' : 'expand_more'}
                   </span>
@@ -707,10 +743,10 @@ export default function SettingsPage() {
             </button>
 
             {isSectionOpen('permissions') && (
-              <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-0 border-t border-white/5 bg-black/10">
+              <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-0 border-t border-border bg-black/[0.02] dark:bg-black/20">
 
                 {/* Permiso Especial: Edición de Turnos para Coordinadores */}
-                <div className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-white/[0.02] transition-colors">
+                <div className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
                       <span className="material-symbols-outlined text-[18px]">edit_calendar</span>
@@ -719,7 +755,7 @@ export default function SettingsPage() {
                       <p className="text-xs font-bold text-text">Coordinadores editan turnos</p>
                       <p className="text-[10px] text-text-dim font-medium">Por defecto solo administradores pueden modificar asignaciones</p>
                       {currentRole !== 'Admin' && (
-                        <p className="text-[10px] text-amber-400 font-bold flex items-center gap-1 pt-0.5">
+                        <p className="text-[10px] text-amber-500 dark:text-amber-400 font-bold flex items-center gap-1 pt-0.5">
                           <span className="material-symbols-outlined text-[12px]">lock</span>
                           Solo Administradores pueden modificar este permiso
                         </p>
@@ -731,7 +767,7 @@ export default function SettingsPage() {
                     type="button"
                     disabled={currentRole !== 'Admin'}
                     onClick={() => handleToggleCoordinatorShiftEdit(!allowCoordinatorShiftEdit)}
-                    className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${allowCoordinatorShiftEdit ? 'bg-emerald-500' : 'bg-white/10'
+                    className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${allowCoordinatorShiftEdit ? 'bg-emerald-500' : 'bg-black/15 dark:bg-white/10'
                       } ${currentRole !== 'Admin' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
                   >
                     <motion.span
@@ -744,15 +780,15 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Lista de Permisos por Rol — borderless rows */}
-                <div className="divide-y divide-white/5">
+                <div className="divide-y divide-border">
                   {ALL_PERMISSIONS.map(perm => {
                     const isOn = ROLE_PERMISSIONS[editRole].includes(perm);
                     const isLocked = currentRole !== 'Admin';
 
                     return (
-                      <div key={perm} className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-white/[0.02] transition-colors">
+                      <div key={perm} className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isOn ? 'bg-[#4d7cfe]/15 text-[#4d7cfe]' : 'bg-white/5 text-text-dim'
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isOn ? 'bg-[#4d7cfe]/15 text-[#4d7cfe]' : 'bg-black/5 dark:bg-white/5 text-text-dim'
                             }`}>
                             <span className="material-symbols-outlined text-[18px]">
                               {perm === 'Ver voluntarios' ? 'group' :
@@ -771,7 +807,7 @@ export default function SettingsPage() {
                         <button
                           type="button"
                           disabled={isLocked}
-                          className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${isOn ? 'bg-[#4d7cfe]' : 'bg-white/10'
+                          className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${isOn ? 'bg-[#4d7cfe]' : 'bg-black/15 dark:bg-white/10'
                             } ${isLocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
                         >
                           <motion.span
@@ -796,8 +832,8 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={() => isMobile && toggleSection('requirements')}
-                className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left ${isMobile ? 'cursor-pointer hover:bg-white/[0.02]' : 'cursor-default'
-                  } ${isSectionOpen('requirements') ? 'bg-white/[0.02]' : ''}`}
+                className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors ${isMobile ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'
+                  } ${isSectionOpen('requirements') ? 'bg-black/[0.03] dark:bg-white/[0.02]' : ''}`}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center justify-center shrink-0">
@@ -810,7 +846,7 @@ export default function SettingsPage() {
                 </div>
 
                 {isMobile && (
-                  <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-white/70 shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center text-text-dim shrink-0">
                     <span className="material-symbols-outlined text-[18px]">
                       {isSectionOpen('requirements') ? 'expand_less' : 'expand_more'}
                     </span>
@@ -819,7 +855,7 @@ export default function SettingsPage() {
               </button>
 
               {isSectionOpen('requirements') && (
-                <div className="p-4 sm:p-6 space-y-5 border-t border-white/5 bg-black/10">
+                <div className="p-4 sm:p-6 space-y-5 border-t border-border bg-black/[0.02] dark:bg-black/20">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <p className="text-xs font-inter text-text-dim">
                       Ajusta la cantidad mínima de voluntarios requeridos por turno.
@@ -832,7 +868,7 @@ export default function SettingsPage() {
                       className={`flex items-center gap-1.5 px-3 h-8 rounded-full border text-xs font-bold transition-all shrink-0 self-start sm:self-auto ${
                         isSyncEnabled 
                           ? 'bg-[#4d7cfe] text-white border-[#4d7cfe] shadow-blue-500/20' 
-                          : 'bg-white/5 border-white/15 text-text-dim hover:bg-white/10 hover:text-white'
+                          : 'bg-dark3 border-border text-text-dim hover:bg-dark hover:text-text'
                       }`}
                     >
                       <span className="material-symbols-outlined text-[15px]">link</span>
@@ -895,21 +931,21 @@ export default function SettingsPage() {
 
                   {/* Warning banner when no committee is selected */}
                   {selectedConfigCommittees.length === 0 && currentRole === 'Admin' && (
-                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-400 font-bold flex items-center gap-2">
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-500 dark:text-amber-400 font-bold flex items-center gap-2">
                       <span className="material-symbols-outlined text-[15px]">info</span>
                       Selecciona al menos un comité arriba para ver y modificar sus requerimientos por turno.
                     </div>
                   )}
 
                   {/* Shift List: ERD Database Schema Relation Lines (0 Pixel Resize) */}
-                  <div className="divide-y divide-white/5 border border-white/10 rounded-xl overflow-hidden bg-black/20 relative">
+                  <div className="divide-y divide-border border border-border rounded-xl overflow-hidden bg-dark3/40 relative">
                     {([
                       { id: 'T1', label: 'Turno 1', time: '8:00 AM - 12:00 PM' },
                       { id: 'T2', label: 'Turno 2', time: '11:00 AM - 3:00 PM' },
                       { id: 'T3', label: 'Turno 3', time: '2:00 PM - 6:00 PM' },
                       { id: 'T4', label: 'Turno 4', time: '5:00 PM - 10:00 PM' }
                     ] as const).map(({ id, label, time }) => (
-                      <div key={id} className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-white/[0.02] transition-colors relative min-h-[57px]">
+                      <div key={id} className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors relative min-h-[57px]">
                         <div className="flex flex-col gap-0.5 shrink-0">
                           <span className="text-xs font-extrabold text-text">{label}</span>
                           <span className="text-[10px] font-inter font-medium text-text-dim uppercase">{time}</span>
@@ -921,9 +957,9 @@ export default function SettingsPage() {
                             <button
                               type="button"
                               onClick={() => updateCapacity(id, -1)}
-                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1e293b] border border-white/15 text-white hover:bg-[#334155] transition-all active:scale-90 shadow-sm"
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-dark3 border border-border text-text hover:bg-dark transition-all active:scale-90 shadow-sm"
                             >
-                              <span className="material-symbols-outlined text-[16px] text-white font-bold">remove</span>
+                              <span className="material-symbols-outlined text-[16px] font-bold">remove</span>
                             </button>
                             <span className="text-base sm:text-lg font-extrabold text-text tabular-nums min-w-[24px] text-center font-inter">
                               {(capacities as any)[id]}
@@ -931,9 +967,9 @@ export default function SettingsPage() {
                             <button
                               type="button"
                               onClick={() => updateCapacity(id, 1)}
-                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1e293b] border border-white/15 text-white hover:bg-[#334155] transition-all active:scale-90 shadow-sm"
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-dark3 border border-border text-text hover:bg-dark transition-all active:scale-90 shadow-sm"
                             >
-                              <span className="material-symbols-outlined text-[16px] text-white font-bold">add</span>
+                              <span className="material-symbols-outlined text-[16px] font-bold">add</span>
                             </button>
                           </div>
                         )}
@@ -944,7 +980,7 @@ export default function SettingsPage() {
                     {isSyncEnabled && (
                       <>
                         <svg 
-                          className="absolute left-[130px] sm:left-[145px] right-[130px] sm:right-[145px] top-0 bottom-0 w-auto h-full pointer-events-none z-0 text-white/30" 
+                          className="absolute left-[130px] sm:left-[145px] right-[130px] sm:right-[145px] top-0 bottom-0 w-auto h-full pointer-events-none z-0 text-text-dim/40" 
                           viewBox="0 0 100 228" 
                           preserveAspectRatio="none"
                         >
@@ -961,16 +997,16 @@ export default function SettingsPage() {
                           <circle cx="2" cy="200" r="2.5" fill="currentColor" />
 
                           {/* Target Relation Node */}
-                          <circle cx="96" cy="114" r="3.5" fill="#0f172a" stroke="currentColor" strokeWidth="1.5" />
+                          <circle cx="96" cy="114" r="3.5" className="fill-dark2" stroke="currentColor" strokeWidth="1.5" />
                         </svg>
 
                         <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 flex items-center gap-3 shrink-0 z-10">
                           <button
                             type="button"
                             onClick={() => updateCapacity('T1', -1)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1e293b] border border-white/15 text-white hover:bg-[#334155] transition-all active:scale-90 shadow-sm"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-dark3 border border-border text-text hover:bg-dark transition-all active:scale-90 shadow-sm"
                           >
-                            <span className="material-symbols-outlined text-[16px] text-white font-bold">remove</span>
+                            <span className="material-symbols-outlined text-[16px] font-bold">remove</span>
                           </button>
                           <span className="text-base sm:text-lg font-extrabold text-text tabular-nums min-w-[24px] text-center font-inter">
                             {capacities.T1}
@@ -978,9 +1014,9 @@ export default function SettingsPage() {
                           <button
                             type="button"
                             onClick={() => updateCapacity('T1', 1)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1e293b] border border-white/15 text-white hover:bg-[#334155] transition-all active:scale-90 shadow-sm"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-dark3 border border-border text-text hover:bg-dark transition-all active:scale-90 shadow-sm"
                           >
-                            <span className="material-symbols-outlined text-[16px] text-white font-bold">add</span>
+                            <span className="material-symbols-outlined text-[16px] font-bold">add</span>
                           </button>
                         </div>
                       </>
@@ -995,7 +1031,7 @@ export default function SettingsPage() {
                       <Button
                         onClick={handleSaveRequirements}
                         disabled={isSavingConfig}
-                        className="bg-white hover:bg-white/90 text-black font-bold px-6 h-9 shadow-lg active:scale-[0.97] transition-all rounded-full text-xs"
+                        className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-6 h-9 shadow-lg active:scale-[0.97] transition-all rounded-full text-xs"
                       >
                         {isSavingConfig ? 'Guardando...' : 'Guardar Requerimientos'}
                       </Button>

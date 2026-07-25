@@ -1655,25 +1655,17 @@ export default function ShiftsPage() {
         <div
           id="drawer-profile"
           className={cn(
-            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-[#0a101d]",
+            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl border-l border-border",
             isMobile
-              ? `w-full h-[94dvh] rounded-t-[40px] shadow-2xl ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
-              : `w-[450px] h-full shadow-2xl border-l border-white/10 ${isSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
+              ? `w-full h-[94dvh] rounded-t-[40px] border-0 ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
+              : `w-[450px] h-full ${isSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
           )}
           style={{ willChange: 'transform' }}
         >
-          <div className="absolute inset-0 z-0 dark:hidden">
-            <MeshGradientBackground colors={["#60a5fa", "#3b82f6", "#93c5fd", "#4d7cfe"]} backgroundColor="#1e3a8a" />
-          </div>
-          {/* Fondo animado (Tema Oscuro) */}
-          <div className="absolute inset-0 z-0 hidden dark:block">
-            <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
-          </div>
-
           <div className="relative z-10 flex flex-col h-full w-full">
             {/* Handle */}
             {isMobile && (
-              <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
+              <div className="w-12 h-1.5 bg-text-dim/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
             )}
 
           <div
@@ -1734,14 +1726,14 @@ export default function ShiftsPage() {
                   >
                     {/* Header Profile Info */}
                     <div className="text-center mt-4 mb-8 px-4">
-                      <div className="flex flex-col items-center justify-center leading-[1.25] font-black text-[26px] sm:text-[30px] text-white tracking-tight">
+                      <div className="flex flex-col items-center justify-center leading-[1.25] font-black text-[26px] sm:text-[30px] text-text tracking-tight">
                         {(() => {
                           const parts = (editingVolunteer.name || '').trim().split(/\s+/).filter(Boolean);
                           if (parts.length >= 4) {
                             return (
                               <>
                                 <span>{parts.slice(0, 2).join(' ')}</span>
-                                <span className="text-white/95">{parts.slice(2).join(' ')}</span>
+                                <span className="text-text/90">{parts.slice(2).join(' ')}</span>
                               </>
                             );
                           }
@@ -1750,19 +1742,19 @@ export default function ShiftsPage() {
                       </div>
                       <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
                         {editingVolunteer.committee && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-[#4d7cfe]/20 text-[#8bb0ff] border border-[#4d7cfe]/30 shadow-sm">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 shadow-sm">
                             <span className="material-symbols-outlined text-[13px]">groups</span>
                             {editingVolunteer.committee}
                           </span>
                         )}
                         {editingVolunteer.stake && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-amber-500/15 text-amber-300 border border-amber-500/25 shadow-sm">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25 shadow-sm">
                             <span className="material-symbols-outlined text-[13px]">account_balance</span>
                             {editingVolunteer.stake}
                           </span>
                         )}
                         {editingVolunteer.ward && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 shadow-sm">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/25 shadow-sm">
                             <span className="material-symbols-outlined text-[13px]">location_on</span>
                             {editingVolunteer.ward}
                           </span>
@@ -1778,24 +1770,24 @@ export default function ShiftsPage() {
 
                         return (
                           <>
-                            <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                              <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">{totalTurnos}</span>
-                              <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Turnos</span>
+                            <div className="flex flex-col items-center flex-1 border-r border-border">
+                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{totalTurnos}</span>
+                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Turnos</span>
                             </div>
-                            <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                              <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">{diasCubiertos}</span>
-                              <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Días</span>
+                            <div className="flex flex-col items-center flex-1 border-r border-border">
+                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{diasCubiertos}</span>
+                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Días</span>
                             </div>
-                            <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                              <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">
+                            <div className="flex flex-col items-center flex-1 border-r border-border">
+                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">
                                 {editingVolunteer.reliability}
-                                <span className="text-[16px] font-bold text-white/80 ml-0.5">%</span>
+                                <span className="text-[16px] font-bold text-text-dim ml-0.5">%</span>
                               </span>
-                              <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Confia.</span>
+                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Confia.</span>
                             </div>
                             <div className="flex flex-col items-center flex-1">
-                              <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">{editingVolunteer.age || '-'}</span>
-                              <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Edad</span>
+                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{editingVolunteer.age || '-'}</span>
+                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Edad</span>
                             </div>
                           </>
                         );
@@ -1807,26 +1799,26 @@ export default function ShiftsPage() {
                       <div className="grid grid-cols-3 gap-2">
                         <Button
                           variant="outline"
-                          className="h-11 px-1.5 gap-1.5 text-white border-white/20 bg-white/10 font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20 truncate"
+                          className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate"
                           onClick={() => window.open(`https://wa.me/${editingVolunteer.phone.replace(/\s+/g, '')}`, '_blank')}
                         >
-                          <span className="material-symbols-outlined text-[17px] shrink-0">message</span>
+                          <span className="material-symbols-outlined text-[17px] shrink-0 text-[#25D366]">message</span>
                           <span>WHATSAPP</span>
                         </Button>
                         <Button
                           variant="outline"
-                          className="h-11 px-1.5 gap-1.5 text-white border-white/20 bg-white/10 font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20 truncate"
+                          className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate"
                           onClick={() => window.location.href = `tel:${editingVolunteer.phone.replace(/\s+/g, '')}`}
                         >
-                          <span className="material-symbols-outlined text-[17px] shrink-0">call</span>
+                          <span className="material-symbols-outlined text-[17px] shrink-0 text-blue-500">call</span>
                           <span>LLAMAR</span>
                         </Button>
                         <Button
                           variant="outline"
-                          className="h-11 px-1.5 gap-1.5 text-white border-white/25 bg-white/15 hover:bg-white/25 font-bold text-[11px] sm:text-xs rounded-md active:scale-95 transition-all truncate"
+                          className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate"
                           onClick={() => handleStartEditProfile(editingVolunteer)}
                         >
-                          <span className="material-symbols-outlined text-[17px] shrink-0">edit_square</span>
+                          <span className="material-symbols-outlined text-[17px] shrink-0 text-[#4d7cfe]">edit_square</span>
                           <span>EDITAR</span>
                         </Button>
                       </div>
@@ -1836,24 +1828,24 @@ export default function ShiftsPage() {
                     <div className="w-full">
                       <div className="flex items-center justify-between px-2 mb-4">
                         <div className="flex items-center gap-2 relative">
-                          <p className="text-drawer-label text-white">Cronograma</p>
+                          <p className="text-drawer-label text-text font-bold">Cronograma</p>
                           
                           {/* Helper Icon & Legend Popover */}
                           <div className="relative">
                             <button
                               type="button"
                               onClick={() => setShowLegend(prev => !prev)}
-                              className="text-white/60 hover:text-white transition-colors p-0.5 rounded-full flex items-center justify-center focus:outline-none"
+                              className="text-text-dim hover:text-text transition-colors p-0.5 rounded-full flex items-center justify-center focus:outline-none"
                               title="Ver leyenda del cronograma"
                             >
                               <span className="material-symbols-outlined text-[15px]">help_outline</span>
                             </button>
 
                             {showLegend && (
-                              <div className="absolute left-0 top-6 z-50 w-60 bg-[#0f172a] border border-white/20 rounded-xl p-3.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
-                                <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10">
-                                  <span className="text-xs font-bold text-white font-inter">Leyenda del Cronograma</span>
-                                  <button onClick={() => setShowLegend(false)} className="text-white/50 hover:text-white flex items-center justify-center">
+                              <div className="absolute left-0 top-6 z-50 w-60 bg-dark2 border border-border rounded-xl p-3.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+                                <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border">
+                                  <span className="text-xs font-bold text-text font-inter">Leyenda del Cronograma</span>
+                                  <button onClick={() => setShowLegend(false)} className="text-text-dim hover:text-text flex items-center justify-center">
                                     <span className="material-symbols-outlined text-[14px]">close</span>
                                   </button>
                                 </div>
@@ -1863,35 +1855,35 @@ export default function ShiftsPage() {
                                       <span className="material-symbols-outlined text-[13px]">check</span>
                                     </span>
                                     <div>
-                                      <p className="text-white font-bold leading-tight">Programado</p>
-                                      <p className="text-white/60 text-[10px]">Turno asignado</p>
+                                      <p className="text-text font-bold leading-tight">Programado</p>
+                                      <p className="text-text-dim text-[10px]">Turno asignado</p>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shrink-0">
+                                    <span className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-500 flex items-center justify-center shrink-0">
                                       <span className="material-symbols-outlined text-[13px]">check</span>
                                     </span>
                                     <div>
-                                      <p className="text-emerald-400 font-bold leading-tight">Entrada</p>
-                                      <p className="text-white/60 text-[10px]">Turno registrado con QR</p>
+                                      <p className="text-emerald-500 font-bold leading-tight">Entrada</p>
+                                      <p className="text-text-dim text-[10px]">Turno registrado con QR</p>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center shrink-0">
+                                    <span className="w-6 h-6 rounded-lg bg-slate-500/20 border border-slate-500/40 text-slate-500 flex items-center justify-center shrink-0">
                                       <span className="material-symbols-outlined text-[13px]">check</span>
                                     </span>
                                     <div>
-                                      <p className="text-slate-300 font-bold leading-tight">Salida</p>
-                                      <p className="text-white/60 text-[10px]">Turno completado en el sistema</p>
+                                      <p className="text-slate-500 font-bold leading-tight">Salida</p>
+                                      <p className="text-text-dim text-[10px]">Turno completado en el sistema</p>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-lg bg-white/5 border border-white/10 text-white/30 flex items-center justify-center shrink-0 text-[12px] font-bold">
+                                    <span className="w-6 h-6 rounded-lg bg-dark3 border border-border text-text-dim flex items-center justify-center shrink-0 text-[12px] font-bold">
                                       -
                                     </span>
                                     <div>
-                                      <p className="text-white/50 font-medium leading-tight">Sin Turnos</p>
-                                      <p className="text-white/40 text-[10px]">Disponible / No programado</p>
+                                      <p className="text-text-dim font-medium leading-tight">Sin Turnos</p>
+                                      <p className="text-text-dim/70 text-[10px]">Disponible / No programado</p>
                                     </div>
                                   </div>
                                 </div>
@@ -1901,9 +1893,9 @@ export default function ShiftsPage() {
                         </div>
 
                         <div className="flex items-center gap-3">
-                          {saved && <span className="text-[11px] text-green-300 font-bold animate-pulse">✓ Listo</span>}
+                          {saved && <span className="text-[11px] text-emerald-500 font-bold animate-pulse">✓ Listo</span>}
                           {isEditingShifts ? (
-                            <button onClick={handleSaveShifts} className="h-7 px-4 bg-white hover:bg-white/90 text-black rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
+                            <button onClick={handleSaveShifts} className="h-7 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
                               Guardar
                             </button>
                           ) : (
@@ -1919,8 +1911,8 @@ export default function ShiftsPage() {
                               className={cn(
                                 "h-7 px-4 backdrop-blur-sm border font-bold text-[11px] transition-all rounded-full",
                                 canEditShifts()
-                                  ? "bg-black/20 border-white/10 hover:bg-black/30 text-white active:scale-[0.97]"
-                                  : "bg-white/5 border-white/5 text-white/40 cursor-not-allowed"
+                                  ? "bg-dark3 border-border hover:bg-dark text-text active:scale-[0.97]"
+                                  : "bg-dark3/50 border-border/50 text-text-dim/40 cursor-not-allowed"
                               )}
                               title={canEditShifts() ? "Editar turnos" : "Permiso deshabilitado por el administrador"}
                             >
@@ -1947,14 +1939,14 @@ export default function ShiftsPage() {
                           const cardBg = bgColors[index % bgColors.length];
 
                           return (
-                            <div key={d.key} className={`rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01] bg-white/5 border border-white/10 flex`}>
+                            <div key={d.key} className="rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01] bg-dark3 border border-border flex">
                               {/* Etiqueta de color lateral estructural */}
                               <div className={`w-3 shrink-0 ${cardBg} opacity-90`} />
                               
                               <div className="flex-1 flex items-center justify-between px-5 sm:px-6 py-4">
                                 {/* Left: Date */}
                                 <div className="flex-1 min-w-0 pr-4 flex items-center">
-                                  <p className="font-inter font-bold text-white text-[13px] truncate capitalize">
+                                  <p className="font-inter font-bold text-text text-[13px] truncate capitalize">
                                     {d.label} {d.dateNum}
                                   </p>
                                 </div>
@@ -1966,18 +1958,18 @@ export default function ShiftsPage() {
                                     const isCheckedIn = checkedInMap[`${editingVolunteer.id}-${d.key}-${t}`];
                                     const isCheckedOut = checkedOutMap[`${editingVolunteer.id}-${d.key}-${t}`];
 
-                                    let statusStyle = "bg-white/[0.03] border-white/10 text-white/30";
-                                    let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-white/30">-</span>;
-                                    let labelColor = "text-white/40";
+                                    let statusStyle = "bg-dark2 border-border text-text-dim/40";
+                                    let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-text-dim/40">-</span>;
+                                    let labelColor = "text-text-dim/40";
 
                                     if (isCheckedOut) {
-                                      statusStyle = "bg-slate-800/80 border-slate-700/60 text-slate-300 shadow-sm";
-                                      iconContent = <span className="material-symbols-outlined text-[15px] text-slate-400">check</span>;
-                                      labelColor = "text-slate-400 font-bold";
+                                      statusStyle = "bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm";
+                                      iconContent = <span className="material-symbols-outlined text-[15px] text-slate-500">check</span>;
+                                      labelColor = "text-slate-500 font-bold";
                                     } else if (isCheckedIn) {
-                                      statusStyle = "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 shadow-sm";
-                                      iconContent = <span className="material-symbols-outlined text-[15px] text-emerald-400">check</span>;
-                                      labelColor = "text-emerald-400 font-bold";
+                                      statusStyle = "bg-emerald-500/15 border-emerald-500/30 text-emerald-500 shadow-sm";
+                                      iconContent = <span className="material-symbols-outlined text-[15px] text-emerald-500">check</span>;
+                                      labelColor = "text-emerald-500 font-bold";
                                     } else if (active) {
                                       statusStyle = "bg-[#4d7cfe]/15 border-[#4d7cfe]/35 text-[#4d7cfe] font-bold shadow-sm";
                                       iconContent = <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">check</span>;
@@ -1992,7 +1984,7 @@ export default function ShiftsPage() {
                                         className={cn(
                                           "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all",
                                           statusStyle,
-                                          isEditingShifts && !isCheckedIn && !isCheckedOut && canEditShifts() && "hover:bg-white/10 hover:border-white/20 cursor-pointer active:scale-95"
+                                          isEditingShifts && !isCheckedIn && !isCheckedOut && canEditShifts() && "hover:bg-dark hover:border-border cursor-pointer active:scale-95"
                                         )}
                                       >
                                         <div className="h-4 flex items-center justify-center">
@@ -2021,60 +2013,60 @@ export default function ShiftsPage() {
                     transition={{ duration: 0.15 }}
                     className="pt-2 px-2"
                   >
-                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/15">
+                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
                       <button
                         onClick={() => setDrawerMode('view')}
-                        className="flex items-center gap-1.5 text-white/80 hover:text-white font-bold text-xs bg-white/10 hover:bg-white/20 px-3.5 py-1.5 rounded-full transition-all"
+                        className="flex items-center gap-1.5 text-text font-bold text-xs bg-dark3 hover:bg-dark px-3.5 py-1.5 border border-border rounded-full transition-all"
                       >
                         <span className="material-symbols-outlined text-[16px]">arrow_back</span>
                         Volver al Perfil
                       </button>
-                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/60 font-inter">Editar Información</span>
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-text-dim font-inter">Editar Información</span>
                     </div>
 
                     <form onSubmit={handleSaveProfile} className="space-y-5 pb-6">
                       <div className="mb-6">
-                        <h3 className="font-black text-white text-xl leading-tight">Editar Perfil</h3>
-                        <p className="text-xs text-white/70 mt-1 font-inter">Actualiza los datos personales y comité asignado</p>
+                        <h3 className="font-black text-text text-xl leading-tight">Editar Perfil</h3>
+                        <p className="text-xs text-text-dim mt-1 font-inter">Actualiza los datos personales y comité asignado</p>
                       </div>
 
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-white/90">Nombres</label>
+                            <label className="text-xs font-extrabold text-text">Nombres</label>
                             <Input
                               value={editFirstName}
                               onChange={(e) => setEditFirstName(e.target.value)}
                               placeholder="Ej: Juan Carlos"
                               required
-                              className="bg-white/10 border-white/20 text-white text-sm h-10 font-bold placeholder:text-white/40 focus:border-[#4d7cfe] rounded-lg"
+                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg"
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-white/90">Apellidos</label>
+                            <label className="text-xs font-extrabold text-text">Apellidos</label>
                             <Input
                               value={editLastName}
                               onChange={(e) => setEditLastName(e.target.value)}
                               placeholder="Ej: Pérez Rodríguez"
                               required
-                              className="bg-white/10 border-white/20 text-white text-sm h-10 font-bold placeholder:text-white/40 focus:border-[#4d7cfe] rounded-lg"
+                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg"
                             />
                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-white/90">Teléfono</label>
+                            <label className="text-xs font-extrabold text-text">Teléfono</label>
                             <Input
                               value={editPhone}
                               onChange={(e) => setEditPhone(e.target.value)}
                               placeholder="Ej: +52 5512345678"
                               required
-                              className="bg-white/10 border-white/20 text-white text-sm h-10 font-bold placeholder:text-white/40 focus:border-[#4d7cfe] rounded-lg"
+                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg"
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-white/90">Edad</label>
+                            <label className="text-xs font-extrabold text-text">Edad</label>
                             <Input
                               type="text"
                               inputMode="numeric"
@@ -2086,20 +2078,20 @@ export default function ShiftsPage() {
                                 }
                               }}
                               placeholder="Ej: 24"
-                              className="bg-white/10 border-white/20 text-white text-sm h-10 font-bold placeholder:text-white/40 focus:border-[#4d7cfe] rounded-lg [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           </div>
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-xs font-extrabold text-white/90">Comité</label>
+                          <label className="text-xs font-extrabold text-text">Comité</label>
                           <Select value={editCommitteeId} onValueChange={(v) => setEditCommitteeId(v || '')}>
-                            <SelectTrigger className="w-full h-10 border text-white font-bold bg-white/10 border-white/20 rounded-lg px-3">
+                            <SelectTrigger className="w-full h-10 border text-text font-bold bg-dark3 border-border rounded-lg px-3">
                               <SelectValue placeholder="Selecciona un comité">
                                 {committeesList.find(c => c.id === editCommitteeId || c.name === editCommitteeId)?.name || editingVolunteer?.committee || "Selecciona un comité"}
                               </SelectValue>
                             </SelectTrigger>
-                            <SelectContent className="bg-[#0f172a] border-white/20 text-white font-bold z-[120]">
+                            <SelectContent className="bg-dark2 border-border text-text font-bold z-[120]">
                               {committeesList.map(c => (
                                 <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                               ))}
@@ -2109,39 +2101,39 @@ export default function ShiftsPage() {
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-white/90">Estaca</label>
+                            <label className="text-xs font-extrabold text-text">Estaca</label>
                             <Input
                               value={editStake}
                               onChange={(e) => setEditStake(e.target.value)}
                               placeholder="Ej: Estaca Central"
-                              className="bg-white/10 border-white/20 text-white text-sm h-10 font-bold placeholder:text-white/40 focus:border-[#4d7cfe] rounded-lg"
+                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg"
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-white/90">Barrio / Vecindario</label>
+                            <label className="text-xs font-extrabold text-text">Barrio / Vecindario</label>
                             <Input
                               value={editWard}
                               onChange={(e) => setEditWard(e.target.value)}
                               placeholder="Ej: Barrio 1"
-                              className="bg-white/10 border-white/20 text-white text-sm h-10 font-bold placeholder:text-white/40 focus:border-[#4d7cfe] rounded-lg"
+                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg"
                             />
                           </div>
                         </div>
                       </div>
 
-                      <div className="pt-6 flex items-center gap-3 border-t border-white/15">
+                      <div className="pt-6 flex items-center gap-3 border-t border-border">
                         <Button
                           type="button"
                           variant="outline"
                           onClick={() => setDrawerMode('view')}
-                          className="flex-1 h-11 rounded-full text-xs font-bold border-white/20 text-white hover:bg-white/10"
+                          className="flex-1 h-11 rounded-full text-xs font-bold border-border text-text bg-dark3 hover:bg-dark"
                         >
                           Cancelar
                         </Button>
                         <Button
                           type="submit"
                           disabled={isSavingProfile}
-                          className="flex-1 bg-white hover:bg-white/90 text-black rounded-full h-11 text-xs font-bold shadow-lg active:scale-95 transition-all"
+                          className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full h-11 text-xs font-bold shadow-lg active:scale-95 transition-all"
                         >
                           {isSavingProfile ? 'Guardando...' : 'Guardar Cambios'}
                         </Button>

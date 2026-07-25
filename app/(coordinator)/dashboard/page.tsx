@@ -88,17 +88,17 @@ export default function CoordinatorDashboard() {
   const supabase = createClient();
 
   const loadData = async () => {
-    const volsData = await fetchAllRows(supabase, 'volunteers', '*, committees(name)');
+    const [volsData, commsRes, shiftsData, reqsData] = await Promise.all([
+      fetchAllRows(supabase, 'volunteers', '*, committees(name)'),
+      supabase.from('committees').select('id, name'),
+      fetchAllRows(supabase, 'shifts', '*'),
+      fetchAllRows(supabase, 'committee_shift_requirements', '*, committees(name)')
+    ]);
 
-    const { data: commsData } = await supabase
-      .from('committees')
-      .select('id, name');
-
+    const commsData = commsRes.data;
     if (commsData) {
       setCommitteesList(commsData);
     }
-
-    const shiftsData = await fetchAllRows(supabase, 'shifts', '*');
 
     const gShifts: Record<string, Record<string, string[]>> = {};
     const cMap: Record<string, boolean> = {};
@@ -121,9 +121,6 @@ export default function CoordinatorDashboard() {
         }
       });
     }
-
-    // Fetch committee_shift_requirements from Supabase and merge with defaults
-    const reqsData = await fetchAllRows(supabase, 'committee_shift_requirements', '*, committees(name)');
 
     if (reqsData && reqsData.length > 0 && commsData) {
       const updatedReqs: Record<string, Record<string, number>> = {};

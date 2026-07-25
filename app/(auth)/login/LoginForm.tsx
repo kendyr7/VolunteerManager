@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { loginWithPin } from "@/app/actions/auth";
 import { updateInitialPin } from "@/app/actions/update-pin";
@@ -21,7 +21,7 @@ const isMobileDevice = () => {
 
 export function LoginForm() {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [isSubmittingPin, setIsSubmittingPin] = useState(false);
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
 
   // Unified Login Fields
@@ -130,34 +130,24 @@ export function LoginForm() {
       const options = await resp.json();
       const asseResp = await startAuthentication(options);
 
-      // Desactivamos el loading de la huella puesto que el lector nativo ya terminó
-      setIsBiometricLoading(false);
-
-      // Sólo mostrar el overlay de carga DESPUÉS de que pone la huella
-      startTransition(async () => {
-        try {
-          const verifyResp = await fetch('/api/webauthn/authenticate/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(asseResp)
-          });
-
-          const verifyData = await verifyResp.json();
-          
-          if (verifyData.verified) {
-            localStorage.setItem("preferred_auth_method", "biometrics");
-            finishLogin(verifyData);
-          } else {
-            throw new Error('La huella no pudo ser verificada.');
-          }
-        } catch (err: any) {
-          setError(err.message || "Error al verificar la huella");
-        }
+      const verifyResp = await fetch('/api/webauthn/authenticate/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(asseResp)
       });
+
+      const verifyData = await verifyResp.json();
+      setIsBiometricLoading(false);
+      
+      if (verifyData.verified) {
+        localStorage.setItem("preferred_auth_method", "biometrics");
+        finishLogin(verifyData);
+      } else {
+        setError('La huella no pudo ser verificada.');
+      }
     } catch (err: any) {
       setIsBiometricLoading(false);
       if (err.name === 'NotAllowedError') {
-        // Cancelación voluntaria del usuario, limpiamos el error sin molestar
         setError(null);
       } else {
         setError(err.message || "Huella no reconocida, inténtelo de nuevo.");
@@ -165,7 +155,7 @@ export function LoginForm() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -179,32 +169,35 @@ export function LoginForm() {
       return;
     }
 
-    startTransition(async () => {
-      try {
-        const minDelay = new Promise(resolve => setTimeout(resolve, 600));
-        const formData = new FormData();
-        formData.append("phone", phone);
-        formData.append("pin", pin);
+    setIsSubmittingPin(true);
+    try {
+      const formData = new FormData();
+      formData.append("phone", phone);
+      formData.append("pin", pin);
 
-        const [result] = await Promise.all([loginWithPin({}, formData), minDelay]);
+      const result = await loginWithPin({}, formData);
 
-        if (result.error) {
-          setError(result.error);
-          setPin("");
-        } else if (result.force_pin_change) {
-          setUserData({ id: result.user_id!, type: result.user_type! });
-          setNeedsNewPin(true);
-        } else if (result.success) {
-          finishLogin(result);
-        }
-      } catch (err: any) {
-        console.error("Login transition error:", err);
-        setError("Error de conexión con el servidor. Inténtalo de nuevo.");
+      if (result.error) {
+        setError(result.error);
+        setPin("");
+        setIsSubmittingPin(false);
+      } else if (result.force_pin_change) {
+        setUserData({ id: result.user_id!, type: result.user_type! });
+        setNeedsNewPin(true);
+        setIsSubmittingPin(false);
+      } else if (result.success) {
+        finishLogin(result);
+      } else {
+        setIsSubmittingPin(false);
       }
-    });
+    } catch (err: any) {
+      console.error("Login error:", err);
+      setError("Error de conexión con el servidor. Inténtalo de nuevo.");
+      setIsSubmittingPin(false);
+    }
   };
 
-  const handleUpdatePin = (e: React.FormEvent) => {
+  const handleUpdatePin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -223,21 +216,23 @@ export function LoginForm() {
       return;
     }
 
-    startTransition(async () => {
-      try {
-        const minDelay = new Promise(resolve => setTimeout(resolve, 600));
-        const [result] = await Promise.all([updateInitialPin(userData!.id, userData!.type, newPin), minDelay]);
+    setIsSubmittingPin(true);
+    try {
+      const result = await updateInitialPin(userData!.id, userData!.type, newPin);
 
-        if (result.error) {
-          setError(result.error);
-        } else if (result.success) {
-          finishLogin(result);
-        }
-      } catch (err: any) {
-        console.error("PIN update transition error:", err);
-        setError("Error de conexión con el servidor. Inténtalo de nuevo.");
+      if (result.error) {
+        setError(result.error);
+        setIsSubmittingPin(false);
+      } else if (result.success) {
+        finishLogin(result);
+      } else {
+        setIsSubmittingPin(false);
       }
-    });
+    } catch (err: any) {
+      console.error("PIN update error:", err);
+      setError("Error de conexión con el servidor. Inténtalo de nuevo.");
+      setIsSubmittingPin(false);
+    }
   };
 
   const finishLogin = (result: any) => {
@@ -261,7 +256,7 @@ export function LoginForm() {
 
   return (
     <div className="relative">
-      {(isPending || isRedirecting) && typeof document !== "undefined" && createPortal(
+      {isRedirecting && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[9999] bg-dark flex items-center justify-center animate-in fade-in duration-200">
           <AnimatedLogo className="w-16 h-16 md:w-20 md:h-20 text-text" isLooping={true} />
         </div>,
@@ -298,7 +293,7 @@ export function LoginForm() {
                       value={phone}
                       onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 8))}
                       className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all placeholder:text-slate-500"
-                      disabled={isPending}
+                      disabled={isSubmittingPin || isRedirecting}
                     />
                   </div>
                 </div>
@@ -321,19 +316,19 @@ export function LoginForm() {
                         value={pin}
                         onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                         className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-11 pr-3 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
-                        disabled={isPending}
+                        disabled={isSubmittingPin || isRedirecting}
                       />
                     </div>
 
                     <button 
                       type="submit" 
                       className="flex-1 h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center group shrink-0 text-center"
-                      disabled={isPending}
+                      disabled={isSubmittingPin || isRedirecting}
                       onClick={() => {
                         localStorage.setItem("preferred_auth_method", "pin");
                       }}
                     >
-                      {isPending ? (
+                      {isSubmittingPin ? (
                         <span>Verificando...</span>
                       ) : (
                         <span>Ingresar</span>
@@ -390,7 +385,7 @@ export function LoginForm() {
                       onClick={handleBiometricLogin}
                       suppressHydrationWarning
                       className="group flex flex-col items-center justify-center p-3 rounded-2xl transition-all duration-300 active:scale-95 disabled:opacity-40 my-1 hover:bg-white/5"
-                      disabled={!isMounted || isPending || isBiometricLoading || !phone}
+                      disabled={!isMounted || isSubmittingPin || isBiometricLoading || isRedirecting || !phone}
                       title="Ingresar con Huella / Face ID"
                     >
                       <div className="relative mb-2">
@@ -447,19 +442,19 @@ export function LoginForm() {
                             value={pin}
                             onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                             className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-11 pr-3 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
-                            disabled={isPending}
+                            disabled={isSubmittingPin || isRedirecting}
                           />
                         </div>
 
                         <button 
                           type="submit" 
                           className="flex-1 h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center group shrink-0 text-center"
-                          disabled={isPending}
+                          disabled={isSubmittingPin || isRedirecting}
                           onClick={() => {
                             localStorage.setItem("preferred_auth_method", "pin");
                           }}
                         >
-                          {isPending ? (
+                          {isSubmittingPin ? (
                             <span>Verificando...</span>
                           ) : (
                             <span>Ingresar</span>
@@ -528,7 +523,7 @@ export function LoginForm() {
                   value={newPin}
                   onChange={(e) => setNewNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                   className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
-                  disabled={isPending}
+                  disabled={isSubmittingPin || isRedirecting}
                 />
               </div>
             </div>
@@ -550,7 +545,7 @@ export function LoginForm() {
                   value={confirmPin}
                   onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                   className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
-                  disabled={isPending}
+                  disabled={isSubmittingPin || isRedirecting}
                 />
               </div>
             </div>
@@ -565,9 +560,9 @@ export function LoginForm() {
             <button 
               type="submit" 
               className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white rounded-sm font-bold shadow-lg transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 group"
-              disabled={isPending}
+              disabled={isSubmittingPin || isRedirecting}
             >
-              {isPending ? (
+              {isSubmittingPin ? (
                 <>
                   <span>Guardando...</span>
                 </>

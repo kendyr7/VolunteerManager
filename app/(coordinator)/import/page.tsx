@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { generatePinMessage, generateWaMeLink, formatE164, validatePhone8Digits } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
@@ -47,6 +49,7 @@ export default function ImportPage() {
   const [committees, setCommittees] = useState<{ id: string, name: string }[]>([]);
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor'>('Admin');
   const [userCommittee, setUserCommittee] = useState<string>('');
+  const [existingPhones, setExistingPhones] = useState<Set<string>>(new Set());
   const [isImporting, setIsImporting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'valid' | 'error' | 'duplicate'>('all');
@@ -58,6 +61,78 @@ export default function ImportPage() {
     setToast({ message, type, isVisible: true });
   };
 
+  const getLocal8Digits = (phone: string): string => {
+    if (!phone) return '';
+    let cleaned = phone.trim().replace(/\D/g, '');
+    if (cleaned.startsWith('505') && cleaned.length > 8) {
+      cleaned = cleaned.slice(3);
+    }
+    return cleaned;
+  };
+
+  const validateRow = (
+    vol: ParsedVolunteer,
+    phonesSet: Set<string>,
+    commsList: { id: string, name: string }[],
+    role: string,
+    userComm: string
+  ): ParsedVolunteer => {
+    const fullName = `${vol.firstName || ''} ${vol.lastName || ''}`.trim();
+    const localPhone = getLocal8Digits(vol.phone || '');
+    const phoneValidation = validatePhone8Digits(localPhone);
+    const formattedPhone = phoneValidation.formatted;
+    const isDuplicate = formattedPhone ? phonesSet.has(formattedPhone) : false;
+
+    const match = commsList.find(c => c.name.toLowerCase() === (vol.committeeName || '').trim().toLowerCase());
+    const isRoleAdmin = role === 'Admin';
+    const isMyCommittee = match ? match.name.toLowerCase() === userComm.toLowerCase() : false;
+    const isValidCommittee = isRoleAdmin || isMyCommittee;
+
+    let errorMsg = '';
+    if (!fullName) {
+      errorMsg = "El nombre es obligatorio.";
+    } else if (!vol.phone) {
+      errorMsg = "El número telefónico es obligatorio.";
+    } else if (!phoneValidation.isValid) {
+      errorMsg = phoneValidation.error || "El teléfono debe tener 8 dígitos.";
+    } else if (!vol.committeeName) {
+      errorMsg = "El nombre del comité es obligatorio.";
+    } else if (!match) {
+      errorMsg = `El comité '${vol.committeeName}' no existe.`;
+    } else if (!isValidCommittee) {
+      errorMsg = `Acceso denegado: solo puedes importar para '${userComm}'.`;
+    }
+
+    return {
+      ...vol,
+      phone: localPhone || vol.phone,
+      committeeName: match ? match.name : vol.committeeName,
+      committeeId: (isValidCommittee && match && match.id) ? match.id : undefined,
+      error: errorMsg || undefined,
+      isDuplicate
+    };
+  };
+
+  const handleUpdateRow = (originalIndex: number, updates: Partial<ParsedVolunteer>) => {
+    setParsedData(prev => {
+      const updated = [...prev];
+      const item = { ...updated[originalIndex], ...updates };
+      updated[originalIndex] = validateRow(item, existingPhones, committees, currentRole, userCommittee);
+      return updated;
+    });
+  };
+
+  const handleUpdateName = (originalIndex: number, fullName: string) => {
+    const parts = fullName.trim().split(/\s+/);
+    const firstName = parts[0] || '';
+    const lastName = parts.slice(1).join(' ');
+    handleUpdateRow(originalIndex, { firstName, lastName });
+  };
+
+  const handleDeleteRow = (originalIndex: number) => {
+    setParsedData(prev => prev.filter((_, i) => i !== originalIndex));
+  };
+
   useEffect(() => {
     const role = localStorage.getItem('mock_role') as any;
     const comm = localStorage.getItem('mock_committee') || '';
@@ -67,7 +142,7 @@ export default function ImportPage() {
     const fetchCommittees = async () => {
       const supabase = createClient();
       const { data } = await supabase.from('committees').select('id, name');
-      if (data) setCommittees(data);
+      if (data) setCommittees(data.map(c => ({ id: c.id || '', name: c.name || '' })));
     };
     fetchCommittees();
   }, []);
@@ -194,7 +269,8 @@ export default function ImportPage() {
         // Fetch current volunteers to pre-validate duplicate phone numbers
         const supabase = createClient();
         const { data: existingVols } = await supabase.from('volunteers').select('phone');
-        const existingPhones = new Set(existingVols?.map(v => formatE164(v.phone || '')) || []);
+        const existingPhonesSet = new Set(existingVols?.map(v => formatE164(v.phone || '')) || []);
+        setExistingPhones(existingPhonesSet);
 
         const parsedList: ParsedVolunteer[] = [];
 
@@ -216,44 +292,19 @@ export default function ImportPage() {
           const phoneRaw = phoneIdx !== -1 ? cleanVal(row[phoneIdx]) : '';
           const committeeName = committeeIdx !== -1 ? cleanVal(row[committeeIdx]) : '';
 
-          const match = committees.find(c => c.name.toLowerCase() === committeeName.toLowerCase());
-          const isRoleAdmin = currentRole === 'Admin';
-          const isMyCommittee = match?.name.toLowerCase() === userCommittee.toLowerCase();
-          const isValidCommittee = isRoleAdmin || isMyCommittee;
-          
-          // Validar que el teléfono sea válido E.164 y tenga 8 dígitos
-          const phoneValidation = validatePhone8Digits(phoneRaw);
-          const formattedPhone = phoneValidation.formatted;
-          const isDuplicate = formattedPhone ? existingPhones.has(formattedPhone) : false;
-
-          let errorMsg = '';
-          if (!fullName) {
-            errorMsg = "El nombre es obligatorio.";
-          } else if (!phoneRaw) {
-            errorMsg = "El número telefónico es obligatorio.";
-          } else if (!phoneValidation.isValid) {
-            errorMsg = phoneValidation.error || "El número telefónico debe tener exactamente 8 dígitos.";
-          } else if (!committeeName) {
-            errorMsg = "El nombre del comité es obligatorio.";
-          } else if (!match) {
-            errorMsg = `El comité '${committeeName}' no existe en el sistema.`;
-          } else if (!isValidCommittee) {
-            errorMsg = `Acceso denegado: solo puedes importar voluntarios para tu comité ('${userCommittee}').`;
-          }
-
-          parsedList.push({
+          const rawVol: ParsedVolunteer = {
             rowNum: i + 1,
             firstName,
             lastName,
             age,
             ward,
             stake,
-            phone: formattedPhone || phoneRaw,
-            committeeName: match?.name || committeeName,
-            committeeId: isValidCommittee ? match?.id : undefined,
-            error: errorMsg || undefined,
-            isDuplicate: isDuplicate
-          });
+            phone: phoneRaw,
+            committeeName
+          };
+
+          const validatedVol = validateRow(rawVol, existingPhonesSet, committees, currentRole, userCommittee);
+          parsedList.push(validatedVol);
         }
 
         if (parsedList.length === 0) {
@@ -330,7 +381,7 @@ export default function ImportPage() {
             neighborhood: vol.ward,
             stake: vol.stake,
             phone: sanitizedPhone,
-            committee_id: vol.committeeId,
+            committee_id: vol.committeeId || null,
             pin: pin,
             status: 'active'
           })
@@ -520,145 +571,285 @@ export default function ImportPage() {
                 ) : (
                   <>
                     {/* ====== DESKTOP TABLE (md+) ====== */}
-                    <div className="hidden md:block max-h-[500px] overflow-y-auto">
+                    <div className="hidden lg:block max-h-[550px] overflow-y-auto">
                       <table className="w-full text-sm text-left border-separate border-spacing-0">
-                        <thead className="bg-dark3/90 sticky top-0 z-10 backdrop-blur-md text-[10px] font-bold text-text-dim uppercase tracking-wider">
+                        <thead className="bg-dark3/90 sticky top-0 z-10 backdrop-blur-md text-[10px] font-bold text-text-dim uppercase tracking-wider border-b border-border">
                           <tr>
-                            <th className="px-5 py-3">#</th>
-                            <th className="px-3 py-3">Nombre</th>
-                            <th className="px-3 py-3">Barrio / Estaca</th>
-                            <th className="px-3 py-3 text-center">Comité</th>
-                            <th className="px-3 py-3 text-center">Estado</th>
-                            <th className="px-3 py-3 text-right">Teléfono</th>
+                            <th className="px-3 py-3 text-center w-12">#</th>
+                            <th className="px-3 py-3 w-56">Nombre y Apellido</th>
+                            <th className="px-2 py-3 text-center w-20">Edad</th>
+                            <th className="px-3 py-3 w-40">Teléfono</th>
+                            <th className="px-3 py-3 w-52">Barrio / Estaca</th>
+                            <th className="px-3 py-3 w-44">Comité</th>
+                            <th className="px-4 py-3 text-center w-52">Estado</th>
+                            <th className="px-2 py-3 text-center w-10"></th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/5">
-                          {filteredData.map((vol, i) => (
-                            <tr
-                              key={i}
-                              className={`transition-colors hover:bg-white/[0.02] ${
-                                vol.error
-                                  ? 'bg-red-500/[0.04]'
-                                  : vol.isDuplicate
-                                    ? 'bg-amber-500/[0.04]'
-                                    : ''
-                              }`}
-                            >
-                              <td className="px-5 py-3 font-mono text-[11px] text-text-dim w-px whitespace-nowrap">#{vol.rowNum}</td>
-                              <td className="px-3 py-3 w-full">
-                                <p className="font-inter font-bold text-text text-[13px] tracking-wide">
-                                  {vol.firstName} {vol.lastName || ''}
-                                </p>
-                                {vol.age && <p className="text-[11px] text-text-dim font-inter">{vol.age} años</p>}
-                              </td>
-                              <td className="px-3 py-3 whitespace-nowrap">
-                                <p className="font-inter font-bold text-[13px] text-text-dim">{vol.ward || <span className="italic opacity-40">—</span>}</p>
-                                {vol.stake && <p className="font-inter font-bold text-[11px] text-text-dim/60 uppercase tracking-wider">{vol.stake}</p>}
-                              </td>
-                              <td className="px-3 py-3 text-center w-px whitespace-nowrap">
-                                {vol.committeeName && !vol.error ? (
-                                  <Badge variant="outline" className="font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full shrink-0 bg-[#4d7cfe]/10 text-[#4d7cfe] border-[#4d7cfe]/20">
-                                    {vol.committeeName}
-                                  </Badge>
-                                ) : vol.error ? (
-                                  <Badge variant="outline" className="font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full bg-red/10 text-red border-red/20">
-                                    {vol.committeeName || '—'}
-                                  </Badge>
-                                ) : <span className="text-text-dim/30">—</span>}
-                              </td>
-                              <td className="px-3 py-3 text-center w-px whitespace-nowrap">
-                                {vol.error ? (
-                                  <div className="flex flex-col items-center gap-0.5">
-                                    <Badge className="font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full bg-red/10 text-red border-red/20">
-                                      Error
-                                    </Badge>
-                                    <span className="text-[10px] text-red leading-tight max-w-[180px] text-center">{vol.error}</span>
-                                  </div>
-                                ) : vol.isDuplicate ? (
-                                  <Badge className="font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full bg-amber-500/10 text-amber-500 border-amber-500/20">
-                                    Duplicado
-                                  </Badge>
-                                ) : (
-                                  <Badge className="font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full bg-green-500/10 text-green-400 border-green-500/20">
-                                    Válido
-                                  </Badge>
+                        <tbody className="divide-y divide-border">
+                          {filteredData.map((vol) => {
+                            const originalIndex = parsedData.findIndex(v => v.rowNum === vol.rowNum);
+                            if (originalIndex === -1) return null;
+
+                            return (
+                              <tr
+                                key={vol.rowNum}
+                                className={cn(
+                                  "transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.02]",
+                                  vol.error ? 'bg-rose-500/[0.06]' : vol.isDuplicate ? 'bg-amber-500/[0.06]' : ''
                                 )}
-                              </td>
-                              <td className="px-3 py-3 text-right w-px whitespace-nowrap">
-                                <span className="font-inter font-bold text-xs text-text-dim">{vol.phone}</span>
-                              </td>
-                            </tr>
-                          ))}
+                              >
+                                {/* # Row Num */}
+                                <td className="px-3 py-2.5 font-mono text-[11px] text-text-dim text-center whitespace-nowrap">
+                                  #{vol.rowNum}
+                                </td>
+
+                                {/* Nombre y Apellidos */}
+                                <td className="px-3 py-2.5">
+                                  <input
+                                    type="text"
+                                    value={`${vol.firstName || ''}${vol.lastName ? ' ' + vol.lastName : ''}`}
+                                    onChange={(e) => handleUpdateName(originalIndex, e.target.value)}
+                                    placeholder="Nombre completo"
+                                    className="w-full bg-dark3/60 border border-border focus:border-[#4d7cfe] text-text text-[12px] font-bold font-inter rounded-lg px-2.5 py-1.5 outline-none transition-all"
+                                  />
+                                </td>
+
+                                {/* Edad */}
+                                <td className="px-2 py-2.5 text-center">
+                                  <input
+                                    type="text"
+                                    value={vol.age || ''}
+                                    onChange={(e) => handleUpdateRow(originalIndex, { age: e.target.value })}
+                                    placeholder="Edad"
+                                    className="w-full text-center bg-dark3/60 border border-border focus:border-[#4d7cfe] text-text text-[12px] font-bold font-inter rounded-lg px-1 py-1.5 outline-none transition-all"
+                                  />
+                                </td>
+
+                                {/* Teléfono */}
+                                <td className="px-3 py-2.5">
+                                  <input
+                                    type="text"
+                                    value={vol.phone || ''}
+                                    onChange={(e) => handleUpdateRow(originalIndex, { phone: e.target.value })}
+                                    placeholder="Teléfono (8 dígitos)"
+                                    className={cn(
+                                      "w-full bg-dark3/60 border text-xs font-mono font-bold rounded-lg px-2.5 py-1.5 outline-none transition-all",
+                                      vol.error?.toLowerCase().includes('teléfono')
+                                        ? "border-rose-500/50 text-rose-500 focus:border-rose-500"
+                                        : "border-border text-text focus:border-[#4d7cfe]"
+                                    )}
+                                  />
+                                </td>
+
+                                {/* Barrio / Estaca */}
+                                <td className="px-3 py-2.5">
+                                  <div className="flex gap-1.5">
+                                    <input
+                                      type="text"
+                                      value={vol.ward || ''}
+                                      onChange={(e) => handleUpdateRow(originalIndex, { ward: e.target.value })}
+                                      placeholder="Barrio"
+                                      className="w-1/2 bg-dark3/60 border border-border focus:border-[#4d7cfe] text-text text-[11px] font-bold font-inter rounded-lg px-2 py-1.5 outline-none transition-all"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={vol.stake || ''}
+                                      onChange={(e) => handleUpdateRow(originalIndex, { stake: e.target.value })}
+                                      placeholder="Estaca"
+                                      className="w-1/2 bg-dark3/60 border border-border focus:border-[#4d7cfe] text-text text-[11px] font-bold font-inter rounded-lg px-2 py-1.5 outline-none transition-all"
+                                    />
+                                  </div>
+                                </td>
+
+                                {/* Comité */}
+                                <td className="px-3 py-2.5">
+                                  <Select
+                                    value={vol.committeeName || ""}
+                                    onValueChange={(val) => handleUpdateRow(originalIndex, { committeeName: val || "" })}
+                                  >
+                                    <SelectTrigger className="w-full h-8 bg-dark3/60 border-border text-[11px] font-bold text-text rounded-lg px-2 py-1 outline-none">
+                                      <SelectValue placeholder="Seleccionar..." />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-dark2 border-border text-text text-xs z-[200]">
+                                      {committees.map(c => (
+                                        <SelectItem key={c.id} value={c.name}>
+                                          {c.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </td>
+
+                                {/* Estado (ULTIMA COLUMNA) */}
+                                <td className="px-4 py-2.5 text-center">
+                                  {vol.error ? (
+                                    <div className="flex flex-col items-center justify-center gap-0.5">
+                                      <Badge variant="outline" className="font-inter text-[9px] px-2 py-0.5 font-bold border rounded-full bg-rose-500/10 text-rose-500 border-rose-500/20 shrink-0">
+                                        Error
+                                      </Badge>
+                                      <span className="text-[10px] font-bold text-rose-500 leading-tight max-w-[180px] text-center" title={vol.error}>
+                                        {vol.error}
+                                      </span>
+                                    </div>
+                                  ) : vol.isDuplicate ? (
+                                    <div className="flex flex-col items-center justify-center gap-0.5">
+                                      <Badge variant="outline" className="font-inter text-[9px] px-2 py-0.5 font-bold border rounded-full bg-amber-500/10 text-amber-500 border-amber-500/20 shrink-0">
+                                        Duplicado
+                                      </Badge>
+                                      <span className="text-[10px] font-medium text-amber-500/90 leading-tight">Ya registrado</span>
+                                    </div>
+                                  ) : (
+                                    <Badge variant="outline" className="font-inter text-[9px] px-2.5 py-0.5 font-bold border rounded-full bg-emerald-500/10 text-emerald-500 border-emerald-500/20 shrink-0">
+                                      Válido
+                                    </Badge>
+                                  )}
+                                </td>
+
+                                {/* Trash / Delete Action */}
+                                <td className="px-2 py-2.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRow(originalIndex)}
+                                    className="w-7 h-7 rounded-lg text-text-dim hover:text-rose-500 hover:bg-rose-500/10 flex items-center justify-center transition-all cursor-pointer"
+                                    title="Eliminar fila"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">delete</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
 
-                    {/* ====== MOBILE CARDS (under md) ====== */}
-                    <div className="block md:hidden divide-y divide-white/5 max-h-[70dvh] overflow-y-auto">
-                      {filteredData.map((vol, i) => (
-                        <div
-                          key={i}
-                          className={`relative pl-5 pr-4 py-3.5 flex gap-3 ${
-                            vol.error
-                              ? 'bg-red-500/[0.04]'
-                              : vol.isDuplicate
-                                ? 'bg-amber-500/[0.04]'
-                                : 'bg-dark2'
-                          }`}
-                        >
-                          {/* Left color stripe */}
-                          <div className={`absolute left-0 top-0 bottom-0 w-[3px] rounded-r-full ${
-                            vol.error ? 'bg-red/60' : vol.isDuplicate ? 'bg-amber-500/60' : 'bg-green-500/60'
-                          }`} />
+                    {/* ====== MOBILE CARDS (under lg) ====== */}
+                    <div className="block lg:hidden divide-y divide-border max-h-[70dvh] overflow-y-auto">
+                      {filteredData.map((vol) => {
+                        const originalIndex = parsedData.findIndex(v => v.rowNum === vol.rowNum);
+                        if (originalIndex === -1) return null;
 
-                          {/* Card content */}
-                          <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                        return (
+                          <div
+                            key={vol.rowNum}
+                            className={cn(
+                              "relative p-4 flex flex-col gap-3",
+                              vol.error ? 'bg-rose-500/[0.04]' : vol.isDuplicate ? 'bg-amber-500/[0.04]' : 'bg-dark2'
+                            )}
+                          >
+                            {/* Left color stripe */}
+                            <div className={cn(
+                              "absolute left-0 top-0 bottom-0 w-[3px] rounded-r-full",
+                              vol.error ? 'bg-rose-500' : vol.isDuplicate ? 'bg-amber-500' : 'bg-emerald-500'
+                            )} />
 
-                            {/* ROW 1: Name + comité badge + status badge */}
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <p className="font-inter font-bold text-text text-[13px] tracking-wide truncate shrink">
-                                {vol.firstName} {vol.lastName || ''}
-                              </p>
-                              {/* Comité badge (only if valid and has committee) */}
-                              {!vol.error && vol.committeeName && (
-                                <Badge className="font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full shrink-0 bg-[#4d7cfe]/10 text-[#4d7cfe] border-[#4d7cfe]/20">
-                                  {vol.committeeName}
-                                </Badge>
-                              )}
-                              {/* Status badge */}
-                              <div className="shrink-0 ml-auto">
+                            {/* Top row: #Num + Status Badge + Delete Button */}
+                            <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2">
+                              <span className="font-mono text-xs font-bold text-text-dim">#{vol.rowNum}</span>
+                              <div className="flex items-center gap-2">
                                 {vol.error ? (
-                                  <Badge className="font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full bg-red/10 text-red border-red/20">Error</Badge>
+                                  <Badge variant="outline" className="font-inter text-[9px] px-2 py-0.5 font-bold border rounded-full bg-rose-500/10 text-rose-500 border-rose-500/20">Error</Badge>
                                 ) : vol.isDuplicate ? (
-                                  <Badge className="font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full bg-amber-500/10 text-amber-500 border-amber-500/20">Duplicado</Badge>
+                                  <Badge variant="outline" className="font-inter text-[9px] px-2 py-0.5 font-bold border rounded-full bg-amber-500/10 text-amber-500 border-amber-500/20">Duplicado</Badge>
                                 ) : (
-                                  <Badge className="font-inter text-[9px] px-1.5 py-0 h-[18px] font-semibold border rounded-full bg-green-500/10 text-green-400 border-green-500/20">Válido</Badge>
+                                  <Badge variant="outline" className="font-inter text-[9px] px-2 py-0.5 font-bold border rounded-full bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Válido</Badge>
                                 )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRow(originalIndex)}
+                                  className="w-7 h-7 rounded-lg text-text-dim hover:text-rose-500 hover:bg-rose-500/10 flex items-center justify-center transition-all"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">delete</span>
+                                </button>
                               </div>
                             </div>
 
-                            {/* ROW 2: Phone (left) + Ward · Stake (right) */}
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="font-inter font-bold text-xs text-text-dim shrink-0">
-                                {vol.phone || 'Sin teléfono'}
-                              </p>
-                              {(vol.ward || vol.stake) && (
-                                <p className="text-[10px] text-text-dim/60 font-inter text-right truncate">
-                                  {[vol.ward, vol.stake].filter(Boolean).join(' · ')}
-                                </p>
-                              )}
+                            {/* Inputs: Name & Age */}
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="col-span-2">
+                                <label className="text-[9px] font-bold text-text-dim uppercase tracking-wider block mb-1">Nombre</label>
+                                <input
+                                  type="text"
+                                  value={`${vol.firstName || ''}${vol.lastName ? ' ' + vol.lastName : ''}`}
+                                  onChange={(e) => handleUpdateName(originalIndex, e.target.value)}
+                                  placeholder="Nombre completo"
+                                  className="w-full bg-dark3/60 border border-border text-text text-xs font-bold font-inter rounded-lg px-2.5 py-1.5 outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-text-dim uppercase tracking-wider block mb-1">Edad</label>
+                                <input
+                                  type="text"
+                                  value={vol.age || ''}
+                                  onChange={(e) => handleUpdateRow(originalIndex, { age: e.target.value })}
+                                  placeholder="Edad"
+                                  className="w-full text-center bg-dark3/60 border border-border text-text text-xs font-bold font-inter rounded-lg px-2 py-1.5 outline-none"
+                                />
+                              </div>
                             </div>
 
-                            {/* ROW 3: error/duplicate message */}
+                            {/* Inputs: Phone & Committee */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] font-bold text-text-dim uppercase tracking-wider block mb-1">Teléfono</label>
+                                <input
+                                  type="text"
+                                  value={vol.phone || ''}
+                                  onChange={(e) => handleUpdateRow(originalIndex, { phone: e.target.value })}
+                                  placeholder="8 dígitos"
+                                  className="w-full bg-dark3/60 border border-border text-text text-xs font-mono font-bold rounded-lg px-2.5 py-1.5 outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-text-dim uppercase tracking-wider block mb-1">Comité</label>
+                                <Select
+                                  value={vol.committeeName || ""}
+                                  onValueChange={(val) => handleUpdateRow(originalIndex, { committeeName: val || "" })}
+                                >
+                                  <SelectTrigger className="w-full h-8 bg-dark3/60 border-border text-xs font-bold text-text rounded-lg px-2">
+                                    <SelectValue placeholder="Comité" />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-dark2 border-border text-text text-xs z-[200]">
+                                    {committees.map(c => (
+                                      <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+
+                            {/* Inputs: Ward & Stake */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <input
+                                  type="text"
+                                  value={vol.ward || ''}
+                                  onChange={(e) => handleUpdateRow(originalIndex, { ward: e.target.value })}
+                                  placeholder="Barrio"
+                                  className="w-full bg-dark3/60 border border-border text-text text-xs font-bold rounded-lg px-2.5 py-1.5 outline-none"
+                                />
+                              </div>
+                              <div>
+                                <input
+                                  type="text"
+                                  value={vol.stake || ''}
+                                  onChange={(e) => handleUpdateRow(originalIndex, { stake: e.target.value })}
+                                  placeholder="Estaca"
+                                  className="w-full bg-dark3/60 border border-border text-text text-xs font-bold rounded-lg px-2.5 py-1.5 outline-none"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Error / Duplicate message */}
                             {vol.error && (
-                              <p className="text-[10.5px] text-red font-semibold leading-tight">{vol.error}</p>
+                              <p className="text-[11px] text-rose-500 font-bold leading-tight mt-1">{vol.error}</p>
                             )}
                             {vol.isDuplicate && (
-                              <p className="text-[10.5px] text-amber-500 font-semibold leading-tight">Teléfono ya registrado. Se omitirá.</p>
+                              <p className="text-[11px] text-amber-500 font-bold leading-tight mt-1">Teléfono ya registrado en el sistema. Se omitirá.</p>
                             )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 )}

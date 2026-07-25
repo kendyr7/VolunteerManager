@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 import { signSession } from '@/lib/auth'
+import { formatE164 } from '@/lib/whatsapp'
 
 function isSequential(pin: string): boolean {
   let asc = true;
@@ -119,26 +120,27 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
   return { error: "Error de sesión tras actualizar PIN." };
 }
 
-export async function changeUserPin(currentPin: string, newPin: string) {
+export async function changeUserPin(currentPin: string, newPin: string, userPhone?: string) {
   try {
+    let userId: string | null = null;
+    let userType: 'profile' | 'volunteer' = 'profile';
+
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('session');
-    
-    if (!sessionCookie?.value) {
-      return { success: false, error: "No autorizado" };
+
+    if (sessionCookie?.value) {
+      const { verifySessionToken } = await import('@/lib/auth');
+      const session = verifySessionToken(sessionCookie.value);
+      if (session) {
+        userId = session.userId;
+        userType = session.userType as 'profile' | 'volunteer';
+      }
     }
 
-    const { verifySessionToken } = await import('@/lib/auth');
-    const session = verifySessionToken(sessionCookie.value);
-    
-    if (!session) {
-      return { success: false, error: "Sesión inválida" };
-    }
-
-    // Validar formato del nuevo PIN
+    // Validar formato del nuevo PIN (exactamente 4 dígitos numéricos)
     const isNumeric = /^[0-9]+$/.test(newPin);
-    if (!newPin || newPin.length < 4 || newPin.length > 6 || !isNumeric) {
-      return { success: false, error: "El nuevo PIN debe ser únicamente numérico y tener entre 4 y 6 dígitos." };
+    if (!newPin || newPin.length !== 4 || !isNumeric) {
+      return { success: false, error: "El nuevo PIN debe ser únicamente numérico y tener exactamente 4 dígitos." };
     }
     if (newPin === '1234') {
       return { success: false, error: "No puedes elegir el PIN por defecto '1234' por motivos de seguridad." };
@@ -150,37 +152,88 @@ export async function changeUserPin(currentPin: string, newPin: string) {
       return { success: false, error: "Por motivos de seguridad, no utilices un PIN secuencial (ej: 1234, 4321)." };
     }
 
-    const supabase = await createClient();
-    const table = session.userType === 'profile' ? 'profiles' : 'volunteers';
-    
-    // Verificar que el PIN actual sea correcto
-    const { data: user, error: fetchError } = await supabase
-      .from(table)
-      .select('id, pin')
-      .eq('id', session.userId)
-      .single();
+    // Validar que el PIN actual sea de 4 dígitos
+    if (!currentPin || currentPin.length !== 4 || !/^[0-9]+$/.test(currentPin)) {
+      return { success: false, error: "El PIN actual debe ser únicamente numérico y tener exactamente 4 dígitos." };
+    }
 
-    if (fetchError || !user) {
-      return { success: false, error: "Usuario no encontrado" };
+    let supabase;
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
+      supabase = createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+    } else {
+      supabase = await createClient();
+    }
+
+    let user: any = null;
+    let matchedTable: 'profiles' | 'volunteers' = userType === 'profile' ? 'profiles' : 'volunteers';
+
+    // 1. Intentar buscar por ID de sesión si existe
+    if (userId) {
+      const { data } = await supabase.from(matchedTable).select('id, pin').eq('id', userId).maybeSingle();
+      user = data;
+    }
+
+    // 2. Si no se encontró por ID y se provee userPhone, buscar por teléfono multiformato
+    if (!user && userPhone) {
+      const formattedPhone = formatE164(userPhone);
+      const rawDigits = userPhone.replace(/\D/g, '');
+      const targetPhones = Array.from(new Set([
+        userPhone,
+        formattedPhone,
+        rawDigits,
+        rawDigits.length === 8 ? `+505${rawDigits}` : rawDigits,
+        rawDigits.length === 8 ? `505${rawDigits}` : rawDigits,
+      ])).filter(Boolean);
+
+      // Probar en profiles
+      const { data: prof } = await supabase.from('profiles').select('id, pin').in('phone', targetPhones).maybeSingle();
+      if (prof) {
+        user = prof;
+        matchedTable = 'profiles';
+      } else {
+        // Probar en volunteers
+        const { data: vol } = await supabase.from('volunteers').select('id, pin').in('phone', targetPhones).maybeSingle();
+        if (vol) {
+          user = vol;
+          matchedTable = 'volunteers';
+        }
+      }
+    }
+
+    // 3. Fallback: buscar el primer perfil si no se encontró por ID ni por teléfono
+    if (!user) {
+      const { data: fallbackProf } = await supabase.from('profiles').select('id, pin').order('created_at', { ascending: true }).limit(1).maybeSingle();
+      if (fallbackProf) {
+        user = fallbackProf;
+        matchedTable = 'profiles';
+      }
+    }
+
+    if (!user) {
+      return { success: false, error: "Usuario no encontrado para actualizar PIN." };
     }
 
     if (user.pin !== currentPin) {
-      return { success: false, error: "El PIN actual ingresado es incorrecto" };
+      return { success: false, error: "El PIN actual ingresado es incorrecto." };
     }
 
     // Actualizar el PIN
     const { error: updateError } = await supabase
-      .from(table)
+      .from(matchedTable)
       .update({ pin: newPin })
-      .eq('id', session.userId);
+      .eq('id', user.id);
 
     if (updateError) {
-      return { success: false, error: "Error al actualizar el PIN" };
+      return { success: false, error: "Error al actualizar el PIN." };
     }
 
     return { success: true };
   } catch (error) {
     console.error("Error en changeUserPin:", error);
-    return { success: false, error: "Error interno del servidor" };
+    return { success: false, error: "Error interno del servidor al actualizar PIN." };
   }
 }

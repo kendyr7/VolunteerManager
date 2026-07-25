@@ -1201,7 +1201,7 @@ export default function RemindersPage() {
                           {/* Desktop Table (Hidden on small screens) */}
                           <div className="hidden lg:block bg-dark2 relative w-full pb-10">
                             <table className="w-full text-sm text-left font-inter border-separate border-spacing-0">
-                              <thead className="bg-dark3/90 sticky top-0 z-20 backdrop-blur-md border-b border-white/10 text-[10px] font-bold text-text-dim uppercase tracking-wider">
+                              <thead className="bg-dark3/90 sticky top-0 z-20 backdrop-blur-md border-b border-border text-[10px] font-bold text-text-dim uppercase tracking-wider">
                                 <tr>
                                   <th className="px-5 py-4 text-center w-16">
                                     <button 
@@ -1218,7 +1218,7 @@ export default function RemindersPage() {
                                         "w-5 h-5 rounded flex items-center justify-center transition-all mx-auto border",
                                         sortedLetters.flatMap(l => groupedVolunteers[l]).every(v => selectedVolunteers.has(v.id)) && sortedLetters.flatMap(l => groupedVolunteers[l]).length > 0
                                           ? "bg-[#4d7cfe] border-[#4d7cfe] text-white"
-                                          : "border-white/20 hover:border-white/50 text-transparent"
+                                          : "border-border hover:border-text-dim text-transparent dark:border-white/20 dark:hover:border-white/50"
                                       )}
                                     >
                                       <span className="material-symbols-outlined text-[14px] font-bold">check</span>
@@ -1232,7 +1232,7 @@ export default function RemindersPage() {
                                   <th className="px-5 py-4 text-center w-px whitespace-nowrap">Acciones</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-white/5">
+                              <tbody className="divide-y divide-border">
                                 <AnimatePresence mode="popLayout">
                                   {sortedLetters.map(letter => (
                                     <Fragment key={letter}>
@@ -1266,7 +1266,7 @@ export default function RemindersPage() {
                                           }
                                         }}
                                         className={cn(
-                                          "group hover:bg-white/[0.02] transition-colors cursor-pointer",
+                                          "group hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors cursor-pointer",
                                           isConfirmed && "bg-[#6dd230]/5 hover:bg-[#6dd230]/10",
                                           selectedVolunteers.has(vol.id) && "bg-[#4d7cfe]/10 hover:bg-[#4d7cfe]/15"
                                         )}
@@ -1279,7 +1279,7 @@ export default function RemindersPage() {
                                               "w-5 h-5 rounded flex items-center justify-center transition-all mx-auto border",
                                               selectedVolunteers.has(vol.id)
                                                 ? "bg-[#4d7cfe] border-[#4d7cfe] text-white"
-                                                : "border-white/20 hover:border-white/50 text-transparent"
+                                                : "border-border hover:border-text-dim text-transparent dark:border-white/20 dark:hover:border-white/50"
                                             )}
                                           >
                                             <span className="material-symbols-outlined text-[14px] font-bold">check</span>
@@ -1300,7 +1300,7 @@ export default function RemindersPage() {
                                             >
                                               <SelectValue />
                                             </SelectTrigger>
-                                            <SelectContent className="bg-dark2 border-white/10 text-white font-inter">
+                                            <SelectContent className="bg-dark2 border-border text-text font-inter">
                                               <SelectItem value="Pendiente" className="text-amber-500 font-bold text-xs">Pendiente</SelectItem>
                                               <SelectItem value="Contactado" className="text-sky-500 font-bold text-xs">Contactado</SelectItem>
                                               <SelectItem value="Confirmado" className="text-accent font-bold text-xs">Confirmado</SelectItem>
@@ -1465,25 +1465,16 @@ export default function RemindersPage() {
           <div
             id="drawer-profile"
             className={cn(
-              "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-[#0a101d]",
+              "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl border-l border-border",
               isMobile
-                ? `w-full max-h-[94dvh] rounded-t-[40px] shadow-2xl ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
-                : `w-[400px] h-full shadow-2xl border-l border-white/10 ${isSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
+                ? `w-full max-h-[94dvh] rounded-t-[40px] border-0 ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
+                : `w-[400px] h-full ${isSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
             )}
             style={{ willChange: 'transform' }}
           >
-            {/* Fondo animado (Tema Claro) */}
-            <div className="absolute inset-0 z-0 dark:hidden">
-              <MeshGradientBackground colors={["#60a5fa", "#3b82f6", "#93c5fd", "#4d7cfe"]} backgroundColor="#1e3a8a" />
-            </div>
-            {/* Fondo animado (Tema Oscuro) */}
-            <div className="absolute inset-0 z-0 hidden dark:block">
-              <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
-            </div>
-
             <div className="relative z-10 flex flex-col h-full w-full">
               {/* Handle (Mobile only) */}
-              <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none lg:hidden" />
+              <div className="w-12 h-1.5 bg-text-dim/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none lg:hidden" />
 
             <div
               className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
@@ -1532,14 +1523,14 @@ export default function RemindersPage() {
                 <>
                   {/* Header Profile Info */}
                   <div className="text-center mt-4 mb-8 px-4">
-                    <div className="flex flex-col items-center justify-center leading-[1.25] font-black text-[26px] sm:text-[30px] text-white tracking-tight">
+                    <div className="flex flex-col items-center justify-center leading-[1.25] font-black text-[26px] sm:text-[30px] text-text tracking-tight">
                       {(() => {
                         const parts = (editingVolunteer.name || '').trim().split(/\s+/).filter(Boolean);
                         if (parts.length >= 4) {
                           return (
                             <>
                               <span>{parts.slice(0, 2).join(' ')}</span>
-                              <span className="text-white/95">{parts.slice(2).join(' ')}</span>
+                              <span className="text-text/90">{parts.slice(2).join(' ')}</span>
                             </>
                           );
                         }
@@ -1548,19 +1539,19 @@ export default function RemindersPage() {
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
                       {editingVolunteer.committee && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-[#4d7cfe]/20 text-[#8bb0ff] border border-[#4d7cfe]/30 shadow-sm">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 shadow-sm">
                           <span className="material-symbols-outlined text-[13px]">groups</span>
                           {editingVolunteer.committee}
                         </span>
                       )}
                       {editingVolunteer.stake && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-amber-500/15 text-amber-300 border border-amber-500/25 shadow-sm">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25 shadow-sm">
                           <span className="material-symbols-outlined text-[13px]">account_balance</span>
                           {editingVolunteer.stake}
                         </span>
                       )}
                       {editingVolunteer.ward && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 shadow-sm">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/25 shadow-sm">
                           <span className="material-symbols-outlined text-[13px]">location_on</span>
                           {editingVolunteer.ward}
                         </span>
@@ -1588,24 +1579,24 @@ export default function RemindersPage() {
 
                       return (
                         <>
-                          <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                            <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">{totalTurnos}</span>
-                            <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Turnos</span>
+                          <div className="flex flex-col items-center flex-1 border-r border-border">
+                            <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{totalTurnos}</span>
+                            <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Turnos</span>
                           </div>
-                          <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                            <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">{diasCubiertos}</span>
-                            <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Días</span>
+                          <div className="flex flex-col items-center flex-1 border-r border-border">
+                            <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{diasCubiertos}</span>
+                            <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Días</span>
                           </div>
-                          <div className="flex flex-col items-center flex-1 border-r border-white/20">
-                            <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">
+                          <div className="flex flex-col items-center flex-1 border-r border-border">
+                            <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">
                               {dynamicReliability}
-                              {dynamicReliability !== '-' && <span className="text-[16px] font-bold text-white/80 ml-0.5">%</span>}
+                              {dynamicReliability !== '-' && <span className="text-[16px] font-bold text-text-dim ml-0.5">%</span>}
                             </span>
-                            <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Confia.</span>
+                            <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Confia.</span>
                           </div>
                           <div className="flex flex-col items-center flex-1">
-                            <span className="text-drawer-kpi-value font-black text-white drop-shadow-md">{editingVolunteer.age || '-'}</span>
-                            <span className="text-drawer-kpi-label text-white/80 mt-2 font-inter font-extrabold">Edad</span>
+                            <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{editingVolunteer.age || '-'}</span>
+                            <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Edad</span>
                           </div>
                         </>
                       );
@@ -1616,18 +1607,18 @@ export default function RemindersPage() {
                   <div className="grid grid-cols-2 gap-4 px-2 mb-8">
                     <Button
                       variant="outline"
-                      className="flex-1 h-11 gap-2 text-white border-white/20 bg-white/10 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20"
+                      className="flex-1 h-11 gap-2 text-text border-border bg-dark3 hover:bg-dark font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
                       onClick={() => window.open(`https://wa.me/${editingVolunteer.phone.replace(/\s+/g, '')}`, '_blank')}
                     >
-                      <span className="material-symbols-outlined text-[20px]">message</span>
+                      <span className="material-symbols-outlined text-[20px] text-[#25D366]">message</span>
                       WHATSAPP
                     </Button>
                     <Button
                       variant="outline"
-                      className="flex-1 h-11 gap-2 text-white border-white/20 bg-white/10 font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all hover:bg-white/20"
+                      className="flex-1 h-11 gap-2 text-text border-border bg-dark3 hover:bg-dark font-bold text-xs rounded-xl shadow-sm active:scale-95 transition-all"
                       onClick={() => window.location.href = `tel:${editingVolunteer.phone.replace(/\s+/g, '')}`}
                     >
-                      <span className="material-symbols-outlined text-[20px]">call</span>
+                      <span className="material-symbols-outlined text-[20px] text-blue-500">call</span>
                       LLAMAR
                     </Button>
                   </div>
@@ -1636,24 +1627,24 @@ export default function RemindersPage() {
                   <div className="w-full">
                     <div className="flex items-center justify-between px-2 mb-4">
                       <div className="flex items-center gap-2 relative">
-                        <p className="text-drawer-label text-white">Cronograma</p>
+                        <p className="text-drawer-label text-text font-bold">Cronograma</p>
                         
                         {/* Helper Icon & Legend Popover */}
                         <div className="relative">
                           <button
                             type="button"
                             onClick={() => setShowLegend(prev => !prev)}
-                            className="text-white/60 hover:text-white transition-colors p-0.5 rounded-full flex items-center justify-center focus:outline-none"
+                            className="text-text-dim hover:text-text transition-colors p-0.5 rounded-full flex items-center justify-center focus:outline-none"
                             title="Ver leyenda del cronograma"
                           >
                             <span className="material-symbols-outlined text-[15px]">help_outline</span>
                           </button>
 
                           {showLegend && (
-                            <div className="absolute left-0 top-6 z-50 w-60 bg-[#0f172a] border border-white/20 rounded-xl p-3.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
-                              <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10">
-                                <span className="text-xs font-bold text-white font-inter">Leyenda del Cronograma</span>
-                                <button onClick={() => setShowLegend(false)} className="text-white/50 hover:text-white flex items-center justify-center">
+                            <div className="absolute left-0 top-6 z-50 w-60 bg-dark2 border border-border rounded-xl p-3.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+                              <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border">
+                                <span className="text-xs font-bold text-text font-inter">Leyenda del Cronograma</span>
+                                <button onClick={() => setShowLegend(false)} className="text-text-dim hover:text-text flex items-center justify-center">
                                   <span className="material-symbols-outlined text-[14px]">close</span>
                                 </button>
                               </div>
@@ -1663,35 +1654,35 @@ export default function RemindersPage() {
                                     <span className="material-symbols-outlined text-[13px]">check</span>
                                   </span>
                                   <div>
-                                    <p className="text-white font-bold leading-tight">Programado</p>
-                                    <p className="text-white/60 text-[10px]">Turno asignado</p>
+                                    <p className="text-text font-bold leading-tight">Programado</p>
+                                    <p className="text-text-dim text-[10px]">Turno asignado</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2.5">
-                                  <span className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shrink-0">
+                                  <span className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-500 flex items-center justify-center shrink-0">
                                     <span className="material-symbols-outlined text-[13px]">check</span>
                                   </span>
                                   <div>
-                                    <p className="text-emerald-400 font-bold leading-tight">Entrada</p>
-                                    <p className="text-white/60 text-[10px]">Turno registrado con QR</p>
+                                    <p className="text-emerald-500 font-bold leading-tight">Entrada</p>
+                                    <p className="text-text-dim text-[10px]">Turno registrado con QR</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2.5">
-                                  <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center shrink-0">
+                                  <span className="w-6 h-6 rounded-lg bg-slate-500/20 border border-slate-500/40 text-slate-500 flex items-center justify-center shrink-0">
                                     <span className="material-symbols-outlined text-[13px]">check</span>
                                   </span>
                                   <div>
-                                    <p className="text-slate-300 font-bold leading-tight">Salida</p>
-                                    <p className="text-white/60 text-[10px]">Turno completado en el sistema</p>
+                                    <p className="text-slate-500 font-bold leading-tight">Salida</p>
+                                    <p className="text-text-dim text-[10px]">Turno completado en el sistema</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2.5">
-                                  <span className="w-6 h-6 rounded-lg bg-white/5 border border-white/10 text-white/30 flex items-center justify-center shrink-0 text-[12px] font-bold">
+                                  <span className="w-6 h-6 rounded-lg bg-dark3 border border-border text-text-dim flex items-center justify-center shrink-0 text-[12px] font-bold">
                                     -
                                   </span>
                                   <div>
-                                    <p className="text-white/50 font-medium leading-tight">Sin Turnos</p>
-                                    <p className="text-white/40 text-[10px]">Disponible / No programado</p>
+                                    <p className="text-text-dim font-medium leading-tight">Sin Turnos</p>
+                                    <p className="text-text-dim/70 text-[10px]">Disponible / No programado</p>
                                   </div>
                                 </div>
                               </div>
@@ -1701,9 +1692,9 @@ export default function RemindersPage() {
                       </div>
 
                       <div className="flex items-center gap-3">
-                        {saved && <span className="text-[11px] text-green-300 font-bold animate-pulse">✓ Listo</span>}
+                        {saved && <span className="text-[11px] text-emerald-500 font-bold animate-pulse">✓ Listo</span>}
                         {isEditingShifts ? (
-                          <button onClick={handleSaveShifts} className="h-7 px-4 bg-white hover:bg-white/90 text-black rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
+                          <button onClick={handleSaveShifts} className="h-7 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
                             Guardar
                           </button>
                         ) : (
@@ -1719,8 +1710,8 @@ export default function RemindersPage() {
                             className={cn(
                               "h-7 px-4 backdrop-blur-sm border font-bold text-[11px] transition-all rounded-full",
                               canEditShifts()
-                                ? "bg-black/20 border-white/10 hover:bg-black/30 text-white active:scale-[0.97]"
-                                : "bg-white/5 border-white/5 text-white/40 cursor-not-allowed"
+                                ? "bg-dark3 border-border hover:bg-dark text-text active:scale-[0.97]"
+                                : "bg-dark3/50 border-border/50 text-text-dim/40 cursor-not-allowed"
                             )}
                             title={canEditShifts() ? "Editar turnos" : "Permiso deshabilitado por el administrador"}
                           >
@@ -1747,14 +1738,14 @@ export default function RemindersPage() {
                         const cardBg = bgColors[index % bgColors.length];
 
                         return (
-                          <div key={d.key} className={`rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01] bg-white/5 border border-white/10 flex`}>
+                          <div key={d.key} className="rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01] bg-dark3 border border-border flex">
                             {/* Etiqueta de color lateral estructural */}
                             <div className={`w-3 shrink-0 ${cardBg} opacity-90`} />
                             
                             <div className="flex-1 flex items-center justify-between px-5 sm:px-6 py-4">
                               {/* Left: Date */}
                               <div className="flex-1 min-w-0 pr-4 flex items-center">
-                                <p className="font-inter font-bold text-white text-[13px] truncate capitalize">
+                                <p className="font-inter font-bold text-text text-[13px] truncate capitalize">
                                   {d.label} {d.dateNum}
                                 </p>
                               </div>
@@ -1766,18 +1757,18 @@ export default function RemindersPage() {
                                   const isCheckedIn = checkedInMap[`${editingVolunteer.id}-${d.key}-${t}`];
                                   const isCheckedOut = checkedOutMap[`${editingVolunteer.id}-${d.key}-${t}`];
 
-                                  let statusStyle = "bg-white/[0.03] border-white/10 text-white/30";
-                                  let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-white/30">-</span>;
-                                  let labelColor = "text-white/40";
+                                  let statusStyle = "bg-dark2 border-border text-text-dim/40";
+                                  let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-text-dim/40">-</span>;
+                                  let labelColor = "text-text-dim/40";
 
                                   if (isCheckedOut) {
-                                    statusStyle = "bg-slate-800/80 border-slate-700/60 text-slate-300 shadow-sm";
-                                    iconContent = <span className="material-symbols-outlined text-[15px] text-slate-400">check</span>;
-                                    labelColor = "text-slate-400 font-bold";
+                                    statusStyle = "bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm";
+                                    iconContent = <span className="material-symbols-outlined text-[15px] text-slate-500">check</span>;
+                                    labelColor = "text-slate-500 font-bold";
                                   } else if (isCheckedIn) {
-                                    statusStyle = "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 shadow-sm";
-                                    iconContent = <span className="material-symbols-outlined text-[15px] text-emerald-400">check</span>;
-                                    labelColor = "text-emerald-400 font-bold";
+                                    statusStyle = "bg-emerald-500/15 border-emerald-500/30 text-emerald-500 shadow-sm";
+                                    iconContent = <span className="material-symbols-outlined text-[15px] text-emerald-500">check</span>;
+                                    labelColor = "text-emerald-500 font-bold";
                                   } else if (active) {
                                     statusStyle = "bg-[#4d7cfe]/15 border-[#4d7cfe]/35 text-[#4d7cfe] font-bold shadow-sm";
                                     iconContent = <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">check</span>;
@@ -1792,7 +1783,7 @@ export default function RemindersPage() {
                                       className={cn(
                                         "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all",
                                         statusStyle,
-                                        isEditingShifts && !isCheckedIn && !isCheckedOut && canEditShifts() && "hover:bg-white/10 hover:border-white/20 cursor-pointer active:scale-95"
+                                        isEditingShifts && !isCheckedIn && !isCheckedOut && canEditShifts() && "hover:bg-dark hover:border-border cursor-pointer active:scale-95"
                                       )}
                                     >
                                       <div className="h-4 flex items-center justify-center">
