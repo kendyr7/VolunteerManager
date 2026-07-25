@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No tienes huellas o dispositivos registrados' }, { status: 400 });
     }
 
-    const rpID = (request.headers.get('host') || 'localhost:3000').split(':')[0];
+    const rpID = process.env.WEBAUTHN_RP_ID || 'localhost';
 
     const allowCredentials = passkeys.map((pk) => ({
       id: pk.credential_id, // Base64URL string provided by SimpleWebAuthn

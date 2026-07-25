@@ -85,6 +85,18 @@ export default function SettingsPage() {
   const [isRegisteringPasskey, setIsRegisteringPasskey] = useState(false);
   const [hasPasskey, setHasPasskey] = useState(false);
 
+  // Passkeys list for multi-device management
+  type PasskeyEntry = {
+    id: string;
+    device_name: string | null;
+    device_type: string | null;
+    transports: string[];
+    created_at: string;
+    last_used_at: string | null;
+    backed_up: boolean;
+  };
+  const [passkeys, setPasskeys] = useState<PasskeyEntry[]>([]);
+
   // Form states for profile
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
@@ -228,17 +240,24 @@ export default function SettingsPage() {
         setSelectedConfigCommittees([]); // Default: none selected
       }
 
-      // Check if user has passkeys
-      const { data: passkeys } = await supabase
-        .from('passkeys')
-        .select('id')
-        .eq('user_id', user.id);
-
-      if (passkeys && passkeys.length > 0) {
-        setHasPasskey(true);
-      }
+      // Check and load passkeys list
+      await loadPasskeys(user.id, supabase);
     }
     setLoading(false);
+  };
+
+  // Load passkeys for the current user via the API
+  const loadPasskeys = async (userId?: string, supabaseClient?: any) => {
+    try {
+      const resp = await fetch('/api/webauthn/list');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const list = data.passkeys || [];
+      setPasskeys(list);
+      setHasPasskey(list.length > 0);
+    } catch (e) {
+      // silently fail — not critical
+    }
   };
 
   // Helper to load stored capacities for the primary selected committee
@@ -400,7 +419,8 @@ export default function SettingsPage() {
       });
 
       if (!resp.ok) {
-        throw new Error('Error al generar opciones de registro');
+        const err = await resp.json();
+        throw new Error(err.error || 'Error al generar opciones de registro');
       }
 
       const options = await resp.json();
@@ -415,33 +435,43 @@ export default function SettingsPage() {
       const verifyData = await verifyResp.json();
 
       if (verifyData.verified) {
-        setHasPasskey(true);
-        showToast("Huella registrada correctamente");
+        await loadPasskeys();
+        showToast(`Dispositivo "${verifyData.deviceName || 'nuevo'}" registrado correctamente`);
       } else {
-        throw new Error("No se pudo verificar la huella");
+        throw new Error("No se pudo verificar el dispositivo");
       }
     } catch (err: any) {
-      showToast("Registro cancelado o dispositivo no compatible.", "error");
+      if (err.name === 'InvalidStateError') {
+        showToast("Este dispositivo ya está registrado.", "error");
+      } else if (err.name === 'NotAllowedError') {
+        // User cancelled — silent
+      } else {
+        showToast(err.message || "Registro cancelado o dispositivo no compatible.", "error");
+      }
     } finally {
       setIsRegisteringPasskey(false);
     }
   };
 
-  const handleDeletePasskey = async () => {
-    if (!userProfile) return;
+  const handleDeletePasskey = async (passkeyId: string) => {
     setIsRegisteringPasskey(true);
     try {
       const resp = await fetch('/api/webauthn/delete', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: userProfile.id })
+        body: JSON.stringify({ passkeyId })
       });
-      if (!resp.ok) throw new Error('Error al desvincular huella');
-      setHasPasskey(false);
-      localStorage.setItem("preferred_auth_method", "pin"); // Reset auth method to pin
-      showToast("Huella desvinculada correctamente");
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || 'Error al desvincular');
+      }
+      await loadPasskeys();
+      if (passkeys.length <= 1) {
+        localStorage.setItem("preferred_auth_method", "pin");
+      }
+      showToast("Dispositivo desvinculado correctamente");
     } catch (err: any) {
-      showToast("Error al desvincular huella", "error");
+      showToast(err.message || "Error al desvincular dispositivo", "error");
     } finally {
       setIsRegisteringPasskey(false);
     }
@@ -643,37 +673,78 @@ export default function SettingsPage() {
             </button>
 
             {isSectionOpen('security') && (
-              <div className="p-4 sm:p-6 border-t border-border bg-black/[0.02] dark:bg-black/20">
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <p className="text-xs text-text-dim font-inter leading-relaxed max-w-xl">
-                      Vincula este dispositivo para iniciar sesión rápidamente mediante tu huella dactilar o reconocimiento facial.
-                    </p>
-                  </div>
+              <div className="p-4 sm:p-6 border-t border-border bg-black/[0.02] dark:bg-black/20 space-y-6">
 
-                  {hasPasskey ? (
-                    <Button
-                      type="button"
-                      onClick={handleDeletePasskey}
-                      disabled={isRegisteringPasskey}
-                      className="font-bold px-5 h-9 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 border border-rose-500/20"
-                    >
-                      {isRegisteringPasskey ? 'Desvinculando...' : 'Desvincular Dispositivo'}
-                    </Button>
-                  ) : (
+                {/* Passkeys / Biometrics Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-xs font-bold text-text">Dispositivos de acceso biométrico</p>
+                      <p className="text-[10px] font-inter text-text-dim mt-0.5">
+                        Huella, Face ID, Windows Hello — cada dispositivo se registra por separado
+                      </p>
+                    </div>
                     <Button
                       type="button"
                       onClick={handleRegisterPasskey}
                       disabled={isRegisteringPasskey}
-                      className="font-bold px-5 h-9 transition-all active:scale-[0.97] rounded-full text-xs shrink-0 w-full md:w-auto bg-dark3 hover:bg-dark text-text border border-border"
+                      className="font-bold px-4 h-8 transition-all active:scale-[0.97] rounded-full text-[11px] shrink-0 bg-dark3 hover:bg-dark text-text border border-border flex items-center gap-1.5 ml-3"
                     >
-                      {isRegisteringPasskey ? 'Registrando...' : 'Vincular Dispositivo'}
+                      <span className="material-symbols-outlined text-[15px]">add</span>
+                      {isRegisteringPasskey ? 'Registrando...' : 'Añadir'}
                     </Button>
+                  </div>
+
+                  {/* Passkeys list */}
+                  {passkeys.length === 0 ? (
+                    <div className="flex items-center gap-3 p-4 rounded-xl border border-dashed border-border text-text-dim">
+                      <span className="material-symbols-outlined text-[20px]">fingerprint</span>
+                      <p className="text-xs font-inter">Ningún dispositivo biométrico registrado aún.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border rounded-xl border border-border overflow-hidden">
+                      {passkeys.map((pk) => {
+                        const transports: string[] = pk.transports || [];
+                        const isInternal = transports.includes('internal');
+                        const isSynced = pk.backed_up;
+                        const icon = isInternal ? 'fingerprint' : transports.includes('usb') ? 'usb' : 'key';
+                        const deviceLabel = pk.device_name || (isInternal ? 'Biometría del dispositivo' : 'Llave de seguridad');
+                        const addedDate = new Date(pk.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+                        const lastUsed = pk.last_used_at
+                          ? new Date(pk.last_used_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+                          : null;
+
+                        return (
+                          <div key={pk.id} className="flex items-center gap-3 px-4 py-3 bg-dark2 hover:bg-dark3 transition-colors">
+                            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                              <span className="material-symbols-outlined text-[17px]">{icon}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-text truncate">{deviceLabel}</p>
+                              <p className="text-[10px] font-inter text-text-dim mt-0.5">
+                                Agregado {addedDate}
+                                {lastUsed && <span> · Último uso {lastUsed}</span>}
+                                {isSynced && <span> · <span className="text-[#4d7cfe]">Sincronizado</span></span>}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePasskey(pk.id)}
+                              disabled={isRegisteringPasskey}
+                              className="w-7 h-7 rounded-full hover:bg-rose-500/10 text-text-dim hover:text-rose-500 flex items-center justify-center transition-colors shrink-0"
+                              title="Desvincular este dispositivo"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
 
                 {/* Change PIN Section */}
-                <div className="mt-8 pt-6 border-t border-border">
+                <div className="pt-2 border-t border-border">
                   <h4 className="font-bold text-text text-xs mb-4">Cambiar PIN de Acceso</h4>
                   <form onSubmit={handleChangePin} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

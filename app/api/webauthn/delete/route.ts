@@ -13,24 +13,36 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { userId } = await request.json();
+    const body = await request.json();
+    const { passkeyId } = body;
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Falta el ID de usuario' }, { status: 400 });
-    }
-
-    // Admin Check: Solo el dueño de la passkey o un Admin puede borrarla
-    if (session.userId !== userId && session.role !== 'Admin') {
-      return NextResponse.json({ error: 'Prohibido: Permisos insuficientes.' }, { status: 403 });
+    if (!passkeyId) {
+      return NextResponse.json({ error: 'Falta el ID de la passkey' }, { status: 400 });
     }
 
     const supabase = await createClient();
 
-    // Eliminar las llaves asociadas al usuario
+    // First verify the passkey belongs to the authenticated user (or they're admin)
+    const { data: passkey } = await supabase
+      .from('passkeys')
+      .select('id, user_id')
+      .eq('id', passkeyId)
+      .maybeSingle();
+
+    if (!passkey) {
+      return NextResponse.json({ error: 'Passkey no encontrada' }, { status: 404 });
+    }
+
+    // Security: only the owner or an Admin can delete
+    if (passkey.user_id !== session.userId && session.role !== 'Admin') {
+      return NextResponse.json({ error: 'Prohibido: Permisos insuficientes.' }, { status: 403 });
+    }
+
+    // Delete only the specific passkey
     const { error } = await supabase
       .from('passkeys')
       .delete()
-      .eq('user_id', userId);
+      .eq('id', passkeyId);
 
     if (error) {
       throw error;

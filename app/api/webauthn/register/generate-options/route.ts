@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
 import { verifySessionToken } from '@/lib/auth';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
@@ -19,14 +20,31 @@ export async function POST(request: Request) {
     const phone = body.phone || session.userId;
 
     const rpName = 'Volunteer Manager';
-    const host = request.headers.get('host') || 'localhost:3000';
-    const rpID = host.split(':')[0];
+    // Use fixed env-var rpID — critical for cross-env compatibility
+    const rpID = process.env.WEBAUTHN_RP_ID || 'localhost';
+
+    // Fetch existing credentials so the authenticator won't create duplicates
+    // for the SAME device, but WILL allow registering additional devices
+    const supabase = await createClient();
+    const { data: existingPasskeys } = await supabase
+      .from('passkeys')
+      .select('credential_id, transports')
+      .eq('user_id', userId);
+
+    const excludeCredentials = (existingPasskeys || []).map((pk) => ({
+      id: pk.credential_id,
+      type: 'public-key' as const,
+      transports: pk.transports || [],
+    }));
 
     const options = await generateRegistrationOptions({
       rpName,
       rpID,
       userID: new TextEncoder().encode(userId),
       userName: phone,
+      // excludeCredentials prevents re-registering the SAME credential
+      // but still allows registering a NEW credential (different device)
+      excludeCredentials,
       authenticatorSelection: {
         residentKey: 'preferred',
         userVerification: 'preferred',

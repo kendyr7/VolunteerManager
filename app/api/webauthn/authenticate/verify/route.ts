@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { signSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -31,9 +32,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Credencial no encontrada o no pertenece al usuario' }, { status: 400 });
     }
 
-    const host = request.headers.get('host') || 'localhost:3000';
-    const rpID = host.split(':')[0];
-    const expectedOrigin = host.includes('localhost') ? `http://${host}` : `https://${host}`;
+    // Use fixed env-var rpID — critical for cross-env compatibility
+    const rpID = process.env.WEBAUTHN_RP_ID || 'localhost';
+    const expectedOrigin = process.env.WEBAUTHN_RP_ORIGIN || 'http://localhost:3000';
 
     const credential = {
       publicKey: Buffer.from(passkey.public_key.replace('\\x', ''), 'hex'),
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
         credential,
       });
     } catch (error: any) {
-      console.error(error);
+      console.error('WebAuthn verification error:', error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
@@ -72,32 +73,69 @@ export async function POST(request: Request) {
       cookieStore.delete('webauthn_auth_challenge');
       cookieStore.delete('webauthn_auth_user');
 
-      // Replicar lógica de login (cookies de sesión) igual que auth.ts
+      // Replicar lógica de login EXACTAMENTE igual que auth.ts — usando signSession()
       let role = 'Lector';
       let committeeName = '';
       let redirectTo = '/calendar';
-
       let name = '';
 
       if (userType === 'profile') {
-        const { data: profile } = await supabase.from('profiles').select('*, committees(name)').eq('id', userId).single();
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*, committees(name)')
+          .eq('id', userId)
+          .single();
+
+        if (!profile) {
+          return NextResponse.json({ error: 'Perfil no encontrado' }, { status: 404 });
+        }
+
         role = profile.role;
         committeeName = profile.committees?.name || '';
         name = profile.full_name;
-        cookieStore.set('session', encodeURIComponent(`coordinator-${role}-${committeeName}`), {
+
+        // Use proper signSession — identical to auth.ts
+        const sessionToken = signSession({
+          userId: profile.id,
+          userType: 'profile',
+          role,
+          committee: committeeName,
+        });
+
+        cookieStore.set('session', sessionToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           maxAge: 60 * 60 * 24 * 7,
           path: '/',
         });
+
         if (role === 'Admin') redirectTo = '/dashboard';
         if (role === 'Editor') redirectTo = '/volunteers';
         if (role === 'Lector') redirectTo = '/shifts';
+
       } else {
-        const { data: volunteer } = await supabase.from('volunteers').select('*, committees(name)').eq('id', userId).single();
+        const { data: volunteer } = await supabase
+          .from('volunteers')
+          .select('*, committees(name)')
+          .eq('id', userId)
+          .single();
+
+        if (!volunteer) {
+          return NextResponse.json({ error: 'Voluntario no encontrado' }, { status: 404 });
+        }
+
         committeeName = volunteer.committees?.name || '';
         name = `${volunteer.first_name} ${volunteer.last_name}`.trim();
-        cookieStore.set('session', encodeURIComponent(`volunteer-${volunteer.id}-${committeeName}`), {
+
+        // Use proper signSession — identical to auth.ts
+        const sessionToken = signSession({
+          userId: volunteer.id,
+          userType: 'volunteer',
+          role: 'Lector',
+          committee: committeeName,
+        });
+
+        cookieStore.set('session', sessionToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           maxAge: 60 * 60 * 24 * 7,
@@ -111,7 +149,7 @@ export async function POST(request: Request) {
         role, 
         committee: committeeName,
         name,
-        phone // Send phone back to save in localStorage if needed
+        phone,
       });
     }
 

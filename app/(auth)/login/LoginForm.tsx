@@ -84,7 +84,7 @@ export function LoginForm() {
       .then(res => res.json())
       .then(data => {
         if (!isSubscribed) return;
-        const passkeyAvailable = !!data.hasPasskey && isMobileDevice();
+        const passkeyAvailable = !!data.hasPasskey;
         setHasPasskey(passkeyAvailable);
         if (passkeyAvailable && savedUserMode) {
           setAuthMode('biometrics');
@@ -103,11 +103,6 @@ export function LoginForm() {
   }, [phone, savedUserMode]);
 
   const handleBiometricLogin = async () => {
-    if (!isMobile) {
-      setError("El ingreso con huella solo está disponible desde dispositivos móviles.");
-      return;
-    }
-
     if (!phone) {
       setError("Ingresa tu número de teléfono primero.");
       return;
@@ -372,11 +367,11 @@ export function LoginForm() {
                   </button>
                 </div>
 
-                {authMode === 'biometrics' && isMobile && hasPasskey ? (
+                {authMode === 'biometrics' && hasPasskey ? (
                   <div className="space-y-3 pt-2 text-center flex flex-col items-center justify-center">
                     {/* 1. Texto arriba */}
                     <p className="text-sm font-bold font-inter text-slate-300">
-                      Ingresar con huella
+                      {isMobile ? 'Ingresar con huella' : 'Ingresar con passkey'}
                     </p>
 
                     {/* 2. Ícono con Logo de la App + Insignia de Huella */}
@@ -470,7 +465,7 @@ export function LoginForm() {
                       </div>
                     )}
 
-                    {isMobile && hasPasskey && (
+                    {hasPasskey && (
                       <div className="pt-3 flex flex-col items-center justify-center">
                         <button
                           type="button"
@@ -478,7 +473,7 @@ export function LoginForm() {
                           className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
                         >
                           <span className="material-symbols-outlined text-[16px]">fingerprint</span>
-                          <span>O ingresa con tu huella dactilar</span>
+                          <span>{isMobile ? 'O ingresa con tu huella dactilar' : 'O ingresa con passkey / Windows Hello'}</span>
                         </button>
                       </div>
                     )}

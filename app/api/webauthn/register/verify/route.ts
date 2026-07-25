@@ -17,9 +17,9 @@ export async function POST(request: Request) {
 
     const { userId, userType } = JSON.parse(userInfoCookie);
     
-    const host = request.headers.get('host') || 'localhost:3000';
-    const rpID = host.split(':')[0];
-    const expectedOrigin = host.includes('localhost') ? `http://${host}` : `https://${host}`;
+    // Use fixed env-var rpID — critical for cross-env compatibility
+    const rpID = process.env.WEBAUTHN_RP_ID || 'localhost';
+    const expectedOrigin = process.env.WEBAUTHN_RP_ORIGIN || 'http://localhost:3000';
 
     let verification;
     try {
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
         expectedRPID: rpID,
       });
     } catch (error: any) {
-      console.error(error);
+      console.error('Registration verification error:', error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
@@ -45,6 +45,26 @@ export async function POST(request: Request) {
       const webauthnUserId = Buffer.from(userId).toString('base64');
       const publicKeyBuffer = Buffer.from(credentialPublicKey);
 
+      // Derive a human-readable device name from transports
+      const transports: string[] = body.response?.transports || [];
+      let deviceName = 'Dispositivo desconocido';
+      if (transports.includes('internal')) {
+        // internal = built-in biometric (fingerprint, Face ID, Windows Hello, Touch ID)
+        const ua = body.userAgent || '';
+        if (/iPhone|iPad/.test(ua)) deviceName = 'Face ID / Touch ID (iPhone)';
+        else if (/Mac/.test(ua)) deviceName = 'Touch ID (Mac)';
+        else if (/Android/.test(ua)) deviceName = 'Huella dactilar (Android)';
+        else deviceName = 'Biometría del dispositivo';
+      } else if (transports.includes('usb')) {
+        deviceName = 'Llave de seguridad USB';
+      } else if (transports.includes('nfc')) {
+        deviceName = 'Llave NFC';
+      } else if (transports.includes('ble')) {
+        deviceName = 'Dispositivo Bluetooth';
+      } else if (transports.includes('hybrid')) {
+        deviceName = 'Passkey sincronizada';
+      }
+
       const { error: insertError } = await supabase
         .from('passkeys')
         .insert({
@@ -52,11 +72,12 @@ export async function POST(request: Request) {
           user_type: userType,
           webauthn_user_id: webauthnUserId,
           credential_id: credentialID,
-          public_key: '\\x' + publicKeyBuffer.toString('hex'), // format bytea for Supabase
+          public_key: '\\x' + publicKeyBuffer.toString('hex'),
           counter,
           device_type: credentialDeviceType,
+          device_name: deviceName,
           backed_up: credentialBackedUp,
-          transports: body.response.transports || [],
+          transports,
         });
 
       if (insertError) {
@@ -68,7 +89,7 @@ export async function POST(request: Request) {
       cookieStore.delete('webauthn_challenge');
       cookieStore.delete('webauthn_user_info');
 
-      return NextResponse.json({ verified: true });
+      return NextResponse.json({ verified: true, deviceName });
     }
 
     return NextResponse.json({ verified: false }, { status: 400 });
