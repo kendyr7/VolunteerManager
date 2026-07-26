@@ -19,16 +19,25 @@ export default async function VolunteerProfilePage() {
   }
 
   const volunteerId = session.userId;
-  const supabase = await createClient();
+  
+  const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY 
+    ? (await import('@supabase/supabase-js')).createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      )
+    : await createClient();
 
   // Fetch volunteer details with committee name
   const { data: volunteer, error } = await supabase
     .from('volunteers')
     .select('*, committees(name)')
     .eq('id', volunteerId)
-    .single();
+    .maybeSingle();
+
+  console.log("PROFILE_LOG: Fetch volunteer result:", { volunteer, error, volunteerId });
 
   if (error || !volunteer) {
+    console.log("PROFILE_LOG: Redirecting because of DB error or volunteer not found", { error, volunteer });
     redirect('/login');
   }
 

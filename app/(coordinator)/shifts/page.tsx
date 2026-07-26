@@ -1923,9 +1923,16 @@ export default function ShiftsPage() {
                                 {/* Right: 4 Columns (T1 to T4) */}
                                 <div className="flex items-center shrink-0 ml-auto gap-1">
                                   {(['T1', 'T2', 'T3', 'T4'] as const).map((t) => {
-                                    const active = dayShifts.includes(t);
-                                    const isCheckedIn = checkedInMap[`${editingVolunteer.id}-${d.key}-${t}`];
-                                    const isCheckedOut = checkedOutMap[`${editingVolunteer.id}-${d.key}-${t}`];
+                                    // Determinar ID del voluntario: si hay un voluntario en edición, usarlo. Si no, intentar usar el ID del usuario actual.
+                                    const volunteerId = editingVolunteer?.id || localStorage.getItem('user_id');
+                                    
+                                    // Obtener turnos activos: preferir estado local de edición si existe, si no, usar globalShifts del provider
+                                    const active = editingVolunteer 
+                                      ? dayShifts.includes(t)
+                                      : (globalShifts[volunteerId || '']?.[d.key]?.includes(t) ?? false);
+                                    
+                                    const isCheckedIn = checkedInMap[`${volunteerId}-${d.key}-${t}`];
+                                    const isCheckedOut = checkedOutMap[`${volunteerId}-${d.key}-${t}`];
 
                                     let statusStyle = "bg-dark2 border-border text-text-dim/40";
                                     let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-text-dim/40">-</span>;

@@ -25,14 +25,20 @@ export default async function CalendarPage() {
   const volunteerId = session.userId;
   const committeeName = session.committee || 'Sin comité';
 
-  const supabase = await createClient();
+  const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY 
+    ? (await import('@supabase/supabase-js')).createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      )
+    : await createClient();
+
   const { data: volunteer, error } = await supabase
     .from('volunteers')
-    .select('first_name, last_name')
+    .select('id, first_name, last_name')
     .eq('id', volunteerId)
-    .single();
+    .maybeSingle();
 
-  console.log("CALENDAR_LOG: Supabase fetch volunteer result:", { volunteer, error });
+  console.log("CALENDAR_LOG: Supabase fetch volunteer result:", { volunteer, error, volunteerId });
 
   if (error || !volunteer) {
     console.log("CALENDAR_LOG: Redirecting because of DB error or volunteer not found", { error, volunteer });
