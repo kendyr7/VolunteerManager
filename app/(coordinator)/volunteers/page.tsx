@@ -116,6 +116,14 @@ export default function VolunteersPage() {
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
 
+  // Debounce search input to match Shifts page performance
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAppliedSearch(inputValue);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [inputValue]);
+
   const volunteers = useMemo<VolunteerType[]>(
     () =>
       rawVolunteers.map((v: any) => ({
@@ -558,6 +566,9 @@ export default function VolunteersPage() {
   }, [volunteers, globalShifts, confirmedReminders]);
 
   const filteredVolunteers = useMemo(() => {
+    // Lift searchTerms parsing out of the filter loop for huge O(N) performance gain!
+    const searchTerms = appliedSearch.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+
     const result = augmentedVolunteers.filter(v => {
       // 1. Role-based isolation: Editors only see their committee
       if (currentRole === 'Editor' && v.committee !== currentCommittee) return false;
@@ -568,7 +579,6 @@ export default function VolunteersPage() {
       if (!matchesStatus) return false;
 
       // 3. User search and dynamic filters
-      const searchTerms = appliedSearch.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
       const normName = normalizeSearch(v.name);
       const normPhone = v.phone || '';
       const normCommittee = normalizeSearch(v.committee);
@@ -577,7 +587,7 @@ export default function VolunteersPage() {
 
       const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
         normName.includes(term) ||
-        normPhone.includes(appliedSearch) ||
+        normPhone.includes(term) ||
         normCommittee.includes(term) ||
         normStake.includes(term) ||
         normWard.includes(term)

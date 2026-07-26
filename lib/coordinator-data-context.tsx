@@ -25,6 +25,7 @@ interface CoordinatorDataContextValue {
   shiftsData: any[];
   requirementsByCommittee: Record<string, Record<string, number>>;
   globalShifts: Record<string, Record<string, string[]>>;
+  indexedAssignments: Record<string, Record<string, Record<string, string[]>>>;
   checkedInMap: Record<string, boolean>;
   checkedOutMap: Record<string, boolean>;
   shiftCounts: Record<string, number>;
@@ -65,8 +66,8 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   const fetchPromiseRef = useRef<Promise<void> | null>(null);
 
   const derived = useMemo(
-    () => processShiftsData(shiftsData),
-    [shiftsData]
+    () => processShiftsData(shiftsData, rawVolunteers),
+    [shiftsData, rawVolunteers]
   );
 
   const fetchData = useCallback(
@@ -174,6 +175,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
       shiftsData,
       requirementsByCommittee,
       globalShifts: derived.globalShifts,
+      indexedAssignments: derived.indexedAssignments,
       checkedInMap: derived.checkedInMap,
       checkedOutMap: derived.checkedOutMap,
       shiftCounts: derived.shiftCounts,

@@ -4,31 +4,42 @@ export function buildEventDayKeys(): string[] {
   return getActiveEventDays().map((date) => formatDateShort(date));
 }
 
-export function processShiftsData(shiftsData: any[]) {
+export function processShiftsData(shiftsData: any[], volunteers: any[] = []) {
   const dayKeys = buildEventDayKeys();
   const emptyShifts = () =>
     Object.fromEntries(dayKeys.map((k) => [k, [] as string[]]));
+
+  // Index volunteers by ID for quick committee lookup
+  const volCommitteeMap: Record<string, string> = {};
+  volunteers.forEach(v => {
+    volCommitteeMap[v.id] = v.committees?.name || 'Sin comité';
+  });
 
   const globalShifts: Record<string, Record<string, string[]>> = {};
   const checkedInMap: Record<string, boolean> = {};
   const checkedOutMap: Record<string, boolean> = {};
   const shiftCounts: Record<string, number> = {};
+  
+  // New: day -> shift -> committee -> volunteerIds[]
+  const indexedAssignments: Record<string, Record<string, Record<string, string[]>>> = {};
 
   for (const s of shiftsData) {
     if (!s.volunteer_id) continue;
 
+    // Basic stats
     shiftCounts[s.volunteer_id] = (shiftCounts[s.volunteer_id] || 0) + 1;
 
+    // Personal schedule
     if (!globalShifts[s.volunteer_id]) {
       globalShifts[s.volunteer_id] = emptyShifts();
     }
-    if (!globalShifts[s.volunteer_id][s.day_key]) {
-      globalShifts[s.volunteer_id][s.day_key] = [];
-    }
-    if (!globalShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
-      globalShifts[s.volunteer_id][s.day_key].push(s.shift_key);
+    if (globalShifts[s.volunteer_id][s.day_key]) {
+      if (!globalShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
+        globalShifts[s.volunteer_id][s.day_key].push(s.shift_key);
+      }
     }
 
+    // Attendance maps
     const key = `${s.volunteer_id}-${s.day_key}-${s.shift_key}`;
     if (s.checked_in || s.checked_in_at || s.checked_out || s.checked_out_at) {
       checkedInMap[key] = true;
@@ -36,9 +47,19 @@ export function processShiftsData(shiftsData: any[]) {
     if (s.checked_out || s.checked_out_at) {
       checkedOutMap[key] = true;
     }
+
+    // Assignments index (The core optimization)
+    if (!indexedAssignments[s.day_key]) indexedAssignments[s.day_key] = {};
+    if (!indexedAssignments[s.day_key][s.shift_key]) indexedAssignments[s.day_key][s.shift_key] = {};
+    
+    const committeeName = volCommitteeMap[s.volunteer_id] || 'Sin comité';
+    if (!indexedAssignments[s.day_key][s.shift_key][committeeName]) {
+      indexedAssignments[s.day_key][s.shift_key][committeeName] = [];
+    }
+    indexedAssignments[s.day_key][s.shift_key][committeeName].push(s.volunteer_id);
   }
 
-  return { globalShifts, checkedInMap, checkedOutMap, shiftCounts };
+  return { globalShifts, checkedInMap, checkedOutMap, shiftCounts, indexedAssignments };
 }
 
 export function parseRequirementsData(

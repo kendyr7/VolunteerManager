@@ -183,12 +183,21 @@ export default function ShiftsPage() {
     committeesList,
     shiftsData: contextShiftsData,
     globalShifts: contextGlobalShifts,
+    indexedAssignments: contextIndexedAssignments,
     checkedInMap: contextCheckedInMap,
     checkedOutMap: contextCheckedOutMap,
     shiftCounts: contextShiftCounts,
     loading,
     refresh,
   } = useCoordinatorData();
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAppliedSearch(inputValue);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [inputValue]);
 
   // Map raw volunteers to the local VolunteerType shape
   const volunteers = useMemo<VolunteerType[]>(
@@ -210,6 +219,13 @@ export default function ShiftsPage() {
       })),
     [rawVolunteers, contextShiftCounts]
   );
+
+  // Quick lookup map for volunteers by ID
+  const volunteerMap = useMemo(() => {
+    const map = new Map<string, VolunteerType>();
+    volunteers.forEach(v => map.set(v.id, v));
+    return map;
+  }, [volunteers]);
 
   // rawShiftsData comes directly from the shared coordinator context (no local fetch)
   const rawShiftsData = contextShiftsData;
@@ -281,10 +297,10 @@ export default function ShiftsPage() {
   // Estado para expandir las listas de voluntarios por turno
   const [expandedShifts, setExpandedShifts] = useState<Record<string, boolean>>({});
 
-  const toggleShiftExpand = (dayKey: string, shiftKey: string) => {
+  const toggleShiftExpand = useCallback((dayKey: string, shiftKey: string) => {
     const combinedKey = `${dayKey}-${shiftKey}`;
     setExpandedShifts(prev => ({ ...prev, [combinedKey]: !prev[combinedKey] }));
-  };
+  }, []);
 
   const buildEmptyShifts = () =>
     Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
@@ -377,9 +393,9 @@ export default function ShiftsPage() {
     let totalRequired = 0;
     let totalAssignedInRequired = 0;
 
-    const committees = committeesList.map(c => c.name);
+    const committeeListNames = committeesList.map(c => c.name);
     const committeeAlerts: Record<string, number> = {};
-    committees.forEach(c => {
+    committeeListNames.forEach(c => {
       committeeAlerts[c] = 0;
     });
 
@@ -388,20 +404,19 @@ export default function ShiftsPage() {
     let editorShiftsOk = 0;
     let editorShiftsUnderstaffed = 0;
 
-    const targetCommittees = currentRole === 'Admin' ? committees : (activeCommittee ? [activeCommittee] : []);
+    const targetCommittees = currentRole === 'Admin' ? committeeListNames : (activeCommittee ? [activeCommittee] : []);
 
     EVENT_DAYS.forEach(day => {
+      const dayAssignments = contextIndexedAssignments[day.key] || {};
+      
       targetCommittees.forEach(comm => {
         ['T1', 'T2', 'T3', 'T4'].forEach(shiftId => {
           const req = committeeRequirements[comm]?.[shiftId] ?? 0;
           totalRequired += req;
 
-          // Buscar cuántos voluntarios asignados pertenecen a este comité y turno hoy
-          const count = volunteers.filter(vol => {
-            if (vol.committee !== comm) return false;
-            const shifts = globalShifts[vol.id];
-            return shifts && shifts[day.key] && shifts[day.key].includes(shiftId);
-          }).length;
+          // Optimization: Use pre-calculated assignments instead of filtering all volunteers
+          const commAssignedIds = dayAssignments[shiftId]?.[comm] || [];
+          const count = commAssignedIds.length;
 
           totalAssignedInRequired += Math.min(count, req);
 
@@ -430,7 +445,8 @@ export default function ShiftsPage() {
       editorShiftsOk,
       editorShiftsUnderstaffed
     };
-  }, [volunteers, committeesList, globalShifts, committeeRequirements, EVENT_DAYS, currentRole, activeCommittee]);
+  }, [committeesList, contextIndexedAssignments, committeeRequirements, EVENT_DAYS, currentRole, activeCommittee]);
+
 
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>(buildEmptyShifts);
 
@@ -448,6 +464,69 @@ export default function ShiftsPage() {
   };
 
   const canEditShifts = () => currentRole === 'Admin' || currentRole === 'Editor';
+
+  // Helper for filtering a single volunteer (used by multiple logic points)
+  const matchesFilters = useCallback((v: VolunteerType, searchStr: string, comms: string[], stakes: string[], wards: string[], role: string) => {
+    // Role-based isolation
+    const userCommittee = localStorage.getItem('mock_committee');
+    if (role === 'Editor' && v.committee !== userCommittee) return false;
+
+    const searchTerms = searchStr.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
+    const normName = normalizeSearch(v.name);
+    const normPhone = v.phone || '';
+    const normCommittee = normalizeSearch(v.committee);
+    const normStake = normalizeSearch(v.stake);
+    const normWard = normalizeSearch(v.ward);
+
+    const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
+      normName.includes(term) ||
+      normPhone.includes(searchStr) ||
+      normCommittee.includes(term) ||
+      normStake.includes(term) ||
+      normWard.includes(term)
+    );
+
+    const matchesCommittee = comms.length === 0 || comms.includes(v.committee);
+    const matchesStake = stakes.length === 0 || stakes.includes(v.stake);
+    const matchesWard = wards.length === 0 || wards.includes(v.ward);
+
+    return matchesSearch && matchesCommittee && matchesStake && matchesWard;
+  }, []);
+
+  const filteredVolunteers = useMemo(() => {
+    return volunteers.filter(v => matchesFilters(v, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole));
+  }, [volunteers, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, matchesFilters]);
+
+  // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales
+  const getAssignedVolunteers = useCallback((dateKey: string, shiftId: string) => {
+    const dayAssignments = contextIndexedAssignments[dateKey]?.[shiftId] || {};
+    const result: VolunteerType[] = [];
+
+    // Instead of filtering all volunteers, we only look at those assigned to THIS shift
+    for (const [commName, ids] of Object.entries(dayAssignments)) {
+      // If we are filtering by committee, skip other committees early
+      if (selectedCommittees.length > 0 && !selectedCommittees.includes(commName)) continue;
+
+      for (const id of ids) {
+        const vol = volunteerMap.get(id);
+        if (!vol) continue;
+
+        // Check if volunteer matches other filters (search, stake, ward, role)
+        if (matchesFilters(vol, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole)) {
+          
+          if (viewMode === 'active') {
+            const s = rawShiftsData.find(r => r.volunteer_id === vol.id && r.day_key === dateKey && r.shift_key === shiftId);
+            const isAssistanceRecord = !!(s && (s.checked_in || s.checked_out || s.checked_in_at || s.checked_out_at));
+            if (!isAssistanceRecord) continue;
+          }
+          
+          result.push(vol);
+        }
+      }
+    }
+
+    return result.sort((a, b) => a.committee.localeCompare(b.committee));
+  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, rawShiftsData, matchesFilters]);
 
   const handleStartEditProfile = (vol: VolunteerType) => {
     const parts = (vol.name || '').trim().split(/\s+/);
@@ -599,47 +678,20 @@ export default function ShiftsPage() {
     return isAssigned || hasShiftRecord;
   };
 
-  const handleEditClick = (vol: VolunteerType) => {
+  const handleEditClick = useCallback((vol: VolunteerType) => {
     setEditingVolunteer(vol);
     setIsSheetOpen(true);
     setIsEditingShifts(false);
     setSaved(false);
 
     setShiftsByDay(globalShifts[vol.id] || buildEmptyShifts());
-  };
+  }, [globalShifts]);
 
   // qué días están expandidos (todos colapsados al inicio)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const toggleDay = (key: string) =>
-    setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
-
-  const filteredVolunteers = useMemo(() => {
-    return volunteers.filter(v => {
-      // Role-based isolation
-      const userCommittee = localStorage.getItem('mock_committee');
-      if (currentRole === 'Editor' && v.committee !== userCommittee) return false;
-
-      const searchTerms = appliedSearch.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
-      const normName = normalizeSearch(v.name);
-      const normCommittee = normalizeSearch(v.committee);
-      const normStake = normalizeSearch(v.stake);
-      const normWard = normalizeSearch(v.ward);
-
-      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
-        normName.includes(term) ||
-        normCommittee.includes(term) ||
-        normStake.includes(term) ||
-        normWard.includes(term)
-      );
-
-      const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(v.committee);
-      const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(v.stake);
-      const matchesWard = selectedWards.length === 0 || selectedWards.includes(v.ward);
-
-      return matchesSearch && matchesCommittee && matchesStake && matchesWard;
-    });
-  }, [volunteers, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole]);
+  const toggleDay = useCallback((key: string) =>
+    setExpanded(prev => ({ ...prev, [key]: !prev[key] })), []);
 
   const totalActiveCount = useMemo(() => {
     return rawShiftsData.filter(s => s.checked_in && !s.checked_out).length;
@@ -860,23 +912,6 @@ export default function ShiftsPage() {
       setReassignVolunteer(null);
       await refresh(true);
     }
-  };
-
-  // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales
-  const getAssignedVolunteers = (dateKey: string, shiftId: string) => {
-    return filteredVolunteers
-      .filter(vol => {
-        const isAssigned = isVolunteerAssignedToShift(vol, dateKey, shiftId);
-        if (!isAssigned) return false;
-
-        if (viewMode === 'active') {
-          const s = rawShiftsData.find(r => r.volunteer_id === vol.id && r.day_key === dateKey && r.shift_key === shiftId);
-          return !!(s && (s.checked_in || s.checked_out || s.checked_in_at || s.checked_out_at));
-        }
-
-        return true;
-      })
-      .sort((a, b) => a.committee.localeCompare(b.committee));
   };
 
   const getTodayNicaraguaKey = useCallback(() => {
