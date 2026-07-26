@@ -4,6 +4,33 @@ export function buildEventDayKeys(): string[] {
   return getActiveEventDays().map((date) => formatDateShort(date));
 }
 
+export function computeReliabilityMap(
+  volunteers: any[],
+  globalShifts: Record<string, Record<string, string[]>>,
+  confirmedReminders: Record<string, boolean>
+): Record<string, number | '-'> {
+  const reliabilityMap: Record<string, number | '-'> = {};
+
+  volunteers.forEach(vol => {
+    let totalAssigned = 0;
+    let totalConfirmed = 0;
+    const volShifts = globalShifts[vol.id] || {};
+    
+    for (const day in volShifts) {
+      for (const shift of volShifts[day]) {
+        totalAssigned++;
+        if (confirmedReminders[`${vol.id}-${day}-${shift}`]) {
+          totalConfirmed++;
+        }
+      }
+    }
+    
+    reliabilityMap[vol.id] = totalAssigned === 0 ? '-' : Math.round((totalConfirmed / totalAssigned) * 100);
+  });
+
+  return reliabilityMap;
+}
+
 export function processShiftsData(shiftsData: any[], volunteers: any[] = []) {
   const dayKeys = buildEventDayKeys();
   const emptyShifts = () =>

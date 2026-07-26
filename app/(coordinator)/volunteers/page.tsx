@@ -107,6 +107,7 @@ export default function VolunteersPage() {
     checkedInMap,
     checkedOutMap,
     shiftCounts,
+    reliabilityMap,
     loading,
     refresh,
   } = useCoordinatorData();
@@ -190,7 +191,6 @@ export default function VolunteersPage() {
   const [saved, setSaved] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
 
   // Edit Volunteer Profile states
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit_profile'>('view');
@@ -202,26 +202,6 @@ export default function VolunteersPage() {
   const [editAge, setEditAge] = useState('');
   const [editCommitteeId, setEditCommitteeId] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-
-  useEffect(() => {
-    const loadConfirmations = () => {
-      const stored = localStorage.getItem("confirmed_reminders");
-      if (stored) {
-        try {
-          setConfirmedReminders(JSON.parse(stored));
-        } catch (e) {
-          console.error("Error loading confirmations", e);
-        }
-      }
-    };
-    loadConfirmations();
-    window.addEventListener("storage", loadConfirmations);
-    window.addEventListener("focus", loadConfirmations);
-    return () => {
-      window.removeEventListener("storage", loadConfirmations);
-      window.removeEventListener("focus", loadConfirmations);
-    };
-  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -546,24 +526,11 @@ export default function VolunteersPage() {
     return false;
   });
   const augmentedVolunteers = useMemo(() => {
-    return volunteers.map(vol => {
-      let totalAssigned = 0;
-      let totalConfirmed = 0;
-      const volShifts = globalShifts[vol.id] || {};
-      for (const [day, shifts] of Object.entries(volShifts)) {
-        for (const shift of shifts) {
-          totalAssigned++;
-          if (confirmedReminders[`${vol.id}-${day}-${shift}`]) {
-            totalConfirmed++;
-          }
-        }
-      }
-      return {
-        ...vol,
-        computedReliability: totalAssigned === 0 ? '-' : Math.round((totalConfirmed / totalAssigned) * 100)
-      };
-    });
-  }, [volunteers, globalShifts, confirmedReminders]);
+    return volunteers.map(vol => ({
+      ...vol,
+      computedReliability: reliabilityMap[vol.id] || '-'
+    }));
+  }, [volunteers, reliabilityMap]);
 
   const filteredVolunteers = useMemo(() => {
     // Lift searchTerms parsing out of the filter loop for huge O(N) performance gain!

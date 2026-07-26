@@ -15,6 +15,7 @@ import { fetchAllRows } from '@/lib/supabase-helpers';
 import {
   parseRequirementsData,
   processShiftsData,
+  computeReliabilityMap,
 } from '@/lib/coordinator-data';
 
 const STALE_TIME_MS = 60_000;
@@ -29,6 +30,7 @@ interface CoordinatorDataContextValue {
   checkedInMap: Record<string, boolean>;
   checkedOutMap: Record<string, boolean>;
   shiftCounts: Record<string, number>;
+  reliabilityMap: Record<string, number | '-'>;
   loading: boolean;
   isRefreshing: boolean;
   refresh: (force?: boolean) => Promise<void>;
@@ -55,11 +57,27 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
     { id: string; name: string }[]
   >([]);
   const [shiftsData, setShiftsData] = useState<any[]>([]);
+  const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
   const [requirementsByCommittee, setRequirementsByCommittee] = useState<
     Record<string, Record<string, number>>
   >({});
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Load confirmed reminders from localStorage
+  useEffect(() => {
+    const loadConfirmations = () => {
+      const stored = localStorage.getItem("confirmed_reminders");
+      if (stored) {
+        try {
+          setConfirmedReminders(JSON.parse(stored));
+        } catch (e) {
+          console.error("Error loading confirmations", e);
+        }
+      }
+    };
+    loadConfirmations();
+  }, []);
 
   const lastFetchedAtRef = useRef(0);
   const lastCacheKeyRef = useRef('');
@@ -68,6 +86,11 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   const derived = useMemo(
     () => processShiftsData(shiftsData, rawVolunteers),
     [shiftsData, rawVolunteers]
+  );
+  
+  const reliabilityMap = useMemo(
+    () => computeReliabilityMap(rawVolunteers, derived.globalShifts, confirmedReminders),
+    [rawVolunteers, derived.globalShifts, confirmedReminders]
   );
 
   const fetchData = useCallback(
@@ -179,9 +202,10 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
       checkedInMap: derived.checkedInMap,
       checkedOutMap: derived.checkedOutMap,
       shiftCounts: derived.shiftCounts,
+      reliabilityMap,
       loading,
       isRefreshing,
-      refresh,
+      refresh: fetchData,
     }),
     [
       rawVolunteers,
@@ -189,9 +213,10 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
       shiftsData,
       requirementsByCommittee,
       derived,
+      reliabilityMap,
       loading,
       isRefreshing,
-      refresh,
+      fetchData,
     ]
   );
 
