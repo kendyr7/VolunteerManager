@@ -1,5 +1,6 @@
 'use client'
 
+import { AddVolunteerForm } from "@/components/AddVolunteerForm";
 import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { List } from 'react-window';
@@ -179,13 +180,6 @@ export default function VolunteersPage() {
   };
 
   // Form states
-  const [newName, setNewName] = useState('');
-  const [newPhone, setNewPhone] = useState('');
-  const [newStake, setNewStake] = useState('');
-  const [newWard, setNewWard] = useState('');
-  const [newCommitteeId, setNewCommitteeId] = useState('');
-  const [sendWelcomeMessage, setSendWelcomeMessage] = useState(true);
-
   const [editingVolunteer, setEditingVolunteer] = useState<VolunteerType | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
@@ -446,69 +440,8 @@ export default function VolunteersPage() {
     await refresh();
   };
 
-  const handleAddVolunteer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const parts = newName.trim().split(/\s+/);
-    const first_name = parts[0] || '';
-    const last_name = parts.slice(1).join(' ') || '';
-
-    // Validar nombre completo (nombre y apellido)
-    if (parts.length < 2 || !last_name) {
-      showToast("Por favor, introduce al menos un nombre y un apellido.", "error");
-      return;
-    }
-
-    // Sanitizar y validar teléfono E.164 (8 dígitos)
-    const phoneValidation = validatePhone8Digits(newPhone);
-    if (!phoneValidation.isValid) {
-      showToast(phoneValidation.error || "El celular debe tener exactamente 8 dígitos.", "error");
-      return;
-    }
-    const sanitizedPhone = phoneValidation.formatted;
-    const pin = String(Math.floor(1000 + Math.random() * 9000));
-
-    const { error } = await supabase
-      .from('volunteers')
-      .insert([
-        {
-          first_name,
-          last_name,
-          phone: sanitizedPhone,
-          committee_id: newCommitteeId || null,
-          stake: newStake,
-          neighborhood: newWard,
-          pin: pin,
-          status: 'active'
-        }
-      ]);
-
-    if (error) {
-      console.error("Error adding volunteer:", error);
-      showToast("Error al añadir voluntario", "error");
-      return;
-    }
-
-    if (sendWelcomeMessage) {
-      const waResult = await sendWelcomeWhatsAppAction(sanitizedPhone, first_name, pin);
-      if (!waResult.success) {
-        showToast("Voluntario añadido, pero falló el envío de WhatsApp", "info");
-      } else {
-        showToast("Voluntario añadido y credenciales enviadas");
-      }
-    } else {
-      showToast("Voluntario añadido");
-    }
-
-    setNewName('');
-    setNewPhone('');
-    setNewStake('');
-    setNewWard('');
-    setNewCommitteeId('');
-    setIsAddSheetOpen(false);
-
-    await refresh();
-  };
-
+// Removed handleAddVolunteer as logic is now in AddVolunteerForm component
+  
   const stakes = useMemo(() => {
     const set = new Set<string>();
     volunteers.forEach(v => { if (v.stake) set.add(v.stake); });
@@ -1427,184 +1360,15 @@ export default function VolunteersPage() {
               <div className="w-12 h-1.5 bg-text-dim/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
             )}
 
-            <form
-              id="add-volunteer-form"
-              onSubmit={handleAddVolunteer}
-              className="flex-1 flex flex-col overflow-hidden"
-            >
-              <div
-                className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4" : "p-7 space-y-7")}
-                onTouchStart={(e) => {
-                  if (!isMobile) return;
-                  const drawer = document.getElementById("add-volunteer-drawer");
-                  if (!drawer) return;
-                  drawer.dataset.startY = e.touches[0].clientY.toString();
-                  drawer.style.transition = 'none';
-                }}
-                onTouchMove={(e) => {
-                  if (!isMobile) return;
-                  const drawer = document.getElementById("add-volunteer-drawer");
-                  if (!drawer) return;
-                  const startY = parseFloat(drawer.dataset.startY || '0');
-                  const currentY = e.touches[0].clientY;
-                  const deltaY = currentY - startY;
-
-                  if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
-                    drawer.style.transform = `translateY(${deltaY}px)`;
-                    drawer.dataset.swiping = 'true';
-                  }
-                }}
-                onTouchEnd={(e) => {
-                  if (!isMobile) return;
-                  const drawer = document.getElementById("add-volunteer-drawer");
-                  if (!drawer) return;
-
-                  drawer.style.transition = 'transform 0.3s ease-out';
-
-                  if (drawer.dataset.swiping === 'true') {
-                    const startY = parseFloat(drawer.dataset.startY || '0');
-                    const deltaY = e.changedTouches[0].clientY - startY;
-
-                    drawer.dataset.swiping = 'false';
-
-                    if (deltaY > 150) {
-                      drawer.style.transform = `translateY(100%)`;
-                      setTimeout(() => {
-                        drawer.style.transform = '';
-                        setIsAddSheetOpen(false);
-                      }, 300);
-                    } else {
-                      drawer.style.transform = `translateY(0)`;
-                    }
-                  } else {
-                    drawer.style.transform = '';
-                  }
-                }}
-              >
-                <div className="mb-6">
-                  <h2 className="text-xl font-black text-text tracking-tight leading-none mb-1.5">Añadir Voluntario</h2>
-                  <p className="text-xs font-inter font-bold text-text-dim">Registra un nuevo voluntario en el sistema.</p>
-                </div>
-
-                <div className="space-y-6 pb-6">
-                  <div className="space-y-5">
-                    <div className="space-y-2">
-                      <label className="block mb-1.5 text-xs font-extrabold text-text">Nombre y Apellido</label>
-                      <Input
-                        required
-                        minLength={3}
-                        className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text placeholder:text-text-dim focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all"
-                        placeholder="Ej. Juan Pérez"
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                      />
-                      <p className="text-[11px] italic font-inter text-text-dim">Asegúrate de incluir ambos apellidos si es posible.</p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block mb-1.5 text-xs font-extrabold text-text">Celular</label>
-                      <Input
-                        required
-                        type="tel"
-                        inputMode="numeric"
-                        maxLength={8}
-                        onKeyPress={(e) => {
-                          if (!/[0-9]/.test(e.key)) e.preventDefault();
-                        }}
-                        className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text placeholder:text-text-dim focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all"
-                        placeholder="Ej. 88888888"
-                        value={newPhone}
-                        onChange={(e) => setNewPhone(e.target.value)}
-                      />
-                      <p className="text-[11px] italic font-inter text-text-dim">Solo 8 dígitos, sin código de país o espacios.</p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block mb-1.5 text-xs font-extrabold text-text">Estaca</label>
-                      <Input
-                        required
-                        className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text placeholder:text-text-dim focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all"
-                        placeholder="Ej. Managua Sur"
-                        value={newStake}
-                        onChange={(e) => setNewStake(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block mb-1.5 text-xs font-extrabold text-text">Barrio</label>
-                      <Input
-                        required
-                        className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text placeholder:text-text-dim focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all"
-                        placeholder="Ej. Barrio 1"
-                        value={newWard}
-                        onChange={(e) => setNewWard(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block mb-1.5 text-xs font-extrabold text-text">Comité</label>
-                      <Select value={newCommitteeId} onValueChange={(val) => setNewCommitteeId(val || '')}>
-                        <SelectTrigger className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all flex items-center justify-between">
-                          <SelectValue placeholder="Selecciona un comité" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-dark2 border border-border text-text shadow-2xl z-[200]">
-                          {committeesList.map(c => (
-                            <SelectItem key={c.id} value={c.id} className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">
-                              {c.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    {/* WhatsApp Checkbox */}
-                    <div className="pt-2">
-                      <label className={cn(
-                        "flex items-center gap-3 p-3 rounded-xl border border-border cursor-pointer transition-all",
-                        sendWelcomeMessage ? "bg-[#4d7cfe]/10 border-[#4d7cfe]/40" : "bg-dark3"
-                      )}>
-                        <div className="flex items-center justify-center">
-                          <input
-                            type="checkbox"
-                            checked={sendWelcomeMessage}
-                            onChange={(e) => setSendWelcomeMessage(e.target.checked)}
-                            className="w-4 h-4 rounded border-border bg-dark3 text-[#4d7cfe] focus:ring-[#4d7cfe] focus:ring-offset-0 focus:ring-offset-transparent cursor-pointer"
-                          />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold leading-none text-text">
-                            Enviar credenciales por WhatsApp
-                          </span>
-                          <span className="text-[10px] mt-1 text-text-dim">
-                            Enviará un PIN temporal al número registrado.
-                          </span>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                className={cn("flex flex-row w-full mt-auto shrink-0 gap-3 border-t border-border p-7 pt-4", isMobile && "px-6 pt-3")}
-                style={isMobile ? { paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' } : undefined}
-              >
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsAddSheetOpen(false)}
-                  className="flex-1 rounded-full shadow-md h-11 px-4 text-xs sm:text-sm font-bold bg-dark3 hover:bg-dark text-text border border-border transition-all active:scale-[0.97]"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/20 h-11 px-4 text-xs sm:text-sm font-bold transition-all active:scale-[0.97]"
-                >
-                  Añadir Voluntario
-                </Button>
-              </div>
-            </form>
+            <AddVolunteerForm 
+              committeesList={committeesList}
+              onSuccess={() => {
+                setIsAddSheetOpen(false);
+                refresh();
+              }}
+              onClose={() => setIsAddSheetOpen(false)}
+              showToast={showToast}
+            />
           </div>
         </div>
       </div>
@@ -1638,8 +1402,6 @@ export default function VolunteersPage() {
         onConfirm={handleArchiveVolunteer}
         onCancel={() => setIsArchiveModalOpen(false)}
       />
-
-
     </motion.div>
   );
 }

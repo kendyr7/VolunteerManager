@@ -215,19 +215,21 @@ export async function sendVolunteerWelcomeTemplate(options: {
   name: string;
   pin: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  // Using the requested template name and parameters.
-  // {{1}} = name, {{2}} = pin
-  // Note: The template must be approved in Meta Business Manager.
+  // Using the approved template name: volunteer_welcome
+  // {{1}} = name, {{2}} = combined text including PIN
+  
+  const pinText = `tu número de celular y el PIN temporal: ${options.pin}`;
+  
   return sendWhatsAppTemplate({
     to: options.to,
-    templateName: 'volunteer_welcome_pin', // Default template name
-    languageCode: 'es',
+    templateName: 'volunteer_welcome',
+    languageCode: 'es_ES',
     components: [
       {
         type: 'body',
         parameters: [
           { type: 'text', text: options.name },
-          { type: 'text', text: options.pin }
+          { type: 'text', text: pinText }
         ]
       }
     ]

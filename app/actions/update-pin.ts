@@ -52,11 +52,30 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
   }
 
   // 2. Si se actualizó correctamente, crear el token de sesión criptográfico
-  const { data: user } = await supabase
+  
+  // Use service role key to bypass potential RLS restrictions after update
+  const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY 
+    ? (await import('@supabase/supabase-js')).createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      )
+    : supabase;
+
+  const { data: user, error: fetchError } = await supabaseAdmin
     .from(table)
     .select('*, committees(name)')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error("Error fetching user after PIN update:", fetchError);
+    return { error: `Error interno al recuperar usuario: ${fetchError.message}` };
+  }
+
+  if (!user) {
+    console.error("User not found after PIN update for ID:", userId);
+    return { error: "Error de sesión: Usuario no encontrado tras actualizar PIN." };
+  }
 
   if (user) {
     const cookieStore = await cookies();
