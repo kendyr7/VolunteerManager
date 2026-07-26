@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { List } from 'react-window';
+import { CSSProperties } from 'react';
+
+// ...
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -590,7 +594,16 @@ export default function VolunteersPage() {
     });
     return groups;
   }, [filteredVolunteers]);
-  const sortedLetters = Object.keys(groupedVolunteers).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
+  const sortedLetters = useMemo(() => Object.keys(groupedVolunteers).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b)), [groupedVolunteers]);
+
+  const flattenedData = useMemo(() => {
+    const flat: (VolunteerType | { type: 'header', letter: string })[] = [];
+    sortedLetters.forEach(letter => {
+      flat.push({ type: 'header', letter });
+      groupedVolunteers[letter].forEach(vol => flat.push(vol));
+    });
+    return flat;
+  }, [groupedVolunteers, sortedLetters]);
 
   const handleEditClick = (vol: VolunteerType, startInEditMode = false) => {
     setEditingVolunteer(vol);
@@ -729,7 +742,7 @@ export default function VolunteersPage() {
       <div className="flex flex-col gap-4 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
         <motion.div variants={itemVariants} className="bg-dark2 border border-white/10 rounded-[20px] shadow-lg overflow-clip flex flex-col w-full">
           <AlphabetScrubber isMobile={isMobile} />
-          {/* Contenedor de Datos */}
+          {/* Contenedor de Datos Virtualizado */}
           <div className="hidden lg:block bg-dark2 flex-1 relative w-full pb-10">
             <table className="w-full text-sm text-left border-separate border-spacing-0">
               <thead className="bg-dark3/80 sticky top-[140px] z-10 backdrop-blur-md text-[10px] font-bold text-text-dim uppercase tracking-wider">
@@ -744,16 +757,19 @@ export default function VolunteersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {filteredVolunteers.length > 0 ? (
-                  sortedLetters.map(letter => (
-                    <Fragment key={letter}>
-                      {groupedVolunteers[letter].map((vol, index) => (
-                        <tr
-                          key={vol.id}
-                          id={index === 0 ? `letter-${letter}` : undefined}
-                          className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
-                          onClick={() => handleEditClick(vol)}
-                        >
+                {flattenedData.map((item, index) => {
+                    if ('type' in item && item.type === 'header') {
+                      return (
+                        <tr key={`header-${item.letter}`}>
+                            <td colSpan={7} className="px-5 py-4 bg-dark3 font-bold text-text-dim text-[10px] uppercase tracking-wider">
+                                {item.letter}
+                            </td>
+                        </tr>
+                      );
+                    }
+                    const vol = item as VolunteerType;
+                    return (
+                        <tr key={vol.id} className="hover:bg-white/[0.02] transition-colors group cursor-pointer" onClick={() => handleEditClick(vol)}>
                           <td className="px-5 py-4 w-full">
                             <p className={USER_TABLE_STYLES.name}>
                               <HighlightText text={vol.name} term={appliedSearch} />
@@ -817,16 +833,8 @@ export default function VolunteersPage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
-                    </Fragment>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="px-5 py-8 text-center text-text-dim">
-                      No se encontraron voluntarios con esos términos.
-                    </td>
-                  </tr>
-                )}
+                    );
+                })}
               </tbody>
             </table>
           </div>

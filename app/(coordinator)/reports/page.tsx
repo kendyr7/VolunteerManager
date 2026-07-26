@@ -69,10 +69,13 @@ export default function ReportsPage() {
   const [inputValue, setInputValue] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
 
-  const appliedSearchNormalized = useMemo(() => {
-    if (!appliedSearch.trim()) return '';
-    return appliedSearch.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  }, [appliedSearch]);
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAppliedSearch(inputValue);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [inputValue]);
 
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedNeighborhoods, setSelectedNeighborhoods] = useState<string[]>([]);
@@ -147,22 +150,22 @@ export default function ReportsPage() {
   const filteredItems = useMemo(() => {
     if (items.length === 0) return [];
 
-    const normSearch = appliedSearchNormalized;
+    const normSearch = appliedSearch.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
     return items.filter(item => {
-      // 1. Search term (matches name, phone, neighborhood, stake)
+      // 1. Search term
       if (normSearch) {
         const itemVolName = (item.volunteerName || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         const itemPhone = item.phone || '';
         const itemNeigh = (item.neighborhood || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         const itemStake = (item.stake || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-        const matchesName = itemVolName.includes(normSearch);
-        const matchesPhone = itemPhone.includes(appliedSearch);
-        const matchesNeigh = itemNeigh.includes(normSearch);
-        const matchesStake = itemStake.includes(normSearch);
+        const matchesSearch = itemVolName.includes(normSearch) ||
+                              itemPhone.includes(appliedSearch) ||
+                              itemNeigh.includes(normSearch) ||
+                              itemStake.includes(normSearch);
 
-        if (!matchesName && !matchesPhone && !matchesNeigh && !matchesStake) {
+        if (!matchesSearch) {
           return false;
         }
       }
@@ -195,7 +198,7 @@ export default function ReportsPage() {
 
       return true;
     });
-  }, [items, appliedSearchNormalized, appliedSearch, selectedCommittees, selectedNeighborhoods, selectedStakes, selectedStatuses, selectedDates]);
+  }, [items, appliedSearch, selectedCommittees, selectedNeighborhoods, selectedStakes, selectedStatuses, selectedDates]);
 
   // Single-pass calculation of KPIs from filtered items
   const kpiStats = useMemo(() => {
