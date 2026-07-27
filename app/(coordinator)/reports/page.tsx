@@ -446,7 +446,9 @@ export default function ReportsPage() {
             }}
           >
             <SelectTrigger className="w-full h-11 bg-dark2 border-border text-xs text-text rounded-xl px-3 font-medium font-inter hover:border-border-strong transition-all outline-none">
-              <SelectValue placeholder="Todos los comités" />
+              <SelectValue placeholder="Todos los comités">
+                {data.uniqueCommittees.find(c => c.id === selectedCommittees[0])?.name}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="bg-dark2 border-border text-text font-inter text-xs z-[200]">
               <SelectItem value="">Todos los comités</SelectItem>

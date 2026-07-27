@@ -275,6 +275,7 @@ export default function VolunteersPage() {
     const role = localStorage.getItem('mock_role') as any;
     const committee = localStorage.getItem('mock_committee');
     if (role) setCurrentRole(role);
+    if (committee) setCurrentCommittee(committee);
   }, []);
 
 

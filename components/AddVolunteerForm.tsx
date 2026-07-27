@@ -106,7 +106,11 @@ export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast
         <div className="space-y-2">
             <label className="block text-xs font-extrabold text-text">Comité</label>
             <Select value={newCommitteeId} onValueChange={(val: string | null) => setNewCommitteeId(val || '')}>
-                <SelectTrigger className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold"><SelectValue placeholder="Selecciona" /></SelectTrigger>
+                <SelectTrigger className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold">
+                    <SelectValue placeholder="Selecciona">
+                        {committeesList.find(c => c.id === newCommitteeId)?.name}
+                    </SelectValue>
+                </SelectTrigger>
                 <SelectContent className="bg-dark2 border-border text-text">
                     {committeesList.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
