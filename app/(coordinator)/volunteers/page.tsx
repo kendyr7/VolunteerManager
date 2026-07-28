@@ -31,6 +31,7 @@ import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { formatE164, validatePhone8Digits } from "@/lib/whatsapp";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
+import { VolunteerProfileView } from "@/components/VolunteerProfileView";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -913,285 +914,27 @@ export default function VolunteersPage() {
                     exit={{ opacity: 0, x: -10 }}
                     transition={{ duration: 0.15 }}
                   >
-                    {/* Header Profile Info */}
-                    <div className="text-center mt-4 mb-8 px-4">
-                      <div className="flex flex-col items-center justify-center leading-[1.25] font-black text-[26px] sm:text-[30px] text-text tracking-tight">
-                        {(() => {
-                          const parts = (editingVolunteer.name || '').trim().split(/\s+/).filter(Boolean);
-                          if (parts.length >= 4) {
-                            return (
-                              <>
-                                <span>{parts.slice(0, 2).join(' ')}</span>
-                                <span className="text-text/90">{parts.slice(2).join(' ')}</span>
-                              </>
-                            );
-                          }
-                          return <span>{parts.join(' ')}</span>;
-                        })()}
-                      </div>
-                      <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
-                        {editingVolunteer.committee && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 shadow-sm">
-                            <span className="material-symbols-outlined text-[13px]">groups</span>
-                            {editingVolunteer.committee}
-                          </span>
-                        )}
-                        {editingVolunteer.stake && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25 shadow-sm">
-                            <span className="material-symbols-outlined text-[13px]">account_balance</span>
-                            {editingVolunteer.stake}
-                          </span>
-                        )}
-                        {editingVolunteer.ward && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/25 shadow-sm">
-                            <span className="material-symbols-outlined text-[13px]">location_on</span>
-                            {editingVolunteer.ward}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Top Stats Row */}
-                    <div className="flex items-center mb-8 -mx-4">
-                      {(() => {
-                        const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
-                        const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
-
-                        return (
-                          <>
-                            <div className="flex flex-col items-center flex-1 border-r border-border">
-                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{totalTurnos}</span>
-                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Turnos</span>
-                            </div>
-                            <div className="flex flex-col items-center flex-1 border-r border-border">
-                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{diasCubiertos}</span>
-                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Días</span>
-                            </div>
-                            <div className="flex flex-col items-center flex-1 border-r border-border">
-                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">
-                                {editingVolunteer.reliability}
-                                <span className="text-[16px] font-bold text-text-dim ml-0.5">%</span>
-                              </span>
-                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Confia.</span>
-                            </div>
-                            <div className="flex flex-col items-center flex-1">
-                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{editingVolunteer.age || '-'}</span>
-                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Edad</span>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Acciones de Contacto y Edición de Datos */}
-                    <div className="px-2 mb-8">
-                      <div className="grid grid-cols-3 gap-2">
-                        <Button
-                          variant="outline"
-                          className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate"
-                          onClick={() => window.open(`https://wa.me/${editingVolunteer.phone.replace(/\s+/g, '')}`, '_blank')}
-                        >
-                          <span className="material-symbols-outlined text-[17px] shrink-0 text-[#25D366]">message</span>
-                          <span>WHATSAPP</span>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate"
-                          onClick={() => window.location.href = `tel:${editingVolunteer.phone.replace(/\s+/g, '')}`}
-                        >
-                          <span className="material-symbols-outlined text-[17px] shrink-0 text-blue-500">call</span>
-                          <span>LLAMAR</span>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate"
-                          onClick={() => handleStartEditProfile(editingVolunteer)}
-                        >
-                          <span className="material-symbols-outlined text-[17px] shrink-0 text-[#4d7cfe]">edit_square</span>
-                          <span>EDITAR</span>
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Squad/Schedule / Day Cards List */}
-                    <div className="w-full">
-                      <div className="flex items-center justify-between px-2 mb-4">
-                        <div className="flex items-center gap-2 relative">
-                          <p className="text-drawer-label text-text font-bold">Cronograma</p>
-                          
-                          {/* Helper Icon & Legend Popover */}
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={() => setShowLegend(prev => !prev)}
-                              className="text-text-dim hover:text-text transition-colors p-0.5 rounded-full flex items-center justify-center focus:outline-none"
-                              title="Ver leyenda del cronograma"
-                            >
-                              <span className="material-symbols-outlined text-[15px]">help_outline</span>
-                            </button>
-
-                            {showLegend && (
-                              <div className="absolute left-0 top-6 z-50 w-60 bg-dark2 border border-border rounded-xl p-3.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
-                                <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border">
-                                  <span className="text-xs font-bold text-text font-inter">Leyenda del Cronograma</span>
-                                  <button onClick={() => setShowLegend(false)} className="text-text-dim hover:text-text flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-[14px]">close</span>
-                                  </button>
-                                </div>
-                                <div className="space-y-2 text-[11px] font-inter">
-                                  <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-lg bg-[#4d7cfe]/20 border border-[#4d7cfe]/40 text-[#4d7cfe] flex items-center justify-center shrink-0">
-                                      <span className="material-symbols-outlined text-[13px]">check</span>
-                                    </span>
-                                    <div>
-                                      <p className="text-text font-bold leading-tight">Programado</p>
-                                      <p className="text-text-dim text-[10px]">Turno asignado</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-500 flex items-center justify-center shrink-0">
-                                      <span className="material-symbols-outlined text-[13px]">check</span>
-                                    </span>
-                                    <div>
-                                      <p className="text-emerald-500 font-bold leading-tight">Entrada</p>
-                                      <p className="text-text-dim text-[10px]">Turno registrado con QR</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-lg bg-slate-500/20 border border-slate-500/40 text-slate-500 flex items-center justify-center shrink-0">
-                                      <span className="material-symbols-outlined text-[13px]">check</span>
-                                    </span>
-                                    <div>
-                                      <p className="text-slate-500 font-bold leading-tight">Salida</p>
-                                      <p className="text-text-dim text-[10px]">Turno completado en el sistema</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-lg bg-dark3 border border-border text-text-dim flex items-center justify-center shrink-0 text-[12px] font-bold">
-                                      -
-                                    </span>
-                                    <div>
-                                      <p className="text-text-dim font-medium leading-tight">Sin Turnos</p>
-                                      <p className="text-text-dim/70 text-[10px]">Disponible / No programado</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          {saved && <span className="text-[11px] text-emerald-500 font-bold animate-pulse">✓ Listo</span>}
-                          {isEditingShifts ? (
-                            <button onClick={handleSaveShifts} className="h-7 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
-                              Guardar
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                if (!canEditShifts()) {
-                                  showToast("No tienes permiso para editar turnos", "error");
-                                  return;
-                                }
-                                setIsEditingShifts(true);
-                                setSaved(false);
-                              }}
-                              className={cn(
-                                "h-7 px-4 backdrop-blur-sm border font-bold text-[11px] transition-all rounded-full",
-                                canEditShifts()
-                                  ? "bg-dark3 border-border hover:bg-dark text-text active:scale-[0.97]"
-                                  : "bg-dark3/50 border-border/50 text-text-dim/40 cursor-not-allowed"
-                              )}
-                              title={canEditShifts() ? "Editar turnos" : "Permiso deshabilitado por el administrador"}
-                            >
-                              Editar
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Shifts Content as Day Cards */}
-                      <div className="flex flex-col gap-2 pb-12">
-                        {EVENT_DAYS.map((d, index) => {
-                          const dayShifts = shiftsByDay[d.key] || [];
-                          const bgColors = [
-                            'bg-[#10a562]',
-                            'bg-[#4aa9df]',
-                            'bg-[#f1c130]',
-                            'bg-[#d54134]',
-                            'bg-[#981e32]',
-                            'bg-[#2c44c2]',
-                            'bg-[#f1c130]',
-                            'bg-[#ed1b24]'
-                          ];
-                          const cardBg = bgColors[index % bgColors.length];
-
-                          return (
-                            <div key={d.key} className="rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01] bg-dark3 border border-border flex">
-                              {/* Etiqueta de color lateral estructural */}
-                              <div className={`w-3 shrink-0 ${cardBg} opacity-90`} />
-                              
-                              <div className="flex-1 flex items-center justify-between px-5 sm:px-6 py-4">
-                                {/* Left: Date */}
-                                <div className="flex-1 min-w-0 pr-4 flex items-center">
-                                  <p className="font-inter font-bold text-text text-[13px] truncate capitalize">
-                                    {d.label} {d.dateNum}
-                                  </p>
-                                </div>
-
-                                {/* Right: 4 Columns (T1 to T4) */}
-                                <div className="flex items-center shrink-0 ml-auto gap-1">
-                                  {(['T1', 'T2', 'T3', 'T4'] as const).map((t) => {
-                                    const active = dayShifts.includes(t);
-                                    const isCheckedIn = checkedInMap[`${editingVolunteer.id}-${d.key}-${t}`];
-                                    const isCheckedOut = checkedOutMap[`${editingVolunteer.id}-${d.key}-${t}`];
-
-                                    let statusStyle = "bg-dark2 border-border text-text-dim/40";
-                                    let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-text-dim/40">-</span>;
-                                    let labelColor = "text-text-dim/40";
-
-                                    if (isCheckedOut) {
-                                      statusStyle = "bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm";
-                                      iconContent = <span className="material-symbols-outlined text-[15px] text-slate-500">check</span>;
-                                      labelColor = "text-slate-500 font-bold";
-                                    } else if (isCheckedIn) {
-                                      statusStyle = "bg-emerald-500/15 border-emerald-500/30 text-emerald-500 shadow-sm";
-                                      iconContent = <span className="material-symbols-outlined text-[15px] text-emerald-500">check</span>;
-                                      labelColor = "text-emerald-500 font-bold";
-                                    } else if (active) {
-                                      statusStyle = "bg-[#4d7cfe]/15 border-[#4d7cfe]/35 text-[#4d7cfe] font-bold shadow-sm";
-                                      iconContent = <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">check</span>;
-                                      labelColor = "text-[#4d7cfe] font-bold";
-                                    }
-
-                                    return (
-                                      <button
-                                        key={t}
-                                        disabled={!isEditingShifts || isCheckedIn || isCheckedOut || !canEditShifts()}
-                                        onClick={() => toggleShift(d.key, t)}
-                                        className={cn(
-                                          "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all",
-                                          statusStyle,
-                                          isEditingShifts && !isCheckedIn && !isCheckedOut && canEditShifts() && "hover:bg-dark hover:border-border cursor-pointer active:scale-95"
-                                        )}
-                                      >
-                                        <div className="h-4 flex items-center justify-center">
-                                          {iconContent}
-                                        </div>
-                                        <span className={cn("font-inter text-[10px] uppercase tracking-wider mt-0.5", labelColor)}>
-                                          {t}
-                                        </span>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <VolunteerProfileView
+                      volunteer={editingVolunteer}
+                      mode="coordinator"
+                      shiftsByDay={shiftsByDay}
+                      checkedInMap={checkedInMap}
+                      checkedOutMap={checkedOutMap}
+                      onToggleShift={toggleShift}
+                      isEditingShifts={isEditingShifts}
+                      canEditShifts={canEditShifts()}
+                      onStartEditShifts={() => {
+                        if (!canEditShifts()) {
+                          showToast("No tienes permiso para editar turnos", "error");
+                          return;
+                        }
+                        setIsEditingShifts(true);
+                        setSaved(false);
+                      }}
+                      onSaveShifts={handleSaveShifts}
+                      onStartEditProfile={() => handleStartEditProfile(editingVolunteer)}
+                      savedNotice={saved}
+                    />
                   </motion.div>
                 ) : (
                   <motion.div

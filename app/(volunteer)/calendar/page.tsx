@@ -1,8 +1,7 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { ShiftCalendar } from "@/components/ShiftCalendar";
-import { EntryPassButton } from "@/components/EntryPassButton";
+import { ShiftCalendar, VolunteerInfo } from "@/components/ShiftCalendar";
 import { verifySessionToken } from "@/lib/auth";
 
 export const metadata = {
@@ -15,61 +14,66 @@ export default async function CalendarPage() {
   const sessionCookie = cookieStore.get('session')?.value || '';
   const session = verifySessionToken(sessionCookie);
 
-  console.log("CALENDAR_LOG: Verifying session token");
-
   if (!session || session.userType !== 'volunteer') {
-    console.log("CALENDAR_LOG: Redirecting because session is invalid or not volunteer");
     redirect('/login');
   }
 
   const volunteerId = session.userId;
-  const committeeName = session.committee || 'Sin comité';
 
-  const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY 
+  const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY
     ? (await import('@supabase/supabase-js')).createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-      )
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    )
     : await createClient();
 
-  const { data: volunteer, error } = await supabase
-    .from('volunteers')
-    .select('id, first_name, last_name')
-    .eq('id', volunteerId)
-    .maybeSingle();
-
-  console.log("CALENDAR_LOG: Supabase fetch volunteer result:", { volunteer, error, volunteerId });
+  const [{ data: volunteer, error }, { data: initialShifts }] = await Promise.all([
+    supabase
+      .from('volunteers')
+      .select('*, committees(name)')
+      .eq('id', volunteerId)
+      .maybeSingle(),
+    supabase
+      .from('shifts')
+      .select('*')
+      .eq('volunteer_id', volunteerId)
+  ]);
 
   if (error || !volunteer) {
-    console.log("CALENDAR_LOG: Redirecting because of DB error or volunteer not found", { error, volunteer });
+    console.error("CALENDAR_PAGE_ERROR:", error);
     redirect('/login');
   }
 
   const fullName = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim();
+  const commName = (volunteer.committees as any)?.name || session.committee || 'Sin comité';
+
+  const volunteerInfo: VolunteerInfo = {
+    id: volunteer.id,
+    name: fullName,
+    first_name: volunteer.first_name || '',
+    last_name: volunteer.last_name || '',
+    committee: commName,
+    stake: volunteer.stake || '',
+    ward: volunteer.neighborhood || '',
+    phone: volunteer.phone || '',
+    reliability: volunteer.reliability_score ?? 100,
+    age: volunteer.age || undefined,
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white pb-12 flex flex-col">
-      {/* Sticky Header matching admin design */}
-      <div className="sticky top-0 z-40 bg-slate-950/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 border-b border-white/10 pointer-events-auto">
-        <div className="w-full max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-[32px] sm:text-4xl font-black text-white tracking-tight flex items-center gap-3">
-            Mis Turnos
+    <div className="min-h-screen bg-dark text-text pb-12 flex flex-col w-full">
+      {/* Sticky Header matching layout background */}
+      <div className="sticky top-0 z-40 bg-dark/80 backdrop-blur-xl pt-5 pb-3 px-4 sm:px-6 lg:px-8 flex items-center justify-between border-b border-border pointer-events-auto w-full">
+        <div className="w-full flex items-center justify-between">
+          <h1 className="text-xl sm:text-2xl font-black text-text tracking-tight flex items-center gap-2">
+            <span>Mi Calendario</span>
           </h1>
-          
-          <div className="flex items-center gap-3">
-            <EntryPassButton 
-              volunteerId={volunteerId}
-              volunteerName={fullName}
-              committeeName={committeeName}
-            />
-          </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-2">
-
-        <ShiftCalendar volunteerId={volunteerId} />
+      {/* Main Content - Full 100% Width */}
+      <main className="w-full px-4 sm:px-6 lg:px-8 mt-4 flex-1">
+        <ShiftCalendar volunteerId={volunteerId} volunteerInfo={volunteerInfo} initialShifts={initialShifts || []} />
       </main>
     </div>
   );
