@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { generatePinMessage, generateWaMeLink, formatE164, validatePhone8Digits } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
+import { canImportData } from "@/lib/permissions";
 import { motion, AnimatePresence } from "framer-motion";
 // xlsx is loaded dynamically inside downloadExcelTemplate() and processFile()
 // to avoid bundling ~800 KB into the initial JS chunk for this route.
@@ -436,6 +437,32 @@ export default function ImportPage() {
   const totalErrors = parsedData.filter(v => v.error).length;
   const totalDuplicates = parsedData.filter(v => v.isDuplicate).length;
   const totalValids = parsedData.filter(v => !v.error && !v.isDuplicate).length;
+
+  const [permTick, setPermTick] = useState(0);
+
+  useEffect(() => {
+    const handlePermissionsChange = () => setPermTick(v => v + 1);
+    window.addEventListener("storage", handlePermissionsChange);
+    window.addEventListener("permissions-changed", handlePermissionsChange);
+    return () => {
+      window.removeEventListener("storage", handlePermissionsChange);
+      window.removeEventListener("permissions-changed", handlePermissionsChange);
+    };
+  }, []);
+
+  if (!canImportData()) {
+    return (
+      <div className="w-full min-h-[65vh] flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-4">
+          <span className="material-symbols-outlined text-[32px]">lock</span>
+        </div>
+        <h2 className="text-xl font-bold text-text mb-2">Acceso Restringido a Importación</h2>
+        <p className="text-xs text-text-dim max-w-md leading-relaxed">
+          El Administrador ha deshabilitado la función de Importación de Datos para este rol. Si necesitas acceso, contacta a un Administrador para habilitar esta política en Ajustes.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <motion.div 

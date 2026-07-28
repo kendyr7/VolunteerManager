@@ -10,6 +10,7 @@ import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { generateWaMeLink, validatePhone8Digits } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
+import { canManageUsers } from "@/lib/permissions";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { useSearch } from "@/lib/search-context";
 import { DataTableFilter } from "@/components/DataTableFilter";
@@ -496,6 +497,32 @@ export default function UsersPage() {
   }, [filteredUsers]);
   const sortedLetters = Object.keys(groupedUsers).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
 
+  const [permTick, setPermTick] = useState(0);
+
+  useEffect(() => {
+    const handlePermissionsChange = () => setPermTick(v => v + 1);
+    window.addEventListener("storage", handlePermissionsChange);
+    window.addEventListener("permissions-changed", handlePermissionsChange);
+    return () => {
+      window.removeEventListener("storage", handlePermissionsChange);
+      window.removeEventListener("permissions-changed", handlePermissionsChange);
+    };
+  }, []);
+
+  if (!canManageUsers()) {
+    return (
+      <div className="w-full min-h-[65vh] flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-4">
+          <span className="material-symbols-outlined text-[32px]">lock</span>
+        </div>
+        <h2 className="text-xl font-bold text-text mb-2">Acceso Restringido a Gestión de Usuarios</h2>
+        <p className="text-xs text-text-dim max-w-md leading-relaxed">
+          El Administrador ha deshabilitado el acceso a la Gestión de Usuarios para este rol. Si necesitas acceso, contacta a un Administrador para habilitar esta política en Ajustes.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <motion.div 
       variants={containerVariants}
@@ -682,18 +709,23 @@ export default function UsersPage() {
                           <SelectContent className="bg-dark2 border border-border text-text shadow-2xl z-[200]">
                             <SelectItem value="Admin" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">
                               <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[18px] text-text-dim">admin_panel_settings</span>
-                                <span>Administrador (Admin)</span>
+                                <span className="material-symbols-outlined text-[18px] text-amber-400">admin_panel_settings</span>
+                                <span>Administrador (Admin - Acceso Total)</span>
                               </div>
                             </SelectItem>
                             <SelectItem value="Editor" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">
                               <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[18px] text-text-dim">manage_accounts</span>
-                                <span>Coordinador (Editor)</span>
+                                <span className="material-symbols-outlined text-[18px] text-[#4d7cfe]">manage_accounts</span>
+                                <span>Coordinador (Editor de Comité)</span>
                               </div>
                             </SelectItem>
                           </SelectContent>
                         </Select>
+                        <p className="text-[11px] font-inter text-text-dim">
+                          {newRole === 'Admin'
+                            ? 'Otorgará control total del sistema, gestión de usuarios, comités y reportes.'
+                            : 'Permite gestionar voluntarios, enviar avisos y ver reportes de su comité.'}
+                        </p>
                       </div>
 
                       {newRole === 'Editor' && (

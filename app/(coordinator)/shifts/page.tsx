@@ -463,8 +463,6 @@ export default function ShiftsPage() {
     });
   };
 
-  const canEditShifts = () => currentRole === 'Admin' || currentRole === 'Editor';
-
   // Helper for filtering a single volunteer (used by multiple logic points)
   const matchesFilters = useCallback((v: VolunteerType, searchStr: string, comms: string[], stakes: string[], wards: string[], role: string) => {
     // Role-based isolation

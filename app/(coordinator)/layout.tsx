@@ -21,6 +21,16 @@ function Icon({ name, size = 20, className = "" }: { name: string, size?: number
   );
 }
 
+import {
+  canViewReports,
+  canViewVolunteers,
+  canQrCheckin,
+  canSendWhatsappMessages,
+  canImportData,
+  canManageUsers,
+  getSystemPermission
+} from "@/lib/permissions";
+
 // Inner layout component that consumes SearchContext
 function CoordinatorLayoutInner({
   children,
@@ -63,11 +73,31 @@ function CoordinatorLayoutInner({
     }
   };
 
+  const [permTick, setPermTick] = useState(0);
+
   useEffect(() => {
-    const role = localStorage.getItem('mock_role') as any;
-    const committee = localStorage.getItem('mock_committee');
-    if (role) setCurrentRole(role);
-    if (committee) setCurrentCommittee(committee);
+    const syncRoleAndPermissions = () => {
+      const role = localStorage.getItem('mock_role');
+      if (role === 'Editor' || role === 'Coordinador') {
+        setCurrentRole('Editor');
+      } else if (role === 'Lector' || role === 'Voluntario') {
+        setCurrentRole('Lector');
+      } else if (role === 'Admin') {
+        setCurrentRole('Admin');
+      }
+      const committee = localStorage.getItem('mock_committee');
+      if (committee) setCurrentCommittee(committee);
+
+      setPermTick(v => v + 1);
+    };
+
+    syncRoleAndPermissions();
+    window.addEventListener('storage', syncRoleAndPermissions);
+    window.addEventListener('permissions-changed', syncRoleAndPermissions);
+    return () => {
+      window.removeEventListener('storage', syncRoleAndPermissions);
+      window.removeEventListener('permissions-changed', syncRoleAndPermissions);
+    };
   }, []);
 
   // Reset search when navigating to a new page
@@ -84,7 +114,7 @@ function CoordinatorLayoutInner({
 
   const NAV_ITEMS = [
     { name: "Dashboard", href: "/dashboard", icon: "space_dashboard", roles: ['Admin'] },
-    { name: "Voluntarios", href: "/volunteers", icon: "group", roles: ['Admin', 'Editor'] },
+    { name: "Voluntarios", href: "/volunteers", icon: "group", roles: ['Admin', 'Editor', 'Lector'] },
     { name: currentRole === 'Lector' ? "Mi Perfil" : "Turnos", href: "/shifts", icon: currentRole === 'Lector' ? "person" : "checklist", roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Escanear QR", href: "/check-in", icon: "qr_code_scanner", roles: ['Admin', 'Editor'] },
     { name: "Avisos", href: "/reminders", icon: "campaign", roles: ['Admin', 'Editor'] },
@@ -97,7 +127,21 @@ function CoordinatorLayoutInner({
     { name: "Ajustes", href: "/settings", icon: "settings", roles: ['Admin', 'Editor'] },
   ];
 
-  const visibleNavItems = NAV_ITEMS.filter(item => item.roles.includes(currentRole));
+  const visibleNavItems = NAV_ITEMS.filter(item => {
+    if (!item.roles.includes(currentRole)) return false;
+    if (currentRole === 'Editor') {
+      if (item.href === '/volunteers' && !canViewVolunteers()) return false;
+      if (item.href === '/check-in' && !canQrCheckin()) return false;
+      if (item.href === '/reminders' && !canSendWhatsappMessages()) return false;
+      if (item.href === '/reports' && !canViewReports()) return false;
+      if (item.href === '/import' && !canImportData()) return false;
+      if (item.href === '/users' && !canManageUsers()) return false;
+    }
+    if (currentRole === 'Lector') {
+      if (item.href === '/volunteers' && !canViewVolunteers()) return false;
+    }
+    return true;
+  });
   const visibleBottomItems = BOTTOM_ITEMS.filter(item => item.roles.includes(currentRole));
   const allMobileNavItems = [
     ...visibleNavItems,
@@ -176,7 +220,7 @@ function CoordinatorLayoutInner({
                   <Icon name="expand_more" size={16} />
                 </div>
               )}
-              {NAV_ITEMS.filter(item => item.roles.includes(currentRole)).map((item) => {
+              {visibleNavItems.map((item) => {
                 const isActive = pathname.startsWith(item.href);
                 return (
                   <Link

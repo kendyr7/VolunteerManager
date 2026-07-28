@@ -799,7 +799,7 @@ export default function CoordinatorDashboard() {
                     : selectedHeatmapCommittee}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent className="bg-dark2 border-border text-[#ffffff] z-50">
+              <SelectContent className="bg-dark2 border-border text-text z-50">
                 <SelectItem value="todos" className="text-xs font-bold">
                   Todos los comités
                 </SelectItem>

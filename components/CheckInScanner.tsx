@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { checkInVolunteer } from "@/app/actions/attendance";
+import { canQrCheckin } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
@@ -365,6 +366,18 @@ export function CheckInScanner({
     startScanning();
   };
 
+  const [permTick, setPermTick] = useState(0);
+
+  useEffect(() => {
+    const handlePermissionsChange = () => setPermTick(v => v + 1);
+    window.addEventListener("storage", handlePermissionsChange);
+    window.addEventListener("permissions-changed", handlePermissionsChange);
+    return () => {
+      window.removeEventListener("storage", handlePermissionsChange);
+      window.removeEventListener("permissions-changed", handlePermissionsChange);
+    };
+  }, []);
+
   useEffect(() => {
     return () => {
       stopScanning();
@@ -388,6 +401,20 @@ export function CheckInScanner({
   } as const;
 
   const { dot, label } = statusConfig[state];
+
+  if (!canQrCheckin()) {
+    return (
+      <div className="w-full min-h-[65vh] flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-4">
+          <span className="material-symbols-outlined text-[32px]">lock</span>
+        </div>
+        <h2 className="text-xl font-bold text-text mb-2">Acceso Restringido a Escáner QR</h2>
+        <p className="text-xs text-text-dim max-w-md leading-relaxed">
+          El Administrador ha deshabilitado la función de Escanear QR para este rol. Si necesitas acceso, contacta a un Administrador para habilitar esta política en Ajustes.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full pb-32 lg:pb-12 flex flex-col min-h-full">

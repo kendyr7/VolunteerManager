@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,12 @@ import { cn } from "@/lib/utils";
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { startRegistration } from "@simplewebauthn/browser";
 
-import { isCoordinatorShiftEditAllowed, setCoordinatorShiftEditAllowed } from "@/lib/permissions";
+import {
+  getSystemPermission,
+  setSystemPermission,
+  fetchSystemPermission,
+  setMockRole
+} from "@/lib/permissions";
 import { changeUserPin } from "@/app/actions/update-pin";
 import { formatE164 } from "@/lib/whatsapp";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
@@ -147,8 +152,77 @@ export default function SettingsPage() {
   const [capacities, setCapacities] = useState({ T1: 0, T2: 0, T3: 0, T4: 0 });
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
-  // Shift edit permission state for coordinators
-  const [allowCoordinatorShiftEdit, setAllowCoordinatorShiftEdit] = useState<boolean>(false);
+type PermissionMatrixRow = {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  coordKey: string;
+  coordDefault: boolean;
+  volKey?: string;
+  volDefault?: boolean;
+};
+
+const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
+  {
+    id: "volunteers",
+    name: "Ver lista de voluntarios",
+    description: "Permite acceder a la nómina y directorio de voluntarios de su comité",
+    icon: "group",
+    coordKey: "allow_coordinator_volunteers",
+    coordDefault: true,
+    volKey: "allow_volunteer_view_volunteers",
+    volDefault: true,
+  },
+  {
+    id: "shift_edit",
+    name: "Edición de turnos de voluntarios",
+    description: "Permite asignar, modificar o cancelar turnos",
+    icon: "edit_calendar",
+    coordKey: "allow_coordinator_shift_edit",
+    coordDefault: false,
+  },
+  {
+    id: "whatsapp",
+    name: "Envío de avisos por WhatsApp",
+    description: "Permite enviar avisos y recordatorios por WhatsApp a su comité",
+    icon: "send_to_mobile",
+    coordKey: "allow_coordinator_whatsapp",
+    coordDefault: true,
+  },
+  {
+    id: "reports",
+    name: "Ver reportes y estadísticas",
+    description: "Permite acceder al panel de analíticas y descargas de reportes",
+    icon: "analytics",
+    coordKey: "allow_coordinator_reports",
+    coordDefault: true,
+  },
+  {
+    id: "qr_checkin",
+    name: "Escanear QR y registro de asistencia",
+    description: "Permite usar el escáner QR para hacer Check-in / Check-out",
+    icon: "qr_code_scanner",
+    coordKey: "allow_coordinator_qr",
+    coordDefault: true,
+  },
+  {
+    id: "import_data",
+    name: "Importación de datos masivos",
+    description: "Permite cargar hojas de cálculo Excel/CSV con nuevos registros",
+    icon: "cloud_upload",
+    coordKey: "allow_coordinator_import",
+    coordDefault: true,
+  },
+  {
+    id: "manage_users",
+    name: "Gestión de usuarios y accesos",
+    description: "Permite invitar usuarios nuevos y modificar PINs",
+    icon: "shield_person",
+    coordKey: "allow_coordinator_users",
+    coordDefault: false,
+  },
+];
 
   const handleCreateCommittee = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,18 +280,54 @@ export default function SettingsPage() {
 
 
 
-  useEffect(() => {
-    setAllowCoordinatorShiftEdit(isCoordinatorShiftEditAllowed());
+  const [permissionsMap, setPermissionsMap] = useState<Record<string, boolean>>({});
+
+  const loadMatrixPermissions = useCallback(() => {
+    const map: Record<string, boolean> = {};
+    SYSTEM_PERMISSIONS_MATRIX.forEach(row => {
+      map[row.coordKey] = getSystemPermission(row.coordKey, row.coordDefault);
+      if (row.volKey) {
+        map[row.volKey] = getSystemPermission(row.volKey, row.volDefault);
+      }
+    });
+    setPermissionsMap(map);
+
+    SYSTEM_PERMISSIONS_MATRIX.forEach(row => {
+      fetchSystemPermission(row.coordKey, row.coordDefault).then(val => {
+        setPermissionsMap(prev => ({ ...prev, [row.coordKey]: val }));
+      });
+      if (row.volKey) {
+        fetchSystemPermission(row.volKey, row.volDefault!).then(val => {
+          setPermissionsMap(prev => ({ ...prev, [row.volKey!]: val }));
+        });
+      }
+    });
   }, []);
 
-  const handleToggleCoordinatorShiftEdit = (allowed: boolean) => {
+  useEffect(() => {
+    loadMatrixPermissions();
+    const handleStorageChange = () => {
+      loadMatrixPermissions();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('permissions-changed', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('permissions-changed', handleStorageChange);
+    };
+  }, [loadMatrixPermissions]);
+
+  const handleToggleMatrixPermission = (key: string, name: string, roleLabel: string, defaultVal = true) => {
     if (currentRole !== 'Admin') {
-      showToast("Solo los administradores pueden cambiar este permiso", "error");
+      showToast("Solo los administradores pueden cambiar los permisos del sistema", "error");
       return;
     }
-    setCoordinatorShiftEditAllowed(allowed);
-    setAllowCoordinatorShiftEdit(allowed);
-    showToast(allowed ? "Permiso de edición de turnos HABILITADO para Coordinadores" : "Permiso de edición de turnos DESHABILITADO para Coordinadores");
+    const currentVal = permissionsMap[key] ?? defaultVal;
+    const newVal = !currentVal;
+    setSystemPermission(key, newVal);
+    setPermissionsMap(prev => ({ ...prev, [key]: newVal }));
+    showToast(newVal ? `Permiso "${name}" HABILITADO para ${roleLabel}` : `Permiso "${name}" DESHABILITADO para ${roleLabel}`);
   };
 
   const handleToggleCommittee = (name: string) => {
@@ -484,7 +594,7 @@ export default function SettingsPage() {
     } else {
       showToast("Perfil actualizado");
       localStorage.setItem('volunteer_phone', editPhone);
-      localStorage.setItem('mock_role', editRole);
+      setMockRole(editRole);
       if (editRole === 'Admin' || editRole === 'Editor') localStorage.setItem('mock_committee', editCommittee);
       setCurrentRole(editRole);
       await loadData();
@@ -595,11 +705,16 @@ export default function SettingsPage() {
 
   // Permissions Data
   const ALL_PERMISSIONS = ['Ver voluntarios', 'Editar turnos', 'Enviar mensajes', 'Ver reportes', 'Importar datos', 'Configurar ajustes'];
-  const ROLE_PERMISSIONS: Record<string, string[]> = {
-    'Admin': ALL_PERMISSIONS,
-    'Editor': ['Ver voluntarios', 'Editar turnos', 'Enviar mensajes', 'Ver reportes'],
-    'Lector': ['Ver voluntarios']
-  };
+  const ROLE_PERMISSIONS: Record<string, string[]> = useMemo(() => {
+    const coordShiftOn = permissionsMap["allow_coordinator_shift_edit"] ?? false;
+    return {
+      'Admin': ALL_PERMISSIONS,
+      'Editor': coordShiftOn
+        ? ['Ver voluntarios', 'Editar turnos', 'Enviar mensajes', 'Ver reportes']
+        : ['Ver voluntarios', 'Enviar mensajes', 'Ver reportes'],
+      'Lector': ['Ver voluntarios']
+    };
+  }, [permissionsMap]);
 
   if (loading) return null;
 
@@ -679,47 +794,23 @@ export default function SettingsPage() {
                       />
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 md:col-span-2">
                       <label className="text-xs font-bold text-text">Rol en la plataforma</label>
-                      {currentRole === 'Admin' ? (
-                        <Select value={editRole} onValueChange={(v) => setEditRole(v as 'Admin' | 'Editor' | 'Lector')}>
-                          <SelectTrigger className="w-full h-10 px-3 border border-border text-text text-xs font-inter font-bold flex items-center justify-between bg-dark3 rounded-xl">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-dark2 border-border text-text text-xs font-inter font-bold z-[120]">
-                            <SelectItem value="Admin">Admin (Acceso total)</SelectItem>
-                            <SelectItem value="Editor">Editor (Coordinador de comité)</SelectItem>
-                            <SelectItem value="Lector">Lector (Solo lectura)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <div className="w-full h-10 px-3 rounded-xl border border-border bg-dark text-text-dim text-xs font-inter font-bold flex items-center cursor-not-allowed">
-                          {editRole}
+                      <div className="w-full h-10 px-3.5 rounded-xl border border-border bg-dark3 flex items-center justify-between text-xs font-inter font-bold">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[18px] text-[#4d7cfe]">
+                            {editRole === 'Admin' ? 'admin_panel_settings' : editRole === 'Editor' ? 'manage_accounts' : 'visibility'}
+                          </span>
+                          <span className="text-text">
+                            {editRole === 'Admin' ? 'Administrador (Acceso total)' : editRole === 'Editor' ? `Coordinador de Comité (${editCommittee || 'Sin comité'})` : 'Voluntario (Lectura)'}
+                          </span>
                         </div>
-                      )}
-                    </div>
-
-                    {editRole === 'Editor' && (
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-text">Comité Asignado</label>
-                        {currentRole === 'Admin' ? (
-                          <Select value={editCommittee} onValueChange={(v) => v && setEditCommittee(v)}>
-                            <SelectTrigger className="w-full h-10 px-3 border border-border text-text text-xs font-inter font-bold flex items-center justify-between bg-dark3 rounded-xl">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-dark2 border-border text-text text-xs font-inter font-bold z-[120]">
-                              {committees.map(c => (
-                                <SelectItem key={c.id} value={c.name} className="focus:bg-dark3 focus:text-text">{c.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <div className="w-full h-10 px-3 rounded-xl border border-border bg-dark text-text-dim text-xs font-inter font-bold flex items-center cursor-not-allowed">
-                            {editCommittee || 'Sin comité'}
-                          </div>
-                        )}
+                        <span className="text-[10px] text-text-dim font-medium uppercase tracking-wider">Asignado por Administrador</span>
                       </div>
-                    )}
+                      <p className="text-[10px] text-text-dim">
+                        Para cambiar roles o permisos de los usuarios de la plataforma, dirígete a <a href="/users" className="text-[#4d7cfe] font-bold hover:underline">Gestión de Usuarios</a>.
+                      </p>
+                    </div>
                   </div>
 
                   {currentRole !== 'Lector' && (
@@ -888,8 +979,8 @@ export default function SettingsPage() {
                   <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Permisos</h3>
-                  <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">Gestión de accesos y edición de turnos para coordinadores</p>
+                  <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Políticas del Sistema y Roles</h3>
+                  <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">Políticas globales de acceso y matriz de capacidades por rol</p>
                 </div>
               </div>
 
@@ -903,83 +994,126 @@ export default function SettingsPage() {
             </button>
 
             {isSectionOpen('permissions') && (
-              <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-0 border-t border-border bg-black/[0.02] dark:bg-black/20">
+              <div className="p-4 sm:p-5 space-y-4 border-t border-border bg-black/[0.02] dark:bg-black/20">
 
-                {/* Permiso Especial: Edición de Turnos para Coordinadores */}
-                <div className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined text-[18px]">edit_calendar</span>
-                    </div>
+                {/* Matriz Interactiva de Permisos por Rol */}
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
                     <div>
-                      <p className="text-xs font-bold text-text">Coordinadores editan turnos</p>
-                      <p className="text-[10px] text-text-dim font-medium">Por defecto solo administradores pueden modificar asignaciones</p>
-                      {currentRole !== 'Admin' && (
-                        <p className="text-[10px] text-amber-500 dark:text-amber-400 font-bold flex items-center gap-1 pt-0.5">
-                          <span className="material-symbols-outlined text-[12px]">lock</span>
-                          Solo Administradores pueden modificar este permiso
-                        </p>
-                      )}
+                      <h4 className="text-xs font-bold text-text flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[16px] text-[#4d7cfe]">shield</span>
+                        Matriz Interactiva de Permisos por Rol
+                      </h4>
+                      <p className="text-[10px] text-text-dim mt-0.5">
+                        Haz clic en los interruptores para activar o desactivar permisos globales por rol.
+                      </p>
                     </div>
+                    {currentRole !== 'Admin' && (
+                      <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0 self-start sm:self-auto">
+                        <span className="material-symbols-outlined text-[12px]">lock</span>
+                        Solo Administradores pueden editar
+                      </span>
+                    )}
                   </div>
 
-                  <button
-                    type="button"
-                    disabled={currentRole !== 'Admin'}
-                    onClick={() => handleToggleCoordinatorShiftEdit(!allowCoordinatorShiftEdit)}
-                    className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${allowCoordinatorShiftEdit ? 'bg-emerald-500' : 'bg-black/15 dark:bg-white/10'
-                      } ${currentRole !== 'Admin' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
-                  >
-                    <motion.span
-                      initial={false}
-                      animate={{ x: allowCoordinatorShiftEdit ? 18 : 3 }}
-                      style={{ left: 0 }}
-                      className="absolute top-[2.5px] w-3.5 h-3.5 rounded-full bg-white shadow-md"
-                    />
-                  </button>
-                </div>
+                  <div className="overflow-x-auto rounded-xl border border-border bg-dark3">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-border bg-dark2 text-[10px] font-bold text-text-dim uppercase tracking-wider">
+                          <th className="py-3 px-4 min-w-[200px]">Módulo / Función</th>
+                          <th className="py-3 px-3 text-center w-28">Admin</th>
+                          <th className="py-3 px-3 text-center w-36">Coordinador</th>
+                          <th className="py-3 px-3 text-center w-32">Voluntario</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border text-[11px] font-medium text-text">
+                        {SYSTEM_PERMISSIONS_MATRIX.map((row) => {
+                          const coordOn = permissionsMap[row.coordKey] ?? row.coordDefault;
+                          const volOn = row.volKey ? (permissionsMap[row.volKey] ?? row.volDefault) : false;
 
-                {/* Lista de Permisos por Rol — borderless rows */}
-                <div className="divide-y divide-border">
-                  {ALL_PERMISSIONS.map(perm => {
-                    const isOn = ROLE_PERMISSIONS[editRole].includes(perm);
-                    const isLocked = currentRole !== 'Admin';
+                          return (
+                            <tr key={row.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
+                              {/* Function & Description */}
+                              <td className="py-3 px-4">
+                                <div className="flex items-start gap-2.5">
+                                  <div className="w-7 h-7 rounded-lg bg-[#4d7cfe]/10 text-[#4d7cfe] border border-[#4d7cfe]/20 flex items-center justify-center shrink-0 mt-0.5">
+                                    <span className="material-symbols-outlined text-[16px]">{row.icon}</span>
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-text text-xs">{row.name}</p>
+                                    <p className="text-[10px] text-text-dim font-normal">{row.description}</p>
+                                  </div>
+                                </div>
+                              </td>
 
-                    return (
-                      <div key={perm} className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isOn ? 'bg-[#4d7cfe]/15 text-[#4d7cfe]' : 'bg-black/5 dark:bg-white/5 text-text-dim'
-                            }`}>
-                            <span className="material-symbols-outlined text-[18px]">
-                              {perm === 'Ver voluntarios' ? 'group' :
-                                perm === 'Editar turnos' ? 'edit_calendar' :
-                                  perm === 'Enviar mensajes' ? 'send_to_mobile' :
-                                    perm === 'Ver reportes' ? 'analytics' :
-                                      perm === 'Importar datos' ? 'upload_file' : 'settings_suggest'}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-text">{perm}</p>
-                            <p className="text-[10px] text-text-dim font-medium">{isOn ? 'Habilitado' : 'Restringido'}</p>
-                          </div>
-                        </div>
+                              {/* Admin Column (Always Full Access) */}
+                              <td className="py-3 px-3 text-center">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                                  ✓ Total
+                                </span>
+                              </td>
 
-                        <button
-                          type="button"
-                          disabled={isLocked}
-                          className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${isOn ? 'bg-[#4d7cfe]' : 'bg-black/15 dark:bg-white/10'
-                            } ${isLocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
-                        >
-                          <motion.span
-                            initial={false}
-                            animate={{ x: isOn ? 18 : 3 }}
-                            style={{ left: 0 }}
-                            className="absolute top-[2.5px] w-3.5 h-3.5 rounded-full bg-white shadow-md"
-                          />
-                        </button>
-                      </div>
-                    );
-                  })}
+                              {/* Coordinator Column (Interactive Switch) */}
+                              <td className="py-3 px-3 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={currentRole !== 'Admin'}
+                                    onClick={() => handleToggleMatrixPermission(row.coordKey, row.name, "Coordinadores", row.coordDefault)}
+                                    className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${
+                                      coordOn ? 'bg-emerald-500' : 'bg-black/15 dark:bg-white/10'
+                                    } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+                                    title={coordOn ? "Permiso Habilitado" : "Permiso Deshabilitado"}
+                                  >
+                                    <motion.span
+                                      initial={false}
+                                      animate={{ x: coordOn ? 18 : 3 }}
+                                      style={{ left: 0 }}
+                                      className="absolute top-[2.5px] w-3.5 h-3.5 rounded-full bg-white shadow-md"
+                                    />
+                                  </button>
+                                  <span className={`text-[10px] font-bold ${coordOn ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                    {coordOn ? 'Sí' : 'No'}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Volunteer Column (Interactive Switch if applicable, or N/A badge) */}
+                              <td className="py-3 px-3 text-center">
+                                {row.volKey ? (
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={currentRole !== 'Admin'}
+                                      onClick={() => handleToggleMatrixPermission(row.volKey!, row.name, "Voluntarios", row.volDefault!)}
+                                      className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${
+                                        volOn ? 'bg-emerald-500' : 'bg-black/15 dark:bg-white/10'
+                                      } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+                                      title={volOn ? "Permiso Habilitado" : "Permiso Deshabilitado"}
+                                    >
+                                      <motion.span
+                                        initial={false}
+                                        animate={{ x: volOn ? 18 : 3 }}
+                                        style={{ left: 0 }}
+                                        className="absolute top-[2.5px] w-3.5 h-3.5 rounded-full bg-white shadow-md"
+                                      />
+                                    </button>
+                                    <span className={`text-[10px] font-bold ${volOn ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                      {volOn ? 'Sí' : 'No'}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] font-medium text-text-dim/50">
+                                    ✕ N/A
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
               </div>

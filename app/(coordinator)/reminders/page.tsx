@@ -29,7 +29,7 @@ import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { USER_TABLE_STYLES } from "@/app/(coordinator)/users/page";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
-import { canEditShifts } from "@/lib/permissions";
+import { canEditShifts, canSendWhatsappMessages } from "@/lib/permissions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
@@ -1101,6 +1101,10 @@ export default function RemindersPage() {
                                     selectionModeActive={selectedVolunteers.size > 0}
 
                                     onSwipeRight={() => {
+                                      if (!canSendWhatsappMessages()) {
+                                        showToast("El Administrador ha deshabilitado el envío de WhatsApp para Coordinadores", "error");
+                                        return;
+                                      }
                                       const link = generateWaMeLink(vol.phone, msg);
                                       window.open(link, '_blank');
                                     }}
@@ -1259,15 +1263,26 @@ export default function RemindersPage() {
                                         <td className="px-3 py-4 text-center w-px whitespace-nowrap">
                                           <div className="flex items-center justify-center gap-1">
                                             <a
-                                              href={link}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              onClick={(e) => e.stopPropagation()}
-                                              className="inline-flex items-center justify-center h-8 w-8 text-[#25D366] hover:bg-white/10 transition-all active:scale-90 rounded-full"
-                                              title="Enviar recordatorio WhatsApp"
-                                            >
-                                              <span className="material-symbols-outlined text-[20px]">send</span>
-                                            </a>
+                                               href={canSendWhatsappMessages() ? link : "#"}
+                                               target={canSendWhatsappMessages() ? "_blank" : "_self"}
+                                               rel="noopener noreferrer"
+                                               onClick={(e) => {
+                                                 e.stopPropagation();
+                                                 if (!canSendWhatsappMessages()) {
+                                                   e.preventDefault();
+                                                   showToast("El Administrador ha deshabilitado el envío de WhatsApp para Coordinadores", "error");
+                                                 }
+                                               }}
+                                               className={cn(
+                                                 "inline-flex items-center justify-center h-8 w-8 transition-all rounded-full",
+                                                 canSendWhatsappMessages()
+                                                   ? "text-[#25D366] hover:bg-white/10 active:scale-90"
+                                                   : "text-text-dim/30 cursor-not-allowed"
+                                               )}
+                                               title={canSendWhatsappMessages() ? "Enviar recordatorio WhatsApp" : "Permiso deshabilitado por el administrador"}
+                                             >
+                                               <span className="material-symbols-outlined text-[20px]">send</span>
+                                             </a>
                                             <Button
                                               variant="ghost"
                                               size="icon"

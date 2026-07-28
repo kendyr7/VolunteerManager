@@ -17,6 +17,7 @@ import {
   processShiftsData,
   computeReliabilityMap,
 } from '@/lib/coordinator-data';
+import { fetchCoordinatorShiftEditAllowed } from '@/lib/permissions';
 
 const STALE_TIME_MS = 60_000;
 
@@ -116,6 +117,8 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
       const promise = (async () => {
         try {
+          fetchCoordinatorShiftEditAllowed();
+
           let commIdFilter: string | null = null;
           if (role === 'Editor' && committee) {
             const { data: commObj } = await supabase

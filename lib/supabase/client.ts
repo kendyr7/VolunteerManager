@@ -22,7 +22,10 @@ export function createClient() {
             const res = await fetch(url, options);
             if (!res.ok) {
               const text = await res.text();
-              console.error("Supabase fetch failed:", res.status, res.statusText, text);
+              // Don't trigger console.error overlay for 404 missing table schema errors (PGRST205)
+              if (res.status !== 404 && !text.includes('PGRST205')) {
+                console.error("Supabase fetch failed:", res.status, res.statusText, text);
+              }
               // Devolver un objeto Response que supabase pueda parsear
               return new Response(text, { status: res.status, statusText: res.statusText, headers: res.headers });
             }

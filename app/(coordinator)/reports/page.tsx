@@ -17,6 +17,7 @@ import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn } from "@/lib/utils";
 import { getActiveEventDays, formatDateShort } from "@/lib/dates";
+import { canViewReports } from "@/lib/permissions";
 
 // Day names for week headers
 const DAY_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -102,6 +103,18 @@ export default function ReportsPage() {
   // Pagination State (30 items per page for instant 1ms DOM rendering)
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 30;
+
+  const [permTick, setPermTick] = useState(0);
+
+  useEffect(() => {
+    const handlePermissionsChange = () => setPermTick(v => v + 1);
+    window.addEventListener("storage", handlePermissionsChange);
+    window.addEventListener("permissions-changed", handlePermissionsChange);
+    return () => {
+      window.removeEventListener("storage", handlePermissionsChange);
+      window.removeEventListener("permissions-changed", handlePermissionsChange);
+    };
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -616,6 +629,20 @@ export default function ReportsPage() {
       </div>
     </div>
   );
+
+  if (!canViewReports()) {
+    return (
+      <div className="w-full min-h-[65vh] flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-4">
+          <span className="material-symbols-outlined text-[32px]">lock</span>
+        </div>
+        <h2 className="text-xl font-bold text-text mb-2">Acceso Restringido a Reportes</h2>
+        <p className="text-xs text-text-dim max-w-md leading-relaxed">
+          El Administrador ha deshabilitado el acceso a la sección de Reportes para los Coordinadores. Si necesitas acceso, contacta a un Administrador para habilitar esta política en Ajustes.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full pb-32 flex flex-col min-h-full">

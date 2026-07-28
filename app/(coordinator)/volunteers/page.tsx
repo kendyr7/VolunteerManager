@@ -19,7 +19,7 @@ import { DataTableFilter } from "@/components/DataTableFilter";
 import { createClient } from "@/lib/supabase/client";
 import { cn, normalizeSearch } from "@/lib/utils";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
-import { canEditShifts } from "@/lib/permissions";
+import { canEditShifts, canViewVolunteers } from "@/lib/permissions";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
@@ -216,6 +216,18 @@ export default function VolunteersPage() {
   const [editAge, setEditAge] = useState('');
   const [editCommitteeId, setEditCommitteeId] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  const [permTick, setPermTick] = useState(0);
+
+  useEffect(() => {
+    const handlePermissionsChange = () => setPermTick(v => v + 1);
+    window.addEventListener("storage", handlePermissionsChange);
+    window.addEventListener("permissions-changed", handlePermissionsChange);
+    return () => {
+      window.removeEventListener("storage", handlePermissionsChange);
+      window.removeEventListener("permissions-changed", handlePermissionsChange);
+    };
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -575,6 +587,20 @@ export default function VolunteersPage() {
     return (
       <div className="absolute inset-0 flex items-center justify-center z-50">
         <AnimatedLogo isLooping className="w-16 h-16 md:w-20 md:h-20 text-text" />
+      </div>
+    );
+  }
+
+  if (!canViewVolunteers()) {
+    return (
+      <div className="w-full min-h-[65vh] flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-4">
+          <span className="material-symbols-outlined text-[32px]">lock</span>
+        </div>
+        <h2 className="text-xl font-bold text-text mb-2">Acceso Restringido a Voluntarios</h2>
+        <p className="text-xs text-text-dim max-w-md leading-relaxed">
+          El Administrador ha deshabilitado el acceso a la lista de Voluntarios para este rol. Si necesitas acceso, contacta a un Administrador para habilitar esta política en Ajustes.
+        </p>
       </div>
     );
   }
