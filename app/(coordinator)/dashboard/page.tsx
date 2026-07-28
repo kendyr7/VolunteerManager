@@ -13,6 +13,13 @@ import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { 
+  Select, 
+  SelectTrigger, 
+  SelectValue, 
+  SelectContent, 
+  SelectItem 
+} from "@/components/ui/select";
 import { motion, AnimatePresence } from "framer-motion";
 
 const containerVariants = {
@@ -61,30 +68,13 @@ export default function CoordinatorDashboard() {
   const buildEmptyShifts = () =>
     Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
 
-  const [committeeRequirements, setCommitteeRequirements] = useState<Record<string, Record<string, number>>>(() => {
-    const defaults = {
-      'Historia': { T1: 3, T2: 2, T3: 3, T4: 2 },
-      'Seguridad': { T1: 4, T2: 4, T3: 4, T4: 4 },
-      'Guía': { T1: 5, T2: 5, T3: 5, T4: 5 },
-      'Traducción': { T1: 2, T2: 1, T3: 2, T4: 1 },
-      'Transporte': { T1: 3, T2: 2, T3: 3, T4: 2 },
-      'Primeros Auxilios': { T1: 2, T2: 2, T3: 2, T4: 2 }
-    };
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("committee_requirements");
-      if (stored) {
-        try {
-          return { ...defaults, ...JSON.parse(stored) };
-        } catch (e) {
-          console.error("Error loading committee requirements in dashboard", e);
-        }
-      }
-    }
-    return defaults;
-  });
+  const committeeRequirements = useMemo(() => {
+    return requirementsByCommittee || {};
+  }, [requirementsByCommittee]);
 
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
   const [chartMetric, setChartMetric] = useState<'volunteers' | 'shifts'>('volunteers');
+  const [selectedHeatmapCommittee, setSelectedHeatmapCommittee] = useState<string>('todos');
   const [activeKpiInfo, setActiveKpiInfo] = useState<{ title: string; explanation: string; formula: string } | null>(null);
   const [greeting, setGreeting] = useState<React.ReactNode>("Monitor central de operaciones para el programa de Puertas Abiertas.");
   const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
@@ -103,11 +93,7 @@ export default function CoordinatorDashboard() {
     [rawVolunteers]
   );
 
-  useEffect(() => {
-    if (Object.keys(requirementsByCommittee).length > 0) {
-      setCommitteeRequirements((prev) => ({ ...prev, ...requirementsByCommittee }));
-    }
-  }, [requirementsByCommittee]);
+
 
   useEffect(() => {
     const loadConfirmations = () => {
@@ -365,7 +351,13 @@ export default function CoordinatorDashboard() {
       const shiftsData = ['T1', 'T2', 'T3', 'T4'].map(shiftId => {
         let totalReq = 0;
         let totalAssigned = 0;
-        Object.keys(committeeRequirements).forEach(commName => {
+
+        const allCommKeys = Object.keys(committeeRequirements);
+        const targetCommittees = (selectedHeatmapCommittee === 'todos' || selectedHeatmapCommittee === 'all')
+          ? allCommKeys
+          : allCommKeys.filter(c => c.trim().toLowerCase() === selectedHeatmapCommittee.trim().toLowerCase());
+
+        targetCommittees.forEach(commName => {
           const reqs = committeeRequirements[commName];
           if (reqs && reqs[shiftId] > 0) {
             totalReq += reqs[shiftId];
@@ -381,7 +373,7 @@ export default function CoordinatorDashboard() {
       });
       return { day: day.key, shortLabel: day.label, dayLabel: day.dateNum, shifts: shiftsData };
     });
-  }, [committeeRequirements, activeVolunteers, globalShifts]);
+  }, [committeeRequirements, activeVolunteers, globalShifts, selectedHeatmapCommittee]);
 
   // Volunteers per event day (unique volunteers with ≥1 shift that day)
   const volsPerDay = useMemo(() => {
@@ -787,9 +779,38 @@ export default function CoordinatorDashboard() {
       {/* Mapa de Calor Operativo — edge to edge, no card */}
       <motion.div variants={itemVariants} className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/[0.02]">
         {/* Header */}
-        <div className="px-5 sm:px-8 py-4 border-b border-white/5">
-          <h3 className="text-text tracking-tight leading-none text-sm font-bold">Mapa de Calor Operativo</h3>
-          <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-widest mt-0.5">Cobertura por Día y Turno</p>
+        <div className="px-5 sm:px-8 py-4 border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-text tracking-tight leading-none text-sm font-bold">Mapa de Calor Operativo</h3>
+            <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-widest mt-0.5">Cobertura por Día y Turno</p>
+          </div>
+
+          {/* Committee Filter Selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider hidden sm:inline">Comité:</span>
+            <Select
+              value={selectedHeatmapCommittee}
+              onValueChange={(val) => setSelectedHeatmapCommittee(val || 'todos')}
+            >
+              <SelectTrigger className="h-8 min-h-[32px] w-full sm:w-[210px] bg-dark3 border-border text-xs font-bold text-text rounded-lg">
+                <SelectValue placeholder="Todos los comités">
+                  {selectedHeatmapCommittee === 'todos' || selectedHeatmapCommittee === 'all'
+                    ? 'Todos los comités'
+                    : selectedHeatmapCommittee}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className="bg-dark2 border-border text-[#ffffff] z-50">
+                <SelectItem value="todos" className="text-xs font-bold">
+                  Todos los comités
+                </SelectItem>
+                {committeesList.map((comm: any) => (
+                  <SelectItem key={comm.id} value={comm.name} className="text-xs font-bold">
+                    {comm.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Grid */}

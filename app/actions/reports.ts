@@ -147,10 +147,13 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
     // 1. Fetch all volunteers including archived ones for historical data retention
     const volsData = await fetchAllRows(supabase, 'volunteers', '*, committees(id, name)');
 
-    // 2. Fetch shifts (bypassing 1000 row limit)
+    // 2. Fetch all committees from database (guarantees new/empty committees appear in reports filters)
+    const commsData = await fetchAllRows(supabase, 'committees', 'id, name');
+
+    // 3. Fetch shifts (bypassing 1000 row limit)
     const shiftsData = await fetchAllRows(supabase, 'shifts', '*');
 
-    // 3. Fetch committee_shift_requirements (server-side authoritative source)
+    // 4. Fetch committee_shift_requirements (server-side authoritative source)
     const reqsData = await fetchAllRows(supabase, 'committee_shift_requirements', 'committee_id, shift_key, required');
 
     // Build requirements map: committeeId -> shiftKey -> required
@@ -165,11 +168,22 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
     const getRequired = (commId: string, shiftKey: string) =>
       reqsMap[commId]?.[shiftKey] ?? DEFAULT_REQ;
 
-    // 3. Process data in memory
+    // 5. Process data in memory
     const items: ReportItem[] = [];
     const neighborhoodsSet = new Set<string>();
     const stakesSet = new Set<string>();
     const committeesMap = new Map<string, string>();
+    
+    // Populate all committees registered in database
+    (commsData || []).forEach((c: any) => {
+      if (c.id && c.name) {
+        // Access isolation: non-Admin coordinators only see their own committee
+        if (role !== 'Admin' && userCommittee && c.name.trim().toLowerCase() !== userCommittee.trim().toLowerCase()) {
+          return;
+        }
+        committeesMap.set(c.id, c.name);
+      }
+    });
     
     const now = new Date();
 

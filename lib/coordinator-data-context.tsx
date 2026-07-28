@@ -134,7 +134,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
                 '*, committees(name)',
                 (q) => (commIdFilter ? q.eq('committee_id', commIdFilter) : q)
               ),
-              supabase.from('committees').select('id, name'),
+              supabase.from('committees').select('*'),
               fetchAllRows(supabase, 'shifts', '*'),
               fetchAllRows(
                 supabase,
@@ -144,9 +144,10 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             ]);
 
           const commsData = commsRes.data ?? [];
+          const activeComms = commsData.filter((c: any) => c.status !== 'archived');
 
           setRawVolunteers(volsData ?? []);
-          setCommitteesList(commsData);
+          setCommitteesList(activeComms);
           setShiftsData(shiftsResult ?? []);
 
           const parsedReqs = parseRequirementsData(reqsData ?? [], commsData);

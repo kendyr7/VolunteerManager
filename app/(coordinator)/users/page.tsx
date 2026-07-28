@@ -46,14 +46,29 @@ const itemVariants = {
 const COMMITTEES = ['Historia', 'Seguridad', 'Guía', 'Traducción', 'Transporte', 'Primeros Auxilios'];
 
 const getCommitteeColor = (committee: string) => {
+  if (!committee) return 'bg-dark3 text-text-dim border-border';
   const comm = committee.toLowerCase();
   if (comm.includes('seguridad')) return 'bg-[#fe4d97]/15 text-[#fe4d97] border-[#fe4d97]/20';
-  if (comm.includes('guía')) return 'bg-[#6dd230]/15 text-[#6dd230] border-[#6dd230]/20';
+  if (comm.includes('guía') || comm.includes('guia')) return 'bg-[#6dd230]/15 text-[#6dd230] border-[#6dd230]/20';
   if (comm.includes('historia')) return 'bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20';
-  if (comm.includes('traducción')) return 'bg-amber-500/15 text-amber-500 border-amber-500/20';
+  if (comm.includes('traducción') || comm.includes('traduccion')) return 'bg-amber-500/15 text-amber-500 border-amber-500/20';
   if (comm.includes('transporte')) return 'bg-purple-500/15 text-purple-500 border-purple-500/20';
-  if (comm.includes('auxilios')) return 'bg-teal-500/15 text-teal-500 border-teal-500/20';
-  return 'bg-dark3 text-text-dim border-border';
+  if (comm.includes('auxilios') || comm.includes('médico') || comm.includes('medico')) return 'bg-teal-500/15 text-teal-500 border-teal-500/20';
+
+  const colors = [
+    'bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20',
+    'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+    'bg-indigo-500/15 text-indigo-400 border-indigo-500/20',
+    'bg-rose-500/15 text-rose-400 border-rose-500/20',
+    'bg-orange-500/15 text-orange-400 border-orange-500/20',
+    'bg-sky-500/15 text-sky-400 border-sky-500/20'
+  ];
+  let hash = 0;
+  for (let i = 0; i < committee.length; i++) {
+    hash = committee.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
 };
 
 // ─── helper: highlight search term ─────────────────────────────────────────

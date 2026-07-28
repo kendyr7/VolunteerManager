@@ -1,18 +1,22 @@
 'use client'
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Toast } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { startRegistration } from "@simplewebauthn/browser";
 
 import { isCoordinatorShiftEditAllowed, setCoordinatorShiftEditAllowed } from "@/lib/permissions";
 import { changeUserPin } from "@/app/actions/update-pin";
 import { formatE164 } from "@/lib/whatsapp";
+import { useCoordinatorData } from "@/lib/coordinator-data-context";
+import { createCommitteeAction, archiveCommitteeAction, unarchiveCommitteeAction } from "@/app/actions/committee-actions";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -71,12 +75,26 @@ const getCommitteeStyle = (committeeName: string, isSelected: boolean) => {
     color = {
       bgSelected: 'bg-cyan-500 text-black font-extrabold border-cyan-500 shadow-cyan-500/25',
     };
+  } else {
+    const palette = [
+      { bgSelected: 'bg-indigo-600 text-white border-indigo-600 shadow-indigo-500/25' },
+      { bgSelected: 'bg-emerald-600 text-white border-emerald-600 shadow-emerald-500/25' },
+      { bgSelected: 'bg-rose-600 text-white border-rose-600 shadow-rose-500/25' },
+      { bgSelected: 'bg-orange-500 text-black font-extrabold border-orange-500 shadow-orange-500/25' },
+      { bgSelected: 'bg-sky-500 text-black font-extrabold border-sky-500 shadow-sky-500/25' }
+    ];
+    let hash = 0;
+    for (let i = 0; i < committeeName.length; i++) {
+      hash = committeeName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    color = palette[Math.abs(hash) % palette.length];
   }
 
   return `${color.bgSelected} shadow-md scale-[1.02]`;
 };
 
 export default function SettingsPage() {
+  const { refresh } = useCoordinatorData();
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [userProfile, setUserProfile] = useState<any>(null);
   const [committees, setCommittees] = useState<{ id: string, name: string }[]>([]);
@@ -84,6 +102,21 @@ export default function SettingsPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isRegisteringPasskey, setIsRegisteringPasskey] = useState(false);
   const [hasPasskey, setHasPasskey] = useState(false);
+
+  // Committee Management States (Admin Only)
+  const [newCommitteeName, setNewCommitteeName] = useState('');
+  const [isCreatingCommittee, setIsCreatingCommittee] = useState(false);
+  const [showArchivedCommittees, setShowArchivedCommittees] = useState(false);
+  const [archiveModal, setArchiveModal] = useState<{
+    isOpen: boolean;
+    committee: { id: string; name: string } | null;
+  }>({ isOpen: false, committee: null });
+  const [archiveInputName, setArchiveInputName] = useState('');
+  const [archiveDeleteText, setArchiveDeleteText] = useState('');
+  const [isArchivingCommittee, setIsArchivingCommittee] = useState(false);
+
+  const activeCommittees = useMemo(() => committees.filter((c: any) => c.status !== 'archived'), [committees]);
+  const archivedCommittees = useMemo(() => committees.filter((c: any) => c.status === 'archived'), [committees]);
 
   // Passkeys list for multi-device management
   type PasskeyEntry = {
@@ -116,6 +149,62 @@ export default function SettingsPage() {
 
   // Shift edit permission state for coordinators
   const [allowCoordinatorShiftEdit, setAllowCoordinatorShiftEdit] = useState<boolean>(false);
+
+  const handleCreateCommittee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (currentRole !== 'Admin') return;
+    if (!newCommitteeName.trim()) return;
+
+    setIsCreatingCommittee(true);
+    const res = await createCommitteeAction(newCommitteeName);
+    if (res.error) {
+      showToast(res.error, "error");
+    } else {
+      showToast(`Comité "${newCommitteeName.trim()}" creado correctamente.`);
+      setNewCommitteeName('');
+      await refresh(true);
+      await loadData();
+    }
+    setIsCreatingCommittee(false);
+  };
+
+  const handleConfirmArchiveCommittee = async () => {
+    if (!archiveModal.committee || currentRole !== 'Admin') return;
+
+    setIsArchivingCommittee(true);
+    const res = await archiveCommitteeAction(
+      archiveModal.committee.id,
+      archiveModal.committee.name,
+      archiveInputName,
+      archiveDeleteText
+    );
+
+    if (res.error) {
+      showToast(res.error, "error");
+    } else {
+      showToast(`Comité "${archiveModal.committee.name}" archivado correctamente.`);
+      setArchiveModal({ isOpen: false, committee: null });
+      setArchiveInputName('');
+      setArchiveDeleteText('');
+      await refresh(true);
+      await loadData();
+    }
+    setIsArchivingCommittee(false);
+  };
+
+  const handleUnarchiveCommittee = async (comm: { id: string; name: string }) => {
+    if (currentRole !== 'Admin') return;
+    const res = await unarchiveCommitteeAction(comm.id);
+    if (res.error) {
+      showToast(res.error, "error");
+    } else {
+      showToast(`Comité "${comm.name}" desarchivado correctamente.`);
+      await refresh(true);
+      await loadData();
+    }
+  };
+
+
 
   useEffect(() => {
     setAllowCoordinatorShiftEdit(isCoordinatorShiftEditAllowed());
@@ -1113,7 +1202,233 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {/* 6. Gestión de Comités (Admin Only) */}
+          {currentRole === 'Admin' && (
+            <div className="w-full transition-all">
+              <button
+                type="button"
+                onClick={() => isMobile && toggleSection('committeeMgmt')}
+                className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors ${
+                  isMobile ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'
+                } ${isSectionOpen('committeeMgmt') ? 'bg-black/[0.03] dark:bg-white/[0.02]' : ''}`}
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[18px]">groups</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Gestión de Comités</h3>
+                    <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">
+                      Crear nuevos comités y administrar comités existentes
+                    </p>
+                  </div>
+                </div>
+
+                {isMobile && (
+                  <div className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center text-text-dim shrink-0">
+                    <span className="material-symbols-outlined text-[18px]">
+                      {isSectionOpen('committeeMgmt') ? 'expand_less' : 'expand_more'}
+                    </span>
+                  </div>
+                )}
+              </button>
+
+              {isSectionOpen('committeeMgmt') && (
+                <div className="p-4 sm:p-6 space-y-6 border-t border-border bg-black/[0.02] dark:bg-black/20">
+                  {/* Formulario para crear nuevo comité */}
+                  <form onSubmit={handleCreateCommittee} className="w-full flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <div className="flex-1 w-full min-w-0">
+                      <Input
+                        type="text"
+                        placeholder="Nombre del nuevo comité (ej. Alimentos, Logística)..."
+                        value={newCommitteeName}
+                        onChange={(e) => setNewCommitteeName(e.target.value)}
+                        className="w-full h-11 sm:h-10 min-h-[44px] px-4 py-2.5 rounded-xl border border-border bg-dark3 text-text placeholder:text-text-dim text-sm sm:text-xs font-inter font-bold outline-none focus:ring-1 focus:ring-[#4d7cfe] focus:border-[#4d7cfe] transition-all"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={isCreatingCommittee || !newCommitteeName.trim()}
+                      className="w-full sm:w-auto h-11 sm:h-10 min-h-[44px] px-5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shrink-0 shadow-sm"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">add</span>
+                      <span>{isCreatingCommittee ? 'Creando...' : 'Agregar Comité'}</span>
+                    </Button>
+                  </form>
+
+                  {/* Lista de comités activos / archivados */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-bold text-text-dim font-inter">Comités registrados</span>
+
+                      <div className="flex bg-dark3 rounded-full p-1 border border-border shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setShowArchivedCommittees(false)}
+                          className={cn(
+                            "px-3 py-1 rounded-full text-[11px] transition-all flex items-center gap-1 font-inter font-bold cursor-pointer",
+                            !showArchivedCommittees
+                              ? "bg-dark2 text-text shadow-sm font-extrabold"
+                              : "text-text-dim hover:text-text"
+                          )}
+                        >
+                          Activos ({activeCommittees.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowArchivedCommittees(true)}
+                          className={cn(
+                            "px-3 py-1 rounded-full text-[11px] transition-all flex items-center gap-1 font-inter font-bold cursor-pointer",
+                            showArchivedCommittees
+                              ? "bg-dark2 text-text shadow-sm font-extrabold"
+                              : "text-text-dim hover:text-text"
+                          )}
+                        >
+                          Archivados ({archivedCommittees.length})
+                        </button>
+                      </div>
+                    </div>
+
+                    {!showArchivedCommittees ? (
+                      /* Activos */
+                      activeCommittees.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 pt-0.5 w-full">
+                          {activeCommittees.map((comm: any) => (
+                            <div
+                              key={comm.id}
+                              className="w-full min-h-[38px] h-auto flex items-center justify-between pl-3.5 pr-1.5 py-1.5 rounded-full text-xs font-bold transition-all border border-border bg-dark3/90 hover:bg-dark3 text-text shadow-sm"
+                            >
+                              <span className="font-inter pr-2 break-words leading-tight">{comm.name}</span>
+                              <button
+                                type="button"
+                                title={`Archivar ${comm.name}`}
+                                onClick={() => {
+                                  setArchiveModal({ isOpen: true, committee: comm });
+                                  setArchiveInputName('');
+                                  setArchiveDeleteText('');
+                                }}
+                                className="w-6 h-6 rounded-full bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0 transition-all cursor-pointer active:scale-90 my-auto"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">archive</span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-text-dim py-3 text-center">No hay comités activos registrados.</p>
+                      )
+                    ) : (
+                      /* Archivados */
+                      archivedCommittees.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 pt-0.5 w-full">
+                          {archivedCommittees.map((comm: any) => (
+                            <div
+                              key={comm.id}
+                              className="w-full min-h-[38px] h-auto flex items-center justify-between pl-3.5 pr-1.5 py-1.5 rounded-full text-xs font-bold transition-all border border-border/60 bg-dark3/40 text-text-dim opacity-75"
+                            >
+                              <span className="font-inter pr-2 break-words leading-tight">{comm.name}</span>
+                              <button
+                                type="button"
+                                title={`Desarchivar ${comm.name}`}
+                                onClick={() => handleUnarchiveCommittee(comm)}
+                                className="w-6 h-6 rounded-full bg-emerald-500/10 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0 transition-all cursor-pointer active:scale-90 my-auto"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">unarchive</span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-text-dim py-3 text-center">No hay comités archivados.</p>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
         </motion.div>
+
+        {/* Modal de Confirmación Doble para Archivar Comité */}
+        {archiveModal.isOpen && archiveModal.committee && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <div className="w-full max-w-md bg-dark2 border border-border rounded-2xl p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-rose-500/20 text-rose-500 border border-rose-500/30 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[24px]">warning</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-text">Archivar Comité</h3>
+                  <p className="text-xs text-text-dim mt-1">
+                    ¿Estás seguro de archivar el comité <strong className="text-text">{archiveModal.committee.name}</strong>?
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-400 font-bold space-y-1">
+                <p className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px]">info</span>
+                  <strong>Nota de seguridad:</strong>
+                </p>
+                <p className="text-[11px] text-amber-300 font-normal">
+                  Los voluntarios y coordinadores asignados a este comité serán desvinculados y quedarán marcados como "Sin comité / N/A".
+                </p>
+              </div>
+
+              <div className="space-y-3 pt-1">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-text-dim">
+                    1. Escribe el nombre exacto del comité: <span className="text-rose-400 font-extrabold">{archiveModal.committee.name}</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={archiveModal.committee.name}
+                    value={archiveInputName}
+                    onChange={(e) => setArchiveInputName(e.target.value)}
+                    className="w-full h-11 sm:h-10 px-3.5 rounded-xl border border-border bg-dark3 text-text text-xs font-inter font-bold outline-none focus:border-rose-500 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-text-dim">
+                    2. Escribe la palabra <span className="text-rose-400 font-extrabold">delete</span> para confirmar:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="delete"
+                    value={archiveDeleteText}
+                    onChange={(e) => setArchiveDeleteText(e.target.value)}
+                    className="w-full h-11 sm:h-10 px-3.5 rounded-xl border border-border bg-dark3 text-text text-xs font-inter font-bold outline-none focus:border-rose-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setArchiveModal({ isOpen: false, committee: null })}
+                  className="h-9 px-4 rounded-full text-xs font-bold"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleConfirmArchiveCommittee}
+                  disabled={
+                    archiveInputName.trim() !== archiveModal.committee.name.trim() ||
+                    archiveDeleteText.trim().toLowerCase() !== 'delete' ||
+                    isArchivingCommittee
+                  }
+                  className="h-9 px-5 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-bold rounded-full text-xs"
+                >
+                  {isArchivingCommittee ? 'Archivando...' : 'Confirmar y Archivar'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <Toast
           message={toast.message}
