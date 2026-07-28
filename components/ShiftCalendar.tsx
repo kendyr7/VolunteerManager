@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { recalculateReliability } from "@/app/actions/attendance";
 import { VolunteerProfileView, VolunteerProfileData } from "@/components/VolunteerProfileView";
+import { AnimatedLogo } from "@/components/ui/animated-logo";
 
 export interface VolunteerInfo extends VolunteerProfileData {}
 
@@ -160,9 +161,8 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
 
   if (loading) {
     return (
-      <div className="w-full py-20 flex flex-col items-center justify-center gap-4">
-        <span className="material-symbols-outlined text-[48px] animate-spin text-[#4d7cfe]">progress_activity</span>
-        <p className="text-sm font-bold text-slate-400 font-inter">Cargando tus turnos...</p>
+      <div className="w-full min-h-[60vh] flex items-center justify-center">
+        <AnimatedLogo isLooping className="w-16 h-16 md:w-20 md:h-20 text-text" />
       </div>
     );
   }

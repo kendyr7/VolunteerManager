@@ -12,20 +12,8 @@ export function computeReliabilityMap(
   const reliabilityMap: Record<string, number | '-'> = {};
 
   volunteers.forEach(vol => {
-    let totalAssigned = 0;
-    let totalConfirmed = 0;
-    const volShifts = globalShifts[vol.id] || {};
-    
-    for (const day in volShifts) {
-      for (const shift of volShifts[day]) {
-        totalAssigned++;
-        if (confirmedReminders[`${vol.id}-${day}-${shift}`]) {
-          totalConfirmed++;
-        }
-      }
-    }
-    
-    reliabilityMap[vol.id] = totalAssigned === 0 ? '-' : Math.round((totalConfirmed / totalAssigned) * 100);
+    const score = vol.reliability_score ?? vol.reliability ?? 100;
+    reliabilityMap[vol.id] = score;
   });
 
   return reliabilityMap;

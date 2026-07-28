@@ -36,9 +36,19 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     return { error: "Por motivos de seguridad, no utilices un PIN secuencial (ej: 1234, 4321)." };
   }
 
-  const supabase = await createClient();
+  // Usar SERVICE_ROLE_KEY para ignorar RLS durante la actualización del PIN inicial
+  let supabase;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
+    supabase = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+  } else {
+    supabase = await createClient();
+  }
+
   const table = userType === 'profile' ? 'profiles' : 'volunteers';
-  
   const updateData: any = { pin: newPin };
 
   const { error } = await supabase
@@ -51,17 +61,8 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     return { error: "No se pudo actualizar el PIN." };
   }
 
-  // 2. Si se actualizó correctamente, crear el token de sesión criptográfico
-  
-  // Use service role key to bypass potential RLS restrictions after update
-  const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY 
-    ? (await import('@supabase/supabase-js')).createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-      )
-    : supabase;
-
-  const { data: user, error: fetchError } = await supabaseAdmin
+  // 2. Si se actualizó correctamente, recuperar el usuario y crear el token de sesión criptográfico
+  const { data: user, error: fetchError } = await supabase
     .from(table)
     .select('*, committees(name)')
     .eq('id', userId)
@@ -77,66 +78,62 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     return { error: "Error de sesión: Usuario no encontrado tras actualizar PIN." };
   }
 
-  if (user) {
-    const cookieStore = await cookies();
-    const committeeName = user.committees?.name || '';
+  const cookieStore = await cookies();
+  const committeeName = user.committees?.name || '';
+  
+  if (userType === 'profile') {
+    const role = user.role;
     
-    if (userType === 'profile') {
-      const role = user.role;
-      
-      const sessionToken = signSession({
-        userId: user.id,
-        userType: 'profile',
-        role,
-        committee: committeeName
-      });
+    const sessionToken = signSession({
+      userId: user.id,
+      userType: 'profile',
+      role,
+      committee: committeeName
+    });
 
-      cookieStore.set('session', sessionToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * 60 * 24 * 7,
-        path: '/',
-      });
-      
-      let redirectTo = '/dashboard';
-      if (role === 'Editor') redirectTo = '/volunteers';
-      if (role === 'Lector') redirectTo = '/shifts';
+    cookieStore.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+    });
+    
+    let redirectTo = '/dashboard';
+    if (role === 'Editor') redirectTo = '/volunteers';
+    if (role === 'Lector') redirectTo = '/shifts';
 
-      return { 
-        success: true, 
-        redirectTo, 
-        role, 
-        committee: committeeName,
-        name: user.full_name,
-        phone: user.phone
-      };
-    } else {
-      const sessionToken = signSession({
-        userId: user.id,
-        userType: 'volunteer',
-        role: 'Lector',
-        committee: committeeName
-      });
+    return { 
+      success: true, 
+      redirectTo, 
+      role, 
+      committee: committeeName,
+      name: user.full_name,
+      phone: user.phone
+    };
+  } else {
+    const sessionToken = signSession({
+      userId: user.id,
+      userType: 'volunteer',
+      role: 'Lector',
+      committee: committeeName
+    });
 
-      cookieStore.set('session', sessionToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * 60 * 24 * 7,
-        path: '/',
-      });
+    cookieStore.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+    });
 
-      return { 
-        success: true, 
-        redirectTo: '/calendar', 
-        role: 'Lector', 
-        committee: committeeName,
-        name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-        phone: user.phone
-      };
-    }
+    return { 
+      success: true, 
+      redirectTo: '/calendar', 
+      role: 'Lector', 
+      committee: committeeName,
+      name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+      phone: user.phone
+    };
   }
-
-  return { error: "Error de sesión tras actualizar PIN." };
 }
 
 export async function changeUserPin(currentPin: string, newPin: string, userPhone?: string) {

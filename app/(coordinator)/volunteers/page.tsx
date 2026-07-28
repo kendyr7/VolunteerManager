@@ -467,7 +467,7 @@ export default function VolunteersPage() {
   const augmentedVolunteers = useMemo(() => {
     return volunteers.map(vol => ({
       ...vol,
-      computedReliability: reliabilityMap[vol.id] || '-'
+      computedReliability: reliabilityMap[vol.id] ?? vol.reliability ?? 100
     }));
   }, [volunteers, reliabilityMap]);
 

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/actions/auth";
+import { AnimatedLogo } from "@/components/ui/animated-logo";
 
 // Helper component for Material Symbols
 function Icon({ name, size = 20, className = "" }: { name: string, size?: number, className?: string }) {
@@ -60,8 +61,8 @@ export default function VolunteerLayout({
 
   if (!mounted) {
     return (
-      <div className="h-screen bg-dark flex items-center justify-center text-white">
-        <span className="material-symbols-outlined text-[48px] animate-spin text-[#4d7cfe]">progress_activity</span>
+      <div className="h-screen bg-dark flex items-center justify-center text-text">
+        <AnimatedLogo isLooping className="w-16 h-16 md:w-20 md:h-20 text-text" />
       </div>
     );
   }
