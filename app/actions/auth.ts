@@ -107,7 +107,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     });
 
     let redirectTo = '/dashboard';
-    if (role === 'Editor') redirectTo = '/volunteers';
+    if (role === 'Editor') redirectTo = '/dashboard';
     if (role === 'Lector') redirectTo = '/shifts';
 
     return { 

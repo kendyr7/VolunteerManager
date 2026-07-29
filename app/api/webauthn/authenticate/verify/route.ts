@@ -110,7 +110,7 @@ export async function POST(request: Request) {
         });
 
         if (role === 'Admin') redirectTo = '/dashboard';
-        if (role === 'Editor') redirectTo = '/volunteers';
+        if (role === 'Editor') redirectTo = '/dashboard';
         if (role === 'Lector') redirectTo = '/shifts';
 
       } else {

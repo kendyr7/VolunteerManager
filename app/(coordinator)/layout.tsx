@@ -22,13 +22,15 @@ function Icon({ name, size = 20, className = "" }: { name: string, size?: number
 }
 
 import {
+  canViewDashboard,
   canViewReports,
   canViewVolunteers,
   canQrCheckin,
   canSendWhatsappMessages,
   canImportData,
   canManageUsers,
-  getSystemPermission
+  getSystemPermission,
+  syncAllPermissionsFromDatabase
 } from "@/lib/permissions";
 
 // Inner layout component that consumes SearchContext
@@ -74,8 +76,10 @@ function CoordinatorLayoutInner({
   };
 
   const [permTick, setPermTick] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const syncRoleAndPermissions = () => {
       const role = localStorage.getItem('mock_role');
       if (role === 'Editor' || role === 'Coordinador') {
@@ -92,6 +96,7 @@ function CoordinatorLayoutInner({
     };
 
     syncRoleAndPermissions();
+    syncAllPermissionsFromDatabase().then(() => syncRoleAndPermissions());
     window.addEventListener('storage', syncRoleAndPermissions);
     window.addEventListener('permissions-changed', syncRoleAndPermissions);
     return () => {
@@ -113,7 +118,7 @@ function CoordinatorLayoutInner({
   };
 
   const NAV_ITEMS = [
-    { name: "Dashboard", href: "/dashboard", icon: "space_dashboard", roles: ['Admin'] },
+    { name: "Dashboard", href: "/dashboard", icon: "space_dashboard", roles: ['Admin', 'Editor'] },
     { name: "Voluntarios", href: "/volunteers", icon: "group", roles: ['Admin', 'Editor', 'Lector'] },
     { name: currentRole === 'Lector' ? "Mi Perfil" : "Turnos", href: "/shifts", icon: currentRole === 'Lector' ? "person" : "checklist", roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Escanear QR", href: "/check-in", icon: "qr_code_scanner", roles: ['Admin', 'Editor'] },
@@ -128,7 +133,9 @@ function CoordinatorLayoutInner({
   ];
 
   const visibleNavItems = NAV_ITEMS.filter(item => {
+    if (!mounted) return item.roles.includes('Admin');
     if (!item.roles.includes(currentRole)) return false;
+    if (item.href === '/dashboard' && !canViewDashboard()) return false;
     if (currentRole === 'Editor') {
       if (item.href === '/volunteers' && !canViewVolunteers()) return false;
       if (item.href === '/check-in' && !canQrCheckin()) return false;
@@ -142,7 +149,7 @@ function CoordinatorLayoutInner({
     }
     return true;
   });
-  const visibleBottomItems = BOTTOM_ITEMS.filter(item => item.roles.includes(currentRole));
+  const visibleBottomItems = BOTTOM_ITEMS.filter(item => !mounted ? item.roles.includes('Admin') : item.roles.includes(currentRole));
   const allMobileNavItems = [
     ...visibleNavItems,
     ...visibleBottomItems,

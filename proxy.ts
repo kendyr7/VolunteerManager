@@ -69,10 +69,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/calendar', request.url))
   }
 
-  // Si es Coordinador e intenta ingresar a rutas de Administrador (/users o /dashboard)
+  // Si es Coordinador e intenta ingresar a rutas de Administrador (/users)
   if (session && session.userType === 'profile' && session.role !== 'Admin') {
-    if (pathname.startsWith('/users') || pathname.startsWith('/dashboard')) {
-      const fallbackDest = session.role === 'Editor' ? '/volunteers' : '/shifts'
+    if (pathname.startsWith('/users')) {
+      const fallbackDest = session.role === 'Editor' ? '/dashboard' : '/shifts'
       return NextResponse.redirect(new URL(fallbackDest, request.url))
     }
   }

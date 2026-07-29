@@ -16,7 +16,8 @@ import {
   getSystemPermission,
   setSystemPermission,
   fetchSystemPermission,
-  setMockRole
+  setMockRole,
+  resetAllPermissionsToDefault
 } from "@/lib/permissions";
 import { changeUserPin } from "@/app/actions/update-pin";
 import { formatE164 } from "@/lib/whatsapp";
@@ -164,6 +165,14 @@ type PermissionMatrixRow = {
 };
 
 const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
+  {
+    id: "dashboard",
+    name: "Ver Dashboard y estadísticas de comité",
+    description: "Permite acceder al panel principal de métricas y mapa de calor de su comité",
+    icon: "space_dashboard",
+    coordKey: "allow_coordinator_dashboard",
+    coordDefault: true,
+  },
   {
     id: "volunteers",
     name: "Ver lista de voluntarios",
@@ -328,6 +337,13 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
     setSystemPermission(key, newVal);
     setPermissionsMap(prev => ({ ...prev, [key]: newVal }));
     showToast(newVal ? `Permiso "${name}" HABILITADO para ${roleLabel}` : `Permiso "${name}" DESHABILITADO para ${roleLabel}`);
+  };
+
+  const handleResetPermissions = () => {
+    if (currentRole !== 'Admin') return;
+    resetAllPermissionsToDefault();
+    loadMatrixPermissions();
+    showToast("Permisos restablecidos a la configuración estándar por defecto.");
   };
 
   const handleToggleCommittee = (name: string) => {
@@ -966,7 +982,7 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
             )}
           </div>
 
-          {/* 3. Permisos (Incluye Edición de Turnos e información del rol) */}
+          {/* 3. Permisos Por Rol */}
           <div className="w-full transition-all">
             <button
               type="button"
@@ -979,8 +995,8 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                   <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Políticas del Sistema y Roles</h3>
-                  <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">Políticas globales de acceso y matriz de capacidades por rol</p>
+                  <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Permisos Por Rol</h3>
+                  <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">Matriz de capacidades y políticas globales de acceso</p>
                 </div>
               </div>
 
@@ -996,33 +1012,119 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
             {isSectionOpen('permissions') && (
               <div className="p-4 sm:p-5 space-y-4 border-t border-border bg-black/[0.02] dark:bg-black/20">
 
-                {/* Matriz Interactiva de Permisos por Rol */}
                 <div className="space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
-                    <div>
-                      <h4 className="text-xs font-bold text-text flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[16px] text-[#4d7cfe]">shield</span>
-                        Matriz Interactiva de Permisos por Rol
-                      </h4>
-                      <p className="text-[10px] text-text-dim mt-0.5">
-                        Haz clic en los interruptores para activar o desactivar permisos globales por rol.
-                      </p>
-                    </div>
-                    {currentRole !== 'Admin' && (
-                      <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0 self-start sm:self-auto">
-                        <span className="material-symbols-outlined text-[12px]">lock</span>
-                        Solo Administradores pueden editar
-                      </span>
-                    )}
+                    <p className="text-[10px] text-text-dim">
+                      Haz clic en los interruptores para activar o desactivar permisos globales por rol.
+                    </p>
+                    {currentRole === 'Admin' ? (
+                      <Button
+                        type="button"
+                        onClick={handleResetPermissions}
+                        variant="outline"
+                        className="h-7 px-3 text-[10px] font-bold text-text-dim hover:text-text border-border bg-dark2 rounded-full flex items-center gap-1 transition-all active:scale-95 shrink-0 self-start sm:self-auto"
+                        title="Restablecer todos los permisos a la configuración estándar por defecto"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">restart_alt</span>
+                        <span>Restablecer por Defecto</span>
+                      </Button>
+                    ) : null}
                   </div>
 
-                  <div className="overflow-x-auto rounded-xl border border-border bg-dark3">
+                  {/* Mobile Card View (block sm:hidden) */}
+                  <div className="block sm:hidden space-y-2.5">
+                    {SYSTEM_PERMISSIONS_MATRIX.map((row) => {
+                      const coordOn = permissionsMap[row.coordKey] ?? row.coordDefault;
+                      const volOn = row.volKey ? (permissionsMap[row.volKey] ?? row.volDefault) : false;
+
+                      return (
+                        <div key={row.id} className="p-3.5 rounded-xl border border-border bg-dark3 space-y-3">
+                          <div className="flex items-start gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-[#4d7cfe]/10 text-[#4d7cfe] border border-[#4d7cfe]/20 flex items-center justify-center shrink-0 mt-0.5">
+                              <span className="material-symbols-outlined text-[16px]">{row.icon}</span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-text text-xs leading-tight">{row.name}</p>
+                              <p className="text-[10px] text-text-dim font-normal mt-0.5">{row.description}</p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-border/50 text-center">
+                            {/* Admin */}
+                            <div className="flex flex-col items-center gap-1.5">
+                              <span className="text-[9px] font-bold text-text-dim uppercase tracking-wider">Admin</span>
+                              <div
+                                className="w-9 h-5 rounded-full p-[2px] bg-emerald-500 flex items-center shrink-0 opacity-80 cursor-not-allowed"
+                                title="Administradores tienen acceso total por defecto"
+                              >
+                                <span className="w-4 h-4 rounded-full bg-white shadow-sm block shrink-0 translate-x-4" />
+                              </div>
+                            </div>
+
+                            {/* Coordinador */}
+                            <div className="flex flex-col items-center gap-1.5">
+                              <span className="text-[9px] font-bold text-text-dim uppercase tracking-wider">Coordinador</span>
+                              <button
+                                type="button"
+                                disabled={currentRole !== 'Admin'}
+                                onClick={() => handleToggleMatrixPermission(row.coordKey, row.name, "Coordinadores", row.coordDefault)}
+                                className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${
+                                  coordOn ? 'bg-emerald-500' : 'bg-orange-500'
+                                } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+                                title={coordOn ? "Permiso Habilitado" : "Permiso Deshabilitado"}
+                              >
+                                <motion.span
+                                  initial={false}
+                                  animate={{ x: coordOn ? 16 : 0 }}
+                                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                  className="w-4 h-4 rounded-full bg-white shadow-sm block shrink-0"
+                                />
+                              </button>
+                            </div>
+
+                            {/* Voluntario */}
+                            <div className="flex flex-col items-center gap-1.5">
+                              <span className="text-[9px] font-bold text-text-dim uppercase tracking-wider">Voluntario</span>
+                              {row.volKey ? (
+                                <button
+                                  type="button"
+                                  disabled={currentRole !== 'Admin'}
+                                  onClick={() => handleToggleMatrixPermission(row.volKey!, row.name, "Voluntarios", row.volDefault!)}
+                                  className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${
+                                    volOn ? 'bg-emerald-500' : 'bg-orange-500'
+                                  } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+                                  title={volOn ? "Permiso Habilitado" : "Permiso Deshabilitado"}
+                                >
+                                  <motion.span
+                                    initial={false}
+                                    animate={{ x: volOn ? 16 : 0 }}
+                                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                    className="w-4 h-4 rounded-full bg-white shadow-sm block shrink-0"
+                                  />
+                                </button>
+                              ) : (
+                                <div
+                                  className="w-9 h-5 rounded-full p-[2px] bg-orange-500/30 border border-orange-500/20 flex items-center shrink-0 opacity-50 cursor-not-allowed"
+                                  title="No disponible para Voluntarios"
+                                >
+                                  <span className="w-4 h-4 rounded-full bg-white/70 shadow-sm block shrink-0 translate-x-0" />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop Table View (hidden sm:block) */}
+                  <div className="hidden sm:block overflow-x-auto rounded-xl border border-border bg-dark3">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
                         <tr className="border-b border-border bg-dark2 text-[10px] font-bold text-text-dim uppercase tracking-wider">
                           <th className="py-3 px-4 min-w-[200px]">Módulo / Función</th>
                           <th className="py-3 px-3 text-center w-28">Admin</th>
-                          <th className="py-3 px-3 text-center w-36">Coordinador</th>
+                          <th className="py-3 px-3 text-center w-32">Coordinador</th>
                           <th className="py-3 px-3 text-center w-32">Voluntario</th>
                         </tr>
                       </thead>
@@ -1033,7 +1135,6 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
 
                           return (
                             <tr key={row.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
-                              {/* Function & Description */}
                               <td className="py-3 px-4">
                                 <div className="flex items-start gap-2.5">
                                   <div className="w-7 h-7 rounded-lg bg-[#4d7cfe]/10 text-[#4d7cfe] border border-[#4d7cfe]/20 flex items-center justify-center shrink-0 mt-0.5">
@@ -1046,67 +1147,69 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                                 </div>
                               </td>
 
-                              {/* Admin Column (Always Full Access) */}
+                              {/* Admin Column */}
                               <td className="py-3 px-3 text-center">
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                                  ✓ Total
-                                </span>
+                                <div className="flex items-center justify-center">
+                                  <div
+                                    className="w-9 h-5 rounded-full p-[2px] bg-emerald-500 flex items-center shrink-0 opacity-80 cursor-not-allowed"
+                                    title="Administradores tienen acceso total por defecto"
+                                  >
+                                    <span className="w-4 h-4 rounded-full bg-white shadow-sm block shrink-0 translate-x-4" />
+                                  </div>
+                                </div>
                               </td>
 
-                              {/* Coordinator Column (Interactive Switch) */}
+                              {/* Coordinator Column */}
                               <td className="py-3 px-3 text-center">
-                                <div className="flex items-center justify-center gap-2">
+                                <div className="flex items-center justify-center">
                                   <button
                                     type="button"
                                     disabled={currentRole !== 'Admin'}
                                     onClick={() => handleToggleMatrixPermission(row.coordKey, row.name, "Coordinadores", row.coordDefault)}
-                                    className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${
-                                      coordOn ? 'bg-emerald-500' : 'bg-black/15 dark:bg-white/10'
+                                    className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${
+                                      coordOn ? 'bg-emerald-500' : 'bg-orange-500'
                                     } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
                                     title={coordOn ? "Permiso Habilitado" : "Permiso Deshabilitado"}
                                   >
                                     <motion.span
                                       initial={false}
-                                      animate={{ x: coordOn ? 18 : 3 }}
-                                      style={{ left: 0 }}
-                                      className="absolute top-[2.5px] w-3.5 h-3.5 rounded-full bg-white shadow-md"
+                                      animate={{ x: coordOn ? 16 : 0 }}
+                                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                      className="w-4 h-4 rounded-full bg-white shadow-sm block shrink-0"
                                     />
                                   </button>
-                                  <span className={`text-[10px] font-bold ${coordOn ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                    {coordOn ? 'Sí' : 'No'}
-                                  </span>
                                 </div>
                               </td>
 
-                              {/* Volunteer Column (Interactive Switch if applicable, or N/A badge) */}
+                              {/* Volunteer Column */}
                               <td className="py-3 px-3 text-center">
-                                {row.volKey ? (
-                                  <div className="flex items-center justify-center gap-2">
+                                <div className="flex items-center justify-center">
+                                  {row.volKey ? (
                                     <button
                                       type="button"
                                       disabled={currentRole !== 'Admin'}
                                       onClick={() => handleToggleMatrixPermission(row.volKey!, row.name, "Voluntarios", row.volDefault!)}
-                                      className={`w-9 h-5 rounded-full transition-all relative flex-shrink-0 ${
-                                        volOn ? 'bg-emerald-500' : 'bg-black/15 dark:bg-white/10'
+                                      className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${
+                                        volOn ? 'bg-emerald-500' : 'bg-orange-500'
                                       } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
                                       title={volOn ? "Permiso Habilitado" : "Permiso Deshabilitado"}
                                     >
                                       <motion.span
                                         initial={false}
-                                        animate={{ x: volOn ? 18 : 3 }}
-                                        style={{ left: 0 }}
-                                        className="absolute top-[2.5px] w-3.5 h-3.5 rounded-full bg-white shadow-md"
+                                        animate={{ x: volOn ? 16 : 0 }}
+                                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                        className="w-4 h-4 rounded-full bg-white shadow-sm block shrink-0"
                                       />
                                     </button>
-                                    <span className={`text-[10px] font-bold ${volOn ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                      {volOn ? 'Sí' : 'No'}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span className="text-[10px] font-medium text-text-dim/50">
-                                    ✕ N/A
-                                  </span>
-                                )}
+                                  ) : (
+                                    <div
+                                      className="w-9 h-5 rounded-full p-[2px] bg-orange-500/30 border border-orange-500/20 flex items-center shrink-0 opacity-50 cursor-not-allowed"
+                                      title="No disponible para Voluntarios"
+                                    >
+                                      <span className="w-4 h-4 rounded-full bg-white/70 shadow-sm block shrink-0 translate-x-0" />
+                                    </div>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -1383,7 +1486,7 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                     <Button
                       type="submit"
                       disabled={isCreatingCommittee || !newCommitteeName.trim()}
-                      className="w-full sm:w-auto h-11 sm:h-10 min-h-[44px] px-5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shrink-0 shadow-sm"
+                      className="w-full sm:w-auto h-10 px-6 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold rounded-full text-xs flex items-center justify-center gap-2 shrink-0 shadow-lg shadow-blue-500/10 active:scale-[0.97] transition-all disabled:opacity-50"
                     >
                       <span className="material-symbols-outlined text-[16px]">add</span>
                       <span>{isCreatingCommittee ? 'Creando...' : 'Agregar Comité'}</span>
@@ -1430,7 +1533,7 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                           {activeCommittees.map((comm: any) => (
                             <div
                               key={comm.id}
-                              className="w-full min-h-[38px] h-auto flex items-center justify-between pl-3.5 pr-1.5 py-1.5 rounded-full text-xs font-bold transition-all border border-border bg-dark3/90 hover:bg-dark3 text-text shadow-sm"
+                              className="w-full min-h-[38px] h-auto flex items-center justify-between pl-3.5 pr-2 py-1.5 rounded-full text-xs font-bold transition-all border border-border bg-dark3/90 hover:bg-dark3 text-text shadow-sm"
                             >
                               <span className="font-inter pr-2 break-words leading-tight">{comm.name}</span>
                               <button
@@ -1441,9 +1544,9 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                                   setArchiveInputName('');
                                   setArchiveDeleteText('');
                                 }}
-                                className="w-6 h-6 rounded-full bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0 transition-all cursor-pointer active:scale-90 my-auto"
+                                className="p-1 text-text-dim hover:text-rose-400 flex items-center justify-center shrink-0 transition-all cursor-pointer active:scale-90 my-auto"
                               >
-                                <span className="material-symbols-outlined text-[13px]">archive</span>
+                                <span className="material-symbols-outlined text-[15px]">archive</span>
                               </button>
                             </div>
                           ))}
@@ -1458,16 +1561,16 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                           {archivedCommittees.map((comm: any) => (
                             <div
                               key={comm.id}
-                              className="w-full min-h-[38px] h-auto flex items-center justify-between pl-3.5 pr-1.5 py-1.5 rounded-full text-xs font-bold transition-all border border-border/60 bg-dark3/40 text-text-dim opacity-75"
+                              className="w-full min-h-[38px] h-auto flex items-center justify-between pl-3.5 pr-2 py-1.5 rounded-full text-xs font-bold transition-all border border-border/60 bg-dark3/40 text-text-dim opacity-75"
                             >
                               <span className="font-inter pr-2 break-words leading-tight">{comm.name}</span>
                               <button
                                 type="button"
                                 title={`Desarchivar ${comm.name}`}
                                 onClick={() => handleUnarchiveCommittee(comm)}
-                                className="w-6 h-6 rounded-full bg-emerald-500/10 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0 transition-all cursor-pointer active:scale-90 my-auto"
+                                className="p-1 text-text-dim hover:text-emerald-400 flex items-center justify-center shrink-0 transition-all cursor-pointer active:scale-90 my-auto"
                               >
-                                <span className="material-symbols-outlined text-[13px]">unarchive</span>
+                                <span className="material-symbols-outlined text-[15px]">unarchive</span>
                               </button>
                             </div>
                           ))}

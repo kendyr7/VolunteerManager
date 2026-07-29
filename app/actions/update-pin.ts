@@ -99,7 +99,7 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     });
     
     let redirectTo = '/dashboard';
-    if (role === 'Editor') redirectTo = '/volunteers';
+    if (role === 'Editor') redirectTo = '/dashboard';
     if (role === 'Lector') redirectTo = '/shifts';
 
     return { 

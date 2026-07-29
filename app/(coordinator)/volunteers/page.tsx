@@ -299,7 +299,10 @@ export default function VolunteersPage() {
 
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>(buildEmptyShifts);
 
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
     const role = localStorage.getItem('mock_role') as any;
     const committee = localStorage.getItem('mock_committee');
     if (role) setCurrentRole(role);
@@ -591,7 +594,7 @@ export default function VolunteersPage() {
     );
   }
 
-  if (!canViewVolunteers()) {
+  if (mounted && !canViewVolunteers()) {
     return (
       <div className="w-full min-h-[65vh] flex flex-col items-center justify-center p-8 text-center">
         <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-4">

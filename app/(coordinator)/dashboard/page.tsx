@@ -10,6 +10,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatE164 } from "@/lib/whatsapp";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
+import { canViewDashboard } from "@/lib/permissions";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -115,12 +116,39 @@ export default function CoordinatorDashboard() {
     };
   }, []);
 
+  const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
+  const [userCommittee, setUserCommittee] = useState<string>('');
+  const [permTick, setPermTick] = useState(0);
+
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
-    const role = localStorage.getItem('mock_role') || 'Admin';
+    setMounted(true);
+    const handlePermissionsChange = () => setPermTick(v => v + 1);
+    window.addEventListener("storage", handlePermissionsChange);
+    window.addEventListener("permissions-changed", handlePermissionsChange);
+    return () => {
+      window.removeEventListener("storage", handlePermissionsChange);
+      window.removeEventListener("permissions-changed", handlePermissionsChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const role = (localStorage.getItem('mock_role') || 'Admin') as any;
+    const committee = localStorage.getItem('mock_committee') || '';
     const phone = localStorage.getItem('volunteer_phone');
 
+    setCurrentRole(role === 'Coordinador' ? 'Editor' : role === 'Voluntario' ? 'Lector' : role);
+    setUserCommittee(committee);
+
+    if (role === 'Editor' || role === 'Lector' || role === 'Coordinador' || role === 'Voluntario') {
+      if (committee) {
+        setSelectedHeatmapCommittee(committee);
+      }
+    }
+
     const fetchUserNameAndSetGreeting = async () => {
-      let userName = 'Coordinador';
+      let userName = role === 'Lector' ? 'Voluntario' : 'Coordinador';
       const savedName = localStorage.getItem('volunteer_name');
       if (savedName) {
         userName = savedName.split(' ')[0];
@@ -190,13 +218,9 @@ export default function CoordinatorDashboard() {
       );
     };
 
-    if (role === 'Editor' || role === 'Lector') {
-      router.replace('/volunteers');
-    } else {
-      setIsAuthorized(true);
-      fetchUserNameAndSetGreeting();
-    }
-  }, [router]);
+    setIsAuthorized(true);
+    fetchUserNameAndSetGreeting();
+  }, []);
 
   const activeVolunteers = useMemo(() => {
     return volunteers.filter(v => v.status !== 'archived');
@@ -211,10 +235,13 @@ export default function CoordinatorDashboard() {
     let totalAssignedInRequired = 0;
     let criticalAlerts = 0;
 
-    const committees = committeesList.map(c => c.name);
+    const isFiltered = selectedHeatmapCommittee && selectedHeatmapCommittee !== 'todos' && selectedHeatmapCommittee !== 'all';
+    const committeesToInclude = isFiltered
+      ? [selectedHeatmapCommittee]
+      : committeesList.map(c => c.name);
 
     EVENT_DAYS.forEach(day => {
-      committees.forEach(comm => {
+      committeesToInclude.forEach(comm => {
         ['T1', 'T2', 'T3', 'T4'].forEach(shiftId => {
           const req = committeeRequirements[comm]?.[shiftId] ?? 0;
           totalRequired += req;
@@ -234,8 +261,13 @@ export default function CoordinatorDashboard() {
       });
     });
 
-    const totalRecruited = activeVolunteers.length;
-    // Dynamic Meta: Sum of requirements across all committees and shift slots
+    const relevantVolunteers = isFiltered
+      ? activeVolunteers.filter(v => v.committee === selectedHeatmapCommittee)
+      : activeVolunteers;
+
+    const relevantVolunteerIds = new Set(relevantVolunteers.map(v => v.id));
+
+    const totalRecruited = relevantVolunteers.length;
     const targetVolunteers = totalRequired;
     const recruitmentPercentage = targetVolunteers > 0 ? Math.round((totalRecruited / targetVolunteers) * 100) : 0;
     const globalCoveragePercentage = totalRequired > 0 ? Math.round((totalAssignedInRequired / totalRequired) * 100) : 100;
@@ -243,7 +275,7 @@ export default function CoordinatorDashboard() {
     let totalGlobalAssigned = 0;
     let totalGlobalCheckedIn = 0;
     Object.entries(globalShifts).forEach(([volId, days]) => {
-      if (!activeVolunteerIds.has(volId)) return;
+      if (!relevantVolunteerIds.has(volId)) return;
       Object.entries(days).forEach(([day, shifts]) => {
         shifts.forEach(shift => {
           totalGlobalAssigned++;
@@ -267,10 +299,15 @@ export default function CoordinatorDashboard() {
       checkedInCount: totalGlobalCheckedIn,
       totalAssigned: totalGlobalAssigned,
     };
-  }, [activeVolunteers, activeVolunteerIds, committeesList, globalShifts, committeeRequirements, dbCheckedInMap]);
+  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, dbCheckedInMap, selectedHeatmapCommittee]);
 
   const committeeStatus = useMemo(() => {
-    return committeesList.map((c, index) => {
+    const isFiltered = selectedHeatmapCommittee && selectedHeatmapCommittee !== 'todos' && selectedHeatmapCommittee !== 'all';
+    const listToProcess = isFiltered
+      ? committeesList.filter(c => c.name === selectedHeatmapCommittee)
+      : committeesList;
+
+    return listToProcess.map((c, index) => {
       let totalReq = 0;
       let totalAssigned = 0;
       let totalMissing = 0;
@@ -306,11 +343,14 @@ export default function CoordinatorDashboard() {
         status
       };
     }).sort((a, b) => a.coverage - b.coverage);
-  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements]);
+  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, selectedHeatmapCommittee]);
 
   const criticalShifts = useMemo(() => {
     const list: any[] = [];
-    const committees = committeesList.map(c => c.name);
+    const isFiltered = selectedHeatmapCommittee && selectedHeatmapCommittee !== 'todos' && selectedHeatmapCommittee !== 'all';
+    const committees = isFiltered
+      ? [selectedHeatmapCommittee]
+      : committeesList.map(c => c.name);
 
     EVENT_DAYS.forEach(day => {
       committees.forEach(comm => {
@@ -344,7 +384,7 @@ export default function CoordinatorDashboard() {
       .sort((a, b) => b.missing - a.missing)
       .slice(0, 5)
       .map((item, index) => ({ id: index + 1, ...item }));
-  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements]);
+  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, selectedHeatmapCommittee]);
 
   const heatmapMatrix = useMemo(() => {
     return EVENT_DAYS.map(day => {
@@ -417,6 +457,20 @@ export default function CoordinatorDashboard() {
     });
     return unique.size;
   }, [activeVolunteers, globalShifts]);
+
+  if (mounted && !canViewDashboard()) {
+    return (
+      <div className="w-full min-h-[65vh] flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-4">
+          <span className="material-symbols-outlined text-[32px]">lock</span>
+        </div>
+        <h2 className="text-xl font-bold text-text mb-2">Acceso Restringido a Dashboard</h2>
+        <p className="text-xs text-text-dim max-w-md leading-relaxed">
+          El Administrador ha deshabilitado el acceso al Dashboard para este rol. Si necesitas acceso, contacta a un Administrador para habilitar esta política en Ajustes.
+        </p>
+      </div>
+    );
+  }
 
   if (!isAuthorized) return null;
 
@@ -788,28 +842,35 @@ export default function CoordinatorDashboard() {
           {/* Committee Filter Selector */}
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider hidden sm:inline">Comité:</span>
-            <Select
-              value={selectedHeatmapCommittee}
-              onValueChange={(val) => setSelectedHeatmapCommittee(val || 'todos')}
-            >
-              <SelectTrigger className="h-8 min-h-[32px] w-full sm:w-[210px] bg-dark3 border-border text-xs font-bold text-text rounded-lg">
-                <SelectValue placeholder="Todos los comités">
-                  {selectedHeatmapCommittee === 'todos' || selectedHeatmapCommittee === 'all'
-                    ? 'Todos los comités'
-                    : selectedHeatmapCommittee}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent className="bg-dark2 border-border text-text z-50">
-                <SelectItem value="todos" className="text-xs font-bold">
-                  Todos los comités
-                </SelectItem>
-                {committeesList.map((comm: any) => (
-                  <SelectItem key={comm.id} value={comm.name} className="text-xs font-bold">
-                    {comm.name}
+            {currentRole === 'Admin' ? (
+              <Select
+                value={selectedHeatmapCommittee}
+                onValueChange={(val) => setSelectedHeatmapCommittee(val || 'todos')}
+              >
+                <SelectTrigger className="h-8 min-h-[32px] w-full sm:w-[210px] bg-dark3 border-border text-xs font-bold text-text rounded-lg">
+                  <SelectValue placeholder="Todos los comités">
+                    {selectedHeatmapCommittee === 'todos' || selectedHeatmapCommittee === 'all'
+                      ? 'Todos los comités'
+                      : selectedHeatmapCommittee}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="bg-dark2 border-border text-text z-50">
+                  <SelectItem value="todos" className="text-xs font-bold">
+                    Todos los comités
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  {committeesList.map((comm: any) => (
+                    <SelectItem key={comm.id} value={comm.name} className="text-xs font-bold">
+                      {comm.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="flex items-center gap-2 bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 text-[#4d7cfe] px-3 py-1 rounded-full text-xs font-bold font-inter">
+                <span className="material-symbols-outlined text-[14px]">groups</span>
+                <span>{selectedHeatmapCommittee || userCommittee || 'Mi Comité'}</span>
+              </div>
+            )}
           </div>
         </div>
 

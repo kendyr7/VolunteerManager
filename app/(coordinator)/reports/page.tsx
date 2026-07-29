@@ -105,8 +105,10 @@ export default function ReportsPage() {
   const pageSize = 30;
 
   const [permTick, setPermTick] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const handlePermissionsChange = () => setPermTick(v => v + 1);
     window.addEventListener("storage", handlePermissionsChange);
     window.addEventListener("permissions-changed", handlePermissionsChange);
@@ -630,7 +632,7 @@ export default function ReportsPage() {
     </div>
   );
 
-  if (!canViewReports()) {
+  if (mounted && !canViewReports()) {
     return (
       <div className="w-full min-h-[65vh] flex flex-col items-center justify-center p-8 text-center">
         <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-4">
