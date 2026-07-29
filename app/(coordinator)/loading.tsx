@@ -1,35 +1,17 @@
+import { AnimatedLogo } from "@/components/ui/animated-logo";
+
 export default function CoordinatorLoading() {
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6 animate-pulse min-h-full">
-      <div className="space-y-2">
-        <div className="h-9 w-56 max-w-[70%] rounded-lg bg-dark3" />
-        <div className="h-4 w-80 max-w-[90%] rounded-md bg-dark3/70" />
+    <div className="w-full min-h-[75vh] flex flex-col items-center justify-center p-8 text-center animate-fadeIn">
+      <div className="relative flex items-center justify-center mb-5">
+        {/* Glow backdrop */}
+        <div className="absolute w-24 h-24 rounded-full bg-[#4d7cfe]/10 blur-xl animate-pulse" />
+        <AnimatedLogo isLooping className="w-16 h-16 md:w-20 md:h-20 text-text relative z-10" />
       </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-24 md:h-28 rounded-xl border border-border bg-dark2"
-          >
-            <div className="p-4 space-y-3">
-              <div className="h-3 w-16 rounded bg-dark3" />
-              <div className="h-7 w-12 rounded bg-dark3" />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="rounded-xl border border-border bg-dark2 p-4 md:p-6 space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="h-5 w-40 rounded bg-dark3" />
-          <div className="h-9 w-28 rounded-lg bg-dark3" />
-        </div>
-        <div className="space-y-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-11 rounded-lg bg-dark3/80" />
-          ))}
-        </div>
+      
+      <div className="space-y-2 max-w-xs mx-auto">
+        <div className="h-3.5 w-28 mx-auto rounded-full bg-dark3 animate-pulse" />
+        <div className="h-2.5 w-40 mx-auto rounded-full bg-dark3/60 animate-pulse" />
       </div>
     </div>
   );
