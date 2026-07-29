@@ -100,6 +100,15 @@ export async function createCommitteeAction(name: string) {
     console.warn("Notice: committee_shift_requirements default upsert warning:", reqErr.message);
   }
 
+  // Audit log
+  await supabase.from('activity_logs').insert({
+    user_name: 'Administrador',
+    user_role: 'Admin',
+    action_type: 'Creación',
+    description: `Creó el nuevo comité "${cleanName}"`,
+    details: `ID de comité: ${newComm.id}`
+  });
+
   return { success: true, committee: newComm };
 }
 
@@ -172,6 +181,15 @@ export async function archiveCommitteeAction(
     }
   }
 
+  // Audit log
+  await supabase.from('activity_logs').insert({
+    user_name: 'Administrador',
+    user_role: 'Admin',
+    action_type: 'Eliminación',
+    description: `Archivó el comité "${expectedName}"`,
+    details: `Desvinculó los voluntarios asignados a este comité.`
+  });
+
   return { success: true };
 }
 
@@ -195,6 +213,15 @@ export async function unarchiveCommitteeAction(committeeId: string) {
     console.error("Error unarchiving committee:", error);
     return { error: `No se pudo desarchivar el comité: ${error.message}` };
   }
+
+  // Audit log
+  await supabase.from('activity_logs').insert({
+    user_name: 'Administrador',
+    user_role: 'Admin',
+    action_type: 'Edición',
+    description: `Desarchivó y restauró el comité`,
+    details: `ID de comité: ${committeeId}`
+  });
 
   return { success: true };
 }

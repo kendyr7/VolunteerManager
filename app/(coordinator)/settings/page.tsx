@@ -23,6 +23,8 @@ import { changeUserPin } from "@/app/actions/update-pin";
 import { formatE164 } from "@/lib/whatsapp";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { createCommitteeAction, archiveCommitteeAction, unarchiveCommitteeAction } from "@/app/actions/committee-actions";
+import { getActivityLogs, ActivityLog } from "@/app/actions/activity-actions";
+import { recordActivityLog } from "@/lib/activity-logger";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -362,6 +364,37 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
     permissions: false,
     requirements: false,
   });
+
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [selectedActionFilter, setSelectedActionFilter] = useState<string>('Todas');
+  const [logSearchQuery, setLogSearchQuery] = useState<string>('');
+
+  const fetchLogs = useCallback(async () => {
+    if (currentRole !== 'Admin') return;
+    setIsLoadingLogs(true);
+    const logs = await getActivityLogs(150);
+    setActivityLogs(logs);
+    setIsLoadingLogs(false);
+  }, [currentRole]);
+
+  useEffect(() => {
+    if (currentRole === 'Admin') {
+      fetchLogs();
+    }
+  }, [currentRole, fetchLogs]);
+
+  const filteredLogs = useMemo(() => {
+    return activityLogs.filter(log => {
+      const matchesAction = selectedActionFilter === 'Todas' || log.action_type === selectedActionFilter;
+      const q = logSearchQuery.toLowerCase().trim();
+      const matchesQuery = !q ||
+        log.user_name.toLowerCase().includes(q) ||
+        log.description.toLowerCase().includes(q) ||
+        (log.details && log.details.toLowerCase().includes(q));
+      return matchesAction && matchesQuery;
+    });
+  }, [activityLogs, selectedActionFilter, logSearchQuery]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -1580,6 +1613,175 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                       )
                     )}
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 5. Historial de Actividades (Solo Admins) */}
+          {currentRole === 'Admin' && (
+            <div className="w-full transition-all border-t border-border mt-2 pt-2">
+              <div
+                onClick={() => isMobile && toggleSection('activity')}
+                className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors ${isMobile ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'
+                  } ${isSectionOpen('activity') ? 'bg-black/[0.03] dark:bg-white/[0.02]' : ''}`}
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-8 h-8 rounded-xl bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[18px]">history</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-text text-xs tracking-tight leading-none truncate">Historial de Actividades</h3>
+                      <Badge className="bg-[#4d7cfe]/20 text-[#4d7cfe] border-[#4d7cfe]/30 text-[9px] font-extrabold px-1.5 py-0 h-4">
+                        Solo Admins
+                      </Badge>
+                    </div>
+                    <p className="text-[10px] font-inter font-medium text-text-dim mt-1 truncate">
+                      Registro de operaciones, cambios de datos, reasignaciones y permisos
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fetchLogs();
+                    }}
+                    title="Actualizar registro"
+                    className="p-1.5 rounded-full hover:bg-white/10 text-text-dim hover:text-text transition-colors flex items-center justify-center cursor-pointer"
+                  >
+                    <span className={cn("material-symbols-outlined text-[17px]", isLoadingLogs && "animate-spin")}>
+                      refresh
+                    </span>
+                  </button>
+                  {isMobile && (
+                    <div className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center text-text-dim shrink-0">
+                      <span className="material-symbols-outlined text-[18px]">
+                        {isSectionOpen('activity') ? 'expand_less' : 'expand_more'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {isSectionOpen('activity') && (
+                <div className="p-4 sm:p-6 border-t border-border bg-black/[0.02] dark:bg-black/20 space-y-4">
+                  {/* Controles de Filtro y Búsqueda */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2 border-b border-border/50">
+                    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
+                      {['Todas', 'Creación', 'Edición', 'Reasignación', 'Seguridad', 'Configuración', 'Eliminación'].map((type) => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setSelectedActionFilter(type)}
+                          className={cn(
+                            "px-2.5 py-1 rounded-full text-[11px] font-inter font-bold transition-all shrink-0 cursor-pointer border",
+                            selectedActionFilter === type
+                              ? "bg-[#4d7cfe] text-white border-[#4d7cfe] shadow-sm"
+                              : "bg-dark3/60 border-border text-text-dim hover:text-text hover:bg-dark3"
+                          )}
+                        >
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="relative min-w-[180px]">
+                      <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-text-dim text-[16px]">
+                        search
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="Buscar por usuario o detalle..."
+                        value={logSearchQuery}
+                        onChange={(e) => setLogSearchQuery(e.target.value)}
+                        className="w-full h-8 pl-8 pr-3 bg-dark3 border border-border rounded-full text-[11px] font-inter text-text placeholder:text-text-dim outline-none focus:border-[#4d7cfe]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Lista de Registros */}
+                  {isLoadingLogs ? (
+                    <div className="py-8 text-center text-text-dim space-y-2">
+                      <span className="material-symbols-outlined animate-spin text-[24px]">progress_activity</span>
+                      <p className="text-xs font-inter">Cargando historial de actividades...</p>
+                    </div>
+                  ) : filteredLogs.length === 0 ? (
+                    <div className="py-8 text-center text-text-dim space-y-2 border border-dashed border-border rounded-xl">
+                      <span className="material-symbols-outlined text-[28px]">manage_search</span>
+                      <p className="text-xs font-inter font-bold">No se encontraron registros de actividades.</p>
+                      <p className="text-[10px] text-text-dim">Las operaciones importantes quedarán registradas aquí.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1 scrollbar-thin">
+                      {filteredLogs.map((log) => {
+                        const dateStr = new Date(log.created_at).toLocaleString('es-ES', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        });
+
+                        let badgeColor = 'bg-white/10 text-white/80 border-white/20';
+                        let iconName = 'notes';
+
+                        if (log.action_type === 'Creación') {
+                          badgeColor = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+                          iconName = 'add_circle';
+                        } else if (log.action_type === 'Edición') {
+                          badgeColor = 'bg-blue-500/15 text-blue-400 border-blue-500/30';
+                          iconName = 'edit_note';
+                        } else if (log.action_type === 'Reasignación') {
+                          badgeColor = 'bg-purple-500/15 text-purple-400 border-purple-500/30';
+                          iconName = 'sync_alt';
+                        } else if (log.action_type === 'Seguridad') {
+                          badgeColor = 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+                          iconName = 'key';
+                        } else if (log.action_type === 'Configuración') {
+                          badgeColor = 'bg-sky-500/15 text-sky-400 border-sky-500/30';
+                          iconName = 'settings';
+                        } else if (log.action_type === 'Eliminación') {
+                          badgeColor = 'bg-rose-500/15 text-rose-400 border-rose-500/30';
+                          iconName = 'delete';
+                        }
+
+                        return (
+                          <div
+                            key={log.id}
+                            className="p-3.5 rounded-xl border border-border bg-dark2 hover:bg-dark3 transition-colors flex items-start justify-between gap-3 text-xs"
+                          >
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                              <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border mt-0.5", badgeColor)}>
+                                <span className="material-symbols-outlined text-[16px]">{iconName}</span>
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <span className="font-bold text-text truncate">{log.description}</span>
+                                  <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-extrabold border uppercase tracking-wider", badgeColor)}>
+                                    {log.action_type}
+                                  </span>
+                                </div>
+                                {log.details && (
+                                  <p className="text-[11px] font-inter text-text-dim leading-relaxed">
+                                    {log.details}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-2 mt-1 text-[10px] text-text-dim font-inter">
+                                  <span>👤 {log.user_name} ({log.user_role})</span>
+                                  <span>&bull;</span>
+                                  <span>🕒 {dateStr}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

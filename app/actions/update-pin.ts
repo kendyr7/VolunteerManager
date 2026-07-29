@@ -247,6 +247,15 @@ export async function changeUserPin(currentPin: string, newPin: string, userPhon
       return { success: false, error: "Error al actualizar el PIN." };
     }
 
+    // Audit log
+    await supabase.from('activity_logs').insert({
+      user_name: 'Usuario',
+      user_role: matchedTable === 'profiles' ? 'Coordinador/Admin' : 'Voluntario',
+      action_type: 'Seguridad',
+      description: `Cambió su PIN de seguridad de acceso`,
+      details: `ID de usuario: ${user.id} (${matchedTable})`
+    });
+
     return { success: true };
   } catch (error) {
     console.error("Error en changeUserPin:", error);
