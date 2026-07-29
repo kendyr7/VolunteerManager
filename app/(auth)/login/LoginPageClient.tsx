@@ -10,10 +10,36 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 export function LoginPageClient() {
   const [page, setPage] = useState(0);
   const [vw, setVw] = useState(0);
+  const [isDark, setIsDark] = useState(true);
   const controls = useAnimation();
 
   useEffect(() => {
     setVw(window.innerWidth);
+  }, []);
+
+  useEffect(() => {
+    const applyTheme = (dark: boolean) => {
+      setIsDark(dark);
+      if (dark) {
+        document.documentElement.classList.add("dark");
+        document.documentElement.style.colorScheme = "dark";
+        document.documentElement.style.backgroundColor = "#050505";
+      } else {
+        document.documentElement.classList.remove("dark");
+        document.documentElement.style.colorScheme = "light";
+        document.documentElement.style.backgroundColor = "#f8fafc";
+      }
+    };
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    applyTheme(mediaQuery.matches);
+
+    const listener = (e: MediaQueryListEvent) => {
+      applyTheme(e.matches);
+    };
+
+    mediaQuery.addEventListener("change", listener);
+    return () => mediaQuery.removeEventListener("change", listener);
   }, []);
 
   useEffect(() => {
@@ -45,29 +71,34 @@ export function LoginPageClient() {
     [vw, page, controls],
   );
 
+  const templeImageSrc = isDark ? "/templodark.jpg" : "/templo.jpg";
+
   return (
     <>
       {/* ── Desktop layout (md+) ── */}
-      <div className="hidden md:flex min-h-screen bg-[#030014] relative">
+      <div className={`hidden md:flex min-h-screen relative ${isDark ? 'bg-[#030014]' : 'bg-slate-50'}`}>
         <div className="absolute inset-0 w-1/2 lg:w-2/5 z-0">
-          <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
+          <MeshGradientBackground
+            colors={isDark ? ["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"] : ["#60a5fa", "#3b82f6", "#93c5fd", "#2563eb"]}
+            backgroundColor={isDark ? "#050a15" : "#f8fafc"}
+          />
         </div>
         <div className="flex-1 flex items-center justify-center p-6 md:p-12 lg:p-16 z-10 relative">
           <div className="w-full max-w-sm">
             <div className="mb-10 flex flex-col items-center text-center">
-              <AnimatedLogo className="w-16 h-16 mb-5" />
-              <div className="text-[18px] tracking-wider text-white mb-2 uppercase whitespace-nowrap font-black">
+              <AnimatedLogo className={`w-16 h-16 mb-5 ${isDark ? 'text-white' : 'text-[#4d7cfe]'}`} />
+              <div className={`text-[18px] tracking-wider mb-2 uppercase whitespace-nowrap font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 Bienvenido de nuevo
               </div>
-              <p className="text-slate-400 font-inter font-bold text-[13px]">
+              <p className={`font-inter font-bold text-[13px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Gestión de Voluntarios &bull; Templo de Managua
               </p>
             </div>
 
             <LoginForm />
 
-            <div className="mt-10 pt-8 border-t border-slate-800 text-center">
-              <p className="text-sm text-slate-400 font-inter font-bold">
+            <div className={`mt-10 pt-8 border-t text-center ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+              <p className={`text-sm font-inter font-bold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 ¿Tienes problemas para ingresar? <br />
                 <button className="text-[#0084d1] font-inter font-bold hover:underline mt-1">
                   Contacta a tu coordinador de comité
@@ -79,15 +110,15 @@ export function LoginPageClient() {
 
         <div className="md:w-1/2 lg:w-3/5 relative overflow-hidden bg-black">
           <Image
-            src="/templodark.jpg"
+            src={templeImageSrc}
             alt="Templo de Managua"
             fill
-            className="object-cover"
+            className="object-cover transition-opacity duration-500"
             priority
           />
           <div className="absolute inset-0 bg-[#0084d1]/10 z-10" />
           <div className="absolute bottom-12 left-12 right-12 z-20 text-white">
-            <div className="backdrop-blur-md bg-black/20 p-8 rounded-sm border border-white/20 shadow-2xl">
+            <div className="backdrop-blur-md bg-black/30 p-8 rounded-2xl border border-white/20 shadow-2xl">
               <h2 className="tracking-tight mb-4 text-white font-inter font-bold">
                 &ldquo;El servicio es el lenguaje del amor en acción.&rdquo;
               </h2>
@@ -121,15 +152,15 @@ export function LoginPageClient() {
           {/* ── Page 0 — Hero image + quote ── */}
           <div className="relative h-full w-1/2 shrink-0 bg-black touch-pan-y">
             <Image
-              src="/templodark.jpg"
+              src={templeImageSrc}
               alt="Templo de Managua"
               fill
-              className="object-cover"
+              className="object-cover transition-opacity duration-500"
               priority
             />
 
             <div className="absolute inset-x-6 bottom-6 z-10">
-              <div className="backdrop-blur-md bg-black/20 p-5 rounded-sm border border-white/20 shadow-2xl">
+              <div className="backdrop-blur-md bg-black/30 p-5 rounded-2xl border border-white/20 shadow-2xl">
                 <h2 className="text-white text-lg font-inter font-bold tracking-tight leading-tight">
                   &ldquo;El servicio es el lenguaje del amor en acción.&rdquo;
                 </h2>
@@ -145,24 +176,27 @@ export function LoginPageClient() {
           </div>
 
           {/* ── Page 1 — Login form ── */}
-          <div className="relative h-full w-1/2 shrink-0 overflow-y-auto bg-[#050a15] touch-pan-y">
-            <MeshGradientBackground colors={["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"]} backgroundColor="#050a15" />
+          <div className={`relative h-full w-1/2 shrink-0 overflow-y-auto touch-pan-y ${isDark ? 'bg-[#050a15]' : 'bg-slate-50'}`}>
+            <MeshGradientBackground
+              colors={isDark ? ["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"] : ["#60a5fa", "#3b82f6", "#93c5fd", "#2563eb"]}
+              backgroundColor={isDark ? "#050a15" : "#f8fafc"}
+            />
             <div className="relative z-10 flex min-h-full flex-col justify-center px-6 py-12">
               <div className="mx-auto w-full max-w-sm">
                 <div className="mb-10 flex flex-col items-center text-center">
-                  <AnimatedLogo className="w-14 h-14 mb-4" />
-                  <div className="text-[16px] tracking-wider text-white mb-1 uppercase whitespace-nowrap font-black">
+                  <AnimatedLogo className={`w-14 h-14 mb-4 ${isDark ? 'text-white' : 'text-[#4d7cfe]'}`} />
+                  <div className={`text-[16px] tracking-wider mb-1 uppercase whitespace-nowrap font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     Bienvenido de nuevo
                   </div>
-                  <p className="text-slate-400 font-inter font-bold text-[12px]">
+                  <p className={`font-inter font-bold text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                     Gestión de Voluntarios &bull; Templo de Managua
                   </p>
                 </div>
 
                 <LoginForm />
 
-                <div className="mt-10 pt-8 border-t border-slate-800 text-center">
-                  <p className="text-sm text-slate-400 font-inter font-bold">
+                <div className={`mt-10 pt-8 border-t text-center ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                  <p className={`text-sm font-inter font-bold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                     ¿Tienes problemas para ingresar? <br />
                     <button className="text-[#0084d1] font-inter font-bold hover:underline mt-1">
                       Contacta a tu coordinador de comité

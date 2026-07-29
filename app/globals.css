@@ -32,6 +32,7 @@
   --color-mid: var(--mid);
   
   --color-accent: var(--accent);
+  --color-accent-faint: var(--accent-faint);
   --color-red: var(--red);
   --color-red-faint: var(--red-faint);
 

@@ -269,11 +269,11 @@ export function LoginForm() {
               /* Usuario nuevo / No recordado */
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="phone" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
+                  <Label htmlFor="phone" className="text-[11px] font-dela uppercase tracking-wider text-slate-600 dark:text-slate-400 ml-1">
                     Número de Teléfono
                   </Label>
                   <div className="relative group">
-                    <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">call</span>
+                    <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">call</span>
                     <input
                       id="phone"
                       type="tel"
@@ -284,7 +284,7 @@ export function LoginForm() {
                       required
                       value={phone}
                       onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                      className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all placeholder:text-slate-500"
+                      className="w-full h-12 bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-sm pl-12 pr-4 text-slate-900 dark:text-white font-inter font-bold focus:bg-white focus:dark:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm"
                       disabled={isSubmittingPin || isRedirecting}
                     />
                   </div>
@@ -292,7 +292,7 @@ export function LoginForm() {
 
                 {authMode === 'biometrics' && hasPasskey ? (
                   <div className="space-y-3 pt-2 text-center flex flex-col items-center justify-center">
-                    <p className="text-sm font-bold font-inter text-slate-300">
+                    <p className="text-sm font-bold font-inter text-slate-700 dark:text-slate-300">
                       {isMobile ? 'Ingresar con huella' : 'Ingresar con passkey'}
                     </p>
 
@@ -322,7 +322,7 @@ export function LoginForm() {
                       <button
                         type="button"
                         onClick={() => setAuthMode('pin')}
-                        className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline underline-offset-4"
+                        className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors underline underline-offset-4"
                       >
                         O ingresa con tu PIN
                       </button>
@@ -331,12 +331,12 @@ export function LoginForm() {
                 ) : (
                   <>
                     <div className="space-y-2">
-                      <Label htmlFor="pin" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
+                      <Label htmlFor="pin" className="text-[11px] font-dela uppercase tracking-wider text-slate-600 dark:text-slate-400 ml-1">
                         PIN de Acceso
                       </Label>
                       <div className="flex items-center gap-3">
                         <div className="relative flex-1 group">
-                          <span className="material-symbols-outlined text-[20px] absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">vpn_key</span>
+                          <span className="material-symbols-outlined text-[20px] absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">vpn_key</span>
                           <input
                             id="pin"
                             type="password"
@@ -347,7 +347,7 @@ export function LoginForm() {
                             required
                             value={pin}
                             onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                            className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-11 pr-3 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
+                            className="w-full h-12 bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-sm pl-11 pr-3 text-slate-900 dark:text-white text-lg font-inter font-bold focus:bg-white focus:dark:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm"
                             disabled={isSubmittingPin || isRedirecting}
                           />
                         </div>
@@ -381,7 +381,7 @@ export function LoginForm() {
                         <button
                           type="button"
                           onClick={() => setAuthMode('biometrics')}
-                          className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
+                          className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
                         >
                           <span className="material-symbols-outlined text-[16px]">fingerprint</span>
                           <span>{isMobile ? 'O ingresa con tu huella dactilar' : 'O ingresa con passkey / Windows Hello'}</span>
@@ -395,14 +395,14 @@ export function LoginForm() {
 
               /* Usuario Recordado (savedUserMode === true) */
               <>
-                <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-sm">
+                <div className="flex items-center justify-between p-4 bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-sm shadow-sm">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-[#4d7cfe]/20 text-[#4d7cfe] flex items-center justify-center font-bold font-inter">
                       {savedName.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-white font-inter">{savedName}</p>
-                      <p className="text-[11px] text-slate-400 font-inter">{phone}</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white font-inter">{savedName}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-inter">{phone}</p>
                     </div>
                   </div>
                   <button 
@@ -414,7 +414,7 @@ export function LoginForm() {
                       setPhone(''); 
                       setAuthMode('pin');
                     }}
-                    className="text-xs font-bold text-slate-400 hover:text-white transition-colors"
+                    className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                   >
                     Cambiar
                   </button>
@@ -422,7 +422,7 @@ export function LoginForm() {
 
                 {authMode === 'biometrics' && hasPasskey ? (
                   <div className="space-y-3 pt-2 text-center flex flex-col items-center justify-center">
-                    <p className="text-sm font-bold font-inter text-slate-300">
+                    <p className="text-sm font-bold font-inter text-slate-700 dark:text-slate-300">
                       {isMobile ? 'Ingresar con huella' : 'Ingresar con passkey'}
                     </p>
 
@@ -452,7 +452,7 @@ export function LoginForm() {
                       <button
                         type="button"
                         onClick={() => setAuthMode('pin')}
-                        className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline underline-offset-4"
+                        className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors underline underline-offset-4"
                       >
                         O ingresa con tu PIN
                       </button>
@@ -461,12 +461,12 @@ export function LoginForm() {
                 ) : (
                   <>
                     <div className="space-y-2">
-                      <Label htmlFor="pin" className="text-[11px] font-dela uppercase tracking-wider text-slate-400 ml-1">
+                      <Label htmlFor="pin" className="text-[11px] font-dela uppercase tracking-wider text-slate-600 dark:text-slate-400 ml-1">
                         PIN de Acceso
                       </Label>
                       <div className="flex items-center gap-3">
                         <div className="relative flex-1 group">
-                          <span className="material-symbols-outlined text-[20px] absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">vpn_key</span>
+                          <span className="material-symbols-outlined text-[20px] absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">vpn_key</span>
                           <input
                             id="pin"
                             type="password"
@@ -477,7 +477,7 @@ export function LoginForm() {
                             required
                             value={pin}
                             onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                            className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-11 pr-3 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
+                            className="w-full h-12 bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-sm pl-11 pr-3 text-slate-900 dark:text-white text-lg font-inter font-bold focus:bg-white focus:dark:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm"
                             disabled={isSubmittingPin || isRedirecting}
                           />
                         </div>
@@ -511,7 +511,7 @@ export function LoginForm() {
                         <button
                           type="button"
                           onClick={() => setAuthMode('biometrics')}
-                          className="text-xs font-bold text-slate-400 hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
+                          className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
                         >
                           <span className="material-symbols-outlined text-[16px]">fingerprint</span>
                           <span>{isMobile ? 'O ingresa con tu huella dactilar' : 'O ingresa con passkey / Windows Hello'}</span>
@@ -537,17 +537,17 @@ export function LoginForm() {
                 <span className="material-symbols-outlined text-[20px]">security</span>
                 Primer Acceso Detectado
               </p>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
                 Por seguridad, debes crear un nuevo PIN personal para reemplazar el asignado temporalmente.
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="newPin" className="text-xs font-inter font-bold uppercase tracking-wider text-slate-400 ml-1">
+              <Label htmlFor="newPin" className="text-xs font-inter font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 ml-1">
                 Nuevo PIN Personal
               </Label>
               <div className="relative group">
-                <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">lock</span>
+                <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">lock</span>
                 <input
                   id="newPin"
                   type="password"
@@ -558,18 +558,18 @@ export function LoginForm() {
                   required
                   value={newPin}
                   onChange={(e) => setNewNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
+                  className="w-full h-12 bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-sm pl-12 pr-4 text-slate-900 dark:text-white text-lg font-inter font-bold focus:bg-white focus:dark:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm"
                   disabled={isSubmittingPin || isRedirecting}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPin" className="text-xs font-inter font-bold uppercase tracking-wider text-slate-400 ml-1">
+              <Label htmlFor="confirmPin" className="text-xs font-inter font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 ml-1">
                 Confirmar Nuevo PIN
               </Label>
               <div className="relative group">
-                <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">check_circle</span>
+                <span className="material-symbols-outlined text-[20px] absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 group-focus-within:text-[#4d7cfe] transition-colors">check_circle</span>
                 <input
                   id="confirmPin"
                   type="password"
@@ -580,7 +580,7 @@ export function LoginForm() {
                   required
                   value={confirmPin}
                   onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  className="w-full h-12 bg-white/5 border border-white/10 rounded-sm pl-12 pr-4 text-white text-lg font-inter font-bold focus:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-500"
+                  className="w-full h-12 bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-sm pl-12 pr-4 text-slate-900 dark:text-white text-lg font-inter font-bold focus:bg-white focus:dark:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm"
                   disabled={isSubmittingPin || isRedirecting}
                 />
               </div>

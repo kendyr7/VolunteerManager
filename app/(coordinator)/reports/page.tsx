@@ -650,7 +650,7 @@ export default function ReportsPage() {
     <div className="w-full pb-32 flex flex-col min-h-full">
       {/* Sticky Header matching other sections design */}
       <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto shrink-0">
-        <div className="w-full flex items-center justify-between max-w-7xl mx-auto">
+        <div className="w-full flex items-center justify-between">
           <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
             Reportes
             <span className="text-xs font-bold text-[#4d7cfe] bg-[#4d7cfe]/10 px-2.5 py-1 rounded-full border border-[#4d7cfe]/20">
@@ -693,7 +693,7 @@ export default function ReportsPage() {
             }
             setCurrentPage(1);
           }}
-          className="w-full relative z-10 max-w-7xl mx-auto"
+          className="w-full relative z-10"
         >
           <div className="relative w-full flex items-center">
             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
@@ -736,7 +736,7 @@ export default function ReportsPage() {
         </form>
       </div>
 
-      <div className="flex-1 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+      <div className="flex-1 px-4 sm:px-6 lg:px-8 w-full">
         {/* Primary KPIs - Edge to Edge Fine Line Grid matching Dashboard */}
         <div className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-border bg-dark3/40 mb-8">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-[1px]">

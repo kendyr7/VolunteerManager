@@ -61,12 +61,12 @@ type VolunteerType = {
   age?: number;
 };
 
-const getShiftColor = (shiftId: string, count: number, isSingleCommittee: boolean, minRequired: number) => {
-  if (!isSingleCommittee) {
-    // Vista Global (Admin sin filtro de comité): Estilo neutro y limpio
+const getShiftColor = (shiftId: string, count: number, minRequired: number, showColors: boolean = true) => {
+  if (!showColors || minRequired <= 0) {
+    // Estilo neutro y limpio cuando los colores están desactivados
     return {
-      card: 'bg-dark2',
-      border: 'border-border shadow-sm',
+      card: 'bg-dark2 border-border shadow-sm',
+      border: 'border-border',
       title: 'text-text',
       badge: 'bg-dark3 text-text-dim border border-border',
       dot: 'bg-mid'
@@ -74,34 +74,34 @@ const getShiftColor = (shiftId: string, count: number, isSingleCommittee: boolea
   }
 
   const isUnderstaffed = count < minRequired;
-  const isCritical = minRequired > 0 && count <= minRequired / 2;
+  const isCritical = count <= Math.floor(minRequired / 2);
 
   if (isCritical) {
     // Rojo suave para alertas críticas
     return {
-      card: 'bg-red-faint',
-      border: 'border-red/30',
-      title: 'text-red',
-      badge: 'bg-red/20 text-red border border-red/30',
-      dot: 'bg-red'
+      card: 'bg-rose-500/10 dark:bg-rose-500/15 border-rose-500/30',
+      border: 'border-rose-500/30',
+      title: 'text-rose-500',
+      badge: 'bg-rose-500/20 text-rose-500 border border-rose-500/30',
+      dot: 'bg-rose-500'
     };
   } else if (isUnderstaffed) {
-    // Rosa suave para déficit
+    // Naranja suave para déficit / casi lleno
     return {
-      card: 'bg-amber-400/10',
-      border: 'border-amber-400/30',
-      title: 'text-text',
-      badge: 'bg-amber-400/20 text-amber-500 border border-amber-400/20',
-      dot: 'bg-amber-400'
+      card: 'bg-amber-500/10 dark:bg-amber-500/15 border-amber-500/30',
+      border: 'border-amber-500/30',
+      title: 'text-amber-600 dark:text-amber-400',
+      badge: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30',
+      dot: 'bg-amber-500'
     };
   } else {
-    // Verde suave para cubierto
+    // Verde suave para cubierto / lleno totalmente
     return {
-      card: 'bg-accent-faint',
-      border: 'border-accent/30',
-      title: 'text-text',
-      badge: 'bg-accent/20 text-accent border border-accent/20',
-      dot: 'bg-accent'
+      card: 'bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30',
+      border: 'border-emerald-500/30',
+      title: 'text-emerald-600 dark:text-emerald-400',
+      badge: 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30',
+      dot: 'bg-emerald-500'
     };
   }
 };
@@ -282,6 +282,7 @@ export default function ShiftsPage() {
   const [isEditingShifts, setIsEditingShifts] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
+  const [showCapacityColors, setShowCapacityColors] = useState<boolean>(true);
 
   // Edit Volunteer Profile states
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit_profile'>('view');
@@ -996,10 +997,38 @@ export default function ShiftsPage() {
                   }).length;
                 }
 
+                let minRequired = 0;
+                if (activeCommittee) {
+                  minRequired = committeeRequirements[activeCommittee]?.[t] ?? 0;
+                } else {
+                  committees.forEach(c => {
+                    minRequired += (committeeRequirements[c]?.[t] ?? 0);
+                  });
+                }
+
+                let numColorClass = "text-text font-semibold";
+                let labelColorClass = "text-text-dim font-bold";
+
+                if (showCapacityColors && minRequired > 0) {
+                  const isUnderstaffed = count < minRequired;
+                  const isCritical = count <= Math.floor(minRequired / 2);
+
+                  if (isCritical) {
+                    numColorClass = "text-rose-500 font-extrabold";
+                    labelColorClass = "text-rose-500/80 font-bold";
+                  } else if (isUnderstaffed) {
+                    numColorClass = "text-amber-500 font-extrabold";
+                    labelColorClass = "text-amber-500/80 font-bold";
+                  } else {
+                    numColorClass = "text-emerald-600 dark:text-emerald-400 font-extrabold";
+                    labelColorClass = "text-emerald-600/80 dark:text-emerald-400/80 font-bold";
+                  }
+                }
+
                 return (
                   <div key={t} className={`flex flex-col items-center justify-center w-12 sm:w-16 ${i !== 0 ? 'border-l border-border' : ''}`}>
-                    <span className="text-[16px] font-semibold text-text leading-none">{count}</span>
-                    <span className="font-inter text-[10px] font-bold text-text-dim uppercase mt-1 tracking-widest">{t}</span>
+                    <span className={cn("text-[16px] leading-none transition-colors", numColorClass)}>{count}</span>
+                    <span className={cn("font-inter text-[10px] uppercase mt-1 tracking-widest transition-colors", labelColorClass)}>{t}</span>
                   </div>
                 );
               })}
@@ -1032,7 +1061,7 @@ export default function ShiftsPage() {
                     });
                   }
 
-                  const c = getShiftColor(t, count, isSingleCommittee, minRequired);
+                  const c = getShiftColor(t, count, minRequired, showCapacityColors);
                   const combinedKey = `${key}-${t}`;
                   const isShiftExpanded = !!expandedShifts[combinedKey];
                   const displayedVols = isShiftExpanded ? vols : vols.slice(0, 10);
@@ -1064,7 +1093,7 @@ export default function ShiftsPage() {
                           <p className="text-[10px] text-text-dim mt-0.5">{info?.time}</p>
                         </div>
                         <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${c.badge}`}>
-                          {isSingleCommittee ? `${count} / ${minRequired}` : `${count} Vol.`}
+                          {minRequired > 0 ? `${count} / ${minRequired}` : `${count} Vol.`}
                         </span>
                       </div>
 
@@ -1318,19 +1347,46 @@ export default function ShiftsPage() {
                         const hiddenCount = Math.max(0, vols.length - limit);
                         const hasMore = vols.length > limit;
 
+                        let drawerCardBg = "bg-black/30 border-white/15";
+                        let drawerBadgeBg = "bg-white/15 text-white/90 border-white/20";
+                        let drawerIconColor = "text-white/80";
+
+                        if (showCapacityColors && minRequired > 0) {
+                          const isUnderstaffed = count < minRequired;
+                          const isCritical = minRequired > 0 && count <= Math.floor(minRequired / 2);
+
+                          if (isCritical) {
+                            drawerCardBg = "bg-rose-500/20 border-rose-500/40";
+                            drawerBadgeBg = "bg-rose-500/30 text-rose-200 border-rose-500/50 font-bold";
+                            drawerIconColor = "text-rose-400";
+                          } else if (isUnderstaffed) {
+                            drawerCardBg = "bg-amber-500/20 border-amber-500/40";
+                            drawerBadgeBg = "bg-amber-500/30 text-amber-200 border-amber-500/50 font-bold";
+                            drawerIconColor = "text-amber-400";
+                          } else {
+                            drawerCardBg = "bg-emerald-500/20 border-emerald-500/40";
+                            drawerBadgeBg = "bg-emerald-500/30 text-emerald-200 border-emerald-500/50 font-bold";
+                            drawerIconColor = "text-emerald-400";
+                          }
+                        }
+
                         return (
                           <div
                             key={t}
-                            className="bg-black/20 backdrop-blur-md rounded-[24px] p-4 shadow-lg border border-white/10 flex flex-col h-fit"
+                            className={cn(
+                              "backdrop-blur-md rounded-[24px] p-4 shadow-lg border flex flex-col h-fit transition-all",
+                              drawerCardBg
+                            )}
                           >
                             {/* Turno Header */}
                             <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
                               <div className="flex items-center gap-2">
-                                <span className="text-drawer-label text-white font-black text-xs sm:text-sm">{t}</span>
+                                <span className={cn("material-symbols-outlined text-[16px]", drawerIconColor)}>schedule</span>
+                                <span className="text-drawer-label text-white font-black text-xs sm:text-sm">Turno {t[1]}</span>
                                 <span className="font-inter text-[11px] text-white/70 font-medium">{info?.time}</span>
                               </div>
-                              <span className="font-inter text-[10px] font-bold text-white bg-white/15 px-2 py-0.5 rounded-full leading-none flex items-center justify-center shrink-0 border border-white/10">
-                                {count}/{minRequired}
+                              <span className={cn("font-inter text-[10px] px-2 py-0.5 rounded-full leading-none flex items-center justify-center shrink-0 border", drawerBadgeBg)}>
+                                {isSingleCommittee ? `${count}/${minRequired}` : `${count} Vol.`}
                               </span>
                             </div>
 
@@ -1497,33 +1553,50 @@ export default function ShiftsPage() {
       <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto">
         <motion.div variants={itemVariants} className="w-full flex items-center justify-between">
           <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight">Turnos</h1>
-          <div className="flex bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setViewMode('active')}
+              type="button"
+              onClick={() => setShowCapacityColors(!showCapacityColors)}
               className={cn(
-                "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
-                viewMode === 'active'
-                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
-                  : "text-text-dim hover:text-text"
+                "w-[60px] h-7 rounded-full text-[10px] transition-all flex items-center justify-center gap-1 font-inter font-bold border shrink-0 cursor-pointer active:scale-95",
+                showCapacityColors
+                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30 shadow-sm"
+                  : "bg-dark3 text-text-dim border-border hover:text-text"
               )}
+              title={showCapacityColors ? "Ocultar colores de capacidad" : "Mostrar colores de capacidad"}
             >
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              En Turno ({totalActiveCount})
+              <span className="material-symbols-outlined text-[14px]">palette</span>
+              <span className="w-6 text-center">{showCapacityColors ? "ON" : "OFF"}</span>
             </button>
-            <button
-              onClick={() => setViewMode('turnos')}
-              className={cn(
-                "px-3.5 py-1.5 rounded-full text-[10px] transition-all font-inter font-bold",
-                viewMode === 'turnos'
-                  ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
-                  : "text-text-dim hover:text-text"
-              )}
-            >
-              Programación
-            </button>
+
+            <div className="flex bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10">
+              <button
+                onClick={() => setViewMode('active')}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
+                  viewMode === 'active'
+                    ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                    : "text-text-dim hover:text-text"
+                )}
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                En Turno ({totalActiveCount})
+              </button>
+              <button
+                onClick={() => setViewMode('turnos')}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-full text-[10px] transition-all font-inter font-bold",
+                  viewMode === 'turnos'
+                    ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
+                    : "text-text-dim hover:text-text"
+                )}
+              >
+                Programación
+              </button>
+            </div>
           </div>
         </motion.div>
 
