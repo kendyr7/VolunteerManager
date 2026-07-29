@@ -10,7 +10,7 @@ const outfit = Outfit({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: "#4d7cfe",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -18,8 +18,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Volunteer Manager",
-  description: "Gestión de voluntarios para Puertas Abiertas del Templo",
+  title: "Gestión de Voluntarios • Puertas Abiertas",
+  description: "Sistema de administración y organización de turnos de voluntariado para el Templo de Managua.",
   manifest: "/manifest.json",
   verification: {
     other: {
@@ -32,8 +32,25 @@ export const metadata: Metadata = {
     title: "Voluntarios",
   },
   openGraph: {
-    title: "Volunteer Manager",
-    description: "Gestión de voluntarios para Puertas Abiertas del Templo",
+    title: "Gestión de Voluntarios • Puertas Abiertas",
+    description: "Sistema de administración y organización de turnos de voluntariado para el Templo de Managua.",
+    siteName: "Volunteer Manager",
+    locale: "es_NI",
+    type: "website",
+    images: [
+      {
+        url: "/app-icon-512.png",
+        width: 512,
+        height: 512,
+        alt: "Gestión de Voluntarios • Templo de Managua",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "Gestión de Voluntarios • Puertas Abiertas",
+    description: "Sistema de administración y organización de turnos de voluntariado para el Templo de Managua.",
+    images: ["/app-icon-512.png"],
   },
 };
 
