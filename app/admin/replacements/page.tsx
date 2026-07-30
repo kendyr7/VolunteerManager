@@ -1,163 +1,149 @@
 'use client'
 
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { generateWaMeLink } from "@/lib/whatsapp";
-
-// Mocks basados en PRD
-const absentVolunteers = [
-  { id: 1, name: "María González", committee: "Historia", shift: "Turno 1 (8AM-12PM)", phone: "8888 1111", status: "absent" },
-  { id: 2, name: "José Pérez", committee: "Seguridad", shift: "Turno 1 (8AM-12PM)", phone: "8888 4444", status: "pending" },
-];
-
-const suggestedReplacements = [
-  { id: 101, name: "Pedro Ruiz", phone: "8888 5555", isPresentToday: true, currentShift: "Turno 2" },
-  { id: 102, name: "Laura Sánchez", phone: "8888 6666", isPresentToday: false, currentShift: null },
-];
+import {
+  fetchPendingShiftChangeRequestsAction,
+  approveShiftChangeRequestAction,
+  rejectShiftChangeRequestAction
+} from "@/app/actions/shift-change-actions";
 
 export default function ReplacementsPage() {
-  const [selectedAbsent, setSelectedAbsent] = useState<number | null>(null);
-  const [replaced, setReplaced] = useState<number[]>([]);
+  const [shiftRequests, setShiftRequests] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
-  const handleSelectToReplace = (id: number) => {
-    setSelectedAbsent(id);
+  const loadShiftRequests = async () => {
+    setLoadingRequests(true);
+    const res = await fetchPendingShiftChangeRequestsAction();
+    if (res.success && res.requests) {
+      setShiftRequests(res.requests);
+    }
+    setLoadingRequests(false);
   };
 
-  const handleConfirmReplacement = (absentId: number, replacementName: string, replacementPhone: string, shift: string) => {
-    // Generar mensaje pre-llenado
-    const message = `Hola ${replacementName}, necesitamos tu ayuda urgente. Un voluntario se ausentó en el ${shift}. ¿Podrías cubrir este espacio?\n\nPor favor acércate al punto de control. ¡Gracias!`;
-    const link = generateWaMeLink(replacementPhone, message);
-    
-    // Simular el reemplazo
-    setReplaced([...replaced, absentId]);
-    setSelectedAbsent(null);
-    
-    // Abrir WhatsApp en nueva pestaña
-    window.open(link, '_blank');
+  useEffect(() => {
+    loadShiftRequests();
+    const interval = setInterval(loadShiftRequests, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleApproveRequest = async (requestId: string) => {
+    setProcessingId(requestId);
+    const res = await approveShiftChangeRequestAction(requestId);
+    if (res.success) {
+      alert("✅ Solicitud de cambio de turno APROBADA exitosamente. Se notificó al voluntario por WhatsApp.");
+      await loadShiftRequests();
+    } else {
+      alert("❌ Error aprobando solicitud: " + res.error);
+    }
+    setProcessingId(null);
   };
 
-  const activeAbsents = absentVolunteers.filter(v => !replaced.includes(v.id));
+  const handleRejectRequest = async (requestId: string) => {
+    const reason = prompt("Ingresa el motivo del rechazo:", "limitación de disponibilidad de cupos en el turno solicitado");
+    if (reason === null) return;
+
+    setProcessingId(requestId);
+    const res = await rejectShiftChangeRequestAction(requestId, reason);
+    if (res.success) {
+      alert("Solicitud rechazada. Se notificó al voluntario por WhatsApp.");
+      await loadShiftRequests();
+    } else {
+      alert("❌ Error rechazando solicitud: " + res.error);
+    }
+    setProcessingId(null);
+  };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div>
-        <h2 className="font-semibold text-slate-800 tracking-tight">Gestión de Crisis</h2>
-        <p className="text-slate-500 mt-1">Soluciona rápidamente las ausencias buscando reemplazos sugeridos.</p>
+    <div className="max-w-5xl mx-auto space-y-6 p-4">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Solicitudes de Cambio de Turno</h2>
+          <p className="text-slate-500 text-sm mt-1">Aprueba o rechaza solicitudes enviadas por voluntarios desde WhatsApp.</p>
+        </div>
+
+        <Button size="sm" variant="outline" onClick={loadShiftRequests} disabled={loadingRequests}>
+          <span className="material-symbols-outlined text-[16px] mr-1">refresh</span> Actualizar
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Panel Izquierdo: Lista de Ausentes */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium text-slate-800">Alertas Actuales</h3>
-          {activeAbsents.length === 0 ? (
-            <Card className="border-0 shadow-sm bg-emerald-50 border-emerald-200">
-              <CardContent className="p-8 text-center text-accent">
-                <span className="material-symbols-outlined text-[48px] mx-auto mb-3 opacity-50">verified_user</span>
-                No hay crisis activas. Todos los turnos están cubiertos.
-              </CardContent>
-            </Card>
-          ) : (
-            activeAbsents.map(vol => (
-              <Card 
-                key={vol.id} 
-                className={`border-0 shadow-sm transition-all ${selectedAbsent === vol.id ? 'ring-2 ring-blue-500 bg-blue-50/30' : ''}`}
-              >
-                <CardContent className="p-4">
-                  <div className="flex flex-col sm:flex-row justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold text-slate-800">{vol.name}</h4>
-                        {vol.status === 'absent' ? (
-                          <Badge variant="destructive" className="h-5 text-[10px]">Ausente</Badge>
-                        ) : (
-                          <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-none h-5 text-[10px]">Retrasado</Badge>
-                        )}
+      <div className="space-y-4">
+        {loadingRequests && shiftRequests.length === 0 ? (
+          <Card className="border-0 shadow-sm p-8 text-center text-slate-500">
+            Cargando solicitudes...
+          </Card>
+        ) : shiftRequests.length === 0 ? (
+          <Card className="border-0 shadow-sm bg-slate-50 p-12 text-center text-slate-500 rounded-xl">
+            <CardContent className="p-4 flex flex-col items-center">
+              <span className="material-symbols-outlined text-[48px] text-slate-400 mb-2">published_with_changes</span>
+              <p className="font-bold text-base text-slate-700">No hay solicitudes pendientes</p>
+              <p className="text-xs text-slate-500 mt-1">Las solicitudes enviadas por WhatsApp aparecerán aquí en tiempo real.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            {shiftRequests.map((req) => {
+              const volName = `${req.volunteers?.first_name || ''} ${req.volunteers?.last_name || ''}`.trim() || 'Voluntario';
+              const commName = req.volunteers?.committees?.name || 'Servicio';
+              const phone = req.volunteers?.phone || '';
+
+              return (
+                <Card key={req.id} className="border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                  <CardContent className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-slate-900 text-base">{volName}</h4>
+                        <Badge className="bg-blue-100 text-blue-800 border-none text-[11px] font-bold">
+                          {commName}
+                        </Badge>
+                        <Badge className="bg-amber-100 text-amber-800 border-none text-[11px] font-bold">
+                          Pendiente
+                        </Badge>
                       </div>
-                      <p className="text-sm text-slate-600">{vol.committee} • {vol.shift}</p>
-                      <p className="text-xs text-slate-500 font-mono mt-1">Tel: {vol.phone}</p>
-                    </div>
+                      <p className="text-xs text-slate-500 font-mono">Tel: {phone}</p>
 
-                    <div className="flex sm:flex-col gap-2 justify-end">
-                      <Button size="sm" variant="outline" className="text-[#0084d1] hover:bg-blue-50">
-                        <span className="material-symbols-outlined text-[18px] mr-2">send</span> Contactar
-                      </Button>
-                      <Button size="sm" onClick={() => handleSelectToReplace(vol.id)} className="bg-[#0084d1] hover:bg-[#006eb3] text-white shadow-sm">
-                        <span className="material-symbols-outlined text-[18px] mr-2">refresh</span> Reemplazar
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
-
-        {/* Panel Derecho: Sugerencias de Reemplazo */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium text-slate-800">Candidatos Sugeridos</h3>
-          
-          {!selectedAbsent ? (
-            <Card className="border-0 shadow-sm border-dashed border-2 border-slate-200 bg-slate-50">
-              <CardContent className="p-12 text-center text-slate-500 flex flex-col items-center">
-                <span className="material-symbols-outlined text-[40px] text-slate-300 mb-3">person_add</span>
-                <p>Selecciona a un voluntario ausente para ver sugerencias de reemplazo.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="border-0 shadow-sm border-t-4 border-t-blue-500">
-              <CardHeader className="pb-3 border-b border-slate-100">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base text-blue-800 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[18px]">refresh</span>
-                    Buscando para: {absentVolunteers.find(v => v.id === selectedAbsent)?.shift}
-                  </CardTitle>
-                  <Button variant="ghost" size="icon" onClick={() => setSelectedAbsent(null)} className="h-6 w-6">
-                    <span className="material-symbols-outlined text-[18px]">close</span>
-                  </Button>
-                </div>
-                <CardDescription>
-                  Voluntarios del mismo comité disponibles en este horario.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y divide-slate-100">
-                  {suggestedReplacements.map(rep => (
-                    <div key={rep.id} className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-slate-50/50">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-medium text-slate-800">{rep.name}</h4>
-                          {rep.isPresentToday && (
-                            <Badge className="bg-emerald-100 text-emerald-800 border-none h-5 text-[10px] uppercase tracking-wider">
-                              Ya está en el Templo
-                            </Badge>
-                          )}
+                      <div className="flex items-center gap-3 text-xs font-semibold mt-3 pt-2 border-t border-slate-100 text-slate-700">
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Turno Actual:</span>
+                          <span className="text-rose-600 font-bold">{req.current_shift_key} ({req.current_day_key})</span>
                         </div>
-                        <p className="text-xs text-slate-500 mt-1">
-                          {rep.isPresentToday ? `Su turno hoy es: ${rep.currentShift}` : "No tiene turnos hoy"}
-                        </p>
+                        <span className="material-symbols-outlined text-slate-400">arrow_forward</span>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Turno Solicitado:</span>
+                          <span className="text-emerald-600 font-bold">{req.requested_shift_key} ({req.requested_day_key})</span>
+                        </div>
                       </div>
-                      
-                      <Button 
-                        size="sm" 
-                        onClick={() => handleConfirmReplacement(
-                          selectedAbsent, 
-                          rep.name, 
-                          rep.phone, 
-                          absentVolunteers.find(v => v.id === selectedAbsent)?.shift || ""
-                        )}
-                        className="bg-[#25D366] hover:bg-[#1ebd5a] text-white shadow-sm shrink-0"
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={processingId === req.id}
+                        onClick={() => handleRejectRequest(req.id)}
+                        className="text-rose-600 hover:bg-rose-50 border-rose-200 text-xs font-bold"
                       >
-                        <span className="material-symbols-outlined text-[18px] mr-2">send</span> Notificar y Asignar
+                        <span className="material-symbols-outlined text-[16px] mr-1">close</span> Rechazar
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        disabled={processingId === req.id}
+                        onClick={() => handleApproveRequest(req.id)}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm"
+                      >
+                        <span className="material-symbols-outlined text-[16px] mr-1">check</span> Aprobar y Notificar WA
                       </Button>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -122,6 +122,7 @@ function CoordinatorLayoutInner({
     { name: "Voluntarios", href: "/volunteers", icon: "group", roles: ['Admin', 'Editor', 'Lector'] },
     { name: currentRole === 'Lector' ? "Mi Perfil" : "Turnos", href: "/shifts", icon: currentRole === 'Lector' ? "person" : "checklist", roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Escanear QR", href: "/check-in", icon: "qr_code_scanner", roles: ['Admin', 'Editor'] },
+    { name: "Solicitudes", href: "/replacements", icon: "published_with_changes", roles: ['Admin', 'Editor'] },
     { name: "Avisos", href: "/reminders", icon: "campaign", roles: ['Admin', 'Editor'] },
     { name: "Reportes", href: "/reports", icon: "analytics", roles: ['Admin', 'Editor'] },
     { name: "Usuarios", href: "/users", icon: "shield_person", roles: ['Admin'] },
@@ -140,6 +141,7 @@ function CoordinatorLayoutInner({
       if (item.href === '/volunteers' && !canViewVolunteers()) return false;
       if (item.href === '/check-in' && !canQrCheckin()) return false;
       if (item.href === '/reminders' && !canSendWhatsappMessages()) return false;
+      if (item.href === '/replacements' && !canSendWhatsappMessages()) return false;
       if (item.href === '/reports' && !canViewReports()) return false;
       if (item.href === '/import' && !canImportData()) return false;
       if (item.href === '/users' && !canManageUsers()) return false;
@@ -339,6 +341,7 @@ function CoordinatorLayoutInner({
                   "/shifts": { activeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/40 shadow-[0_0_14px_rgba(245,158,11,0.2)]", iconClass: "text-amber-600 dark:text-amber-400" },
                   "/check-in": { activeClass: "bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/40 shadow-[0_0_14px_rgba(236,72,153,0.2)]", iconClass: "text-pink-600 dark:text-pink-400" },
                   "/reminders": { activeClass: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/40 shadow-[0_0_14px_rgba(139,92,246,0.2)]", iconClass: "text-purple-600 dark:text-purple-400" },
+                  "/replacements": { activeClass: "bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/40 shadow-[0_0_14px_rgba(20,184,166,0.2)]", iconClass: "text-teal-600 dark:text-teal-400" },
                   "/reports": { activeClass: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/40 shadow-[0_0_14px_rgba(6,182,212,0.2)]", iconClass: "text-cyan-600 dark:text-cyan-400" },
                   "/users": { activeClass: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/40 shadow-[0_0_14px_rgba(59,130,246,0.2)]", iconClass: "text-blue-600 dark:text-blue-400" },
                   "/import": { activeClass: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/40 shadow-[0_0_14px_rgba(249,115,22,0.2)]", iconClass: "text-orange-600 dark:text-orange-400" },

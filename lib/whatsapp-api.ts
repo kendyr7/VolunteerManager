@@ -233,6 +233,154 @@ export async function sendWhatsAppInteractiveButton(options: {
 }
 
 /**
+ * Send Interactive Multi-Button Message (up to 3 buttons inside 24h window)
+ */
+export async function sendWhatsAppInteractiveButtons(options: {
+  to: string;
+  bodyText: string;
+  buttons: Array<{ id: string; title: string }>;
+  headerText?: string;
+  footerText?: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { token, phoneNumberId } = getMetaCredentials();
+
+  if (!token || !phoneNumberId) {
+    return { success: false, error: "Missing WhatsApp Credentials" };
+  }
+
+  const recipientPhone = formatE164Phone(options.to);
+  const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
+
+  const interactiveObj: any = {
+    type: 'button',
+    body: { text: options.bodyText },
+    action: {
+      buttons: options.buttons.slice(0, 3).map(b => ({
+        type: 'reply',
+        reply: {
+          id: b.id,
+          title: b.title.slice(0, 20) // Meta limit: 20 chars
+        }
+      }))
+    }
+  };
+
+  if (options.headerText) {
+    interactiveObj.header = { type: 'text', text: options.headerText };
+  }
+  if (options.footerText) {
+    interactiveObj.footer = { text: options.footerText };
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: recipientPhone,
+        type: 'interactive',
+        interactive: interactiveObj
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error("Meta WhatsApp Buttons Error:", data);
+      return { success: false, error: data.error?.message || "Error enviando botones interactivos" };
+    }
+
+    return { success: true, messageId: data.messages?.[0]?.id };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Send Interactive List Message ("Ver Opciones" dropdown menu)
+ */
+export async function sendWhatsAppInteractiveList(options: {
+  to: string;
+  bodyText: string;
+  buttonText?: string;
+  headerText?: string;
+  footerText?: string;
+  sections: Array<{
+    title: string;
+    rows: Array<{
+      id: string;
+      title: string;
+      description?: string;
+    }>;
+  }>;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { token, phoneNumberId } = getMetaCredentials();
+
+  if (!token || !phoneNumberId) {
+    return { success: false, error: "Missing WhatsApp Credentials" };
+  }
+
+  const recipientPhone = formatE164Phone(options.to);
+  const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
+
+  const interactiveObj: any = {
+    type: 'list',
+    body: { text: options.bodyText },
+    action: {
+      button: (options.buttonText || 'Ver Opciones').slice(0, 20),
+      sections: options.sections.map(s => ({
+        title: s.title.slice(0, 24),
+        rows: s.rows.slice(0, 10).map(r => ({
+          id: r.id,
+          title: r.title.slice(0, 24),
+          description: r.description ? r.description.slice(0, 72) : undefined
+        }))
+      }))
+    }
+  };
+
+  if (options.headerText) {
+    interactiveObj.header = { type: 'text', text: options.headerText };
+  }
+  if (options.footerText) {
+    interactiveObj.footer = { text: options.footerText };
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: recipientPhone,
+        type: 'interactive',
+        interactive: interactiveObj
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error("Meta WhatsApp List Error:", data);
+      return { success: false, error: data.error?.message || "Error enviando lista interactiva" };
+    }
+
+    return { success: true, messageId: data.messages?.[0]?.id };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Send Welcome Template to a newly created Volunteer
  */
 export async function sendVolunteerWelcomeTemplate(options: {
@@ -295,4 +443,51 @@ export async function sendShiftReminderTemplate(options: {
       }
     ]
   });
+}
+
+/**
+ * Send Shift Change Result Template (Resolution: Approved or Rejected)
+ * Template Name: resultado_cambio_turno (es)
+ * {{1}} = Volunteer Name (e.g. "Juan Carlos")
+ * {{2}} = Status / Result ("APROBADA" or "RECHAZADA")
+ * {{3}} = Target Shift & Date (e.g. "Turno 1 para el 30 de Agosto")
+ * {{4}} = Detail / Reason (e.g. "Tu nuevo turno ha sido registrado" or "limitación de disponibilidad de cupos")
+ */
+export async function sendShiftChangeResultTemplate(options: {
+  to: string;
+  volunteerName: string;
+  resultStatus: 'APROBADA' | 'RECHAZADA';
+  shiftDetails: string;
+  reasonOrDetail: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const apiRes = await sendWhatsAppTemplate({
+    to: options.to,
+    templateName: 'resultado_cambio_turno',
+    languageCode: 'es',
+    components: [
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: options.volunteerName },
+          { type: 'text', text: options.resultStatus },
+          { type: 'text', text: options.shiftDetails },
+          { type: 'text', text: options.reasonOrDetail }
+        ]
+      }
+    ]
+  });
+
+  // Fallback to text message inside 24h window or if template pending approval
+  if (!apiRes.success) {
+    const textMsg = options.resultStatus === 'APROBADA'
+      ? `¡Hola ${options.volunteerName}! 🎉 Tu petición de cambio de turno (${options.shiftDetails}) ha sido APROBADA. ${options.reasonOrDetail}. ¡Gracias por tu disposición!`
+      : `Estimado(a) ${options.volunteerName}. Tu petición de cambio de turno (${options.shiftDetails}) ha sido RECHAZADA debido a ${options.reasonOrDetail}. Agradecemos tu comprensión. 🙏`;
+
+    return sendWhatsAppText({
+      to: options.to,
+      text: textMsg
+    });
+  }
+
+  return apiRes;
 }
