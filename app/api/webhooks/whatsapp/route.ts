@@ -198,7 +198,7 @@ export async function POST(req: NextRequest) {
       // Send thank-you confirmation text message via Meta WhatsApp API
       const replyRes = await sendWhatsAppText({
         to: rawFrom,
-        text: `¡Muchas gracias por tu respuesta, ${firstName}! Tu asistencia para el turno de servicio voluntario ha sido CONFIRMADA exitosamente. 🙏✨`
+        text: `¡Muchas gracias por tu respuesta, ${firstName}! Tu asistencia ha sido CONFIRMADA exitosamente. ✨`
       });
 
       console.log(`Sent thank-you confirmation WhatsApp reply to ${rawFrom}:`, replyRes);
