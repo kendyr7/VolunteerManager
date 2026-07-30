@@ -44,11 +44,11 @@ export async function GET(req: NextRequest) {
   const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'volunteermanager_verify_token_2026';
 
   if (mode === 'subscribe' && token === verifyToken) {
-    console.log("WhatsApp Webhook Verified Successfully!");
+    console.log("✅ WhatsApp Webhook Verified Successfully!");
     return new Response(challenge, { status: 200 });
   }
 
-  console.warn("WhatsApp Webhook Verification Failed. Provided Token:", token);
+  console.warn("❌ WhatsApp Webhook Verification Failed. Provided Token:", token);
   return new Response('Forbidden', { status: 403 });
 }
 
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     const wamid = message.id;
     const contextMsgId = message.context?.id;
 
-    console.log(`Received Meta WhatsApp Webhook message of type "${messageType}" from ${rawFrom}:`, JSON.stringify(message));
+    console.log(`📩 Received Meta WhatsApp Webhook message of type "${messageType}" from ${rawFrom} (Context ID: ${contextMsgId || 'none'})`);
 
     const supabase = getAdminClient();
     const senderDigits = rawFrom.replace(/\D/g, '');
@@ -119,37 +119,42 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Extract payload IDs for interactive clicks
+    // Extract payload IDs or typed numbers
     let interactiveId = '';
-    let isListReply = false;
-    let isButtonReply = false;
 
     if (messageType === 'interactive') {
       const interactive = message.interactive;
       if (interactive.type === 'list_reply') {
         interactiveId = interactive.list_reply?.id || '';
-        isListReply = true;
       } else if (interactive.type === 'button_reply') {
         interactiveId = interactive.button_reply?.id || '';
-        isButtonReply = true;
       }
     } else if (messageType === 'button') {
       interactiveId = message.button?.payload || message.button?.text || '';
-      isButtonReply = true;
+    } else if (messageType === 'text') {
+      const textContent = (message.text?.body || '').trim().toLowerCase();
+      if (textContent === '1' || textContent.includes('confirmar mi turno') || textContent === 'confirmar') {
+        interactiveId = 'menu_confirm_shift';
+      } else if (textContent === '2' || textContent.includes('ver mis turnos') || textContent.includes('mis turnos')) {
+        interactiveId = 'menu_view_shifts';
+      } else if (textContent === '3' || textContent.includes('solicitar cambio') || textContent.includes('reagendar')) {
+        interactiveId = 'menu_reschedule';
+      } else if (textContent === '4' || textContent.includes('contactar coordinador') || textContent.includes('coordinador')) {
+        interactiveId = 'menu_contact_coordinator';
+      }
     }
 
-    // 2. Process Interactive Menu Selection & Actions
-    if (interactiveId === 'menu_confirm_shift' || interactiveId.startsWith('confirm_date_')) {
+    // 2. Process Actions
+    if (interactiveId === 'menu_confirm_shift' || interactiveId.startsWith('confirm_date_') || interactiveId.startsWith('confirm_shift_')) {
       // OPTION 1: Confirmar mi turno
       if (!targetVolId) {
         await sendWhatsAppText({
           to: rawFrom,
-          text: `Hola. No encontramos tu número de teléfono registrado como voluntario activo. Por favor contacta al administrador del sistema.`
+          text: `Hola. No encontramos tu número de teléfono registrado como voluntario activo. Por favor contacta al administrador.`
         });
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
 
-      // Fetch assigned shifts for this volunteer
       const { data: userShifts } = await supabase
         .from('shifts')
         .select('*')
@@ -158,18 +163,16 @@ export async function POST(req: NextRequest) {
       if (!userShifts || userShifts.length === 0) {
         await sendWhatsAppText({
           to: rawFrom,
-          text: `Hola ${firstName}, actualmente no tienes turnos de servicio asignados para confirmar. Por favor contacta a tu coordinador de ${committeeName}.`
+          text: `Hola ${firstName}, actualmente no tienes turnos de servicio asignados para confirmar.`
         });
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
 
-      // If user selected a specific date (e.g. confirm_date_2026-08-30)
       if (interactiveId.startsWith('confirm_date_')) {
         const selectedDayKey = interactiveId.replace('confirm_date_', '');
         const dayShifts = userShifts.filter(s => s.day_key === selectedDayKey);
 
         if (dayShifts.length === 1) {
-          // Confirm immediately
           const shiftKey = dayShifts[0].shift_key;
           await supabase.from('reminder_logs').upsert({
             volunteer_id: targetVolId,
@@ -185,24 +188,30 @@ export async function POST(req: NextRequest) {
             text: `¡Muchas gracias, ${firstName}! Tu asistencia para el *${shiftKey}* del día *${selectedDayKey}* ha sido CONFIRMADA exitosamente. 🙏✨`
           });
         } else {
-          // Ask which shift for that date
           const buttons = dayShifts.map(s => ({
             id: `confirm_shift_${s.day_key}_${s.shift_key}`,
             title: `Turno ${s.shift_key.replace('T', '')}`
           }));
 
-          await sendWhatsAppInteractiveButtons({
+          const btnRes = await sendWhatsAppInteractiveButtons({
             to: rawFrom,
             bodyText: `¿Qué turno deseas confirmar para la fecha *${selectedDayKey}*?`,
             buttons
           });
+
+          if (!btnRes.success) {
+            let optionsText = dayShifts.map(s => `• ${s.shift_key}`).join('\n');
+            await sendWhatsAppText({
+              to: rawFrom,
+              text: `¿Qué turno deseas confirmar para el *${selectedDayKey}*?\n\n${optionsText}`
+            });
+          }
         }
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
 
-      // If user clicked confirm_shift_YYYY-MM-DD_T1
       if (interactiveId.startsWith('confirm_shift_')) {
-        const parts = interactiveId.split('_'); // confirm_shift_DAY_SHIFT
+        const parts = interactiveId.split('_');
         const dayKey = parts[2];
         const shiftKey = parts[3];
 
@@ -222,10 +231,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
 
-      // First step: present list/buttons of assigned dates
+      // Initial date selection
       const uniqueDays = Array.from(new Set(userShifts.map(s => s.day_key)));
       if (uniqueDays.length === 1) {
-        // Single date assigned
         const dayKey = uniqueDays[0];
         const dayShifts = userShifts.filter(s => s.day_key === dayKey);
         const shiftKey = dayShifts[0].shift_key;
@@ -244,20 +252,27 @@ export async function POST(req: NextRequest) {
           text: `¡Muchas gracias, ${firstName}! Tu asistencia para el *${shiftKey}* del día *${dayKey}* ha sido CONFIRMADA exitosamente. 🙏✨`
         });
       } else {
-        // Multiple dates assigned -> ask date first
         const rows = uniqueDays.map(d => ({
           id: `confirm_date_${d}`,
           title: `Fecha ${d}`,
           description: `Confirmar servicio del día ${d}`
         }));
 
-        await sendWhatsAppInteractiveList({
+        const listRes = await sendWhatsAppInteractiveList({
           to: rawFrom,
           headerText: "Confirmación de Turno",
           bodyText: `Hola ${firstName}, por favor selecciona la fecha que deseas confirmar:`,
           buttonText: "Seleccionar Fecha",
           sections: [{ title: "Tus Fechas Asignadas", rows }]
         });
+
+        if (!listRes.success) {
+          let textDays = uniqueDays.map(d => `• ${d}`).join('\n');
+          await sendWhatsAppText({
+            to: rawFrom,
+            text: `Hola ${firstName}, por favor escribe cuál fecha deseas confirmar:\n\n${textDays}`
+          });
+        }
       }
 
       return NextResponse.json({ status: 'success' }, { status: 200 });
@@ -291,9 +306,9 @@ export async function POST(req: NextRequest) {
       userShifts.forEach(s => {
         text += `• *Fecha:* ${s.day_key} | *${s.shift_key}*\n`;
       });
-      text += `\n¿Deseas confirmar la asistencia a alguno de estos turnos?`;
+      text += `\n¿Deseas confirmar tu asistencia a alguno de estos turnos?`;
 
-      await sendWhatsAppInteractiveButtons({
+      const btnRes = await sendWhatsAppInteractiveButtons({
         to: rawFrom,
         bodyText: text,
         buttons: [
@@ -301,6 +316,11 @@ export async function POST(req: NextRequest) {
           { id: 'menu_reschedule', title: 'Solicitar Cambio' }
         ]
       });
+
+      if (!btnRes.success) {
+        text += `\n\nResponde *1* para confirmar un turno o *3* para solicitar cambio.`;
+        await sendWhatsAppText({ to: rawFrom, text });
+      }
 
       return NextResponse.json({ status: 'success' }, { status: 200 });
     }
@@ -315,16 +335,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
 
-      // Step 2: Handle target selection `reschedule_to_CURRENTDAY_CURRENTSHIFT_NEWDAY_NEWSHIFT`
       if (interactiveId.startsWith('reschedule_to_')) {
         const parts = interactiveId.replace('reschedule_to_', '').split('__');
-        const currentPart = parts[0]; // DAY_SHIFT
-        const requestedPart = parts[1]; // DAY_SHIFT
+        const currentPart = parts[0];
+        const requestedPart = parts[1];
 
         const [currDay, currShift] = currentPart.split('_');
         const [reqDay, reqShift] = requestedPart.split('_');
 
-        // Insert shift change request into DB
         await supabase.from('shift_change_requests').insert({
           volunteer_id: targetVolId,
           current_day_key: currDay,
@@ -336,16 +354,14 @@ export async function POST(req: NextRequest) {
 
         await sendWhatsAppText({
           to: rawFrom,
-          text: `Tu solicitud de cambio del *${currShift} (${currDay})* al *${reqShift} (${reqDay})* ha sido recibida y se encuentra en revisión.\n\nTe notificaremos por WhatsApp una vez que el administrador/coordinador apruebe o deniegue tu solicitud. 🙏`
+          text: `Tu solicitud de cambio del *${currShift} (${currDay})* al *${reqShift} (${reqDay})* ha sido recibida y se encuentra en revisión.\n\nTe notificaremos por WhatsApp una vez que el administrador apruebe o deniegue tu solicitud. 🙏`
         });
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
 
-      // Step 1: User selected a shift to reschedule from `reschedule_from_DAY_SHIFT`
       if (interactiveId.startsWith('reschedule_from_')) {
         const [currDay, currShift] = interactiveId.replace('reschedule_from_', '').split('_');
 
-        // Present target options (e.g. T1, T2, T3, T4 on next active days)
         const targetRows = [
           { id: `reschedule_to_${currDay}_${currShift}__2026-08-30_T1`, title: '30 Aug - Turno 1', description: '7:00 AM - 12:00 PM' },
           { id: `reschedule_to_${currDay}_${currShift}__2026-08-30_T2`, title: '30 Aug - Turno 2', description: '12:00 PM - 5:00 PM' },
@@ -353,17 +369,23 @@ export async function POST(req: NextRequest) {
           { id: `reschedule_to_${currDay}_${currShift}__2026-08-31_T2`, title: '31 Aug - Turno 2', description: '12:00 PM - 5:00 PM' },
         ];
 
-        await sendWhatsAppInteractiveList({
+        const listRes = await sendWhatsAppInteractiveList({
           to: rawFrom,
           headerText: "Solicitar Reagendamiento",
           bodyText: `Has seleccionado cambiar el *${currShift} (${currDay})*. ¿A qué nuevo turno te gustaría cambiarte?`,
           buttonText: "Ver Turnos Nuevos",
           sections: [{ title: "Turnos Disponibles", rows: targetRows }]
         });
+
+        if (!listRes.success) {
+          await sendWhatsAppText({
+            to: rawFrom,
+            text: `Has seleccionado cambiar el *${currShift} (${currDay})*. Escribe la fecha y turno al que deseas cambiarte.`
+          });
+        }
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
 
-      // Step 0: User clicked menu_reschedule -> Ask which of their current shifts to reschedule
       const { data: userShifts } = await supabase
         .from('shifts')
         .select('*')
@@ -383,13 +405,21 @@ export async function POST(req: NextRequest) {
         description: `Solicitar cambio para este turno`
       }));
 
-      await sendWhatsAppInteractiveList({
+      const listRes = await sendWhatsAppInteractiveList({
         to: rawFrom,
         headerText: "Cambio de Turno",
         bodyText: `Hola ${firstName}, ¿cuál de tus turnos actuales deseas cambiar?`,
         buttonText: "Seleccionar Turno",
         sections: [{ title: "Tus Turnos Actuales", rows }]
       });
+
+      if (!listRes.success) {
+        let shiftsText = userShifts.map(s => `• ${s.shift_key} (${s.day_key})`).join('\n');
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: `Hola ${firstName}, ¿cuál de tus turnos actuales deseas cambiar?\n\n${shiftsText}`
+        });
+      }
 
       return NextResponse.json({ status: 'success' }, { status: 200 });
     }
@@ -466,8 +496,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'success' }, { status: 200 });
     }
 
-    // 4. Default Fallback: Send Main Interactive Options Menu
-    await sendWhatsAppInteractiveList({
+    // 4. Default Fallback: Send Main Interactive Options Menu (or text menu fallback)
+    const mainListRes = await sendWhatsAppInteractiveList({
       to: rawFrom,
       headerText: "Asistencia Voluntariado",
       bodyText: `Hola ${firstName}, bienvenido(a) al centro de atención por WhatsApp. ¿En qué podemos ayudarte hoy?`,
@@ -500,6 +530,14 @@ export async function POST(req: NextRequest) {
         }
       ]
     });
+
+    if (!mainListRes.success) {
+      console.warn("Main Interactive List failed, sending plain text fallback:", mainListRes.error);
+      await sendWhatsAppText({
+        to: rawFrom,
+        text: `Hola ${firstName}, bienvenido(a) al centro de atención por WhatsApp. Por favor escribe el número de la opción que deseas:\n\n1. Confirmar mi turno\n2. Ver mis turnos\n3. Solicitar cambio de turno\n4. Contactar a mi coordinador`
+      });
+    }
 
     return NextResponse.json({ status: 'success' }, { status: 200 });
   } catch (error: any) {
