@@ -28,8 +28,8 @@ export function formatE164(phone: string, defaultCountryCode: string = '505'): s
 
   if (!cleaned) return '';
 
-  // Si no traía '+' y tampoco empieza con el código de país por defecto (505), agregarlo
-  if (!hadPlus && !cleaned.startsWith(defaultCountryCode)) {
+  // Solo agregar el código de país por defecto (505) si el número no traía '+' y es un número local de 8 dígitos
+  if (!hadPlus && !cleaned.startsWith(defaultCountryCode) && cleaned.length === 8) {
     cleaned = `${defaultCountryCode}${cleaned}`;
   }
 

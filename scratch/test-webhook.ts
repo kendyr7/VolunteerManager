@@ -23,6 +23,9 @@ async function testWebhook() {
                   button: {
                     payload: "Confirmar",
                     text: "Confirmar"
+                  },
+                  context: {
+                    id: "wamid.HBgLODgyNzMwMzQ2FQIAERgSQjE2RDE0NDYyOTExMUI1NzQxAA=="
                   }
                 }
               ]

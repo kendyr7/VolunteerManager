@@ -600,8 +600,23 @@ export default function RemindersPage() {
     };
 
     syncLogsFromSupabase();
-    const interval = setInterval(syncLogsFromSupabase, 5000);
-    return () => clearInterval(interval);
+    const interval = setInterval(syncLogsFromSupabase, 4000);
+
+    const channel = supabase
+      .channel('reminder_logs_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reminder_logs' },
+        () => {
+          syncLogsFromSupabase();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleSingleSendWhatsApp = async (vol: VolunteerType) => {

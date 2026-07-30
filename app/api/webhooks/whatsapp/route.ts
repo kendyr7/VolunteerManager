@@ -55,47 +55,83 @@ export async function POST(req: NextRequest) {
     const rawFrom = message.from; // Sender phone number e.g. "50588273034"
     const messageType = message.type;
     const wamid = message.id;
+    const contextMsgId = message.context?.id; // Original template message ID if reply/button click
 
-    console.log(`Received Meta WhatsApp Webhook message of type "${messageType}" from ${rawFrom}:`, JSON.stringify(message));
+    console.log(`Received Meta WhatsApp Webhook message of type "${messageType}" from ${rawFrom} (Context ID: ${contextMsgId || 'none'}):`, JSON.stringify(message));
 
     const supabase = getAdminClient();
     const formattedSender = formatE164Phone(rawFrom);
+    const senderDigits = rawFrom.replace(/\D/g, '');
 
-    // 1. Search for volunteer/user by phone number in both volunteers and profiles
+    // 1. Primary Check: Lookup reminder_logs directly by contextMsgId if available
+    let contextLogMatched = false;
     let targetVolId: string | null = null;
     let firstName = 'Voluntario(a)';
 
-    const { data: volunteers } = await supabase
-      .from('volunteers')
-      .select('id, first_name, last_name, phone');
+    if (contextMsgId) {
+      const { data: matchedLog } = await supabase
+        .from('reminder_logs')
+        .select('*, volunteers(first_name, last_name)')
+        .eq('whatsapp_message_id', contextMsgId)
+        .maybeSingle();
 
-    const matchedVol = (volunteers || []).find(v => {
-      if (!v.phone) return false;
-      const cleanVPhone = formatE164Phone(v.phone);
-      return cleanVPhone.endsWith(formattedSender.slice(-8));
-    });
+      if (matchedLog) {
+        contextLogMatched = true;
+        targetVolId = matchedLog.volunteer_id;
+        if (matchedLog.volunteers?.first_name) {
+          firstName = matchedLog.volunteers.first_name;
+        }
 
-    if (matchedVol) {
-      targetVolId = matchedVol.id;
-      firstName = matchedVol.first_name || 'Voluntario(a)';
-    } else {
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, phone');
+        // Update this exact log to 'confirmado'
+        await supabase
+          .from('reminder_logs')
+          .update({
+            status: 'confirmado',
+            confirmed_at: new Date().toISOString(),
+            raw_payload: message
+          })
+          .eq('id', matchedLog.id);
 
-      const matchedProf = (profiles || []).find(p => {
-        if (!p.phone) return false;
-        const cleanPPhone = formatE164Phone(p.phone);
-        return cleanPPhone.endsWith(formattedSender.slice(-8));
-      });
-
-      if (matchedProf) {
-        targetVolId = matchedProf.id;
-        firstName = (matchedProf.full_name || 'Usuario').split(' ')[0];
+        console.log(`Successfully updated reminder_log ${matchedLog.id} to 'confirmado' via context.id ${contextMsgId}`);
       }
     }
 
-    // 2. Check if message is a confirmation button click or confirmation text
+    // 2. Secondary Check: Search for volunteer/user by phone number if targetVolId not found yet
+    if (!targetVolId) {
+      const { data: volunteers } = await supabase
+        .from('volunteers')
+        .select('id, first_name, last_name, phone');
+
+      const matchedVol = (volunteers || []).find(v => {
+        if (!v.phone) return false;
+        const vDigits = v.phone.replace(/\D/g, '');
+        if (!vDigits || !senderDigits) return false;
+        return senderDigits.endsWith(vDigits.slice(-8)) || vDigits.endsWith(senderDigits.slice(-8));
+      });
+
+      if (matchedVol) {
+        targetVolId = matchedVol.id;
+        firstName = matchedVol.first_name || 'Voluntario(a)';
+      } else {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone');
+
+        const matchedProf = (profiles || []).find(p => {
+          if (!p.phone) return false;
+          const pDigits = p.phone.replace(/\D/g, '');
+          if (!pDigits || !senderDigits) return false;
+          return senderDigits.endsWith(pDigits.slice(-8)) || pDigits.endsWith(senderDigits.slice(-8));
+        });
+
+        if (matchedProf) {
+          targetVolId = matchedProf.id;
+          firstName = (matchedProf.full_name || 'Usuario').split(' ')[0];
+        }
+      }
+    }
+
+    // 3. Check if message is a confirmation button click or confirmation text
     let isConfirmation = false;
     let buttonText = '';
 
@@ -122,12 +158,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 3. Process Confirmation vs Re-prompt
+    // 4. Process Confirmation vs Re-prompt
     if (isConfirmation) {
       console.log(`Confirmation received from ${rawFrom} (${firstName})`);
 
-      if (targetVolId) {
-        // Update all recent logs for this volunteer to 'confirmado'
+      if (!contextLogMatched && targetVolId) {
+        // Update all recent pending/contacted logs for this volunteer to 'confirmado'
         const { data: pendingLogs } = await supabase
           .from('reminder_logs')
           .select('*')
@@ -146,7 +182,7 @@ export async function POST(req: NextRequest) {
             })
             .in('id', logIds);
         } else {
-          // Insert a new confirmed log
+          // Insert a new confirmed log if no existing log was found
           await supabase.from('reminder_logs').insert([{
             volunteer_id: targetVolId,
             shift_key: 'T1',
