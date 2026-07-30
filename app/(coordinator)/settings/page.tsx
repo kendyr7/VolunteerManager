@@ -365,26 +365,6 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
     requirements: false,
   });
 
-  const [testPhone, setTestPhone] = useState('');
-  const [isSendingTestMeta, setIsSendingTestMeta] = useState(false);
-
-  const handleSendMetaTest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!testPhone.trim()) return;
-    setIsSendingTestMeta(true);
-
-    const { sendTestMetaWhatsAppMessageAction } = await import('@/app/actions/whatsapp');
-    const res = await sendTestMetaWhatsAppMessageAction(testPhone, 'hello_world', 'en_US');
-
-    if (res.success) {
-      showToast(`✅ ¡Mensaje "hello_world" enviado con éxito! ID: ${res.messageId}`);
-      setTestPhone('');
-    } else {
-      showToast(`❌ Error de Meta WhatsApp: ${res.error}`, 'error');
-    }
-    setIsSendingTestMeta(false);
-  };
-
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [selectedActionFilter, setSelectedActionFilter] = useState<string>('Todas');
@@ -1031,43 +1011,6 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                     </div>
                   </form>
                 </div>
-
-                {/* Meta WhatsApp Cloud API Tester */}
-                {currentRole === 'Admin' && (
-                  <div className="pt-4 border-t border-border space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-[#25D366] text-[18px]">chat</span>
-                        <h4 className="font-bold text-text text-xs">Probador de Meta WhatsApp Cloud API</h4>
-                      </div>
-                      <Badge className="bg-[#25D366]/15 text-[#25D366] border-[#25D366]/30 text-[9px] font-extrabold px-2 py-0.5">
-                        Plantilla Aprobada: finalizar_configuracion_cuenta (es)
-                      </Badge>
-                    </div>
-
-                    <p className="text-[11px] font-inter text-text-dim">
-                      Envía un mensaje de bienvenida y verificación de PIN utilizando la plantilla oficial aprobada por Meta (<strong className="text-text">finalizar_configuracion_cuenta</strong>).
-                    </p>
-
-                    <form onSubmit={handleSendMetaTest} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                      <input
-                        type="text"
-                        placeholder="Ej: +50588888888 o 88888888"
-                        value={testPhone}
-                        onChange={(e) => setTestPhone(e.target.value)}
-                        className="flex-1 h-9 px-3.5 rounded-xl border border-border bg-dark3 text-text text-xs font-inter font-bold outline-none focus:border-[#25D366] transition-all"
-                        required
-                      />
-                      <Button
-                        type="submit"
-                        disabled={isSendingTestMeta || !testPhone.trim()}
-                        className="h-9 px-5 bg-[#25D366] hover:bg-[#20bd5a] text-black font-extrabold text-xs rounded-full shadow-md active:scale-95 transition-all shrink-0 cursor-pointer"
-                      >
-                        {isSendingTestMeta ? 'Enviando a Meta...' : 'Enviar WhatsApp de Prueba'}
-                      </Button>
-                    </form>
-                  </div>
-                )}
               </div>
             )}
           </div>
