@@ -17,7 +17,7 @@ async function triggerCalls() {
 
     console.log("Triggering Graph API message templates call...");
     const res3 = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/message_templates?access_token=${token}`);
-    const data3 = await res3.json();
+    const data3: any = await res3.json();
     console.log("Templates Response:", res3.status, data3?.data ? `Found ${data3.data.length} templates` : data3);
   } catch (e: any) {
     console.error("Error executing API calls:", e.message);
