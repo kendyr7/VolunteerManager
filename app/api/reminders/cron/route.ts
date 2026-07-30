@@ -45,9 +45,9 @@ async function handleReminders(req: NextRequest) {
       }
     }
 
-    // Determine target date (48 hours in the future)
+    // Determine target date (72 hours in the future)
     const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() + 2);
+    targetDate.setDate(targetDate.getDate() + 3);
     const targetDayKey = targetDate.toISOString().split('T')[0]; // YYYY-MM-DD
 
     const results: any[] = [];
@@ -67,7 +67,7 @@ async function handleReminders(req: NextRequest) {
       const isHelloWorld = templateName === 'hello_world';
       const apiResult = await sendWhatsAppTemplate({
         to: formattedTestPhone,
-        templateName: templateName,
+        templateName: isHelloWorld ? 'hello_world' : 'recordatorio_turno_comite',
         languageCode: isHelloWorld ? 'en_US' : 'es',
         components: isHelloWorld ? undefined : [
           {
@@ -76,6 +76,7 @@ async function handleReminders(req: NextRequest) {
               { type: 'text', text: fullName },
               { type: 'text', text: commName },
               { type: 'text', text: 'Turno 1' },
+              { type: 'text', text: '7:00 AM - 12:00 PM' },
               { type: 'text', text: targetDayKey }
             ]
           }
@@ -88,7 +89,7 @@ async function handleReminders(req: NextRequest) {
         console.warn("Template failed (may not be approved yet). Trying fallback text message...");
         finalResult = await sendWhatsAppText({
           to: formattedTestPhone,
-          text: `Querido(a) hermano(a) ${fullName}, le recordamos su turno de servicio voluntario del comité de ${commName} para el Turno 1 el día ${targetDayKey}.\n\nAgradecemos profundamente su apoyo.`
+          text: `Querido(a) hermano(a) ${fullName}, le recordamos su turno de servicio voluntario del comité de ${commName} para el Turno 1 (7:00 AM - 12:00 PM) el día ${targetDayKey}.\n\nAgradecemos profundamente su apoyo.`
         });
       }
 
@@ -122,10 +123,11 @@ async function handleReminders(req: NextRequest) {
         const fullName = `${vol.first_name || ''} ${vol.last_name || ''}`.trim() || 'Hermano(a)';
         const commName = (vol?.committees as any)?.name || (Array.isArray(vol?.committees) ? (vol?.committees as any)[0]?.name : 'Servicio');
         const shiftLabel = `Turno ${shift.shift_key.replace('T', '')}`;
+        const shiftTime = shift.shift_key === 'T1' ? '7:00 AM - 12:00 PM' : shift.shift_key === 'T2' ? '12:00 PM - 5:00 PM' : shift.shift_key === 'T3' ? '5:00 PM - 8:00 PM' : '8:00 PM - 10:00 PM';
 
         const apiResult = await sendWhatsAppTemplate({
           to: recipientPhone,
-          templateName: templateName,
+          templateName: 'recordatorio_turno_comite',
           languageCode: 'es',
           components: [
             {
@@ -134,6 +136,7 @@ async function handleReminders(req: NextRequest) {
                 { type: 'text', text: fullName },
                 { type: 'text', text: commName },
                 { type: 'text', text: shiftLabel },
+                { type: 'text', text: shiftTime },
                 { type: 'text', text: shift.day_key }
               ]
             }

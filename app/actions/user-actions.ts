@@ -1,0 +1,100 @@
+'use server';
+
+import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
+import { sendVolunteerWelcomeTemplate } from '@/lib/whatsapp-api';
+import { formatE164 } from '@/lib/whatsapp';
+
+function getAdminClient() {
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
+    return createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+  }
+  return createClient();
+}
+
+export async function createUserProfileAction({
+  fullName,
+  phone,
+  role,
+  committeeId,
+  sendWhatsApp = true
+}: {
+  fullName: string;
+  phone: string;
+  role: 'Admin' | 'Editor' | 'Lector';
+  committeeId?: string | null;
+  sendWhatsApp?: boolean;
+}) {
+  try {
+    const formattedPhone = formatE164(phone);
+    if (!formattedPhone) {
+      return { success: false, error: "Número de teléfono inválido." };
+    }
+
+    const pin = Math.floor(1000 + Math.random() * 9000).toString();
+    const supabase = getAdminClient();
+
+    const { data: inserted, error } = await supabase
+      .from('profiles')
+      .insert({
+        full_name: fullName.trim(),
+        phone: formattedPhone,
+        role,
+        committee_id: committeeId || null,
+        pin
+      })
+      .select('*, committees(name)')
+      .single();
+
+    if (error) {
+      console.error("Error creating user profile:", error);
+      if (error.code === '23505') {
+        return { success: false, error: "Este número de teléfono ya está registrado en el sistema." };
+      }
+      return { success: false, error: `Error al crear usuario: ${error.message}` };
+    }
+
+    // Audit log
+    await supabase.from('activity_logs').insert({
+      user_name: 'Administrador',
+      user_role: 'Admin',
+      action_type: 'Creación',
+      description: `Creó el usuario de plataforma "${fullName.trim()}" (${role})`,
+      details: `Tel: ${formattedPhone} · PIN: ${pin}`
+    });
+
+    let waSuccess = false;
+    let waError: string | undefined;
+
+    if (sendWhatsApp) {
+      const waResult = await sendVolunteerWelcomeTemplate({
+        to: formattedPhone,
+        name: fullName.trim(),
+        pin
+      });
+      waSuccess = waResult.success;
+      waError = waResult.error;
+    }
+
+    return {
+      success: true,
+      user: {
+        id: inserted.id,
+        name: inserted.full_name,
+        phone: inserted.phone,
+        role: inserted.role,
+        committee: inserted.committees?.name,
+        pin: inserted.pin
+      },
+      waSuccess,
+      waError
+    };
+  } catch (err: any) {
+    console.error("Exception in createUserProfileAction:", err);
+    return { success: false, error: err.message || "Error de servidor al crear usuario." };
+  }
+}

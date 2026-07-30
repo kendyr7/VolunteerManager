@@ -8,6 +8,7 @@ import {
   generateReminderMessage,
   generateWaMeLink
 } from "@/lib/whatsapp";
+import { sendShiftReminderAction } from "@/app/actions/whatsapp";
 import {
   getActiveEventDays,
   formatDateShort,
@@ -553,12 +554,151 @@ export default function RemindersPage() {
     showToast(confirm ? "Asistencia confirmada" : "Asistencia cancelada");
   };
 
+  const [isSendingBulkWA, setIsSendingBulkWA] = useState(false);
+
+  // Sync reminder_logs from Supabase in real-time
+  useEffect(() => {
+    const syncLogsFromSupabase = async () => {
+      try {
+        const { data: logs } = await supabase
+          .from('reminder_logs')
+          .select('volunteer_id, day_key, shift_key, status');
+
+        if (logs && logs.length > 0) {
+          setContactedReminders(prev => {
+            const next = { ...prev };
+            logs.forEach(log => {
+              if (log.status === 'contactado' || log.status === 'confirmado') {
+                const key = `${log.volunteer_id}-${log.day_key}-${log.shift_key}`;
+                next[key] = true;
+              }
+            });
+            return next;
+          });
+
+          setConfirmedReminders(prev => {
+            const next = { ...prev };
+            logs.forEach(log => {
+              if (log.status === 'confirmado') {
+                const key = `${log.volunteer_id}-${log.day_key}-${log.shift_key}`;
+                next[key] = true;
+              }
+            });
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error("Error syncing reminder logs:", err);
+      }
+    };
+
+    syncLogsFromSupabase();
+    const interval = setInterval(syncLogsFromSupabase, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSingleSendWhatsApp = async (vol: VolunteerType) => {
+    if (!canSendWhatsappMessages()) {
+      showToast("El Administrador ha deshabilitado el envío de WhatsApp para Coordinadores", "error");
+      return;
+    }
+    if (!vol.phone) {
+      showToast("El voluntario no tiene teléfono registrado", "error");
+      return;
+    }
+    showToast(`Enviando recordatorio de Meta WhatsApp a ${vol.name}...`);
+    const res = await sendShiftReminderAction({
+      phone: vol.phone,
+      volunteerName: vol.name,
+      committeeName: vol.committee,
+      shiftName: selectedShiftDetails?.name || 'Turno 1',
+      shiftHours: selectedShiftDetails?.time || '7:00 AM - 12:00 PM',
+      shiftDate: dateStr || 'Próximo turno'
+    });
+
+    if (res.success) {
+      const key = `${vol.id}-${selectedDayKey}-${selectedShiftId}`;
+      setContactedReminders(prev => ({ ...prev, [key]: true }));
+
+      // Insert log into Supabase
+      await supabase.from('reminder_logs').insert([{
+        volunteer_id: vol.id,
+        shift_key: selectedShiftId,
+        day_key: selectedDayKey,
+        whatsapp_message_id: res.messageId || null,
+        status: 'contactado',
+        sent_at: new Date().toISOString()
+      }]);
+
+      showToast(`✅ Recordatorio de WhatsApp enviado a ${vol.name}`);
+    } else {
+      showToast(`❌ Error enviando WhatsApp: ${res.error}`, 'error');
+    }
+  };
+
+  const handleBulkSendWhatsApp = async () => {
+    if (!canSendWhatsappMessages()) {
+      showToast("El Administrador ha deshabilitado el envío de WhatsApp para Coordinadores", "error");
+      return;
+    }
+    if (selectedVolunteers.size === 0) return;
+    setIsSendingBulkWA(true);
+    showToast(`Enviando recordatorios de Meta WhatsApp a ${selectedVolunteers.size} voluntarios...`, 'info');
+
+    const selectedVols = Array.from(selectedVolunteers)
+      .map(id => volunteers.find(v => v.id === id))
+      .filter((v): v is VolunteerType => !!v);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const vol of selectedVols) {
+      if (!vol.phone) {
+        failCount++;
+        continue;
+      }
+      const res = await sendShiftReminderAction({
+        phone: vol.phone,
+        volunteerName: vol.name,
+        committeeName: vol.committee,
+        shiftName: selectedShiftDetails?.name || 'Turno 1',
+        shiftHours: selectedShiftDetails?.time || '7:00 AM - 12:00 PM',
+        shiftDate: dateStr || 'Próximo turno'
+      });
+
+      if (res.success) {
+        successCount++;
+        const key = `${vol.id}-${selectedDayKey}-${selectedShiftId}`;
+        setContactedReminders(prev => ({ ...prev, [key]: true }));
+
+        await supabase.from('reminder_logs').insert([{
+          volunteer_id: vol.id,
+          shift_key: selectedShiftId,
+          day_key: selectedDayKey,
+          whatsapp_message_id: res.messageId || null,
+          status: 'contactado',
+          sent_at: new Date().toISOString()
+        }]);
+      } else {
+        failCount++;
+      }
+    }
+
+    setIsSendingBulkWA(false);
+    setSelectedVolunteers(new Set());
+    if (failCount === 0) {
+      showToast(`✅ ¡Recordatorios enviados exitosamente a ${successCount} voluntarios!`);
+    } else {
+      showToast(`Enviados: ${successCount} | Fallidos: ${failCount}`, failCount > 0 ? 'error' : 'success');
+    }
+  };
+
   const handleBulkContacted = () => {
     setContactedReminders(prev => {
       const updated = { ...prev };
       selectedVolunteers.forEach(volId => {
         const key = `${volId}-${selectedDayKey}-${selectedShiftId}`;
-        updated[key] = true; // Always mark as contacted in bulk
+        updated[key] = true;
       });
       if (typeof window !== "undefined") {
         localStorage.setItem("contacted_reminders", JSON.stringify(updated));
@@ -1060,6 +1200,33 @@ export default function RemindersPage() {
               <div className="flex flex-col w-full lg:h-full lg:min-h-0">
                 <div className="flex flex-col w-full lg:h-full lg:min-h-0">
                   <div className="bg-dark2 border border-border rounded-sm shadow-sm flex flex-col w-full relative lg:h-full lg:min-h-0">
+                    {selectedVolunteers.size > 0 && (
+                      <div className="p-3 bg-dark3 border-b border-border flex items-center justify-between gap-3 animate-in fade-in sticky top-0 z-30">
+                        <div className="flex items-center gap-2 text-xs font-bold text-text">
+                          <span className="bg-[#4d7cfe] text-white px-2.5 py-0.5 rounded-full font-mono text-[11px]">
+                            {selectedVolunteers.size}
+                          </span>
+                          <span>voluntarios seleccionados</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            onClick={handleBulkSendWhatsApp}
+                            disabled={isSendingBulkWA}
+                            className="bg-[#25D366] hover:bg-[#1ebd5a] text-black font-extrabold text-xs rounded-full px-4 h-9 shadow-lg flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">send</span>
+                            {isSendingBulkWA ? "Enviando..." : `Enviar Recordatorio WhatsApp (${selectedVolunteers.size})`}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            onClick={() => setSelectedVolunteers(new Set())}
+                            className="text-text-dim text-xs font-bold hover:text-text h-9 rounded-full px-3"
+                          >
+                            Desmarcar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     <AlphabetScrubber isMobile={isMobile} />
                     <div className="bg-dark2 w-full relative lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:rounded-sm">
                       {activeVolunteers.length === 0 ? (

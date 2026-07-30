@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { generateWaMeLink, validatePhone8Digits } from "@/lib/whatsapp";
+import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
 import { createClient } from "@/lib/supabase/client";
 import { canManageUsers } from "@/lib/permissions";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
@@ -202,6 +203,7 @@ export default function UsersPage() {
   const [newPhone, setNewPhone] = useState('');
   const [newRole, setNewRole] = useState<Role>('Editor');
   const [newCommittee, setNewCommittee] = useState<string>(COMMITTEES[0]);
+  const [sendWelcomeWhatsApp, setSendWelcomeWhatsApp] = useState(true);
   const [generatedInvite, setGeneratedInvite] = useState<PlatformUser | null>(null);
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -276,8 +278,6 @@ export default function UsersPage() {
     }
     const sanitizedPhone = phoneValidation.formatted;
 
-    const supabase = createClient();
-
     let commId: string | null = null;
     if (newRole === 'Editor') {
       const targetComm = committeesList.find(c => c.name === newCommittee);
@@ -286,39 +286,38 @@ export default function UsersPage() {
       }
     }
 
-    const pin = Math.floor(1000 + Math.random() * 9000).toString();
+    const { createUserProfileAction } = await import('@/app/actions/user-actions');
+    const result = await createUserProfileAction({
+      fullName: newName.trim(),
+      phone: sanitizedPhone,
+      role: newRole,
+      committeeId: commId,
+      sendWhatsApp: sendWelcomeWhatsApp
+    });
 
-    const { data: inserted, error } = await supabase
-      .from('profiles')
-      .insert({
-        full_name: newName.trim(),
-        phone: sanitizedPhone,
-        role: newRole,
-        committee_id: commId,
-        pin
-      })
-      .select('*, committees(name)')
-      .single();
-
-    if (error) {
-      console.error("Error creating user:", error);
-      setErrorMsg("Error al crear usuario. Posiblemente el teléfono ya esté registrado.");
+    if (!result.success || !result.user) {
+      console.error("Error creating user:", result.error);
+      setErrorMsg(result.error || "Error al crear usuario. Posiblemente el teléfono ya esté registrado.");
       return;
     }
 
     const newUser: PlatformUser = {
-      id: inserted.id,
-      name: inserted.full_name,
-      phone: inserted.phone,
-      role: inserted.role as Role,
-      committee: inserted.committees?.name,
+      id: result.user.id,
+      name: result.user.name,
+      phone: result.user.phone,
+      role: result.user.role as Role,
+      committee: result.user.committee,
       status: 'pending',
-      pin: inserted.pin,
+      pin: result.user.pin,
       inviteLink: `http://localhost:3000/login`
     };
 
     setGeneratedInvite(newUser);
-    showToast("Usuario añadido exitosamente");
+    if (result.waSuccess) {
+      showToast("Usuario añadido y credenciales enviadas por WhatsApp");
+    } else {
+      showToast("Usuario añadido exitosamente");
+    }
     loadData();
   };
 
@@ -747,6 +746,15 @@ export default function UsersPage() {
                           </Select>
                         </div>
                       )}
+                      <label className="flex items-center gap-3 p-3.5 rounded-xl border border-border bg-dark3 cursor-pointer mt-4">
+                        <input
+                          type="checkbox"
+                          checked={sendWelcomeWhatsApp}
+                          onChange={(e) => setSendWelcomeWhatsApp(e.target.checked)}
+                          className="w-4 h-4 rounded border-border bg-dark3 accent-[#4d7cfe]"
+                        />
+                        <span className="text-xs font-bold text-text">Enviar credenciales por WhatsApp Meta al registrar</span>
+                      </label>
                     </div>
 
                     {errorMsg && (
@@ -778,44 +786,67 @@ export default function UsersPage() {
                 </div>
               </form>
             ) : (
-              <div className="flex-1 flex flex-col p-6 space-y-5 animate-in fade-in zoom-in-95 justify-center items-center text-center">
+              <div className="flex-1 flex flex-col p-6 space-y-4 animate-in fade-in zoom-in-95 justify-center items-center text-center">
                 <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-500 flex items-center justify-center shadow-lg">
                   <span className="material-symbols-outlined text-[32px]">check_circle</span>
                 </div>
                 <div>
                   <h4 className="font-extrabold text-text text-lg">¡Usuario Añadido!</h4>
-                  <p className="text-xs text-text-dim mt-1.5 leading-relaxed px-2">
-                    Envía los detalles de acceso a <span className="font-bold text-text">{generatedInvite.name}</span>. Al ingresar, validará su número de WhatsApp para acceder.
+                  <p className="text-xs text-text-dim mt-1 leading-relaxed px-2">
+                    Envía las credenciales de acceso a <span className="font-bold text-text">{generatedInvite.name}</span>.
                   </p>
                 </div>
 
-                <div className="w-full bg-dark3 border border-border rounded-2xl p-3.5 flex items-center justify-between gap-3">
-                  <code className="text-xs text-text font-mono truncate">{generatedInvite.inviteLink}</code>
+                <div className="w-full bg-dark3 border border-border rounded-2xl p-3 flex items-center justify-between gap-3">
+                  <code className="text-xs text-text font-mono truncate">PIN: {generatedInvite.pin}</code>
                   <button
-                    onClick={() => copyToClipboard(generatedInvite.inviteLink!)}
-                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-dark2 hover:bg-dark border border-border text-xs font-bold text-text transition-all active:scale-95"
+                    onClick={() => copyToClipboard(`Nombre: ${generatedInvite.name} | PIN: ${generatedInvite.pin}`)}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-dark2 hover:bg-dark border border-border text-xs font-bold text-text transition-all active:scale-95 cursor-pointer"
                   >
                     {copied ? <span className="material-symbols-outlined text-[15px] text-emerald-500">check_circle</span> : <span className="material-symbols-outlined text-[15px]">content_copy</span>}
                     {copied ? 'Copiado' : 'Copiar'}
                   </button>
                 </div>
 
+                {/* Primary Meta WhatsApp Button */}
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    showToast(`Enviando WhatsApp a ${generatedInvite.name}...`);
+                    const res = await sendWelcomeWhatsAppAction(
+                      generatedInvite.phone,
+                      generatedInvite.name,
+                      generatedInvite.pin || '1234'
+                    );
+                    if (res.success) {
+                      showToast(`✅ ¡WhatsApp enviado a ${generatedInvite.name}!`);
+                    } else {
+                      showToast(`❌ Error de WhatsApp: ${res.error}`, 'error');
+                    }
+                  }}
+                  className="w-full h-11 flex items-center justify-center gap-2 rounded-full bg-[#25D366] hover:bg-[#1ebd5a] text-black font-extrabold text-xs transition-all shadow-lg active:scale-95 mt-1 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chat</span>
+                  Enviar credenciales por WhatsApp Meta
+                </Button>
+
+                {/* Direct Manual Chat Link */}
                 <a
                   href={getWaLink(generatedInvite)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full h-11 flex items-center justify-center gap-2 rounded-full bg-[#25D366] hover:bg-[#1ebd5a] text-white font-bold text-xs transition-all shadow-lg active:scale-95 mt-2"
+                  className="w-full h-10 flex items-center justify-center gap-2 rounded-full bg-dark3 hover:bg-dark border border-border text-text-dim hover:text-text font-bold text-xs transition-all"
                 >
-                  <span className="material-symbols-outlined text-[18px]">send</span>
-                  Enviar por WhatsApp
+                  <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                  Abrir chat manual en WhatsApp
                 </a>
 
                 <Button
                   variant="outline"
                   onClick={resetInviteForm}
-                  className="w-full h-11 rounded-full text-xs font-bold bg-dark3 hover:bg-dark text-text border border-border mt-2"
+                  className="w-full h-11 rounded-full text-xs font-bold bg-dark3 hover:bg-dark text-text border border-border mt-1"
                 >
-                  Cerrar y Crear Otra Invitación
+                  Cerrar y Crear Otro Usuario
                 </Button>
               </div>
             )}
@@ -904,6 +935,28 @@ export default function UsersPage() {
                                 onClick={(e) => { e.stopPropagation(); handleResetPin(user); }}
                               >
                                 <span className="material-symbols-outlined text-[18px]">lock_reset</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-[#25D366] hover:bg-[#25D366]/15 hover:text-[#25D366] transition-all active:scale-90"
+                                title="Enviar credenciales por WhatsApp Meta"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  showToast(`Enviando WhatsApp a ${user.name}...`);
+                                  const res = await sendWelcomeWhatsAppAction(
+                                    user.phone,
+                                    user.name,
+                                    user.pin || '1234'
+                                  );
+                                  if (res.success) {
+                                    showToast(`✅ ¡WhatsApp enviado a ${user.name}!`);
+                                  } else {
+                                    showToast(`❌ Error enviando WhatsApp: ${res.error}`, 'error');
+                                  }
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">chat</span>
                               </Button>
                               <Button
                                 variant="ghost"

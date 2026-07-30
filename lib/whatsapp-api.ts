@@ -28,11 +28,36 @@ export function formatE164Phone(phone: string, defaultCountryCode: string = '505
 }
 
 /**
- * Get Meta API credentials from environment variables
+ * Get Meta API credentials from environment variables (with dynamic .env.local fallback on server)
  */
 function getMetaCredentials() {
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  let token = process.env.WHATSAPP_TOKEN;
+  let phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if ((!token || !phoneNumberId) && typeof window === 'undefined') {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const envPath = path.join(process.cwd(), '.env.local');
+      if (fs.existsSync(envPath)) {
+        const content = fs.readFileSync(envPath, 'utf8');
+        content.split(/\r?\n/).forEach((line: string) => {
+          const match = line.match(/^\s*([\w_]+)\s*=\s*(.*)\s*$/);
+          if (match) {
+            const key = match[1];
+            let val = match[2].trim();
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+              val = val.slice(1, -1);
+            }
+            if (key === 'WHATSAPP_TOKEN' && !token) token = val;
+            if (key === 'WHATSAPP_PHONE_NUMBER_ID' && !phoneNumberId) phoneNumberId = val;
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("Could not parse .env.local fallback:", err);
+    }
+  }
 
   if (!token || !phoneNumberId) {
     console.warn("WhatsApp API credentials missing (WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID)");
@@ -215,21 +240,57 @@ export async function sendVolunteerWelcomeTemplate(options: {
   name: string;
   pin: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  // Using the approved template name: volunteer_welcome
-  // {{1}} = name, {{2}} = combined text including PIN
-  
-  const pinText = `tu número de celular y el PIN temporal: ${options.pin}`;
-  
+  // Using the approved template name: finalizar_configuracion_cuenta
+  // {{1}} = name, {{2}} = "tu PIN de acceso: 4829"
+
+  const pinText = `tu PIN de acceso: ${options.pin}`;
+
   return sendWhatsAppTemplate({
     to: options.to,
-    templateName: 'volunteer_welcome',
-    languageCode: 'es_ES',
+    templateName: 'finalizar_configuracion_cuenta',
+    languageCode: 'es',
     components: [
       {
         type: 'body',
         parameters: [
           { type: 'text', text: options.name },
           { type: 'text', text: pinText }
+        ]
+      }
+    ]
+  });
+}
+
+/**
+ * Send Shift Reminder Template to a Volunteer
+ * Approved Template Name: recordatorio_turno_comite (es)
+ * {{1}} = Volunteer Full Name (e.g. "Juan Carlos Robles Meza")
+ * {{2}} = Committee Name (e.g. "Historia")
+ * {{3}} = Shift Name (e.g. "Turno 1")
+ * {{4}} = Shift Hours (e.g. "7:00 AM - 12:00 PM")
+ * {{5}} = Shift Date (e.g. "10 de Septiembre del 2026")
+ */
+export async function sendShiftReminderTemplate(options: {
+  to: string;
+  volunteerName: string;
+  committeeName: string;
+  shiftName: string;
+  shiftHours: string;
+  shiftDate: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  return sendWhatsAppTemplate({
+    to: options.to,
+    templateName: 'recordatorio_turno_comite',
+    languageCode: 'es',
+    components: [
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: options.volunteerName },
+          { type: 'text', text: options.committeeName },
+          { type: 'text', text: options.shiftName },
+          { type: 'text', text: options.shiftHours },
+          { type: 'text', text: options.shiftDate }
         ]
       }
     ]
