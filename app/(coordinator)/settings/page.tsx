@@ -155,85 +155,85 @@ export default function SettingsPage() {
   const [capacities, setCapacities] = useState({ T1: 0, T2: 0, T3: 0, T4: 0 });
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
-type PermissionMatrixRow = {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  coordKey: string;
-  coordDefault: boolean;
-  volKey?: string;
-  volDefault?: boolean;
-};
+  type PermissionMatrixRow = {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    coordKey: string;
+    coordDefault: boolean;
+    volKey?: string;
+    volDefault?: boolean;
+  };
 
-const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
-  {
-    id: "dashboard",
-    name: "Ver Dashboard y estadísticas de comité",
-    description: "Permite acceder al panel principal de métricas y mapa de calor de su comité",
-    icon: "space_dashboard",
-    coordKey: "allow_coordinator_dashboard",
-    coordDefault: true,
-  },
-  {
-    id: "volunteers",
-    name: "Ver lista de voluntarios",
-    description: "Permite acceder a la nómina y directorio de voluntarios de su comité",
-    icon: "group",
-    coordKey: "allow_coordinator_volunteers",
-    coordDefault: true,
-    volKey: "allow_volunteer_view_volunteers",
-    volDefault: true,
-  },
-  {
-    id: "shift_edit",
-    name: "Edición de turnos de voluntarios",
-    description: "Permite asignar, modificar o cancelar turnos",
-    icon: "edit_calendar",
-    coordKey: "allow_coordinator_shift_edit",
-    coordDefault: false,
-  },
-  {
-    id: "whatsapp",
-    name: "Envío de avisos por WhatsApp",
-    description: "Permite enviar avisos y recordatorios por WhatsApp a su comité",
-    icon: "send_to_mobile",
-    coordKey: "allow_coordinator_whatsapp",
-    coordDefault: true,
-  },
-  {
-    id: "reports",
-    name: "Ver reportes y estadísticas",
-    description: "Permite acceder al panel de analíticas y descargas de reportes",
-    icon: "analytics",
-    coordKey: "allow_coordinator_reports",
-    coordDefault: true,
-  },
-  {
-    id: "qr_checkin",
-    name: "Escanear QR y registro de asistencia",
-    description: "Permite usar el escáner QR para hacer Check-in / Check-out",
-    icon: "qr_code_scanner",
-    coordKey: "allow_coordinator_qr",
-    coordDefault: true,
-  },
-  {
-    id: "import_data",
-    name: "Importación de datos masivos",
-    description: "Permite cargar hojas de cálculo Excel/CSV con nuevos registros",
-    icon: "cloud_upload",
-    coordKey: "allow_coordinator_import",
-    coordDefault: true,
-  },
-  {
-    id: "manage_users",
-    name: "Gestión de usuarios y accesos",
-    description: "Permite invitar usuarios nuevos y modificar PINs",
-    icon: "shield_person",
-    coordKey: "allow_coordinator_users",
-    coordDefault: false,
-  },
-];
+  const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
+    {
+      id: "dashboard",
+      name: "Ver Dashboard y estadísticas de comité",
+      description: "Permite acceder al panel principal de métricas y mapa de calor de su comité",
+      icon: "space_dashboard",
+      coordKey: "allow_coordinator_dashboard",
+      coordDefault: true,
+    },
+    {
+      id: "volunteers",
+      name: "Ver lista de voluntarios",
+      description: "Permite acceder a la nómina y directorio de voluntarios de su comité",
+      icon: "group",
+      coordKey: "allow_coordinator_volunteers",
+      coordDefault: true,
+      volKey: "allow_volunteer_view_volunteers",
+      volDefault: true,
+    },
+    {
+      id: "shift_edit",
+      name: "Edición de turnos de voluntarios",
+      description: "Permite asignar, modificar o cancelar turnos",
+      icon: "edit_calendar",
+      coordKey: "allow_coordinator_shift_edit",
+      coordDefault: false,
+    },
+    {
+      id: "whatsapp",
+      name: "Envío de avisos por WhatsApp",
+      description: "Permite enviar avisos y recordatorios por WhatsApp a su comité",
+      icon: "send_to_mobile",
+      coordKey: "allow_coordinator_whatsapp",
+      coordDefault: true,
+    },
+    {
+      id: "reports",
+      name: "Ver reportes y estadísticas",
+      description: "Permite acceder al panel de analíticas y descargas de reportes",
+      icon: "analytics",
+      coordKey: "allow_coordinator_reports",
+      coordDefault: true,
+    },
+    {
+      id: "qr_checkin",
+      name: "Escanear QR y registro de asistencia",
+      description: "Permite usar el escáner QR para hacer Check-in / Check-out",
+      icon: "qr_code_scanner",
+      coordKey: "allow_coordinator_qr",
+      coordDefault: true,
+    },
+    {
+      id: "import_data",
+      name: "Importación de datos masivos",
+      description: "Permite cargar hojas de cálculo Excel/CSV con nuevos registros",
+      icon: "cloud_upload",
+      coordKey: "allow_coordinator_import",
+      coordDefault: true,
+    },
+    {
+      id: "manage_users",
+      name: "Gestión de usuarios y accesos",
+      description: "Permite invitar usuarios nuevos y modificar PINs",
+      icon: "shield_person",
+      coordKey: "allow_coordinator_users",
+      coordDefault: false,
+    },
+  ];
 
   const handleCreateCommittee = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -365,6 +365,26 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
     requirements: false,
   });
 
+  const [testPhone, setTestPhone] = useState('');
+  const [isSendingTestMeta, setIsSendingTestMeta] = useState(false);
+
+  const handleSendMetaTest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testPhone.trim()) return;
+    setIsSendingTestMeta(true);
+
+    const { sendTestMetaWhatsAppMessageAction } = await import('@/app/actions/whatsapp');
+    const res = await sendTestMetaWhatsAppMessageAction(testPhone, 'hello_world', 'en_US');
+
+    if (res.success) {
+      showToast(`✅ ¡Mensaje "hello_world" enviado con éxito! ID: ${res.messageId}`);
+      setTestPhone('');
+    } else {
+      showToast(`❌ Error de Meta WhatsApp: ${res.error}`, 'error');
+    }
+    setIsSendingTestMeta(false);
+  };
+
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [selectedActionFilter, setSelectedActionFilter] = useState<string>('Todas');
@@ -469,10 +489,10 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
     }
 
     if (user) {
-      const fullName = role === 'Lector' 
-        ? `${user.first_name || ''} ${user.last_name || ''}`.trim() 
+      const fullName = role === 'Lector'
+        ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
         : (user.full_name || `${user.first_name || ''} ${user.last_name || ''}`).trim();
-      
+
       setUserProfile(user);
       setEditName(fullName || 'Coordinador');
       setEditPhone(user.phone || phone || '');
@@ -551,7 +571,7 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
       // 0 or 2+ committees — show neutral zeros
       setCapacities({ T1: 0, T2: 0, T3: 0, T4: 0 });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConfigCommittees.join(','), isSyncEnabled]);
 
   const handleSaveRequirements = async () => {
@@ -728,7 +748,7 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
   const handleChangePin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsChangingPin(true);
-    
+
     if (currentPin.length !== 4) {
       showToast("El PIN actual debe tener exactamente 4 dígitos", "error");
       setIsChangingPin(false);
@@ -740,7 +760,7 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
       setIsChangingPin(false);
       return;
     }
-    
+
     const res = await changeUserPin(currentPin, newPin, editPhone);
     if (res.success) {
       showToast("PIN actualizado correctamente");
@@ -1011,6 +1031,43 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                     </div>
                   </form>
                 </div>
+
+                {/* Meta WhatsApp Cloud API Tester */}
+                {currentRole === 'Admin' && (
+                  <div className="pt-4 border-t border-border space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[#25D366] text-[18px]">chat</span>
+                        <h4 className="font-bold text-text text-xs">Probador de Meta WhatsApp Cloud API</h4>
+                      </div>
+                      <Badge className="bg-[#25D366]/15 text-[#25D366] border-[#25D366]/30 text-[9px] font-extrabold px-2 py-0.5">
+                        Plantilla Aprobada: finalizar_configuracion_cuenta (es)
+                      </Badge>
+                    </div>
+
+                    <p className="text-[11px] font-inter text-text-dim">
+                      Envía un mensaje de bienvenida y verificación de PIN utilizando la plantilla oficial aprobada por Meta (<strong className="text-text">finalizar_configuracion_cuenta</strong>).
+                    </p>
+
+                    <form onSubmit={handleSendMetaTest} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                      <input
+                        type="text"
+                        placeholder="Ej: +50588888888 o 88888888"
+                        value={testPhone}
+                        onChange={(e) => setTestPhone(e.target.value)}
+                        className="flex-1 h-9 px-3.5 rounded-xl border border-border bg-dark3 text-text text-xs font-inter font-bold outline-none focus:border-[#25D366] transition-all"
+                        required
+                      />
+                      <Button
+                        type="submit"
+                        disabled={isSendingTestMeta || !testPhone.trim()}
+                        className="h-9 px-5 bg-[#25D366] hover:bg-[#20bd5a] text-black font-extrabold text-xs rounded-full shadow-md active:scale-95 transition-all shrink-0 cursor-pointer"
+                      >
+                        {isSendingTestMeta ? 'Enviando a Meta...' : 'Enviar WhatsApp de Prueba'}
+                      </Button>
+                    </form>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1101,9 +1158,8 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                                 type="button"
                                 disabled={currentRole !== 'Admin'}
                                 onClick={() => handleToggleMatrixPermission(row.coordKey, row.name, "Coordinadores", row.coordDefault)}
-                                className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${
-                                  coordOn ? 'bg-emerald-500' : 'bg-orange-500'
-                                } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+                                className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${coordOn ? 'bg-emerald-500' : 'bg-orange-500'
+                                  } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
                                 title={coordOn ? "Permiso Habilitado" : "Permiso Deshabilitado"}
                               >
                                 <motion.span
@@ -1123,9 +1179,8 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                                   type="button"
                                   disabled={currentRole !== 'Admin'}
                                   onClick={() => handleToggleMatrixPermission(row.volKey!, row.name, "Voluntarios", row.volDefault!)}
-                                  className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${
-                                    volOn ? 'bg-emerald-500' : 'bg-orange-500'
-                                  } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+                                  className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${volOn ? 'bg-emerald-500' : 'bg-orange-500'
+                                    } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
                                   title={volOn ? "Permiso Habilitado" : "Permiso Deshabilitado"}
                                 >
                                   <motion.span
@@ -1199,9 +1254,8 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                                     type="button"
                                     disabled={currentRole !== 'Admin'}
                                     onClick={() => handleToggleMatrixPermission(row.coordKey, row.name, "Coordinadores", row.coordDefault)}
-                                    className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${
-                                      coordOn ? 'bg-emerald-500' : 'bg-orange-500'
-                                    } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+                                    className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${coordOn ? 'bg-emerald-500' : 'bg-orange-500'
+                                      } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
                                     title={coordOn ? "Permiso Habilitado" : "Permiso Deshabilitado"}
                                   >
                                     <motion.span
@@ -1222,9 +1276,8 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                                       type="button"
                                       disabled={currentRole !== 'Admin'}
                                       onClick={() => handleToggleMatrixPermission(row.volKey!, row.name, "Voluntarios", row.volDefault!)}
-                                      className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${
-                                        volOn ? 'bg-emerald-500' : 'bg-orange-500'
-                                      } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
+                                      className={`w-9 h-5 rounded-full p-[2px] transition-colors flex items-center shrink-0 ${volOn ? 'bg-emerald-500' : 'bg-orange-500'
+                                        } ${currentRole !== 'Admin' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}`}
                                       title={volOn ? "Permiso Habilitado" : "Permiso Deshabilitado"}
                                     >
                                       <motion.span
@@ -1290,16 +1343,15 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                     <p className="text-xs font-inter text-text-dim">
                       Ajusta la cantidad mínima de voluntarios requeridos por turno.
                     </p>
-                    
+
                     {/* Sync Button */}
                     <button
                       onClick={handleToggleSync}
                       title={isSyncEnabled ? "Sincronización activada" : "Sincronización desactivada"}
-                      className={`flex items-center gap-1.5 px-3 h-8 rounded-full border text-xs font-bold transition-all shrink-0 self-start sm:self-auto ${
-                        isSyncEnabled 
-                          ? 'bg-[#4d7cfe] text-white border-[#4d7cfe] shadow-blue-500/20' 
+                      className={`flex items-center gap-1.5 px-3 h-8 rounded-full border text-xs font-bold transition-all shrink-0 self-start sm:self-auto ${isSyncEnabled
+                          ? 'bg-[#4d7cfe] text-white border-[#4d7cfe] shadow-blue-500/20'
                           : 'bg-dark3 border-border text-text-dim hover:bg-dark hover:text-text'
-                      }`}
+                        }`}
                     >
                       <span className="material-symbols-outlined text-[15px]">link</span>
                       <span className="text-[11px]">{isSyncEnabled ? 'Sincronizado' : 'Sincronizar'}</span>
@@ -1327,9 +1379,9 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                           {selectedConfigCommittees.length === committees.length ? 'Deseleccionar Todos' : 'Seleccionar Todos'}
                         </button>
                       </div>
-                      
+
                       {/* Dynamic grid to guarantee MAX 2 ROWS */}
-                      <div 
+                      <div
                         className="grid gap-2 pt-0.5 w-full"
                         style={{
                           gridTemplateColumns: `repeat(${Math.max(2, Math.ceil(committees.length / 2))}, minmax(0, 1fr))`
@@ -1409,9 +1461,9 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
                     {/* ERD Database Relationship Lines & Single Synchronized Counter Overlay */}
                     {isSyncEnabled && (
                       <>
-                        <svg 
-                          className="absolute left-[130px] sm:left-[145px] right-[130px] sm:right-[145px] top-0 bottom-0 w-auto h-full pointer-events-none z-0 text-text-dim/40" 
-                          viewBox="0 0 100 228" 
+                        <svg
+                          className="absolute left-[130px] sm:left-[145px] right-[130px] sm:right-[145px] top-0 bottom-0 w-auto h-full pointer-events-none z-0 text-text-dim/40"
+                          viewBox="0 0 100 228"
                           preserveAspectRatio="none"
                         >
                           {/* ERD Relationship Bezier curves from each row to center target */}
@@ -1478,9 +1530,8 @@ const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
               <button
                 type="button"
                 onClick={() => isMobile && toggleSection('committeeMgmt')}
-                className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors ${
-                  isMobile ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'
-                } ${isSectionOpen('committeeMgmt') ? 'bg-black/[0.03] dark:bg-white/[0.02]' : ''}`}
+                className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors ${isMobile ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'
+                  } ${isSectionOpen('committeeMgmt') ? 'bg-black/[0.03] dark:bg-white/[0.02]' : ''}`}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0">
