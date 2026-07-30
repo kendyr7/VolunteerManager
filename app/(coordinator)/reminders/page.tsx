@@ -319,7 +319,14 @@ export default function RemindersPage() {
 
 
   // Estado de los filtros y visualización de plantilla
-  const { searchTerm } = useSearch();
+  const { searchTerm, setSearchTerm } = useSearch();
+  const [inputValue, setInputValue] = useState(searchTerm);
+  const [appliedSearch, setAppliedSearch] = useState(searchTerm);
+
+  useEffect(() => {
+    setSearchTerm(appliedSearch);
+  }, [appliedSearch, setSearchTerm]);
+
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
@@ -942,7 +949,7 @@ export default function RemindersPage() {
 
 
       {/* Sticky Header matching users design */}
-      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-8 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 pointer-events-auto shrink-0">
+      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 pointer-events-auto shrink-0">
         <div className="w-full flex items-center justify-between">
           <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
             Avisos
@@ -954,6 +961,52 @@ export default function RemindersPage() {
             <span className="material-symbols-outlined text-[16px]">chat_bubble</span>
             <span>Ver Plantilla</span>
           </Button>
+        </div>
+
+        {/* Search Input Bar */}
+        <div className="w-full relative z-10 flex items-center gap-2.5">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (appliedSearch && inputValue === appliedSearch) {
+                setInputValue('');
+                setAppliedSearch('');
+              } else if (inputValue.trim()) {
+                setAppliedSearch(inputValue.trim());
+              }
+            }}
+            className="relative flex-1 min-w-0 flex items-center"
+          >
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
+              <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar voluntario, barrio o estaca..."
+              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-28 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
+              value={inputValue}
+              onChange={(e) => {
+                setInputValue(e.target.value);
+                setAppliedSearch(e.target.value);
+              }}
+              autoComplete="off"
+            />
+            {appliedSearch !== '' && (
+              <div className="absolute inset-y-0 right-1.5 flex items-center z-10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputValue('');
+                    setAppliedSearch('');
+                  }}
+                  className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                  <span>Limpiar</span>
+                </button>
+              </div>
+            )}
+          </form>
         </div>
       </div>
 
@@ -1272,8 +1325,7 @@ export default function RemindersPage() {
                                         showToast("El Administrador ha deshabilitado el envío de WhatsApp para Coordinadores", "error");
                                         return;
                                       }
-                                      const link = generateWaMeLink(vol.phone, msg);
-                                      window.open(link, '_blank');
+                                      handleSingleSendWhatsApp(vol);
                                     }}
                                     swipeRightIcon="send"
                                     swipeRightText="WhatsApp"
@@ -1429,27 +1481,21 @@ export default function RemindersPage() {
                                         </td>
                                         <td className="px-3 py-4 text-center w-px whitespace-nowrap">
                                           <div className="flex items-center justify-center gap-1">
-                                            <a
-                                               href={canSendWhatsappMessages() ? link : "#"}
-                                               target={canSendWhatsappMessages() ? "_blank" : "_self"}
-                                               rel="noopener noreferrer"
-                                               onClick={(e) => {
-                                                 e.stopPropagation();
-                                                 if (!canSendWhatsappMessages()) {
-                                                   e.preventDefault();
-                                                   showToast("El Administrador ha deshabilitado el envío de WhatsApp para Coordinadores", "error");
-                                                 }
-                                               }}
-                                               className={cn(
-                                                 "inline-flex items-center justify-center h-8 w-8 transition-all rounded-full",
-                                                 canSendWhatsappMessages()
-                                                   ? "text-[#25D366] hover:bg-white/10 active:scale-90"
-                                                   : "text-text-dim/30 cursor-not-allowed"
-                                               )}
-                                               title={canSendWhatsappMessages() ? "Enviar recordatorio WhatsApp" : "Permiso deshabilitado por el administrador"}
-                                             >
-                                               <span className="material-symbols-outlined text-[20px]">send</span>
-                                             </a>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSingleSendWhatsApp(vol);
+                                              }}
+                                              className={cn(
+                                                "h-8 w-8 transition-all rounded-full border border-[#25D366]/20 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 active:scale-95",
+                                                !canSendWhatsappMessages() && "text-text-dim/30 border-transparent bg-transparent cursor-not-allowed"
+                                              )}
+                                              title={canSendWhatsappMessages() ? "Enviar recordatorio por Meta WhatsApp" : "Permiso deshabilitado por el administrador"}
+                                            >
+                                              <span className="material-symbols-outlined text-[18px]">send</span>
+                                            </Button>
                                             <Button
                                               variant="ghost"
                                               size="icon"
@@ -1554,17 +1600,36 @@ export default function RemindersPage() {
               </div>
 
               <div className="flex-1 flex flex-col gap-6">
-                <div className="bg-sky-50/80 p-5 rounded-md rounded-tl-none border border-sky-100 shadow-sm text-sm text-sky-950 leading-relaxed whitespace-pre-wrap font-sans relative">
-                  {previewMessage}
-                  <div className="absolute top-0 -left-2 w-0 h-0 border-[10px] border-transparent border-r-sky-50 border-t-sky-50" />
+                {/* Meta Template Preview Card */}
+                <div className="bg-[#e5ddd5] dark:bg-[#0b141a] p-4 rounded-2xl border border-black/10 dark:border-white/10 shadow-lg relative">
+                  <div className="bg-white dark:bg-[#202c33] p-4 rounded-xl shadow-sm text-sm text-slate-900 dark:text-slate-100 font-sans space-y-3">
+                    <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+                      Templo Managua
+                    </div>
+                    <div className="whitespace-pre-wrap leading-relaxed">
+                      {previewMessage}
+                    </div>
+                    <div className="text-[11px] text-slate-400 text-right pt-1">
+                      Volunteer Manager
+                    </div>
+                    <div className="border-t border-slate-200 dark:border-slate-700/80 pt-2.5 space-y-2">
+                      <div className="w-full py-2 bg-slate-100 dark:bg-[#111b21] hover:bg-slate-200 dark:hover:bg-[#2a3942] rounded-lg text-center text-xs font-bold text-[#00a884] cursor-pointer flex items-center justify-center gap-1.5 transition-colors">
+                        <span className="material-symbols-outlined text-[16px]">reply</span>
+                        <span>Confirmar</span>
+                      </div>
+                      <div className="w-full py-2 bg-slate-100 dark:bg-[#111b21] hover:bg-slate-200 dark:hover:bg-[#2a3942] rounded-lg text-center text-xs font-bold text-[#00a884] cursor-pointer flex items-center justify-center gap-1.5 transition-colors">
+                        <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                        <span>Ver mis turnos</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="p-4 rounded-sm bg-dark3 border border-border text-xs text-text-dim flex items-start gap-2 leading-relaxed">
-                  <span className="material-symbols-outlined text-[18px] text-blue-500 shrink-0 mt-0.5">info</span>
+                <div className="p-4 rounded-xl bg-dark3 border border-border text-xs text-text-dim flex items-start gap-2.5 leading-relaxed">
+                  <span className="material-symbols-outlined text-[18px] text-[#4d7cfe] shrink-0 mt-0.5">verified</span>
                   <span>
-                    Este mensaje se genera automáticamente para cada voluntario.
-                    Los datos como el nombre, la fecha y la hora del turno se rellenan automáticamente
-                    al hacer clic en enviar WhatsApp.
+                    Plantilla oficial aprobada por Meta: <strong className="text-text">recordatorio_turno_comite</strong>.
+                    Los datos de nombre, fecha, horario y comité se completan dinámicamente para cada voluntario.
                   </span>
                 </div>
               </div>

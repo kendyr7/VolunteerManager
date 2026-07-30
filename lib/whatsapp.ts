@@ -102,9 +102,7 @@ export function generateReminderMessage(
   shiftName: string, 
   timeStr: string, 
   committeeName: string, 
-  isHoliday: boolean
+  isHoliday?: boolean
 ): string {
-  const holidayNote = isHoliday ? " *(Día feriado — horario extendido)*" : "";
-  
-  return `Hola ${name}, te recordamos que tienes turno de voluntaria/o:\n\nFecha: ${dateStr}${holidayNote}\nTurno: ${shiftName} (${timeStr})\nComité: ${committeeName} — Templo de Managua\n\n¡Gracias por tu servicio!`;
+  return `Querido(a) hermano(a) *${name}*, le recordamos su turno de servicio como voluntario del comite de *${committeeName}*.\n\n*${shiftName} _(${timeStr})_*\n*${dateStr}*\n\nAgradecemos su apoyo.`;
 }
