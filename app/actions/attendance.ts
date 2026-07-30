@@ -1,7 +1,7 @@
 'use server'
 
 import crypto from "crypto";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAdminClient } from "@/lib/supabase/server";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -77,7 +77,7 @@ export async function generateEntryPassToken(volunteerId: string) {
 
 // 2. Recalculate Reliability Score
 export async function recalculateReliability(volunteerId: string) {
-  const supabase = await createClient();
+  const supabase = getAdminClient();
 
   // Fetch all shifts for the volunteer
   const { data: shifts, error } = await supabase
@@ -119,7 +119,7 @@ export async function recalculateReliability(volunteerId: string) {
 
 // 3. Process Check-in via QR Scan or manual selection
 export async function checkInVolunteer(qrValueString: string, coordinatorId: string, manualShiftId?: string) {
-  const supabase = await createClient();
+  const supabase = getAdminClient();
 
   let volunteerId = "";
   
@@ -237,10 +237,10 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
   const nicaNow = new Date(nicaString);
   const todayKey = format(nicaNow, "EEE d", { locale: es }).toLowerCase();
   
-  const todayShifts = shifts.filter(s => s.day_key.toLowerCase() === todayKey);
+  const todayShifts = shifts.filter((s: any) => s.day_key.toLowerCase() === todayKey);
 
   // Try to find a shift that is currently in its time window
-  const activeShift = todayShifts.find(s => isCurrentTimeInShiftWindow(s.day_key, s.shift_key));
+  const activeShift = todayShifts.find((s: any) => isCurrentTimeInShiftWindow(s.day_key, s.shift_key));
 
   if (activeShift) {
     // Check if already checked in
@@ -287,7 +287,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
 
   // If no shift is active right now, return the list of their shifts so the coordinator can select manually
   // Map shifts to show details
-  const formattedShifts = shifts.map(s => {
+  const formattedShifts = shifts.map((s: any) => {
     let timeLabel = "8:00 AM - 12:00 PM";
     if (s.shift_key === 'T2') timeLabel = "11:00 AM - 3:00 PM";
     if (s.shift_key === 'T3') timeLabel = "2:00 PM - 6:00 PM";
