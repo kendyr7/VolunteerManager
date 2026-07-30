@@ -6,6 +6,11 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const origin = request.headers.get('origin')
 
+  // 0. Eximir Webhooks públicos (Meta WhatsApp, etc.) de bloqueos de origen CORS
+  if (pathname.startsWith('/api/webhooks/')) {
+    return NextResponse.next();
+  }
+
   // 1. Proteger APIs de CORS no autorizados
   if (pathname.startsWith('/api/')) {
     if (origin) {
