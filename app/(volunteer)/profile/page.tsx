@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { VolunteerProfileClient } from "@/components/VolunteerProfileClient";
 import { verifySessionToken } from "@/lib/auth";
+import { getAdminSupabase } from "@/lib/supabase/admin";
 
 export const metadata = {
   title: "Mi Perfil | Volunteer Manager",
@@ -14,46 +14,41 @@ export default async function VolunteerProfilePage() {
   const sessionCookie = cookieStore.get('session')?.value || '';
   const session = verifySessionToken(sessionCookie);
 
-  if (!session || session.userType !== 'volunteer') {
+  if (!session) {
     redirect('/login');
+  }
+
+  // Si no es voluntario (es coordinador/admin), redirigir a la vista de voluntariados
+  if (session.userType !== 'volunteer') {
+    redirect('/volunteers');
   }
 
   const volunteerId = session.userId;
-  
-  const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY 
-    ? (await import('@supabase/supabase-js')).createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-      )
-    : await createClient();
+  const supabase = await getAdminSupabase();
 
-  // Fetch volunteer details with committee name
-  const { data: volunteer, error } = await supabase
-    .from('volunteers')
-    .select('*, committees(name)')
-    .eq('id', volunteerId)
-    .maybeSingle();
-
-  console.log("PROFILE_LOG: Fetch volunteer result:", { volunteer, error, volunteerId });
+  // Fetch volunteer details, passkeys, and shifts in parallel for speed
+  const [{ data: volunteer, error }, { data: passkeys }, { data: shifts }] = await Promise.all([
+    supabase
+      .from('volunteers')
+      .select('*, committees(name)')
+      .eq('id', volunteerId)
+      .maybeSingle(),
+    supabase
+      .from('passkeys')
+      .select('id')
+      .eq('user_id', volunteerId),
+    supabase
+      .from('shifts')
+      .select('*')
+      .eq('volunteer_id', volunteerId)
+  ]);
 
   if (error || !volunteer) {
-    console.log("PROFILE_LOG: Redirecting because of DB error or volunteer not found", { error, volunteer });
+    console.error("PROFILE_PAGE_ERROR:", error);
     redirect('/login');
   }
 
-  // Check if they have passkeys registered
-  const { data: passkeys } = await supabase
-    .from('passkeys')
-    .select('id')
-    .eq('user_id', volunteer.id);
-
   const hasPasskey = passkeys && passkeys.length > 0;
-
-  // Fetch shifts to construct attendance history
-  const { data: shifts } = await supabase
-    .from('shifts')
-    .select('*')
-    .eq('volunteer_id', volunteerId);
 
   return (
     <VolunteerProfileClient 

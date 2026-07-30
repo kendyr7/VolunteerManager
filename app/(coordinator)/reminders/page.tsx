@@ -1269,26 +1269,43 @@ export default function RemindersPage() {
                 <div className="flex flex-col w-full lg:h-full lg:min-h-0">
                   <div className="bg-dark2 border border-border rounded-sm shadow-sm flex flex-col w-full relative lg:h-full lg:min-h-0">
                     {selectedVolunteers.size > 0 && (
-                      <div className="p-3 bg-dark3 border-b border-border flex items-center justify-between gap-3 animate-in fade-in sticky top-0 z-30">
-                        <div className="flex items-center gap-2 text-xs font-bold text-text">
-                          <span className="bg-[#4d7cfe] text-white px-2.5 py-0.5 rounded-full font-mono text-[11px]">
-                            {selectedVolunteers.size}
-                          </span>
-                          <span>voluntarios seleccionados</span>
+                      <div className="p-3 sm:px-4 sm:py-3 bg-dark2/95 backdrop-blur-xl border-b border-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 animate-in fade-in sticky top-0 z-30 shadow-xl">
+                        <div className="flex items-center justify-between sm:justify-start gap-2.5">
+                          <div className="flex items-center gap-2 text-xs font-bold text-text">
+                            <span className="bg-[#4d7cfe] text-white px-2.5 py-0.5 rounded-full font-mono text-[11px] font-black shadow-sm">
+                              {selectedVolunteers.size}
+                            </span>
+                            <span className="text-xs font-bold text-text">
+                              {selectedVolunteers.size === 1 ? 'voluntario seleccionado' : 'voluntarios seleccionados'}
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedVolunteers(new Set())}
+                            className="sm:hidden text-text-dim text-[11px] font-bold hover:text-text h-7 px-2 rounded-full"
+                          >
+                            Desmarcar
+                          </Button>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
                           <Button
                             onClick={handleBulkSendWhatsApp}
                             disabled={isSendingBulkWA}
-                            className="bg-[#25D366] hover:bg-[#1ebd5a] text-black font-extrabold text-xs rounded-full px-4 h-9 shadow-lg flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                            className="bg-emerald-600 hover:bg-emerald-500 dark:bg-[#25D366] dark:hover:bg-[#20bd5a] text-white dark:text-slate-950 font-extrabold text-xs rounded-full px-4 sm:px-5 h-9 sm:h-10 shadow-lg shadow-emerald-600/20 dark:shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 w-full sm:w-auto"
                           >
                             <span className="material-symbols-outlined text-[18px]">send</span>
-                            {isSendingBulkWA ? "Enviando..." : `Enviar Recordatorio WhatsApp (${selectedVolunteers.size})`}
+                            <span className="sm:hidden">
+                              {isSendingBulkWA ? "Enviando..." : `Enviar WA (${selectedVolunteers.size})`}
+                            </span>
+                            <span className="hidden sm:inline">
+                              {isSendingBulkWA ? "Enviando recordatorios..." : `Enviar Recordatorio WhatsApp (${selectedVolunteers.size})`}
+                            </span>
                           </Button>
                           <Button
                             variant="ghost"
                             onClick={() => setSelectedVolunteers(new Set())}
-                            className="text-text-dim text-xs font-bold hover:text-text h-9 rounded-full px-3"
+                            className="hidden sm:inline-flex text-text-dim text-xs font-bold hover:text-text h-9 rounded-full px-3"
                           >
                             Desmarcar
                           </Button>

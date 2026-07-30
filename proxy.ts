@@ -45,7 +45,7 @@ export function proxy(request: NextRequest) {
   const session = verifySessionToken(sessionCookie)
 
   const isAuthRoute = pathname.startsWith('/login')
-  const isVolunteerRoute = pathname.startsWith('/calendar') || pathname.startsWith('/profile')
+  const isVolunteerRoute = pathname.startsWith('/calendar') || pathname.startsWith('/profile') || pathname.startsWith('/requests')
   const isCoordinatorRoute = 
     pathname.startsWith('/dashboard') || 
     pathname.startsWith('/volunteers') || 
@@ -55,7 +55,8 @@ export function proxy(request: NextRequest) {
     pathname.startsWith('/reminders') || 
     pathname.startsWith('/users') || 
     pathname.startsWith('/settings') || 
-    pathname.startsWith('/import')
+    pathname.startsWith('/import') ||
+    pathname.startsWith('/replacements')
 
   // Redirección si no está autenticado y busca páginas protegidas
   if (!session && (isVolunteerRoute || isCoordinatorRoute)) {
@@ -72,6 +73,11 @@ export function proxy(request: NextRequest) {
   // Si es Voluntario e intenta ingresar a rutas de Coordinador
   if (session && session.userType === 'volunteer' && isCoordinatorRoute) {
     return NextResponse.redirect(new URL('/calendar', request.url))
+  }
+
+  // Si es Coordinador e intenta ingresar a rutas exclusivamente de Voluntarios (/calendar o /requests)
+  if (session && session.userType === 'profile' && (pathname.startsWith('/calendar') || pathname.startsWith('/requests'))) {
+    return NextResponse.redirect(new URL('/volunteers', request.url))
   }
 
   // Si es Coordinador e intenta ingresar a rutas de Administrador (/users)
@@ -99,6 +105,8 @@ export const config = {
     '/reminders',
     '/users',
     '/settings',
-    '/import'
+    '/import',
+    '/requests',
+    '/replacements'
   ]
 }

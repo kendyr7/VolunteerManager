@@ -40,6 +40,7 @@ export default function VolunteerLayout({
 
   const navItems = [
     { name: "Turnos", href: "/calendar", icon: "checklist" },
+    { name: "Solicitudes", href: "/requests", icon: "published_with_changes" },
     { name: "Mi Perfil", href: "/profile", icon: "person" }
   ];
 
@@ -102,7 +103,7 @@ export default function VolunteerLayout({
             <div className="space-y-1">
               {sidebarOpen && (
                 <div className="flex items-center justify-between px-3 py-2 text-[13px] font-medium text-text-dim">
-                  <span>Navigation</span>
+                  <span>Navegación</span>
                   <Icon name="expand_more" size={16} />
                 </div>
               )}
@@ -181,7 +182,7 @@ export default function VolunteerLayout({
             >
               {navItems.map((item) => {
                 const isActive = pathname === item.href;
-                const sharedStyle = { width: 'calc((100vw - 32px) / 3)' };
+                const sharedStyle = { width: 'calc((100vw - 32px) / 4)' };
                 return (
                   <Link
                     key={item.href}
@@ -201,7 +202,7 @@ export default function VolunteerLayout({
               {/* Logout button */}
               <button
                 onClick={handleLogoutClick}
-                style={{ width: 'calc((100vw - 32px) / 3)' }}
+                style={{ width: 'calc((100vw - 32px) / 4)' }}
                 className="flex flex-col items-center justify-center py-2 rounded-full transition-all duration-200 shrink-0 text-red-400 hover:text-red-300 active:scale-[0.95]"
               >
                 <Icon name="logout" size={20} className="mb-1 text-red-400" />
