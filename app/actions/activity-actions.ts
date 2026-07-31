@@ -157,3 +157,54 @@ export async function createActivityLog({
     return false;
   }
 }
+
+export async function logImportActivityAction(
+  importedUsers: Array<{
+    firstName: string;
+    lastName: string;
+    phone: string;
+    committeeName?: string;
+    pin?: string;
+  }>,
+  customUserName?: string
+): Promise<boolean> {
+  try {
+    const { getCurrentUserSession } = await import('@/lib/auth-helpers');
+    const session = await getCurrentUserSession();
+
+    const supabase = await getAdminSupabase();
+
+    const userName = customUserName || session.userName || 'Administrador';
+
+    const payload = {
+      type: 'import_batch',
+      totalCount: importedUsers.length,
+      importedBy: userName,
+      importedUsers: importedUsers.map(u => ({
+        firstName: u.firstName,
+        lastName: u.lastName,
+        phone: u.phone,
+        committee: u.committeeName || '',
+        pin: u.pin || ''
+      }))
+    };
+
+    const { error } = await supabase.from('activity_logs').insert({
+      user_name: userName,
+      user_role: session.userRole || 'Admin',
+      action_type: 'Creación',
+      description: `Importó masivamente ${importedUsers.length} voluntario(s)`,
+      details: JSON.stringify(payload)
+    });
+
+    if (error) {
+      console.error("Error logging import activity:", error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error("Error in logImportActivityAction:", err);
+    return false;
+  }
+}

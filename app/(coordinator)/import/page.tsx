@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from "framer-motion";
 // xlsx is loaded dynamically inside downloadExcelTemplate() and processFile()
 // to avoid bundling ~800 KB into the initial JS chunk for this route.
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
+import { logImportActivityAction } from "@/app/actions/activity-actions";
 
 interface ParsedVolunteer {
   rowNum: number;
@@ -415,6 +416,9 @@ export default function ImportPage() {
         setStep(3);
         const skippedMsg = totalDuplicatesCount > 0 ? ` (${totalDuplicatesCount} duplicados omitidos)` : '';
         showToast(`Importados ${results.length} voluntarios exitosamente${skippedMsg}.`, "success");
+
+        const currentUserName = typeof window !== 'undefined' ? localStorage.getItem('volunteer_name') || '' : '';
+        await logImportActivityAction(results, currentUserName);
       } else {
         showToast("No se pudo importar ningún voluntario. Verifique los datos.", "error");
       }

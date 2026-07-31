@@ -63,11 +63,13 @@ export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast
         }
       ]);
 
-    if (error) {
-      showToast("Error al añadir voluntario", "error");
-      setIsSubmitting(false);
-      return;
-    }
+    const { recordActivityLog } = await import('@/lib/activity-logger');
+    const selectedComm = committeesList.find(c => c.id === newCommitteeId)?.name || '';
+    await recordActivityLog({
+      actionType: 'Creación',
+      description: `Creó al voluntario "${first_name} ${last_name}"`,
+      details: `Tel: ${sanitizedPhone} · Comité: ${selectedComm || 'Sin comité'} · PIN: ${pin}`
+    });
 
     if (sendWelcomeMessage) {
       const waResult = await sendWelcomeWhatsAppAction(sanitizedPhone, first_name, pin);

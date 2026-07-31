@@ -101,9 +101,12 @@ export async function createCommitteeAction(name: string) {
   }
 
   // Audit log
+  const { getCurrentUserSession } = await import('@/lib/auth-helpers');
+  const sessionUser = await getCurrentUserSession();
+
   await supabase.from('activity_logs').insert({
-    user_name: 'Administrador',
-    user_role: 'Admin',
+    user_name: sessionUser.userName,
+    user_role: sessionUser.userRole,
     action_type: 'Creación',
     description: `Creó el nuevo comité "${cleanName}"`,
     details: `ID de comité: ${newComm.id}`
@@ -182,9 +185,12 @@ export async function archiveCommitteeAction(
   }
 
   // Audit log
+  const { getCurrentUserSession } = await import('@/lib/auth-helpers');
+  const sessionUser = await getCurrentUserSession();
+
   await supabase.from('activity_logs').insert({
-    user_name: 'Administrador',
-    user_role: 'Admin',
+    user_name: sessionUser.userName,
+    user_role: sessionUser.userRole,
     action_type: 'Eliminación',
     description: `Archivó el comité "${expectedName}"`,
     details: `Desvinculó los voluntarios asignados a este comité.`
@@ -215,9 +221,12 @@ export async function unarchiveCommitteeAction(committeeId: string) {
   }
 
   // Audit log
+  const { getCurrentUserSession } = await import('@/lib/auth-helpers');
+  const sessionUser = await getCurrentUserSession();
+
   await supabase.from('activity_logs').insert({
-    user_name: 'Administrador',
-    user_role: 'Admin',
+    user_name: sessionUser.userName,
+    user_role: sessionUser.userRole,
     action_type: 'Edición',
     description: `Desarchivó y restauró el comité`,
     details: `ID de comité: ${committeeId}`

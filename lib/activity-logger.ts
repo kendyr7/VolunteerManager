@@ -4,17 +4,23 @@ export async function recordActivityLog({
   actionType,
   description,
   details,
-  targetId
+  targetId,
+  userName: customUserName,
+  userRole: customUserRole
 }: {
   actionType: 'Creación' | 'Edición' | 'Reasignación' | 'Seguridad' | 'Configuración' | 'Eliminación' | 'Estado';
   description: string;
   details?: string;
   targetId?: string;
+  userName?: string;
+  userRole?: string;
 }) {
   try {
-    const role = typeof window !== 'undefined' ? localStorage.getItem('mock_role') || 'Admin' : 'Admin';
+    const role = customUserRole || (typeof window !== 'undefined' ? localStorage.getItem('mock_role') || 'Admin' : 'Admin');
     const committee = typeof window !== 'undefined' ? localStorage.getItem('mock_committee') : null;
-    const userName = role === 'Admin' ? 'Administrador' : `Coordinador (${committee || 'General'})`;
+    const storedName = customUserName || (typeof window !== 'undefined' ? localStorage.getItem('volunteer_name') : null);
+
+    const userName = storedName || (role === 'Admin' ? 'Administrador' : `Coordinador (${committee || 'General'})`);
 
     await createActivityLog({
       userName,

@@ -248,9 +248,12 @@ export async function changeUserPin(currentPin: string, newPin: string, userPhon
     }
 
     // Audit log
+    const { getCurrentUserSession } = await import('@/lib/auth-helpers');
+    const sessionUser = await getCurrentUserSession();
+
     await supabase.from('activity_logs').insert({
-      user_name: 'Usuario',
-      user_role: matchedTable === 'profiles' ? 'Coordinador/Admin' : 'Voluntario',
+      user_name: sessionUser.userName,
+      user_role: sessionUser.userRole,
       action_type: 'Seguridad',
       description: `Cambió su PIN de seguridad de acceso`,
       details: `ID de usuario: ${user.id} (${matchedTable})`

@@ -59,9 +59,12 @@ export async function createUserProfileAction({
     }
 
     // Audit log
+    const { getCurrentUserSession } = await import('@/lib/auth-helpers');
+    const sessionUser = await getCurrentUserSession();
+
     await supabase.from('activity_logs').insert({
-      user_name: 'Administrador',
-      user_role: 'Admin',
+      user_name: sessionUser.userName,
+      user_role: sessionUser.userRole,
       action_type: 'Creación',
       description: `Creó el usuario de plataforma "${fullName.trim()}" (${role})`,
       details: `Tel: ${formattedPhone} · PIN: ${pin}`

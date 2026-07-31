@@ -148,6 +148,8 @@ export default function SettingsPage() {
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [isChangingPin, setIsChangingPin] = useState(false);
+  const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
+  const toggleExpandLog = (id: string) => setExpandedLogIds(prev => ({ ...prev, [id]: !prev[id] }));
 
   // Committee Requirements State - NONE selected by default
   const [selectedConfigCommittees, setSelectedConfigCommittees] = useState<string[]>([]);
@@ -1777,33 +1779,47 @@ export default function SettingsPage() {
                           minute: '2-digit'
                         });
 
-                        let badgeColor = 'bg-white/10 text-white/80 border-white/20';
+                        let badgeColor = 'bg-[#4d7cfe]/10 text-[#3b66e0] dark:text-[#4d7cfe] border-[#4d7cfe]/30';
                         let iconName = 'notes';
 
                         if (log.action_type === 'Creación') {
-                          badgeColor = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+                          badgeColor = 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30';
                           iconName = 'add_circle';
                         } else if (log.action_type === 'Edición') {
-                          badgeColor = 'bg-blue-500/15 text-blue-400 border-blue-500/30';
+                          badgeColor = 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30';
                           iconName = 'edit_note';
                         } else if (log.action_type === 'Reasignación') {
-                          badgeColor = 'bg-purple-500/15 text-purple-400 border-purple-500/30';
+                          badgeColor = 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30';
                           iconName = 'sync_alt';
                         } else if (log.action_type === 'Seguridad') {
-                          badgeColor = 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+                          badgeColor = 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30';
                           iconName = 'key';
                         } else if (log.action_type === 'Configuración') {
-                          badgeColor = 'bg-sky-500/15 text-sky-400 border-sky-500/30';
+                          badgeColor = 'bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/30';
                           iconName = 'settings';
                         } else if (log.action_type === 'Eliminación') {
-                          badgeColor = 'bg-rose-500/15 text-rose-400 border-rose-500/30';
+                          badgeColor = 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30';
                           iconName = 'delete';
                         }
+
+                        let parsedImportDetails: any = null;
+                        if (log.details) {
+                          try {
+                            if (log.details.trim().startsWith('{')) {
+                              parsedImportDetails = JSON.parse(log.details);
+                            }
+                          } catch (e) {
+                            parsedImportDetails = null;
+                          }
+                        }
+
+                        const isImportBatch = parsedImportDetails?.type === 'import_batch';
+                        const isExpanded = !!expandedLogIds[log.id];
 
                         return (
                           <div
                             key={log.id}
-                            className="p-3.5 rounded-xl border border-border bg-dark2 hover:bg-dark3 transition-colors flex items-start justify-between gap-3 text-xs"
+                            className="p-3.5 rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-dark2 hover:bg-slate-50/80 dark:hover:bg-dark3 transition-colors flex flex-col gap-2 text-xs shadow-sm"
                           >
                             <div className="flex items-start gap-3 min-w-0 flex-1">
                               <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border mt-0.5", badgeColor)}>
@@ -1811,23 +1827,125 @@ export default function SettingsPage() {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                                  <span className="font-bold text-text truncate">{log.description}</span>
+                                  <span className="font-bold text-slate-900 dark:text-text">{log.description}</span>
                                   <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-extrabold border uppercase tracking-wider", badgeColor)}>
                                     {log.action_type}
                                   </span>
                                 </div>
-                                {log.details && (
-                                  <p className="text-[11px] font-inter text-text-dim leading-relaxed">
+
+                                {log.details && !isImportBatch && (
+                                  <p className="text-[11px] font-inter text-slate-600 dark:text-text-dim leading-relaxed">
                                     {log.details}
                                   </p>
                                 )}
-                                <div className="flex items-center gap-2 mt-1 text-[10px] text-text-dim font-inter">
-                                  <span>👤 {log.user_name} ({log.user_role})</span>
+
+                                <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-500 dark:text-text-dim font-inter">
+                                  <span className="font-semibold text-slate-700 dark:text-text/80">👤 {log.user_name} ({log.user_role})</span>
                                   <span>&bull;</span>
                                   <span>🕒 {dateStr}</span>
                                 </div>
                               </div>
+
+                              {isImportBatch && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpandLog(log.id)}
+                                  className="px-3 py-1.5 rounded-lg bg-[#4d7cfe]/10 hover:bg-[#4d7cfe]/20 text-[#3b66e0] dark:text-[#4d7cfe] text-[11px] font-bold flex items-center gap-1 transition-all shrink-0 cursor-pointer border border-[#4d7cfe]/30"
+                                >
+                                  <span>{isExpanded ? 'Ocultar lista' : `Ver ${parsedImportDetails.totalCount} usuarios`}</span>
+                                  <span className="material-symbols-outlined text-[16px]">
+                                    {isExpanded ? 'expand_less' : 'expand_more'}
+                                  </span>
+                                </button>
+                              )}
                             </div>
+
+                            {/* Tarjeta Expandible Audit-Grade para Importaciones (Modo Claro y Oscuro) */}
+                            {isImportBatch && isExpanded && (
+                              <div className="mt-3 pt-3 border-t border-slate-200 dark:border-border/80 bg-slate-100/70 dark:bg-black/30 p-3.5 rounded-xl space-y-3 animate-in fade-in duration-200">
+                                {/* Encabezado de Auditoría */}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200 dark:border-white/10">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-md bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                                      <span className="material-symbols-outlined text-[14px]">how_to_reg</span>
+                                    </div>
+                                    <div>
+                                      <h4 className="text-[11px] font-bold text-slate-900 dark:text-text">
+                                        Nómina de Importación Masiva Auditada
+                                      </h4>
+                                      <p className="text-[10px] text-slate-500 dark:text-text-dim">
+                                        Ejecutado por <strong className="text-slate-800 dark:text-text font-bold">{parsedImportDetails.importedBy || log.user_name}</strong>
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <span className="bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/20 px-2.5 py-0.5 rounded-full font-mono text-[10px] font-bold">
+                                      {parsedImportDetails.totalCount} voluntarios
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Tabla de Auditoría Ordenada Alfabéticamente */}
+                                <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-dark2/90 shadow-sm">
+                                  <div className="max-h-64 overflow-y-auto scrollbar-thin">
+                                    <table className="w-full text-[11px] text-left border-collapse">
+                                      <thead className="bg-slate-100 dark:bg-dark3 sticky top-0 z-10 text-[9px] font-bold text-slate-600 dark:text-text-dim uppercase tracking-wider border-b border-slate-200 dark:border-border">
+                                        <tr>
+                                          <th className="px-3 py-2 text-center w-10 text-slate-600 dark:text-text-dim">#</th>
+                                          <th className="px-3 py-2 text-slate-600 dark:text-text-dim">Voluntario</th>
+                                          <th className="px-3 py-2 w-32 font-mono text-slate-600 dark:text-text-dim">Teléfono</th>
+                                          <th className="px-3 py-2 w-36 text-slate-600 dark:text-text-dim">Comité</th>
+                                          <th className="px-3 py-2 text-center w-24 text-slate-600 dark:text-text-dim">PIN</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-inter">
+                                        {[...(parsedImportDetails.importedUsers || [])]
+                                          .sort((a, b) => {
+                                            const nameA = `${a.firstName || ''} ${a.lastName || ''}`.trim();
+                                            const nameB = `${b.firstName || ''} ${b.lastName || ''}`.trim();
+                                            return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' });
+                                          })
+                                          .map((u: any, idx: number) => {
+                                            const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Voluntario';
+                                            return (
+                                              <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors">
+                                                <td className="px-3 py-1.5 text-center font-mono text-[10px] text-slate-400 dark:text-text-dim">
+                                                  {idx + 1}
+                                                </td>
+                                                <td className="px-3 py-1.5 font-bold text-slate-900 dark:text-text">
+                                                  {fullName}
+                                                </td>
+                                                <td className="px-3 py-1.5 font-mono text-slate-600 dark:text-text-dim text-[10px]">
+                                                  {u.phone}
+                                                </td>
+                                                <td className="px-3 py-1.5">
+                                                  {u.committee ? (
+                                                    <span className="inline-block px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 text-[9px] font-bold">
+                                                      {u.committee}
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-slate-400 dark:text-text-dim text-[10px]">—</span>
+                                                  )}
+                                                </td>
+                                                <td className="px-3 py-1.5 text-center">
+                                                  {u.pin ? (
+                                                    <span className="inline-block px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 font-mono text-[10px] font-bold">
+                                                      {u.pin}
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-slate-400 dark:text-text-dim text-[10px]">—</span>
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
