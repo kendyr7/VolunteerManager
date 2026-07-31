@@ -4,7 +4,8 @@ import {
   sendWhatsAppInteractiveButton,
   sendWhatsAppInteractiveButtons,
   sendWhatsAppInteractiveList,
-  formatE164Phone
+  formatE164Phone,
+  isWhatsAppEnabled
 } from '@/lib/whatsapp-api';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
@@ -23,17 +24,13 @@ function getAdminClient() {
 
 // Map default committee coordinators
 const COMMITTEE_COORDINATORS: Record<string, { name: string; phone: string }> = {
-  'Historia': { name: 'Coordinador de Historia', phone: '+505 8888-0001' },
-  'Seguridad': { name: 'Coordinador de Seguridad', phone: '+505 8888-0002' },
-  'Guía': { name: 'Coordinador de Guías', phone: '+505 8888-0003' },
-  'Guías': { name: 'Coordinador de Guías', phone: '+505 8888-0003' },
-  'Traducción': { name: 'Coordinador de Traducción', phone: '+505 8888-0004' },
-  'Transporte': { name: 'Coordinador de Transporte', phone: '+505 8888-0005' },
-  'Primeros Auxilios': { name: 'Coordinador de Primeros Auxilios', phone: '+505 8888-0006' },
+  'Historia': { name: 'Kendyr Quintanilla', phone: '+50588273034' },
+  'Servicio': { name: 'Coordinación Servicio', phone: '+50588273034' },
+  'Logística': { name: 'Coordinación Logística', phone: '+50588273034' }
 };
 
 /**
- * GET Handler: Meta Webhook Verification
+ * GET Handler: Verification for Meta Webhooks Setup
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -57,6 +54,11 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
+    if (!isWhatsAppEnabled()) {
+      console.log("⏸️ WhatsApp webhook received but messaging is currently PAUSED via WHATSAPP_ENABLED=false");
+      return NextResponse.json({ status: 'paused' }, { status: 200 });
+    }
+
     const body = await req.json();
 
     // Verify webhook payload structure

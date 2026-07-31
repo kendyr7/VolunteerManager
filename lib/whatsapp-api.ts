@@ -28,6 +28,47 @@ export function formatE164Phone(phone: string, defaultCountryCode: string = '505
 }
 
 /**
+ * Check if WhatsApp sending is enabled via environment variable.
+ * To pause WhatsApp sending, set WHATSAPP_ENABLED=false (or 0, off, disabled) in your environment variables (.env.local or Vercel).
+ * Default: true
+ */
+export function isWhatsAppEnabled(): boolean {
+  let enabledVal = process.env.WHATSAPP_ENABLED ?? process.env.NEXT_PUBLIC_WHATSAPP_ENABLED;
+
+  if (enabledVal === undefined && typeof window === 'undefined') {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const envPath = path.join(process.cwd(), '.env.local');
+      if (fs.existsSync(envPath)) {
+        const content = fs.readFileSync(envPath, 'utf8');
+        content.split(/\r?\n/).forEach((line: string) => {
+          const match = line.match(/^\s*([\w_]+)\s*=\s*(.*)\s*$/);
+          if (match && match[1] === 'WHATSAPP_ENABLED') {
+            let val = match[2].trim();
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+              val = val.slice(1, -1);
+            }
+            enabledVal = val;
+          }
+        });
+      }
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  if (enabledVal !== undefined) {
+    const norm = enabledVal.trim().toLowerCase();
+    if (norm === 'false' || norm === '0' || norm === 'off' || norm === 'disabled') {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Get Meta API credentials from environment variables (with dynamic .env.local fallback on server)
  */
 function getMetaCredentials() {
@@ -75,6 +116,11 @@ export async function sendWhatsAppTemplate(options: {
   languageCode?: string;
   components?: WhatsAppTemplateComponent[];
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  if (!isWhatsAppEnabled()) {
+    console.log("⏸️ WhatsApp message skipped: sending is PAUSED via WHATSAPP_ENABLED=false");
+    return { success: false, error: "WhatsApp messaging is temporarily paused by configuration." };
+  }
+
   const { token, phoneNumberId } = getMetaCredentials();
 
   if (!token || !phoneNumberId) {
@@ -133,6 +179,11 @@ export async function sendWhatsAppText(options: {
   to: string;
   text: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  if (!isWhatsAppEnabled()) {
+    console.log("⏸️ WhatsApp message skipped: sending is PAUSED via WHATSAPP_ENABLED=false");
+    return { success: false, error: "WhatsApp messaging is temporarily paused by configuration." };
+  }
+
   const { token, phoneNumberId } = getMetaCredentials();
 
   if (!token || !phoneNumberId) {
@@ -180,6 +231,11 @@ export async function sendWhatsAppInteractiveButton(options: {
   buttonText: string;
   buttonPayload: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  if (!isWhatsAppEnabled()) {
+    console.log("⏸️ WhatsApp message skipped: sending is PAUSED via WHATSAPP_ENABLED=false");
+    return { success: false, error: "WhatsApp messaging is temporarily paused by configuration." };
+  }
+
   const { token, phoneNumberId } = getMetaCredentials();
 
   if (!token || !phoneNumberId) {
@@ -242,6 +298,11 @@ export async function sendWhatsAppInteractiveButtons(options: {
   headerText?: string;
   footerText?: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  if (!isWhatsAppEnabled()) {
+    console.log("⏸️ WhatsApp message skipped: sending is PAUSED via WHATSAPP_ENABLED=false");
+    return { success: false, error: "WhatsApp messaging is temporarily paused by configuration." };
+  }
+
   const { token, phoneNumberId } = getMetaCredentials();
 
   if (!token || !phoneNumberId) {
@@ -319,6 +380,11 @@ export async function sendWhatsAppInteractiveList(options: {
     }>;
   }>;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  if (!isWhatsAppEnabled()) {
+    console.log("⏸️ WhatsApp message skipped: sending is PAUSED via WHATSAPP_ENABLED=false");
+    return { success: false, error: "WhatsApp messaging is temporarily paused by configuration." };
+  }
+
   const { token, phoneNumberId } = getMetaCredentials();
 
   if (!token || !phoneNumberId) {
