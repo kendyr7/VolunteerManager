@@ -15,6 +15,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
+import { createClient } from "@/lib/supabase/client";
 
 interface CheckInScannerProps {
   coordinatorId: string;
@@ -152,6 +154,25 @@ export function CheckInScanner({
     }
   }, [historyTab, fetchDbHistory]);
 
+  // Realtime subscription for Scanner history (listens to postgres updates on shifts table)
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel('checkin_scanner_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shifts' },
+        () => {
+          fetchDbHistory();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchDbHistory]);
+
   const activeRawList = historyTab === 'session' ? history : dbHistory;
 
   const filteredList = useMemo(() => {
@@ -247,6 +268,16 @@ export function CheckInScanner({
 
     return Object.values(map);
   }, [filteredList]);
+
+  // Keep open Mobile Drawer synced in real-time if history items are modified or reassigned
+  useEffect(() => {
+    if (mobileDrawerDayGroup) {
+      const updatedGroup = groupedHistoryDays.find(g => g.dayKey === mobileDrawerDayGroup.dayKey);
+      if (updatedGroup) {
+        setMobileDrawerDayGroup(updatedGroup);
+      }
+    }
+  }, [groupedHistoryDays]);
 
   const groupedShifts = useMemo(() => {
     if (!scanResult?.shifts) return {};
@@ -371,23 +402,67 @@ export function CheckInScanner({
     setReassignSuccessMsg(null);
   };
 
-  const handleHistoryMarkCompleted = async (entry: ScanEntry) => {
-    playSuccessBeep();
-    setHistory(prev => prev.map(item => item.id === entry.id ? { ...item, isCompleted: true } : item));
-    setDbHistory(prev => prev.map(item => item.id === entry.id ? { ...item, isCompleted: true } : item));
+  const [checkoutModal, setCheckoutModal] = useState<{
+    isOpen: boolean;
+    item: {
+      shiftId: string;
+      volunteerName: string;
+      checkedInAt?: string | Date;
+    } | null;
+  }>({
+    isOpen: false,
+    item: null
+  });
+
+  const handleOpenCheckoutModal = (shiftId: string, volunteerName: string, checkedInAt?: string | Date) => {
+    setCheckoutModal({
+      isOpen: true,
+      item: {
+        shiftId,
+        volunteerName,
+        checkedInAt
+      }
+    });
+  };
+
+  const handleConfirmCheckout = async () => {
+    if (!checkoutModal.item) return;
+    const shiftId = checkoutModal.item.shiftId;
+
+    setHistory(prev => prev.map(item => item.id === shiftId ? { ...item, isCompleted: true } : item));
+    setDbHistory(prev => prev.map(item => item.id === shiftId ? { ...item, isCompleted: true } : item));
 
     if (mobileDrawerDayGroup) {
       setMobileDrawerDayGroup(prev => {
         if (!prev) return null;
         const updatedShifts = { ...prev.shifts };
         (Object.keys(updatedShifts) as (keyof typeof updatedShifts)[]).forEach(k => {
-          updatedShifts[k] = updatedShifts[k].map(item => item.id === entry.id ? { ...item, isCompleted: true } : item);
+          updatedShifts[k] = updatedShifts[k].map(item => item.id === shiftId ? { ...item, isCompleted: true } : item);
         });
         return { ...prev, shifts: updatedShifts };
       });
     }
 
-    await checkOutVolunteer(entry.id);
+    if (scanResult && scanResult.shifts) {
+      const updatedShifts = scanResult.shifts.map((s: any) => {
+        if (s.id === shiftId) {
+          return {
+            ...s,
+            checkedIn: true,
+            checkedOut: true
+          };
+        }
+        return s;
+      });
+
+      setScanResult({
+        ...scanResult,
+        shifts: updatedShifts
+      });
+    }
+
+    setCheckoutModal({ isOpen: false, item: null });
+    await checkOutVolunteer(shiftId);
   };
 
   const handleMarkCompleted = async (shiftId: string) => {
@@ -1090,7 +1165,7 @@ export function CheckInScanner({
                                     {!s.checkedOut ? (
                                       <button
                                         type="button"
-                                        onClick={() => handleMarkCompleted(s.id)}
+                                        onClick={() => handleOpenCheckoutModal(s.id, scanResult?.volunteer || 'Voluntario', s.checkedInAt)}
                                         className="h-9 px-3.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-500 border border-emerald-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
                                         title="Marcar turno como completado"
                                       >
@@ -1390,7 +1465,11 @@ export function CheckInScanner({
                                                             {entry.type === 'error' ? '—' : entry.volunteer}
                                                           </span>
                                                           <span className={`font-inter font-bold text-[9px] leading-tight truncate ${
-                                                            entry.isCompleted ? 'text-gray-400 dark:text-gray-500' : 'text-emerald-400/90'
+                                                            entry.isCompleted
+                                                              ? 'text-gray-400 dark:text-gray-500'
+                                                              : (entry.timestamp && (Date.now() - new Date(entry.timestamp).getTime() > 8 * 3600 * 1000))
+                                                              ? 'text-red-400 font-extrabold'
+                                                              : 'text-emerald-400/90'
                                                           }`}>
                                                             {entry.isCompleted ? 'Completado' : (entry.type === 'success' ? 'En turno' : entry.type === 'already_checked_in' ? 'Ya marcado' : 'Error')}
                                                             {' · '}
@@ -1399,31 +1478,40 @@ export function CheckInScanner({
                                                         </div>
                                                       </div>
 
-                                                      {/* Buttons matching /shifts line 1157-1178 (Icons only on mobile) */}
+                                                      {/* Buttons matching /shifts line 1157-1191 */}
                                                       <div className="flex items-center gap-1 shrink-0 ml-2">
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => handleHistoryMarkCompleted(entry)}
-                                                          disabled={entry.isCompleted}
-                                                          className={`px-2 py-0.5 sm:px-2.5 rounded-full font-inter font-bold text-[9px] transition-all flex items-center gap-1 shadow-sm cursor-pointer ${
-                                                            entry.isCompleted
-                                                              ? 'bg-emerald-500/10 text-emerald-400/60 border border-emerald-500/20 cursor-default'
-                                                              : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 active:scale-95'
-                                                          }`}
-                                                          title={entry.isCompleted ? "Turno Completado" : "Completar Turno"}
-                                                        >
-                                                          <span className="material-symbols-outlined text-[12px]">task_alt</span>
-                                                          <span className="hidden sm:inline">{entry.isCompleted ? 'Completado' : 'Completar'}</span>
-                                                        </button>
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => handleHistoryOpenReassign(entry)}
-                                                          className="px-2 py-0.5 sm:px-2.5 rounded-full font-inter font-bold text-[9px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
-                                                          title="Reasignar Turno"
-                                                        >
-                                                          <span className="material-symbols-outlined text-[12px]">sync_alt</span>
-                                                          <span className="hidden sm:inline">Reasignar</span>
-                                                        </button>
+                                                        {!entry.isCompleted ? (
+                                                          <>
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => handleOpenCheckoutModal(entry.id, entry.volunteer, entry.timestamp)}
+                                                              className="px-2 py-0.5 sm:px-2.5 rounded-full font-inter font-bold text-[9px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                                                              title="Turno Completado"
+                                                            >
+                                                              <span className="material-symbols-outlined text-[12px]">task_alt</span>
+                                                              <span className="hidden sm:inline">Completar</span>
+                                                            </button>
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => handleHistoryOpenReassign(entry)}
+                                                              className="px-2 py-0.5 sm:px-2.5 rounded-full font-inter font-bold text-[9px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                                                              title="Reasignar Turno"
+                                                            >
+                                                              <span className="material-symbols-outlined text-[12px]">sync_alt</span>
+                                                              <span className="hidden sm:inline">Reasignar</span>
+                                                            </button>
+                                                          </>
+                                                        ) : (
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => handleHistoryOpenReassign(entry)}
+                                                            className="px-2 py-0.5 sm:px-2.5 rounded-full font-inter font-bold text-[9px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                                                            title="Reasignar Turno"
+                                                          >
+                                                            <span className="material-symbols-outlined text-[12px]">sync_alt</span>
+                                                            <span className="hidden sm:inline">Reasignar</span>
+                                                          </button>
+                                                        )}
                                                       </div>
                                                     </div>
                                                   ))}
@@ -1669,26 +1757,28 @@ export function CheckInScanner({
                               key={entry.id}
                               className={`flex items-center justify-between gap-2 p-2 rounded-xl transition-all ${
                                 entry.isCompleted
-                                  ? 'opacity-60 bg-white/5 border border-white/5 text-white/50'
-                                  : 'bg-white/5 hover:bg-white/10 border border-white/10'
+                                  ? 'opacity-60 bg-gray-500/10 border border-gray-500/20 dark:bg-white/5 dark:border-white/10 hover:opacity-100'
+                                  : 'bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25'
                               }`}
                             >
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <div className={`w-2 h-2 rounded-full shrink-0 ${
-                                  entry.isCompleted ? 'bg-gray-400' :
-                                  entry.type === 'success' ? 'bg-emerald-400 animate-pulse' :
-                                  entry.type === 'already_checked_in' ? 'bg-amber-400' :
-                                  'bg-rose-400'
+                                  entry.isCompleted ? 'bg-gray-400 dark:bg-gray-600' : 'bg-emerald-400 animate-pulse'
                                 }`} />
                                 <div className="flex flex-col min-w-0">
                                   <span className={`font-inter font-bold text-[12px] truncate ${
-                                    entry.isCompleted ? 'text-white/60 font-bold' :
-                                    entry.type === 'success' ? 'text-emerald-300 font-extrabold' : 'text-white'
+                                    entry.isCompleted ? 'text-gray-400 font-bold' : 'text-emerald-300 font-extrabold'
                                   }`}>
                                     {entry.type === 'error' ? '—' : entry.volunteer}
                                   </span>
-                                  <span className="font-inter font-bold text-[9px] leading-tight text-white/70 truncate">
-                                    {entry.isCompleted ? 'Completado' : (entry.type === 'success' ? 'En turno' : entry.type === 'already_checked_in' ? 'Ya marcado' : 'Error')}
+                                  <span className={`font-inter font-bold text-[9px] leading-tight truncate ${
+                                    entry.isCompleted
+                                      ? 'text-gray-400 dark:text-gray-400'
+                                      : (entry.timestamp && (Date.now() - new Date(entry.timestamp).getTime() > 8 * 3600 * 1000))
+                                      ? 'text-red-400 font-extrabold'
+                                      : 'text-emerald-400/90'
+                                  }`}>
+                                    {entry.isCompleted ? 'Completado' : 'En turno'}
                                     {' · '}
                                     {formatDateLabel(entry.timestamp)}
                                   </span>
@@ -1696,27 +1786,35 @@ export function CheckInScanner({
                               </div>
 
                               <div className="flex items-center gap-1 shrink-0 ml-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleHistoryMarkCompleted(entry)}
-                                  disabled={entry.isCompleted}
-                                  className={`w-7 h-7 rounded-full transition-all flex items-center justify-center shrink-0 shadow-sm cursor-pointer ${
-                                    entry.isCompleted
-                                      ? 'bg-emerald-500/10 text-emerald-300/40 border border-emerald-400/20 cursor-default'
-                                      : 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/40 active:scale-95'
-                                  }`}
-                                  title={entry.isCompleted ? "Turno Completado" : "Completar Turno"}
-                                >
-                                  <span className="material-symbols-outlined text-[14px]">task_alt</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleHistoryOpenReassign(entry)}
-                                  className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm cursor-pointer"
-                                  title="Reasignar Turno"
-                                >
-                                  <span className="material-symbols-outlined text-[14px]">sync_alt</span>
-                                </button>
+                                {!entry.isCompleted ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenCheckoutModal(entry.id, entry.volunteer, entry.timestamp)}
+                                      className="w-7 h-7 rounded-full bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm cursor-pointer"
+                                      title="Turno Completado"
+                                    >
+                                      <span className="material-symbols-outlined text-[14px]">task_alt</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleHistoryOpenReassign(entry)}
+                                      className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm cursor-pointer"
+                                      title="Reasignar Turno"
+                                    >
+                                      <span className="material-symbols-outlined text-[14px]">sync_alt</span>
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleHistoryOpenReassign(entry)}
+                                    className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm cursor-pointer"
+                                    title="Reasignar Turno"
+                                  >
+                                    <span className="material-symbols-outlined text-[14px]">sync_alt</span>
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1730,6 +1828,67 @@ export function CheckInScanner({
           </div>
         </div>
       </div>
+
+      {/* CONFIRMATION MODAL FOR CHECK-OUT (Matching /shifts page 100%) */}
+      <ConfirmationModal
+        isOpen={checkoutModal.isOpen}
+        title="Completar Turno"
+        message={(() => {
+          const name = checkoutModal.item?.volunteerName || 'este voluntario';
+          const checkedInAt = checkoutModal.item?.checkedInAt;
+
+          let elapsedText = '';
+          let isOver8Hours = false;
+
+          if (checkedInAt) {
+            const start = new Date(checkedInAt).getTime();
+            if (!isNaN(start)) {
+              const diffMs = Math.max(0, Date.now() - start);
+              const totalMins = Math.floor(diffMs / (1000 * 60));
+              const hours = Math.floor(totalMins / 60);
+              const minutes = totalMins % 60;
+
+              isOver8Hours = hours > 8 || (hours === 8 && minutes > 0);
+
+              if (hours > 0 && minutes > 0) {
+                elapsedText = `${hours} ${hours === 1 ? 'hora' : 'horas'} y ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+              } else if (hours > 0) {
+                elapsedText = `${hours} ${hours === 1 ? 'hora' : 'horas'}`;
+              } else {
+                elapsedText = `${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+              }
+            }
+          }
+
+          return (
+            <div className="flex flex-col gap-3 text-center">
+              <span>¿Deseas marcar el turno de <strong>{name}</strong> como completado?</span>
+              {elapsedText && (
+                <div className="pt-3 border-t border-black/10 dark:border-white/10 flex flex-col items-center gap-1.5">
+                  <span className="text-xs font-inter font-medium text-slate-500 dark:text-text-dim">
+                    Tiempo transcurrido de servicio:
+                  </span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-inter font-bold border shadow-sm",
+                      isOver8Hours
+                        ? "bg-red-500/15 text-red-500 border-red-500/30 dark:bg-red-500/20 dark:text-red-400"
+                        : "bg-emerald-500/15 text-emerald-600 border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-400"
+                    )}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">schedule</span>
+                    <span>{elapsedText}</span>
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        confirmText="Turno Completado"
+        type="primary"
+        onConfirm={handleConfirmCheckout}
+        onCancel={() => setCheckoutModal({ isOpen: false, item: null })}
+      />
     </div>
   );
 }

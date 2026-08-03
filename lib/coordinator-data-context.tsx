@@ -188,6 +188,47 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
     fetchData();
   }, [fetchData]);
 
+  // Set up Supabase Realtime for instant synchronization across all active coordinators
+  useEffect(() => {
+    const channel = supabase
+      .channel('global_coordinator_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shifts' },
+        (payload) => {
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            setShiftsData(prev => {
+              const idx = prev.findIndex((s: any) => s.id === payload.new.id);
+              if (idx !== -1) {
+                const copy = [...prev];
+                copy[idx] = { ...copy[idx], ...payload.new };
+                return copy;
+              }
+              return [...prev, payload.new];
+            });
+          } else {
+            fetchData(true);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'volunteers' },
+        () => {
+          fetchData(true);
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          fetchData(true);
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, fetchData]);
+
   const refresh = useCallback(
     async (force = true) => {
       await fetchData(force);

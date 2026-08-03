@@ -467,6 +467,7 @@ export async function getHistoricalAttendanceLogs(limit = 150) {
         day_key,
         shift_key,
         checked_in,
+        checked_out,
         checked_in_at,
         checked_in_by,
         volunteers (
@@ -498,7 +499,8 @@ export async function getHistoricalAttendanceLogs(limit = 150) {
         dayKey: s.day_key,
         shiftKey: s.shift_key,
         timestamp: s.checked_in_at || new Date().toISOString(),
-        type: 'success' as const
+        type: 'success' as const,
+        isCompleted: !!s.checked_out
       };
     });
   } catch (err) {
