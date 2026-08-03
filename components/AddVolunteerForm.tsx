@@ -17,6 +17,7 @@ interface AddVolunteerFormProps {
 export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast }: AddVolunteerFormProps) {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [newAge, setNewAge] = useState('');
   const [newStake, setNewStake] = useState('');
   const [newWard, setNewWard] = useState('');
   const [newCommitteeId, setNewCommitteeId] = useState('');
@@ -45,6 +46,18 @@ export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast
       setIsSubmitting(false);
       return;
     }
+
+    let ageNum: number | null = null;
+    if (newAge.trim()) {
+      const parsedAge = parseInt(newAge.trim(), 10);
+      if (isNaN(parsedAge) || parsedAge < 10 || parsedAge > 120) {
+        showToast("La edad debe ser un número entre 10 y 120 años.", "error");
+        setIsSubmitting(false);
+        return;
+      }
+      ageNum = parsedAge;
+    }
+
     const sanitizedPhone = phoneValidation.formatted;
     const pin = String(Math.floor(1000 + Math.random() * 9000));
 
@@ -55,6 +68,7 @@ export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast
           first_name,
           last_name,
           phone: sanitizedPhone,
+          age: ageNum,
           committee_id: newCommitteeId || null,
           stake: newStake,
           neighborhood: newWard,
@@ -63,12 +77,19 @@ export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast
         }
       ]);
 
+    if (error) {
+      console.error("Error adding volunteer:", error);
+      showToast("Error al añadir voluntario", "error");
+      setIsSubmitting(false);
+      return;
+    }
+
     const { recordActivityLog } = await import('@/lib/activity-logger');
     const selectedComm = committeesList.find(c => c.id === newCommitteeId)?.name || '';
     await recordActivityLog({
       actionType: 'Creación',
       description: `Creó al voluntario "${first_name} ${last_name}"`,
-      details: `Tel: ${sanitizedPhone} · Comité: ${selectedComm || 'Sin comité'} · PIN: ${pin}`
+      details: `Tel: ${sanitizedPhone} · Comité: ${selectedComm || 'Sin comité'}${ageNum ? ` · Edad: ${ageNum}` : ''} · PIN: ${pin}`
     });
 
     if (sendWelcomeMessage) {
@@ -93,9 +114,27 @@ export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast
             <label className="block text-xs font-extrabold text-text">Nombre y Apellido</label>
             <Input required minLength={3} className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Juan Pérez" value={newName} onChange={(e) => setNewName(e.target.value)} />
         </div>
-        <div className="space-y-2">
-            <label className="block text-xs font-extrabold text-text">Celular</label>
-            <Input required type="tel" maxLength={8} className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. 88888888" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+              <label className="block text-xs font-extrabold text-text">Celular</label>
+              <Input required type="tel" maxLength={8} className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. 88888888" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+              <label className="block text-xs font-extrabold text-text">Edad</label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                placeholder="Ej. 24"
+                value={newAge}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || /^\d{0,3}$/.test(val)) {
+                    setNewAge(val);
+                  }
+                }}
+              />
+          </div>
         </div>
         <div className="space-y-2">
             <label className="block text-xs font-extrabold text-text">Estaca</label>
