@@ -376,10 +376,10 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
   // If no shift is active right now, return the list of their shifts so the coordinator can select manually
   // Map shifts to show details
   const formattedShifts = shifts.map((s: any) => {
-    let timeLabel = "8:00 AM - 12:00 PM";
-    if (s.shift_key === 'T2') timeLabel = "11:00 AM - 3:00 PM";
-    if (s.shift_key === 'T3') timeLabel = "2:00 PM - 6:00 PM";
-    if (s.shift_key === 'T4') timeLabel = "5:00 PM - 10:00 PM";
+    let timeLabel = "8-12 AM";
+    if (s.shift_key === 'T2') timeLabel = "11 AM-3 PM";
+    if (s.shift_key === 'T3') timeLabel = "2-6 PM";
+    if (s.shift_key === 'T4') timeLabel = "5-10 PM";
 
     return {
       id: s.id,
@@ -423,6 +423,36 @@ export async function checkOutVolunteer(shiftId: string) {
   }
 
   return { success: true, message: "Turno completado exitosamente." };
+}
+
+// 4b. Reassign a shift to a new day and shift key
+export async function reassignVolunteerShift(shiftId: string, newDayKey: string, newShiftKey: string) {
+  try {
+    const supabase = getAdminClient();
+    const { data, error } = await supabase
+      .from('shifts')
+      .update({
+        day_key: newDayKey,
+        shift_key: newShiftKey,
+      })
+      .eq('id', shiftId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error in reassignVolunteerShift:", error);
+      return { error: error.message };
+    }
+
+    try {
+      revalidatePath('/shifts');
+    } catch {}
+
+    return { success: true, shift: data };
+  } catch (err: any) {
+    console.error("Error reassigning shift:", err);
+    return { error: err.message || "Error al reasignar el turno" };
+  }
 }
 
 // 5. Fetch Historical Attendance Logs across all days from Supabase DB
