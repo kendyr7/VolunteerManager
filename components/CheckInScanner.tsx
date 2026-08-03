@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { createClient } from "@/lib/supabase/client";
+import { useCoordinatorData } from "@/lib/coordinator-data-context";
 
 interface CheckInScannerProps {
   coordinatorId: string;
@@ -127,6 +128,12 @@ export function CheckInScanner({
     } catch (e) {}
   };
 
+  let checkedOutMap: Record<string, boolean> = {};
+  try {
+    const coordCtx = useCoordinatorData();
+    checkedOutMap = coordCtx.checkedOutMap || {};
+  } catch (e) {}
+
   const [historyTab, setHistoryTab] = useState<'session' | 'db'>('session');
   const [dbHistory, setDbHistory] = useState<ScanEntry[]>([]);
   const [loadingDbHistory, setLoadingDbHistory] = useState(false);
@@ -137,10 +144,20 @@ export function CheckInScanner({
     setLoadingDbHistory(true);
     try {
       const logs = await getHistoricalAttendanceLogs(150);
-      setDbHistory(logs.map((item: any) => ({
+      const formattedLogs = logs.map((item: any) => ({
         ...item,
         timestamp: new Date(item.timestamp)
-      })));
+      }));
+      setDbHistory(formattedLogs);
+
+      // Sync completed status back to local session history array
+      setHistory(prev => prev.map(sessionItem => {
+        const matchingDbItem = formattedLogs.find((dbItem: any) => dbItem.id === sessionItem.id);
+        if (matchingDbItem && matchingDbItem.isCompleted) {
+          return { ...sessionItem, isCompleted: true };
+        }
+        return sessionItem;
+      }));
     } catch (e) {
       console.error("Error fetching db history", e);
     } finally {
@@ -149,10 +166,8 @@ export function CheckInScanner({
   }, []);
 
   useEffect(() => {
-    if (historyTab === 'db') {
-      fetchDbHistory();
-    }
-  }, [historyTab, fetchDbHistory]);
+    fetchDbHistory();
+  }, [fetchDbHistory]);
 
   // Realtime subscription for Scanner history (listens to postgres updates on shifts table)
   useEffect(() => {
@@ -176,7 +191,16 @@ export function CheckInScanner({
   const activeRawList = historyTab === 'session' ? history : dbHistory;
 
   const filteredList = useMemo(() => {
-    return activeRawList.filter(item => {
+    return activeRawList.map(item => {
+      const isOutInContext = !!(checkedOutMap && (
+        checkedOutMap[item.id] ||
+        (item.dayKey && item.shiftKey && checkedOutMap[`${item.id}-${item.dayKey}-${item.shiftKey}`])
+      ));
+      if (isOutInContext) {
+        return { ...item, isCompleted: true };
+      }
+      return item;
+    }).filter(item => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = item.volunteer.toLowerCase().includes(q);
@@ -190,7 +214,7 @@ export function CheckInScanner({
       }
       return true;
     });
-  }, [activeRawList, searchQuery, selectedDayFilter]);
+  }, [activeRawList, searchQuery, selectedDayFilter, checkedOutMap]);
 
   const uniqueDays = useMemo(() => {
     const daysSet = new Set<string>();

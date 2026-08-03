@@ -401,28 +401,33 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
 
 // 4. Process Check-out (Turno Completado)
 export async function checkOutVolunteer(shiftId: string) {
-  const supabase = await createClient();
+  try {
+    const supabase = getAdminClient();
 
-  const { error } = await supabase
-    .from('shifts')
-    .update({
-      checked_in: true,
-      checked_out: true,
-      checked_out_at: new Date().toISOString(),
-    })
-    .eq('id', shiftId);
-
-  if (error) {
-    console.error("Notice in checkOutVolunteer:", error.message);
-    await supabase
+    const { error } = await supabase
       .from('shifts')
       .update({
         checked_in: true,
+        checked_out: true,
+        checked_out_at: new Date().toISOString(),
       })
       .eq('id', shiftId);
-  }
 
-  return { success: true, message: "Turno completado exitosamente." };
+    if (error) {
+      console.error("Error in checkOutVolunteer:", error);
+      return { error: error.message };
+    }
+
+    try {
+      revalidatePath('/shifts');
+      revalidatePath('/check-in');
+    } catch {}
+
+    return { success: true, message: "Turno completado exitosamente." };
+  } catch (err: any) {
+    console.error("Error completing shift:", err);
+    return { error: err.message || "Error al completar el turno" };
+  }
 }
 
 // 4b. Reassign a shift to a new day and shift key

@@ -2003,7 +2003,7 @@ export default function ShiftsPage() {
                                       : (globalShifts[volunteerId || '']?.[d.key]?.includes(t) ?? false);
                                     
                                     const isCheckedIn = checkedInMap[`${volunteerId}-${d.key}-${t}`];
-                                    const isCheckedOut = checkedOutMap[`${volunteerId}-${d.key}-${t}`];
+                                    const isCheckedOut = checkedOutMap[`${volunteerId}-${d.key}-${t}`] || !!completedShiftsMap[`${volunteerId}-${d.key}-${t}`];
 
                                     let statusStyle = "bg-dark2 border-border text-text-dim/40";
                                     let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-text-dim/40">-</span>;

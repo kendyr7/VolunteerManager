@@ -32,7 +32,7 @@ export interface VolunteerProfileViewProps {
   // Shift state
   shiftsByDay: Record<string, string[]>;
   checkedInMap?: Record<string, boolean> | Record<string, string[]>;
-  checkedOutMap?: Record<string, boolean>;
+  checkedOutMap?: Record<string, boolean> | Record<string, string[]>;
 
   // Handlers
   onToggleShift: (dayKey: string, shiftKey: string) => void;
@@ -167,9 +167,13 @@ export function VolunteerProfileView({
 
   const isShiftCheckedOut = (dayKey: string, shiftKey: string): boolean => {
     if (!checkedOutMap) return false;
+    const arrayVal = (checkedOutMap as Record<string, string[]>)[dayKey];
+    if (Array.isArray(arrayVal)) {
+      return arrayVal.includes(shiftKey);
+    }
     return (
-      !!checkedOutMap[`${volunteer.id}-${dayKey}-${shiftKey}`] ||
-      !!checkedOutMap[`${dayKey}-${shiftKey}`]
+      !!(checkedOutMap as Record<string, boolean>)[`${volunteer.id}-${dayKey}-${shiftKey}`] ||
+      !!(checkedOutMap as Record<string, boolean>)[`${dayKey}-${shiftKey}`]
     );
   };
 

@@ -17,6 +17,8 @@ interface ShiftCalendarProps {
 function parseShifts(data: any[] = []) {
   const mapped: Record<string, string[]> = {};
   const confirmed: Record<string, string[]> = {};
+  const checkedOut: Record<string, string[]> = {};
+
   data.forEach(s => {
     if (!mapped[s.day_key]) {
       mapped[s.day_key] = [];
@@ -25,7 +27,7 @@ function parseShifts(data: any[] = []) {
       mapped[s.day_key].push(s.shift_key);
     }
 
-    if (s.checked_in) {
+    if (s.checked_in || s.checked_in_at || s.checked_out || s.checked_out_at) {
       if (!confirmed[s.day_key]) {
         confirmed[s.day_key] = [];
       }
@@ -33,8 +35,18 @@ function parseShifts(data: any[] = []) {
         confirmed[s.day_key].push(s.shift_key);
       }
     }
+
+    if (s.checked_out || s.checked_out_at) {
+      if (!checkedOut[s.day_key]) {
+        checkedOut[s.day_key] = [];
+      }
+      if (!checkedOut[s.day_key].includes(s.shift_key)) {
+        checkedOut[s.day_key].push(s.shift_key);
+      }
+    }
   });
-  return { mapped, confirmed };
+
+  return { mapped, confirmed, checkedOut };
 }
 
 export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }: ShiftCalendarProps) {
@@ -43,6 +55,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
   const initialParsed = parseShifts(initialShifts);
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>(initialParsed.mapped);
   const [checkedInShifts, setCheckedInShifts] = useState<Record<string, string[]>>(initialParsed.confirmed);
+  const [checkedOutShifts, setCheckedOutShifts] = useState<Record<string, string[]>>(initialParsed.checkedOut);
   const [loading, setLoading] = useState(!volunteerInfo && initialShifts.length === 0);
   const [isPending, startTransition] = useTransition();
   const [volunteerData, setVolunteerData] = useState<VolunteerInfo | undefined>(volunteerInfo);
@@ -85,9 +98,10 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
       }
 
       if (data) {
-        const { mapped, confirmed } = parseShifts(data);
+        const { mapped, confirmed, checkedOut } = parseShifts(data);
         setShiftsByDay(mapped);
         setCheckedInShifts(confirmed);
+        setCheckedOutShifts(checkedOut);
       }
     } catch (e) {
       console.error(e);
@@ -98,13 +112,29 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
 
   useEffect(() => {
     loadShifts();
+
+    const channel = supabase
+      .channel(`volunteer_calendar_${volunteerId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shifts', filter: `volunteer_id=eq.${volunteerId}` },
+        () => {
+          loadShifts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [volunteerId]);
 
   // Toggle shift on click
   const handleToggleShift = (dayKey: string, shiftKey: string) => {
-    // If the shift is already checked-in, do not allow toggling
+    // If the shift is already checked-in or checked-out, do not allow toggling
     const isCheckedIn = (checkedInShifts[dayKey] || []).includes(shiftKey);
-    if (isCheckedIn) return;
+    const isCheckedOut = (checkedOutShifts[dayKey] || []).includes(shiftKey);
+    if (isCheckedIn || isCheckedOut) return;
 
     startTransition(async () => {
       const active = (shiftsByDay[dayKey] || []).includes(shiftKey);
@@ -183,6 +213,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
         mode="volunteer"
         shiftsByDay={shiftsByDay}
         checkedInMap={checkedInShifts}
+        checkedOutMap={checkedOutShifts}
         onToggleShift={handleToggleShift}
       />
     </div>
