@@ -27,27 +27,22 @@ export default async function CheckInPage() {
 
   const supabase = await createClient();
   
-  // Resolve coordinator ID
-  let query = supabase.from('profiles').select('id, full_name');
-  if (role === 'Admin') {
-    query = query.eq('role', 'Admin');
-  } else {
-    const { data: comm } = await supabase
-      .from('committees')
-      .select('id')
-      .eq('name', committeeName)
+  // Resolve coordinator ID directly from session userId
+  let coordinatorId = userId;
+  let coordinatorName = 'Coordinador';
+
+  if (userId) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .eq('id', userId)
       .maybeSingle();
 
-    if (comm) {
-      query = query.eq('role', role).eq('committee_id', comm.id);
-    } else {
-      query = query.eq('role', role);
+    if (profile) {
+      coordinatorId = profile.id;
+      coordinatorName = profile.full_name || 'Coordinador';
     }
   }
-
-  const { data: profile } = await query.limit(1).maybeSingle();
-  const coordinatorId = profile?.id || '99999999-9999-9999-9999-999999999999'; // Fallback to system admin ID
-  const coordinatorName = profile?.full_name || 'Coordinador';
 
   return (
     <CheckInScanner 

@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { createClient, getAdminClient } from "@/lib/supabase/server";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { revalidatePath } from "next/cache";
 
 function getSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -11,6 +12,88 @@ function getSecret(): string {
     throw new Error("La variable de entorno JWT_SECRET no está configurada.");
   }
   return secret;
+}
+
+// Safely update checked_in status on shifts table, protecting against FK constraint errors on checked_in_by
+async function safeUpdateShiftCheckIn(
+  supabase: ReturnType<typeof getAdminClient>,
+  shiftId: string,
+  coordinatorId?: string
+) {
+  const updatePayload: Record<string, unknown> = {
+    checked_in: true,
+    checked_in_at: new Date().toISOString(),
+  };
+
+  const FALLBACK_ID = '99999999-9999-9999-9999-999999999999';
+  if (coordinatorId && coordinatorId !== FALLBACK_ID) {
+    // Check if coordinatorId exists in profiles to prevent FK violations
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', coordinatorId)
+      .maybeSingle();
+
+    if (prof) {
+      updatePayload.checked_in_by = coordinatorId;
+    }
+  }
+
+  const { error } = await supabase
+    .from('shifts')
+    .update(updatePayload)
+    .eq('id', shiftId);
+
+  // Fallback: if update with checked_in_by failed due to any constraint, retry without checked_in_by
+  if (error && updatePayload.checked_in_by) {
+    console.warn("Retrying check-in update without checked_in_by:", error.message);
+    delete updatePayload.checked_in_by;
+    const { error: fallbackErr } = await supabase
+      .from('shifts')
+      .update(updatePayload)
+      .eq('id', shiftId);
+    return fallbackErr;
+  }
+
+  return error;
+}
+
+// Helper to log check-in to activity_logs table for audit history
+async function logCheckInActivity(
+  supabase: ReturnType<typeof getAdminClient>,
+  coordinatorId: string,
+  volunteerName: string,
+  shiftDetail: string,
+  shiftId: string
+) {
+  try {
+    let userName = 'Coordinador';
+    let userRole = 'Coordinador';
+
+    if (coordinatorId && coordinatorId !== '99999999-9999-9999-9999-999999999999') {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', coordinatorId)
+        .maybeSingle();
+
+      if (prof) {
+        userName = prof.full_name || 'Coordinador';
+        userRole = prof.role || 'Coordinador';
+      }
+    }
+
+    await supabase.from('activity_logs').insert({
+      user_name: userName,
+      user_role: userRole,
+      action_type: 'Check-in',
+      description: `Registró asistencia de ${volunteerName}`,
+      details: `Turno: ${shiftDetail}`,
+      target_id: shiftId
+    });
+  } catch (err) {
+    console.error("Notice: Could not create activity log entry:", err);
+  }
 }
 
 // Parse day key to actual Date representing the end of the shift in Nicaragua timezone (UTC-6)
@@ -128,7 +211,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       // Manual override check-in for a specific shift ID
       const { data: shift, error: shiftErr } = await supabase
         .from('shifts')
-        .select('volunteer_id')
+        .select('volunteer_id, day_key, shift_key')
         .eq('id', manualShiftId)
         .single();
 
@@ -137,19 +220,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       }
       volunteerId = shift.volunteer_id;
 
-      const FALLBACK_ID = '99999999-9999-9999-9999-999999999999';
-      const updatePayload: Record<string, unknown> = {
-        checked_in: true,
-        checked_in_at: new Date().toISOString(),
-      };
-      if (coordinatorId && coordinatorId !== FALLBACK_ID) {
-        updatePayload.checked_in_by = coordinatorId;
-      }
-
-      const { error: updateErr } = await supabase
-        .from('shifts')
-        .update(updatePayload)
-        .eq('id', manualShiftId);
+      const updateErr = await safeUpdateShiftCheckIn(supabase, manualShiftId, coordinatorId);
 
       if (updateErr) {
         console.error("Error updating manual check-in:", updateErr);
@@ -168,11 +239,26 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         .eq('id', volunteerId)
         .single();
 
+      const volunteerName = vol ? `${vol.first_name} ${vol.last_name}` : "Voluntario";
+      const shiftDetail = `${shift.day_key} - ${shift.shift_key}`;
+
+      // Log activity to audit logs
+      await logCheckInActivity(supabase, coordinatorId, volunteerName, shiftDetail, manualShiftId);
+
+      // Revalidate app routes so shifts and attendance status reflect immediately
+      try {
+        revalidatePath('/shifts');
+        revalidatePath('/volunteers');
+        revalidatePath('/check-in');
+        revalidatePath('/dashboard');
+      } catch (rErr) {}
+
       return {
         success: true,
         message: "Asistencia registrada manualmente.",
-        volunteer: vol ? `${vol.first_name} ${vol.last_name}` : "Voluntario",
-        committee: vol?.committees?.name || "Sin comité"
+        volunteer: volunteerName,
+        committee: vol?.committees?.name || "Sin comité",
+        shiftDetail
       };
     } catch (manualErr) {
       console.error("Unexpected error in manual check-in:", manualErr);
@@ -243,30 +329,21 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
   const activeShift = todayShifts.find((s: any) => isCurrentTimeInShiftWindow(s.day_key, s.shift_key));
 
   if (activeShift) {
+    const shiftDetail = `${activeShift.day_key} - ${activeShift.shift_key}`;
+    const volunteerName = `${volunteer.first_name} ${volunteer.last_name}`;
+
     // Check if already checked in
     if (activeShift.checked_in) {
       return {
         alreadyCheckedIn: true,
         message: "Este turno ya tiene asistencia registrada.",
-        volunteer: `${volunteer.first_name} ${volunteer.last_name}`,
+        volunteer: volunteerName,
         committee: volunteer.committees?.name || "Sin comité",
-        shiftDetail: `${activeShift.day_key} - ${activeShift.shift_key}`
+        shiftDetail
       };
     }
 
-      const FALLBACK_ID = '99999999-9999-9999-9999-999999999999';
-      const autoPayload: Record<string, unknown> = {
-        checked_in: true,
-        checked_in_at: new Date().toISOString(),
-      };
-      if (coordinatorId && coordinatorId !== FALLBACK_ID) {
-        autoPayload.checked_in_by = coordinatorId;
-      }
-
-      const { error: checkinErr } = await supabase
-        .from('shifts')
-        .update(autoPayload)
-        .eq('id', activeShift.id);
+    const checkinErr = await safeUpdateShiftCheckIn(supabase, activeShift.id, coordinatorId);
 
     if (checkinErr) {
       return { error: "Error al registrar la asistencia en base de datos." };
@@ -277,11 +354,22 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       console.error("Error en segundo plano al recalcular fiabilidad (QR):", err)
     );
 
+    // Log activity
+    await logCheckInActivity(supabase, coordinatorId, volunteerName, shiftDetail, activeShift.id);
+
+    // Revalidate app routes
+    try {
+      revalidatePath('/shifts');
+      revalidatePath('/volunteers');
+      revalidatePath('/check-in');
+      revalidatePath('/dashboard');
+    } catch (rErr) {}
+
     return {
       success: true,
-      volunteer: `${volunteer.first_name} ${volunteer.last_name}`,
+      volunteer: volunteerName,
       committee: volunteer.committees?.name || "Sin comité",
-      shiftDetail: `${activeShift.day_key} - ${activeShift.shift_key}`
+      shiftDetail
     };
   }
 
@@ -335,5 +423,57 @@ export async function checkOutVolunteer(shiftId: string) {
   }
 
   return { success: true, message: "Turno completado exitosamente." };
+}
+
+// 5. Fetch Historical Attendance Logs across all days from Supabase DB
+export async function getHistoricalAttendanceLogs(limit = 150) {
+  try {
+    const supabase = getAdminClient();
+
+    const { data: shifts, error } = await supabase
+      .from('shifts')
+      .select(`
+        id,
+        day_key,
+        shift_key,
+        checked_in,
+        checked_in_at,
+        checked_in_by,
+        volunteers (
+          id,
+          first_name,
+          last_name,
+          committees ( name )
+        )
+      `)
+      .eq('checked_in', true)
+      .order('checked_in_at', { ascending: false, nullsFirst: false })
+      .limit(limit);
+
+    if (error || !shifts) {
+      console.error("Error fetching historical attendance logs:", error);
+      return [];
+    }
+
+    return shifts.map((s: any) => {
+      const vol = s.volunteers;
+      const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : "Voluntario";
+      const commName = vol?.committees?.name || "Sin comité";
+
+      return {
+        id: s.id,
+        volunteer: volName || "Voluntario",
+        committee: commName,
+        shiftDetail: `${s.day_key} - ${s.shift_key}`,
+        dayKey: s.day_key,
+        shiftKey: s.shift_key,
+        timestamp: s.checked_in_at || new Date().toISOString(),
+        type: 'success' as const
+      };
+    });
+  } catch (err) {
+    console.error("Error in getHistoricalAttendanceLogs:", err);
+    return [];
+  }
 }
 
