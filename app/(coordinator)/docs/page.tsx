@@ -1,5 +1,7 @@
 'use client'
 
+import { useState, useMemo } from 'react'
+
 // Icon map matching sidebar exactly
 const MODULE_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
   volunteers: { icon: "group", color: "text-emerald-500", bg: "bg-emerald-500/10" },
@@ -65,7 +67,7 @@ function ModuleCard({ moduleKey, title, route, description, features }: ModuleCa
   const total = features.length
 
   return (
-    <div className="rounded-xl border border-border bg-dark2 overflow-hidden transition-all duration-200 hover:border-border/80">
+    <div className="rounded-none sm:rounded-xl border-x-0 sm:border-x border border-border bg-dark2 overflow-hidden transition-all duration-200 hover:border-border/80">
       {/* Card Header */}
       <div className="flex items-start gap-4 p-5 border-b border-border/50">
         <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center shrink-0 mt-0.5`}>
@@ -236,58 +238,157 @@ const MODULES: ModuleCardProps[] = [
 ]
 
 export default function DocsPage() {
-  const totalFeatures = MODULES.reduce((sum, m) => sum + m.features.length, 0)
-  const totalDone = MODULES.reduce((sum, m) => sum + m.features.filter(f => f.status === "done").length, 0)
-  const totalProgress = MODULES.reduce((sum, m) => sum + m.features.filter(f => f.status === "progress").length, 0)
-  const totalPending = MODULES.reduce((sum, m) => sum + m.features.filter(f => f.status === "pending").length, 0)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredModules = useMemo(() => {
+    if (!searchTerm.trim()) return MODULES
+    const q = searchTerm.toLowerCase()
+    return MODULES.map(mod => {
+      const titleMatch = mod.title.toLowerCase().includes(q) || mod.description.toLowerCase().includes(q)
+      const matchedFeatures = mod.features.filter(f =>
+        f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q)
+      )
+      if (titleMatch) return mod
+      if (matchedFeatures.length > 0) return { ...mod, features: matchedFeatures }
+      return null
+    }).filter(Boolean) as ModuleCardProps[]
+  }, [searchTerm])
+
+  const totalFeatures = filteredModules.reduce((sum, m) => sum + m.features.length, 0)
+  const totalDone = filteredModules.reduce((sum, m) => sum + m.features.filter(f => f.status === "done").length, 0)
+  const totalProgress = filteredModules.reduce((sum, m) => sum + m.features.filter(f => f.status === "progress").length, 0)
+  const totalPending = filteredModules.reduce((sum, m) => sum + m.features.filter(f => f.status === "pending").length, 0)
 
   return (
-    <div className="min-h-full bg-dark">
-      <div className="w-full px-4 sm:px-6 py-8 space-y-8">
-
-        {/* Header */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-text-dim text-sm font-inter mb-3">
-            <Icon name="menu_book" className="text-text-dim" />
-            <span>Volunteer Manager</span>
-            <Icon name="chevron_right" className="text-text-dim" />
-            <span className="text-text">Centro de Documentación</span>
-          </div>
-          <h1 className="text-2xl font-inter font-bold text-text tracking-tight">Centro de Documentación</h1>
-          <p className="text-sm text-text-dim leading-relaxed max-w-2xl">
-            Registro completo de capacidades de la plataforma organizadas por módulo. Úsalo como guía de referencia rápida para el equipo coordinador.
-          </p>
+    <>
+      {/* Sticky Header — matches Dashboard / Volunteers / Reports */}
+      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 pointer-events-auto shrink-0 border-b border-white/5">
+        <div className="w-full flex items-center justify-between">
+          <h1 className="text-[28px] sm:text-4xl font-black text-text tracking-tight">
+            Centro de Documentación
+          </h1>
         </div>
+        {/* Search */}
+        <div className="w-full relative">
+          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
+            <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
+          </div>
+          <input
+            type="text"
+            placeholder="Buscar módulo o función..."
+            className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            autoComplete="off"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="absolute inset-y-0 right-3 flex items-center z-10 text-text-dim hover:text-text transition-colors"
+            >
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          )}
+        </div>
+      </div>
 
-        {/* Summary Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: "Total funciones", value: totalFeatures, icon: "list_alt", color: "text-text" },
-            { label: "Operativas", value: totalDone, icon: "check_circle", color: "text-emerald-500" },
-            { label: "En progreso", value: totalProgress, icon: "pending", color: "text-amber-400" },
-            { label: "Pendientes", value: totalPending, icon: "radio_button_unchecked", color: "text-text-dim" },
-          ].map((stat) => (
-            <div key={stat.label} className="rounded-xl border border-border bg-dark2 px-4 py-3 flex items-center gap-3">
-              <Icon name={stat.icon} className={stat.color} />
-              <div>
-                <p className={`text-xl font-bold font-inter ${stat.color}`}>{stat.value}</p>
-                <p className="text-xs text-text-dim">{stat.label}</p>
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-20 pt-4">
+
+        {/* Summary KPIs — edge-to-edge grid matching Dashboard */}
+        <div className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/5 mb-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-[1px]">
+            {/* Total */}
+            <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3 relative">
+              <div className="flex items-start justify-between mb-3 sm:mb-6">
+                <div className="p-3 bg-blue-500/10 text-blue-500 rounded-sm group-hover:bg-[#4d7cfe] group-hover:text-white transition-colors duration-300">
+                  <Icon name="list_alt" className="" />
+                </div>
               </div>
+              <div className="space-y-1">
+                <h3 className="text-text font-bold tracking-tighter text-2xl sm:text-3xl">{totalFeatures}</h3>
+                <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Total Funciones</p>
+              </div>
+              <p className="text-[10px] text-text-dim mt-3 sm:mt-6 font-inter font-bold uppercase tracking-[0.1em]">Capacidades del sistema</p>
             </div>
-          ))}
+
+            {/* Operativas */}
+            <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3 relative">
+              <div className="flex items-start justify-between mb-3 sm:mb-6">
+                <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-sm group-hover:bg-emerald-500 group-hover:text-white transition-colors duration-300">
+                  <Icon name="check_circle" className="" />
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-dim mb-1">Progreso</span>
+                  <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    {Math.round((totalDone / totalFeatures) * 100)}%
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-emerald-500 font-bold tracking-tighter text-2xl sm:text-3xl">{totalDone}</h3>
+                <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Operativas</p>
+              </div>
+              <p className="text-[10px] text-text-dim mt-3 sm:mt-6 font-inter font-bold uppercase tracking-[0.1em]">Funciones listas para uso</p>
+            </div>
+
+            {/* En Progreso */}
+            <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3 relative">
+              <div className="flex items-start justify-between mb-3 sm:mb-6">
+                <div className="p-3 bg-amber-500/10 text-amber-400 rounded-sm group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300">
+                  <Icon name="pending" className="" />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">Activo</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-amber-400 font-bold tracking-tighter text-2xl sm:text-3xl">{totalProgress}</h3>
+                <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">En Progreso</p>
+              </div>
+              <p className="text-[10px] text-text-dim mt-3 sm:mt-6 font-inter font-bold uppercase tracking-[0.1em]">En desarrollo activo</p>
+            </div>
+
+            {/* Pendientes */}
+            <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3 relative">
+              <div className="flex items-start justify-between mb-3 sm:mb-6">
+                <div className={`p-3 rounded-sm transition-colors duration-300 ${totalPending > 0 ? 'bg-red-500/10 text-red-400 group-hover:bg-red-500 group-hover:text-white' : 'bg-dark3 text-text-dim group-hover:bg-white/10 group-hover:text-white'}`}>
+                  <Icon name="radio_button_unchecked" className="" />
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${totalPending > 0 ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-text-dim bg-dark3 border-border'}`}>
+                  {totalPending > 0 ? 'PENDIENTE' : 'COMPLETO'}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <h3 className={`font-bold tracking-tighter text-2xl sm:text-3xl ${totalPending > 0 ? 'text-red-400' : 'text-text'}`}>{totalPending}</h3>
+                <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Pendientes</p>
+              </div>
+              <p className="text-[10px] text-text-dim mt-3 sm:mt-6 font-inter font-bold uppercase tracking-[0.1em]">
+                {totalPending > 0 ? 'Funciones por implementar' : 'Todo al día'}
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Module Cards */}
-        <div className="space-y-4">
-          {MODULES.map((mod) => (
-            <ModuleCard key={mod.moduleKey} {...mod} />
-          ))}
+        <div className="-mx-4 sm:mx-0 space-y-4 sm:space-y-4">
+          {filteredModules.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <span className="material-symbols-outlined text-[40px] text-text-dim/40 mb-3">search_off</span>
+              <p className="text-sm font-bold text-text-dim">No se encontraron resultados para "{searchTerm}"</p>
+            </div>
+          ) : (
+            filteredModules.map((mod) => (
+              <ModuleCard key={mod.moduleKey} {...mod} />
+            ))
+          )}
         </div>
 
         <p className="text-center text-xs text-text-dim pb-4">
           Última actualización: {new Date().toLocaleDateString("es-ES", { year: "numeric", month: "long", day: "numeric" })}
         </p>
       </div>
-    </div>
+    </>
   )
 }

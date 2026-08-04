@@ -2,23 +2,7 @@ import React from 'react';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { USER_TABLE_STYLES } from '@/app/(coordinator)/users/page';
-
-function HighlightText({ text, term }: { text: string; term: string }) {
-  if (!term.trim()) return <span>{text}</span>;
-  const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-  const parts = text.split(regex);
-  return (
-    <span>
-      {parts.map((part, i) =>
-        regex.test(part) ? (
-          <span key={i} style={{ backgroundColor: '#fde047', color: '#111827', borderRadius: '6px', padding: '0 4px', display: 'inline', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone' }}>{part}</span>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </span>
-  );
-}
+import { HighlightText } from '@/components/HighlightText';
 
 export interface SwipeableMobileCardProps {
   name: string;
@@ -45,7 +29,7 @@ export interface SwipeableMobileCardProps {
   selectionModeActive?: boolean;
 }
 
-export const SwipeableMobileCard: React.FC<SwipeableMobileCardProps> = ({
+export const SwipeableMobileCard: React.FC<SwipeableMobileCardProps> = React.memo(({
   name,
   phone,
   searchTerm,
@@ -187,4 +171,14 @@ export const SwipeableMobileCard: React.FC<SwipeableMobileCardProps> = ({
       </motion.div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.name === nextProps.name &&
+    prevProps.phone === nextProps.phone &&
+    prevProps.searchTerm === nextProps.searchTerm &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.selectionModeActive === nextProps.selectionModeActive &&
+    prevProps.swipeRightText === nextProps.swipeRightText &&
+    prevProps.swipeLeftText === nextProps.swipeLeftText
+  );
+});

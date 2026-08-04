@@ -181,7 +181,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
       fetchPromiseRef.current = promise;
       await promise;
     },
-    [supabase, rawVolunteers.length]
+    [supabase]
   );
 
   useEffect(() => {
@@ -220,7 +220,8 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          fetchData(true);
+          // Only fetch if data hasn't been fetched yet
+          fetchData(false);
         }
       });
 

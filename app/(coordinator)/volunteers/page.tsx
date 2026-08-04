@@ -32,6 +32,10 @@ import { formatE164, validatePhone8Digits } from "@/lib/whatsapp";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
 import { VolunteerProfileView } from "@/components/VolunteerProfileView";
+import { VolunteerTableRow } from "@/components/VolunteerTableRow";
+import { VolunteerSearchService } from "@/lib/services/volunteer-search.service";
+import { filterVolunteerIds } from "@/lib/services/volunteer-filter.service";
+import { groupVolunteersAlphabetically } from "@/lib/services/volunteer-grouping.service";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -148,21 +152,31 @@ export default function VolunteersPage() {
 
   const volunteers = useMemo<VolunteerType[]>(
     () =>
-      rawVolunteers.map((v: any) => ({
-        id: v.id,
-        name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
-        first_name: v.first_name || '',
-        last_name: v.last_name || '',
-        stake: v.stake || '',
-        ward: v.neighborhood || '',
-        phone: v.phone || '',
-        shifts: shiftCounts[v.id] || 0,
-        reliability: v.reliability_score || 100,
-        committee: v.committees?.name || 'Sin comité',
-        committee_id: v.committee_id,
-        status: v.status || 'active',
-        age: v.age,
-      })),
+      rawVolunteers.map((v: any) => {
+        const name = `${v.first_name || ''} ${v.last_name || ''}`.trim();
+        const committee = v.committees?.name || 'Sin comité';
+        const stake = v.stake || '';
+        const ward = v.neighborhood || '';
+        const phone = v.phone || '';
+        const normalizedSearchText = normalizeSearch(`${name} ${phone} ${committee} ${stake} ${ward}`);
+
+        return {
+          id: v.id,
+          name,
+          first_name: v.first_name || '',
+          last_name: v.last_name || '',
+          stake,
+          ward,
+          phone,
+          shifts: shiftCounts[v.id] || 0,
+          reliability: v.reliability_score || 100,
+          committee,
+          committee_id: v.committee_id,
+          status: v.status || 'active',
+          age: v.age,
+          normalizedSearchText,
+        };
+      }),
     [rawVolunteers, shiftCounts]
   );
   const [showArchived, setShowArchived] = useState(false);
@@ -241,7 +255,7 @@ export default function VolunteersPage() {
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [currentCommittee, setCurrentCommittee] = useState<string>('');
 
-  const handleResetPin = async (vol: VolunteerType) => {
+  const handleResetPin = useCallback(async (vol: VolunteerType) => {
     setConfirmModal({
       isOpen: true,
       title: 'Resetear PIN',
@@ -263,7 +277,7 @@ export default function VolunteersPage() {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
-  };
+  }, []);
 
   const handleArchiveVolunteer = async () => {
     if (!volunteerToArchive) return;
@@ -328,7 +342,7 @@ export default function VolunteersPage() {
     });
   };
 
-  const handleStartEditProfile = (vol: VolunteerType) => {
+  const handleStartEditProfile = useCallback((vol: VolunteerType) => {
     const parts = (vol.name || '').trim().split(/\s+/);
     const fn = (vol as any).first_name || (parts.length >= 2 ? parts.slice(0, Math.ceil(parts.length / 2)).join(' ') : parts[0] || '');
     const ln = (vol as any).last_name || (parts.length >= 2 ? parts.slice(Math.ceil(parts.length / 2)).join(' ') : '');
@@ -344,7 +358,28 @@ export default function VolunteersPage() {
     setEditCommitteeId(comm ? comm.id : '');
 
     setDrawerMode('edit_profile');
-  };
+  }, [committeesList]);
+
+  const handleEditClick = useCallback((vol: VolunteerType, startInEditMode = false) => {
+    setEditingVolunteer(vol);
+    setIsSheetOpen(true);
+    setIsEditingShifts(false);
+    setSaved(false);
+
+    const volShifts = globalShifts[vol.id] || Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
+    setShiftsByDay(volShifts);
+
+    if (startInEditMode) {
+      handleStartEditProfile(vol);
+    } else {
+      setDrawerMode('view');
+    }
+  }, [globalShifts, handleStartEditProfile]);
+
+  const handleArchive = useCallback((vol: VolunteerType) => {
+    setVolunteerToArchive(vol);
+    setIsArchiveModalOpen(true);
+  }, []);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -501,42 +536,32 @@ export default function VolunteersPage() {
     }));
   }, [volunteers, reliabilityMap]);
 
+  // Hybrid search service instance
+  const searchService = useMemo(() => {
+    return new VolunteerSearchService(augmentedVolunteers);
+  }, [augmentedVolunteers]);
+
   const filteredVolunteers = useMemo(() => {
-    // Lift searchTerms parsing out of the filter loop for huge O(N) performance gain!
-    const searchTerms = appliedSearch.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
-
-    const result = augmentedVolunteers.filter(v => {
-      // 1. Role-based isolation: Editors only see their committee
-      if (currentRole === 'Editor' && v.committee !== currentCommittee) return false;
-      if (currentRole === 'Lector') return false;
-
-      // 2. Filter by archived status
-      const matchesStatus = showArchived ? v.status === 'archived' : v.status !== 'archived';
-      if (!matchesStatus) return false;
-
-      // 3. User search and dynamic filters
-      const normName = normalizeSearch(v.name);
-      const normPhone = v.phone || '';
-      const normCommittee = normalizeSearch(v.committee);
-      const normStake = normalizeSearch(v.stake);
-      const normWard = normalizeSearch(v.ward);
-
-      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
-        normName.includes(term) ||
-        normPhone.includes(term) ||
-        normCommittee.includes(term) ||
-        normStake.includes(term) ||
-        normWard.includes(term)
-      );
-
-      const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(v.committee);
-      const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(v.stake);
-      const matchesWard = selectedWards.length === 0 || selectedWards.includes(v.ward);
-
-      return matchesSearch && matchesCommittee && matchesStake && matchesWard;
+    const matchedSearchIds = new Set(searchService.search(appliedSearch));
+    return filterVolunteerIds(augmentedVolunteers, matchedSearchIds, {
+      currentRole,
+      currentCommittee,
+      showArchived,
+      selectedCommittees,
+      selectedStakes,
+      selectedWards,
     });
-    return result;
-  }, [augmentedVolunteers, appliedSearch, selectedCommittees, selectedStakes, selectedWards, showArchived, currentRole, currentCommittee]);
+  }, [
+    searchService,
+    augmentedVolunteers,
+    appliedSearch,
+    currentRole,
+    currentCommittee,
+    showArchived,
+    selectedCommittees,
+    selectedStakes,
+    selectedWards,
+  ]);
 
   const { activeCount, archivedCount } = useMemo(() => {
     const baseList = augmentedVolunteers.filter(v => {
@@ -549,42 +574,9 @@ export default function VolunteersPage() {
     return { activeCount: active, archivedCount: archived };
   }, [augmentedVolunteers, currentRole, currentCommittee]);
 
-  const groupedVolunteers = useMemo(() => {
-    const groups: Record<string, VolunteerType[]> = {};
-    filteredVolunteers.forEach(v => {
-      let letter = v.name.charAt(0).toUpperCase();
-      if (!/^[A-Z]$/.test(letter)) letter = '#';
-      if (!groups[letter]) groups[letter] = [];
-      groups[letter].push(v);
-    });
-    return groups;
+  const { letters: sortedLetters, groupCounts, groupedVolunteers, groupsRecord, flatVolunteers } = useMemo(() => {
+    return groupVolunteersAlphabetically(filteredVolunteers);
   }, [filteredVolunteers]);
-  const sortedLetters = useMemo(() => Object.keys(groupedVolunteers).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b)), [groupedVolunteers]);
-
-  const flattenedData = useMemo(() => {
-    const flat: (VolunteerType | { type: 'header', letter: string })[] = [];
-    sortedLetters.forEach(letter => {
-      flat.push({ type: 'header', letter });
-      groupedVolunteers[letter].forEach(vol => flat.push(vol));
-    });
-    return flat;
-  }, [groupedVolunteers, sortedLetters]);
-
-  const handleEditClick = (vol: VolunteerType, startInEditMode = false) => {
-    setEditingVolunteer(vol);
-    setIsSheetOpen(true);
-    setIsEditingShifts(false);
-    setSaved(false);
-
-    const volShifts = globalShifts[vol.id] || Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
-    setShiftsByDay(volShifts);
-
-    if (startInEditMode) {
-      handleStartEditProfile(vol);
-    } else {
-      setDrawerMode('view');
-    }
-  };
 
   if (loading) {
     return (
@@ -721,158 +713,96 @@ export default function VolunteersPage() {
       <div className="flex flex-col gap-4 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
         <motion.div variants={itemVariants} className="bg-dark2 border border-white/10 rounded-[20px] shadow-lg overflow-clip flex flex-col w-full">
           <AlphabetScrubber isMobile={isMobile} />
-          {/* Contenedor de Datos Virtualizado */}
-          <div className="hidden lg:block bg-dark2 flex-1 relative w-full pb-10">
-            <table className="w-full text-sm text-left border-separate border-spacing-0">
-              <thead className="bg-dark3/80 sticky top-[140px] z-10 backdrop-blur-md text-[10px] font-bold text-text-dim uppercase tracking-wider">
-                <tr>
-                  <th className="px-5 py-4 w-full">Nombre y Apellido</th>
-                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Barrio</th>
-                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Estaca</th>
-                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Comité</th>
-                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Turnos</th>
-                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Confiabilidad</th>
-                  <th className="px-3 py-4 text-center w-px whitespace-nowrap">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {flattenedData.map((item, index) => {
-                    if ('type' in item && item.type === 'header') {
-                      return (
-                        <tr key={`header-${item.letter}`}>
-                            <td colSpan={7} className="px-5 py-4 bg-dark3 font-bold text-text-dim text-[10px] uppercase tracking-wider">
-                                {item.letter}
-                            </td>
-                        </tr>
-                      );
-                    }
-                    const vol = item as VolunteerType;
-                    return (
-                        <tr key={vol.id} className="hover:bg-white/[0.02] transition-colors group cursor-pointer" onClick={() => handleEditClick(vol)}>
-                          <td className="px-5 py-4 w-full">
-                            <p className={USER_TABLE_STYLES.name}>
-                              <HighlightText text={vol.name} term={appliedSearch} />
-                            </p>
-                          </td>
-                          <td className="px-3 py-4 text-center font-inter font-bold text-[13px] text-text-dim w-px whitespace-nowrap">{vol.ward}</td>
-                          <td className="px-3 py-4 text-center font-inter font-bold text-[13px] text-text-dim opacity-70 w-px whitespace-nowrap">{vol.stake}</td>
-                          <td className="px-3 py-4 text-center w-px whitespace-nowrap">
+          {/* Contenedor de Datos: Escritorio PC vs Móvil */}
+          {!isMobile ? (
+            <div className="bg-dark2 flex-1 relative w-full pb-10">
+              {filteredVolunteers.length > 0 ? (
+                <div className="w-full overflow-x-auto">
+                  {/* Encabezado Fijo de Tabla */}
+                  <div className="flex items-center w-full px-5 py-3.5 bg-dark3 sticky top-0 z-20 text-[10px] font-bold text-text-dim uppercase tracking-wider border-b border-white/10">
+                    <div className="flex-1 min-w-0 pr-4">Nombre y Apellido</div>
+                    <div className="w-32 text-center shrink-0">Barrio</div>
+                    <div className="w-32 text-center shrink-0">Estaca</div>
+                    <div className="w-40 text-center shrink-0">Comité</div>
+                    <div className="w-24 text-center shrink-0">Turnos</div>
+                    <div className="w-28 text-center shrink-0">Confiabilidad</div>
+                    <div className="w-32 text-center shrink-0">Acciones</div>
+                  </div>
+
+                  {/* Cuerpo de la Tabla */}
+                  <div className="divide-y divide-white/5">
+                    {filteredVolunteers.map((vol: VolunteerType) => (
+                      <VolunteerTableRow
+                        key={vol.id}
+                        vol={vol}
+                        appliedSearch={appliedSearch}
+                        onEditClick={handleEditClick}
+                        onResetPin={handleResetPin}
+                        onArchive={handleArchive}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="px-5 py-12 text-center flex flex-col items-center">
+                  <div className="w-16 h-16 bg-dark3 border border-border rounded-full flex items-center justify-center mb-4 text-text-dim">
+                    <span className="material-symbols-outlined text-[32px]">person_off</span>
+                  </div>
+                  <h3 className="font-bold text-text mb-1">No se encontraron voluntarios</h3>
+                  <p className="text-sm text-text-dim">Prueba ajustando los filtros o el término de búsqueda.</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-dark2 w-full pb-10">
+              {filteredVolunteers.length > 0 ? (
+                <div className="divide-y divide-white/5 w-full">
+                  {filteredVolunteers.map((vol: VolunteerType) => (
+                    <SwipeableMobileCard
+                      key={vol.id}
+                      name={vol.name}
+                      phone={vol.phone}
+                      searchTerm={appliedSearch}
+                      onEdit={() => handleEditClick(vol)}
+
+                      onSwipeRight={() => handleResetPin(vol)}
+                      swipeRightIcon="lock_reset"
+                      swipeRightText="Reset PIN"
+                      swipeRightColorClass="text-amber-500"
+                      swipeRightBgColor="rgba(245, 158, 11, 0.2)"
+
+                      onSwipeLeft={() => handleArchive(vol)}
+                      swipeLeftIcon={vol.status === 'archived' ? 'unarchive' : 'archive'}
+                      swipeLeftText={vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
+                      swipeLeftColorClass="text-red"
+                      swipeLeftBgColor="rgba(254, 77, 151, 0.2)"
+
+                      badges={
+                        <>
+                          {vol.committee && (
                             <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
                               {vol.committee}
                             </Badge>
-                          </td>
-                          <td className="px-3 py-4 text-center w-px whitespace-nowrap">
-                            <Badge variant="secondary" className="bg-dark3 text-text border-none font-inter font-bold text-[10px] px-1.5 py-0.5">
-                              {vol.shifts} {vol.shifts === 1 ? 'turno' : 'turnos'}
-                            </Badge>
-                          </td>
-                          <td className="px-3 py-4 text-center w-px whitespace-nowrap">
-                            {vol.computedReliability === '-' ? (
-                              <span className="font-inter font-bold text-sm text-text-dim">N/A</span>
-                            ) : (
-                              <div className="flex items-center justify-center gap-2">
-                                <div className={`w-1.5 h-1.5 rounded-full ${Number(vol.computedReliability || 0) >= 80 ? 'bg-accent' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'}`} />
-                                <span className="font-inter font-bold text-[13px] text-text tabular-nums">{vol.computedReliability}%</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-3 py-4 text-center w-px whitespace-nowrap">
-                            <div className="flex items-center justify-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90"
-                                title="Editar Perfil"
-                                onClick={(e) => { e.stopPropagation(); handleEditClick(vol, true); }}
-                              >
-                                <span className="material-symbols-outlined text-[18px]">edit</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90"
-                                title="Resetear PIN"
-                                onClick={(e) => { e.stopPropagation(); handleResetPin(vol); }}
-                              >
-                                <span className="material-symbols-outlined text-[18px]">lock_reset</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-amber-500/70 hover:bg-amber-500/10 hover:text-amber-500 transition-all active:scale-90"
-                                title={vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setVolunteerToArchive(vol);
-                                  setIsArchiveModalOpen(true);
-                                }}
-                              >
-                                <span className="material-symbols-outlined text-[18px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                    );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Cards view for Mobile (under lg) */}
-          <div className="block lg:hidden divide-y divide-white/5 bg-dark2">
-            {filteredVolunteers.length > 0 ? (
-              sortedLetters.map(letter => (
-                <Fragment key={letter}>
-                  {groupedVolunteers[letter].map((vol, index) => (
-                    <div key={vol.id} id={index === 0 ? `letter-mobile-${letter}` : undefined}>
-                      <SwipeableMobileCard
-                        name={vol.name}
-                        phone={vol.phone}
-                        searchTerm={appliedSearch}
-                        onEdit={() => handleEditClick(vol)}
-
-                        onSwipeRight={() => handleResetPin(vol)}
-                        swipeRightIcon="lock_reset"
-                        swipeRightText="Reset PIN"
-                        swipeRightColorClass="text-amber-500"
-                        swipeRightBgColor="rgba(245, 158, 11, 0.2)"
-
-                        onSwipeLeft={() => {
-                          setVolunteerToArchive(vol);
-                          setIsArchiveModalOpen(true);
-                        }}
-                        swipeLeftIcon={vol.status === 'archived' ? 'unarchive' : 'archive'}
-                        swipeLeftText={vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
-                        swipeLeftColorClass="text-red"
-                        swipeLeftBgColor="rgba(254, 77, 151, 0.2)"
-
-                        badges={
-                          <>
-                            {vol.committee && (
-                              <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
-                                {vol.committee}
-                              </Badge>
-                            )}
-                            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, vol.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)}>
-                              {vol.status === 'active' ? 'Activo' : 'Archivado'}
-                            </Badge>
-                          </>
-                        }
-                      />
-                    </div>
+                          )}
+                          <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, vol.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)}>
+                            {vol.status === 'active' ? 'Activo' : 'Archivado'}
+                          </Badge>
+                        </>
+                      }
+                    />
                   ))}
-                </Fragment>
-              ))
-            ) : (
-              <div className="px-5 py-8 text-center flex flex-col items-center">
-                <div className="w-16 h-16 bg-dark3 border border-border rounded-full flex items-center justify-center mb-4 text-text-dim">
-                  <span className="material-symbols-outlined text-[32px]">person_off</span>
                 </div>
-                <h3 className="font-bold text-text mb-1">No se encontraron voluntarios</h3>
-                <p className="text-sm text-text-dim">Prueba ajustando los filtros o el término de búsqueda.</p>
-              </div>
-            )}
-          </div>
+              ) : (
+                <div className="px-5 py-8 text-center flex flex-col items-center">
+                  <div className="w-16 h-16 bg-dark3 border border-border rounded-full flex items-center justify-center mb-4 text-text-dim">
+                    <span className="material-symbols-outlined text-[32px]">person_off</span>
+                  </div>
+                  <h3 className="font-bold text-text mb-1">No se encontraron voluntarios</h3>
+                  <p className="text-sm text-text-dim">Prueba ajustando los filtros o el término de búsqueda.</p>
+                </div>
+              )}
+            </div>
+          )}
         </motion.div>
       </div>
 
