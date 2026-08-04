@@ -18,6 +18,10 @@ import {
   computeReliabilityMap,
 } from '@/lib/coordinator-data';
 import { fetchCoordinatorShiftEditAllowed } from '@/lib/permissions';
+import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
+import { useRealtimeStore } from '@/lib/store/use-realtime-store';
+import { RealtimeEventQueue } from '@/lib/services/realtime-event-queue';
+import { SupabaseReconnectManager } from '@/lib/services/supabase-reconnect-manager';
 
 const STALE_TIME_MS = 60_000;
 
@@ -83,6 +87,29 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   const lastFetchedAtRef = useRef(0);
   const lastCacheKeyRef = useRef('');
   const fetchPromiseRef = useRef<Promise<void> | null>(null);
+  const eventQueueRef = useRef<RealtimeEventQueue | null>(null);
+
+  if (!eventQueueRef.current) {
+    eventQueueRef.current = new RealtimeEventQueue((processed) => {
+      setRawVolunteers((prev) => {
+        let updatedList = [...prev];
+        processed.forEach((evt) => {
+          if (evt.eventType === 'DELETE') {
+            updatedList = updatedList.filter((v) => v.id !== evt.payload.id);
+          } else if (evt.eventType === 'INSERT') {
+            if (!updatedList.some((v) => v.id === evt.payload.id)) {
+              updatedList = [evt.payload, ...updatedList];
+            }
+          } else {
+            updatedList = updatedList.map((v) =>
+              v.id === evt.payload.id ? { ...v, ...evt.payload } : v
+            );
+          }
+        });
+        return updatedList;
+      });
+    });
+  }
 
   const derived = useMemo(
     () => processShiftsData(shiftsData, rawVolunteers),
@@ -150,6 +177,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           const activeComms = commsData.filter((c: any) => c.status !== 'archived');
 
           setRawVolunteers(volsData ?? []);
+          useVolunteerStore.getState().setInitialVolunteers(volsData ?? []);
           setCommitteesList(activeComms);
           setShiftsData(shiftsResult ?? []);
 
@@ -214,14 +242,23 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'volunteers' },
-        () => {
-          fetchData(true);
+        (payload) => {
+          if (payload.eventType === 'DELETE' && payload.old) {
+            eventQueueRef.current?.enqueue('DELETE', payload.old);
+          } else if (payload.eventType && payload.new) {
+            eventQueueRef.current?.enqueue(payload.eventType as any, payload.new);
+          } else {
+            fetchData(true);
+          }
         }
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          // Only fetch if data hasn't been fetched yet
+          useRealtimeStore.getState().recordHeartbeat();
+          void SupabaseReconnectManager.getInstance().recoverMissedEvents();
           fetchData(false);
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          useRealtimeStore.getState().setStatus('reconnecting');
         }
       });
 

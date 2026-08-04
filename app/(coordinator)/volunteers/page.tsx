@@ -36,6 +36,7 @@ import { VolunteerTableRow } from "@/components/VolunteerTableRow";
 import { VolunteerSearchService } from "@/lib/services/volunteer-search.service";
 import { filterVolunteerIds } from "@/lib/services/volunteer-filter.service";
 import { groupVolunteersAlphabetically } from "@/lib/services/volunteer-grouping.service";
+import { RealtimeDebugOverlay } from "@/components/RealtimeDebugOverlay";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -1120,6 +1121,8 @@ export default function VolunteersPage() {
         onConfirm={handleArchiveVolunteer}
         onCancel={() => setIsArchiveModalOpen(false)}
       />
+
+      <RealtimeDebugOverlay />
     </motion.div>
   );
 }

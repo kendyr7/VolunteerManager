@@ -25,7 +25,32 @@ export class VolunteerSearchService {
       this.volunteerMap.set(v.id, v);
     });
 
-    this.fuse = new Fuse(volunteers, {
+    this.rebuildFuse();
+  }
+
+  public upsertVolunteer(incoming: VolunteerType) {
+    this.volunteerMap.set(incoming.id, incoming);
+    this.volunteers = Array.from(this.volunteerMap.values());
+    if (this.fuse) {
+      this.fuse.setCollection(this.volunteers);
+    } else {
+      this.rebuildFuse();
+    }
+  }
+
+  public deleteVolunteer(id: string) {
+    if (!this.volunteerMap.has(id)) return;
+    this.volunteerMap.delete(id);
+    this.volunteers = Array.from(this.volunteerMap.values());
+    if (this.fuse) {
+      this.fuse.setCollection(this.volunteers);
+    } else {
+      this.rebuildFuse();
+    }
+  }
+
+  private rebuildFuse() {
+    this.fuse = new Fuse(this.volunteers, {
       keys: [
         { name: 'name', weight: 0.4 },
         { name: 'phone', weight: 0.2 },
@@ -69,7 +94,6 @@ export class VolunteerSearchService {
     // Fuzzy search via Fuse.js for multi-word or multi-token queries
     if (!this.fuse) return this.volunteers.map(v => v.id);
 
-    const threshold = getDynamicThreshold(trimmed.length);
     this.fuse.setCollection(this.volunteers);
     
     // Perform search with dynamic threshold
