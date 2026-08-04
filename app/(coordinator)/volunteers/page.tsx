@@ -37,6 +37,7 @@ import { VolunteerSearchService } from "@/lib/services/volunteer-search.service"
 import { filterVolunteerIds } from "@/lib/services/volunteer-filter.service";
 import { groupVolunteersAlphabetically } from "@/lib/services/volunteer-grouping.service";
 import { RealtimeDebugOverlay } from "@/components/RealtimeDebugOverlay";
+import { useVolunteerStore } from "@/lib/store/use-volunteer-store";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -295,7 +296,9 @@ export default function VolunteersPage() {
       showToast(`Error al ${newStatus === 'archived' ? 'archivar' : 'desarchivar'}`, "error");
     } else {
       showToast(`Voluntario ${newStatus === 'archived' ? 'archivado' : 'desarchivado'}`);
-      await refresh();
+      const updatedVol = { ...volunteerToArchive, status: newStatus };
+      useVolunteerStore.getState().upsertVolunteer(updatedVol);
+      await refresh(true);
     }
 
     setIsArchiveModalOpen(false);
@@ -442,7 +445,8 @@ export default function VolunteersPage() {
       .eq('id', editingVolunteer.id);
 
     if (error) {
-      showToast("Error al guardar cambios del perfil", "error");
+      console.error("Error updating profile:", error);
+      showToast(`Error al guardar cambios: ${error.message}`, "error");
     } else {
       showToast("Perfil de voluntario actualizado correctamente");
 
@@ -456,9 +460,10 @@ export default function VolunteersPage() {
         age: ageNum ?? undefined,
       };
 
+      useVolunteerStore.getState().upsertVolunteer(updatedVol);
       setEditingVolunteer(updatedVol);
       setDrawerMode('view');
-      void refresh();
+      await refresh(true);
     }
     setIsSavingProfile(false);
   };
