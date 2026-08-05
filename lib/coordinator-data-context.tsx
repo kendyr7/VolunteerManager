@@ -319,3 +319,7 @@ export function useCoordinatorData() {
   }
   return ctx;
 }
+
+export function useOptionalCoordinatorData() {
+  return useContext(CoordinatorDataContext);
+}

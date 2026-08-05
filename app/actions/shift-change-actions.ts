@@ -325,3 +325,101 @@ export async function fetchVolunteerShiftChangeRequestsAction(volunteerId: strin
     return { success: false, error: err.message };
   }
 }
+
+export interface VolunteerRescheduleContext {
+  committeeName: string;
+  requirementsByCommittee: Record<string, Record<string, number>>;
+  assignmentCountsByShift: Record<string, Record<string, Record<string, number>>>;
+  ownShifts: {
+    day_key: string;
+    shift_key: string;
+    checked_in: boolean;
+    checked_out: boolean;
+  }[];
+}
+
+export async function fetchVolunteerRescheduleContextAction(
+  volunteerId: string
+): Promise<{ success: boolean } & VolunteerRescheduleContext> {
+  try {
+    const supabase = getAdminClient();
+
+    const [volRes, committeesRes, reqsRes, shiftsRes, volunteersRes] = await Promise.all([
+      supabase
+        .from('volunteers')
+        .select('id, first_name, last_name, committee_id')
+        .eq('id', volunteerId)
+        .maybeSingle(),
+      supabase.from('committees').select('id, name'),
+      supabase
+        .from('committee_shift_requirements')
+        .select('committee_id, shift_key, required'),
+      supabase
+        .from('shifts')
+        .select(
+          'volunteer_id, day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at'
+        ),
+      supabase.from('volunteers').select('id, committee_id'),
+    ]);
+
+    const committeeMap: Record<string, string> = {};
+    (committeesRes.data || []).forEach((c: any) => {
+      committeeMap[c.id] = c.name;
+    });
+
+    const requirementsByCommittee: Record<string, Record<string, number>> = {};
+    (reqsRes.data || []).forEach((r: any) => {
+      const commName = committeeMap[r.committee_id];
+      if (!commName) return;
+      if (!requirementsByCommittee[commName]) requirementsByCommittee[commName] = {};
+      requirementsByCommittee[commName][r.shift_key] = r.required;
+    });
+
+    const volCommitteeMap: Record<string, string> = {};
+    (volunteersRes.data || []).forEach((v: any) => {
+      volCommitteeMap[v.id] = committeeMap[v.committee_id] || 'Sin comité';
+    });
+
+    const assignmentCountsByShift: Record<
+      string,
+      Record<string, Record<string, number>>
+    > = {};
+    const ownShifts: VolunteerRescheduleContext['ownShifts'] = [];
+
+    (shiftsRes.data || []).forEach((s: any) => {
+      const commName = volCommitteeMap[s.volunteer_id] || 'Sin comité';
+      if (!assignmentCountsByShift[s.day_key]) assignmentCountsByShift[s.day_key] = {};
+      if (!assignmentCountsByShift[s.day_key][s.shift_key]) assignmentCountsByShift[s.day_key][s.shift_key] = {};
+      assignmentCountsByShift[s.day_key][s.shift_key][commName] =
+        (assignmentCountsByShift[s.day_key][s.shift_key][commName] || 0) + 1;
+
+      if (s.volunteer_id === volunteerId) {
+        ownShifts.push({
+          day_key: s.day_key,
+          shift_key: s.shift_key,
+          checked_in: !!(s.checked_in || s.checked_in_at),
+          checked_out: !!(s.checked_out || s.checked_out_at),
+        });
+      }
+    });
+
+    const committeeName = committeeMap[volRes.data?.committee_id] || 'Sin comité';
+
+    return {
+      success: true,
+      committeeName,
+      requirementsByCommittee,
+      assignmentCountsByShift,
+      ownShifts,
+    };
+  } catch (err: any) {
+    console.error('Error in fetchVolunteerRescheduleContextAction:', err);
+    return {
+      success: false,
+      committeeName: '',
+      requirementsByCommittee: {},
+      assignmentCountsByShift: {},
+      ownShifts: [],
+    };
+  }
+}

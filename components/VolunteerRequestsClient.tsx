@@ -9,6 +9,12 @@ import {
   fetchVolunteerShiftChangeRequestsAction,
   createShiftChangeRequestAction
 } from "@/app/actions/shift-change-actions";
+import {
+  useVolunteerRescheduleContext,
+  isVolunteerShiftCompleted,
+  isVolunteerShiftAssigned,
+  getVolunteerShiftCapacity,
+} from "@/lib/use-volunteer-reschedule-context";
 
 interface VolunteerRequestsClientProps {
   volunteerId: string;
@@ -36,6 +42,25 @@ export function VolunteerRequestsClient({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
 
+  const rescheduleCtx = useVolunteerRescheduleContext(volunteerId);
+
+  const sourceShiftCompleted = !!(sourceDayKey && sourceShiftKey && isVolunteerShiftCompleted(rescheduleCtx, sourceDayKey, sourceShiftKey));
+
+  const targetShiftStatus = {
+    isSource: sourceDayKey === targetDayKey && sourceShiftKey === targetShiftKey,
+    isCompleted: !!(targetDayKey && targetShiftKey && isVolunteerShiftCompleted(rescheduleCtx, targetDayKey, targetShiftKey)),
+    isAssigned: !!(targetDayKey && targetShiftKey && isVolunteerShiftAssigned(rescheduleCtx, targetDayKey, targetShiftKey)),
+  };
+
+  const targetCapacity = targetDayKey && targetShiftKey
+    ? getVolunteerShiftCapacity(rescheduleCtx, targetDayKey, targetShiftKey)
+    : { committeeName: '', count: 0, maxReq: 0, isFull: false };
+
+  const isSourceDayFullyCompleted = (dayKey: string) => {
+    const shifts = shiftsByDay[dayKey] || [];
+    return shifts.length > 0 && shifts.every(t => isVolunteerShiftCompleted(rescheduleCtx, dayKey, t));
+  };
+
   const EVENT_DAYS_RAW = getActiveEventDays();
   const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
     date,
@@ -60,6 +85,26 @@ export function VolunteerRequestsClient({
     if (!volunteerId || !sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey) return;
     if (!requestReason.trim()) {
       setSubmitError("Por favor ingresa la razón o motivo por el cual solicitas el cambio.");
+      return;
+    }
+
+    if (sourceShiftCompleted) {
+      setSubmitError("No se puede solicitar un cambio para un turno que ya ha sido completado.");
+      return;
+    }
+
+    if (targetShiftStatus.isSource) {
+      setSubmitError("El turno solicitado es el mismo que tu turno actual.");
+      return;
+    }
+
+    if (targetShiftStatus.isCompleted) {
+      setSubmitError("Ya tienes un turno completado en esta fecha y horario.");
+      return;
+    }
+
+    if (targetShiftStatus.isAssigned) {
+      setSubmitError("Ya tienes un turno asignado en esta fecha y horario.");
       return;
     }
 
@@ -326,6 +371,18 @@ export function VolunteerRequestsClient({
                   </div>
                 )}
 
+                {sourceShiftCompleted && (
+                  <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-rose-400 shrink-0">block</span>
+                    <div>
+                      <p className="text-rose-200 font-extrabold text-xs mb-0.5">Turno Origen Completado</p>
+                      <p className="text-[11px] text-rose-300/90 font-medium leading-relaxed">
+                        Este turno ya fue completado y finalizado. No es posible solicitar un cambio para un turno en estado completado.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Paso 1: Seleccionar turno actual */}
                 <div>
                   <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block mb-2">
@@ -338,6 +395,7 @@ export function VolunteerRequestsClient({
                       <div className="grid grid-cols-4 gap-2">
                         {EVENT_DAYS.filter(d => assignedDayKeys.includes(d.key)).map((d, index) => {
                           const isSelected = sourceDayKey === d.key;
+                          const dayCompleted = isSourceDayFullyCompleted(d.key);
                           const bgColors = [
                             'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
                             'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
@@ -348,14 +406,17 @@ export function VolunteerRequestsClient({
                             <button
                               key={d.key}
                               type="button"
+                              disabled={dayCompleted}
                               onClick={() => {
                                 setSourceDayKey(d.key);
                                 setSourceShiftKey("");
                               }}
                               className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-xl border transition-all bg-dark3 ${
-                                isSelected
-                                  ? 'border-[#4d7cfe] text-[#4d7cfe] shadow-md bg-[#4d7cfe]/10'
-                                  : 'border-border text-text-dim hover:text-text'
+                                dayCompleted
+                                  ? 'opacity-30 border-border cursor-not-allowed'
+                                  : isSelected
+                                  ? 'border-[#4d7cfe] text-[#4d7cfe] shadow-md bg-[#4d7cfe]/10 cursor-pointer'
+                                  : 'border-border text-text-dim hover:text-text cursor-pointer'
                               }`}
                             >
                               <div className={`absolute left-0 top-0 bottom-0 w-1 ${cardBg}`} />
@@ -372,18 +433,23 @@ export function VolunteerRequestsClient({
                           <div className="grid grid-cols-4 gap-2">
                             {(shiftsByDay[sourceDayKey] || []).map((t) => {
                               const isSelected = sourceShiftKey === t;
+                              const isCompleted = isVolunteerShiftCompleted(rescheduleCtx, sourceDayKey, t);
                               return (
                                 <button
                                   key={t}
                                   type="button"
+                                  disabled={isCompleted}
                                   onClick={() => setSourceShiftKey(t)}
                                   className={`py-2 rounded-xl border text-xs font-bold transition-all ${
-                                    isSelected
-                                      ? 'bg-rose-500 border-rose-500 text-white shadow-md'
-                                      : 'bg-dark3 border-border text-text hover:bg-dark3/80'
+                                    isCompleted
+                                      ? 'bg-dark2 border-border text-text-dim/40 cursor-not-allowed opacity-40'
+                                      : isSelected
+                                      ? 'bg-rose-500 border-rose-500 text-white shadow-md cursor-pointer'
+                                      : 'bg-dark3 border-border text-text hover:bg-dark3/80 cursor-pointer'
                                   }`}
                                 >
-                                  {t}
+                                  <span>{t}</span>
+                                  {isCompleted && <span className="block text-[8px] text-text-dim/60 font-normal leading-none">Completado</span>}
                                 </button>
                               );
                             })}
@@ -439,22 +505,41 @@ export function VolunteerRequestsClient({
                           {['T1', 'T2', 'T3', 'T4'].map((t) => {
                             const isSameShift = sourceDayKey === targetDayKey && sourceShiftKey === t;
                             const isSelected = targetShiftKey === t;
+                            const tCompleted = isVolunteerShiftCompleted(rescheduleCtx, targetDayKey, t);
+                            const tAssigned = !isSameShift && isVolunteerShiftAssigned(rescheduleCtx, targetDayKey, t);
+                            const capInfo = getVolunteerShiftCapacity(rescheduleCtx, targetDayKey, t);
+                            const isFull = capInfo.isFull;
+                            const isBtnDisabled = isSameShift || tCompleted || tAssigned;
                             return (
                               <button
                                 key={t}
                                 type="button"
-                                disabled={isSameShift}
+                                disabled={isBtnDisabled}
                                 onClick={() => setTargetShiftKey(t)}
-                                className={`py-2 rounded-xl border text-xs font-bold transition-all ${
-                                  isSameShift
+                                className={`py-2 rounded-xl border text-xs font-bold transition-all relative ${
+                                  isBtnDisabled
                                     ? 'bg-dark2 border-border text-text-dim/40 cursor-not-allowed opacity-40'
+                                    : isFull
+                                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25 cursor-pointer'
                                     : isSelected
-                                    ? 'bg-emerald-600 border-emerald-600 text-white shadow-md'
-                                    : 'bg-dark3 border-border text-text hover:bg-dark3/80'
+                                    ? 'bg-emerald-600 border-emerald-600 text-white shadow-md cursor-pointer'
+                                    : 'bg-dark3 border-border text-text hover:bg-dark3/80 cursor-pointer'
                                 }`}
                               >
                                 <span>{t}</span>
-                                {isSameShift && <span className="block text-[8px] text-text-dim/60 font-normal leading-none">Actual</span>}
+                                {isSameShift ? (
+                                  <span className="block text-[8px] text-text-dim/60 font-normal leading-none">Actual</span>
+                                ) : tCompleted ? (
+                                  <span className="block text-[8px] text-text-dim/60 font-normal leading-none">Completado</span>
+                                ) : tAssigned ? (
+                                  <span className="block text-[8px] text-amber-400 font-bold leading-none">Asignado</span>
+                                ) : isFull ? (
+                                  <span className="block text-[8px] text-amber-400 font-bold leading-none">Lleno ({capInfo.count}/{capInfo.maxReq})</span>
+                                ) : (
+                                  <span className="block text-[8px] text-text-dim/70 font-normal leading-none">
+                                    {capInfo.maxReq > 0 ? `${capInfo.count} / ${capInfo.maxReq}` : `${capInfo.count} asig.`}
+                                  </span>
+                                )}
                               </button>
                             );
                           })}
@@ -480,6 +565,47 @@ export function VolunteerRequestsClient({
                   </div>
                 )}
 
+                {/* Advertencias de validación del turno destino */}
+                {targetShiftStatus.isSource && (
+                  <div className="p-3.5 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-inter font-bold flex items-center gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-purple-400 shrink-0">info</span>
+                    <span>Este es el turno actual origen. Selecciona otro horario o día para solicitar el cambio.</span>
+                  </div>
+                )}
+                {!targetShiftStatus.isSource && targetShiftStatus.isCompleted && (
+                  <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-rose-400 shrink-0">block</span>
+                    <div>
+                      <p className="text-rose-200 font-extrabold text-xs mb-0.5">Turno Ya Completado</p>
+                      <p className="text-[11px] text-rose-300/90 font-medium leading-relaxed">
+                        Ya completaste este turno previamente. No es posible solicitar un cambio hacia un turno ya completado.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {!targetShiftStatus.isSource && !targetShiftStatus.isCompleted && targetShiftStatus.isAssigned && (
+                  <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-amber-400 shrink-0">warning</span>
+                    <div>
+                      <p className="text-amber-200 font-extrabold text-xs mb-0.5">Turno Ya Asignado</p>
+                      <p className="text-[11px] text-amber-300/90 font-medium leading-relaxed">
+                        Ya cuentas con este turno activo asignado. Elige un horario o día distinto.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {!targetShiftStatus.isSource && !targetShiftStatus.isCompleted && !targetShiftStatus.isAssigned && targetCapacity.isFull && (
+                  <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-amber-400 shrink-0">warning</span>
+                    <div>
+                      <p className="text-amber-200 font-extrabold text-xs mb-0.5">Capacidad Máxima Alcanzada</p>
+                      <p className="text-[11px] text-amber-300/90 font-medium leading-relaxed">
+                        El turno <strong className="text-white">{targetShiftKey}</strong> del <strong className="text-white">{targetDayKey}</strong> ya alcanzó la meta requerida para <strong className="text-white">{targetCapacity.committeeName}</strong> ({targetCapacity.count}/{targetCapacity.maxReq}). Puedes enviar la solicitud y el coordinador decidirá si te sobreasigna.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Botón de Enviar */}
                 <div className="pt-4 border-t border-border flex items-center gap-3">
                   <Button
@@ -493,7 +619,7 @@ export function VolunteerRequestsClient({
 
                   <Button
                     type="button"
-                    disabled={!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey || !requestReason.trim() || isSubmitting}
+                    disabled={!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey || !requestReason.trim() || isSubmitting || sourceShiftCompleted || targetShiftStatus.isSource || targetShiftStatus.isCompleted || targetShiftStatus.isAssigned}
                     onClick={handleSendRescheduleRequest}
                     className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-dark3 disabled:text-text-dim disabled:border-border text-white rounded-full h-11 text-xs font-bold shadow-lg active:scale-95 transition-all"
                   >
