@@ -78,7 +78,7 @@ export default function ReportsPage() {
   const [data, setData] = useState<ReportsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [activeTab, setActiveTab] = useState<'history' | 'volunteers'>('history');
+  const [activeTab, setActiveTab] = useState<'history' | 'volunteers' | 'recruitment' | 'daily'>('history');
 
   // Filters State (Multi-Selection arrays)
   const [inputValue, setInputValue] = useState("");
@@ -327,6 +327,145 @@ export default function ReportsPage() {
       return v;
     }).sort((a, b) => b.minutes - a.minutes);
   }, [filteredItems]);
+
+  // Dynamic Recruitment Summary filtered by active filters
+  const filteredRecruitmentSummary = useMemo(() => {
+    if (!data) return [];
+
+    const activeCommittees = data.uniqueCommittees.filter(c => {
+      if (selectedCommittees.length > 0) {
+        return selectedCommittees.includes(c.id) || selectedCommittees.includes(c.name);
+      }
+      return true;
+    });
+
+    return activeCommittees.map(c => {
+      const commItems = filteredItems.filter(i => i.committeeId === c.id || i.committeeName.trim().toLowerCase() === c.name.trim().toLowerCase());
+      const uniqueVolIds = new Set(commItems.map(i => i.volunteerId));
+      const totalVolunteers = uniqueVolIds.size;
+
+      const origRec = data.recruitmentSummary.find(r => r.committeeId === c.id || r.committeeName.trim().toLowerCase() === c.name.trim().toLowerCase());
+      
+      let totalRequiredShifts = origRec ? origRec.totalRequiredShifts : 0;
+      if (selectedDates.length > 0 && data.dailyCoverage.length > 0) {
+        const dateRatio = selectedDates.length / data.dailyCoverage.length;
+        totalRequiredShifts = Math.round(totalRequiredShifts * dateRatio);
+      }
+
+      const assignedShifts = commItems.length;
+      const missingShifts = Math.max(0, totalRequiredShifts - assignedShifts);
+      const coverageRate = totalRequiredShifts > 0 ? Math.round((assignedShifts / totalRequiredShifts) * 100) : 0;
+
+      return {
+        committeeId: c.id,
+        committeeName: c.name,
+        totalVolunteers,
+        totalRequiredShifts,
+        assignedShifts,
+        missingShifts,
+        coverageRate,
+      };
+    });
+  }, [data, filteredItems, selectedCommittees, selectedDates]);
+
+  // Dynamic Age Segmentation filtered by active filters
+  const filteredAgeSegmentation = useMemo(() => {
+    const ageCounts: Record<string, number> = {
+      '< 18': 0,
+      '18 - 25': 0,
+      '26 - 35': 0,
+      '36 - 50': 0,
+      '50+': 0,
+      'Sin edad': 0,
+    };
+
+    const uniqueVolMap = new Map<string, number | null>();
+    filteredItems.forEach(item => {
+      if (!uniqueVolMap.has(item.volunteerId)) {
+        uniqueVolMap.set(item.volunteerId, item.age ?? null);
+      }
+    });
+
+    uniqueVolMap.forEach((ageNum) => {
+      if (ageNum === null || isNaN(ageNum) || ageNum <= 0) {
+        ageCounts['Sin edad']++;
+      } else if (ageNum < 18) {
+        ageCounts['< 18']++;
+      } else if (ageNum <= 25) {
+        ageCounts['18 - 25']++;
+      } else if (ageNum <= 35) {
+        ageCounts['26 - 35']++;
+      } else if (ageNum <= 50) {
+        ageCounts['36 - 50']++;
+      } else {
+        ageCounts['50+']++;
+      }
+    });
+
+    const totalVolsCount = uniqueVolMap.size;
+    return Object.entries(ageCounts).map(([range, count]) => ({
+      range,
+      count,
+      percentage: totalVolsCount > 0 ? Math.round((count / totalVolsCount) * 100) : 0,
+    }));
+  }, [filteredItems]);
+
+  // Dynamic Daily Coverage filtered by active filters
+  const filteredDailyCoverage = useMemo(() => {
+    if (!data) return [];
+
+    const activeDays = data.dailyCoverage.filter(day => selectedDates.length === 0 || selectedDates.includes(day.date));
+
+    return activeDays.map(day => {
+      const dayItems = filteredItems.filter(i => i.date === day.date);
+
+      let dayRequired = day.required;
+      if (selectedCommittees.length > 0 && data.uniqueCommittees.length > 0) {
+        const commRatio = selectedCommittees.length / data.uniqueCommittees.length;
+        dayRequired = Math.round(day.required * commRatio);
+      }
+
+      const dayAssigned = dayItems.length;
+      const dayCheckedIn = dayItems.filter(i => i.status === 'confirmed').length;
+      const missing = Math.max(0, dayRequired - dayAssigned);
+
+      const byShift: Record<string, { required: number; assigned: number; checkedIn: number; missing: number }> = {
+        T1: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
+        T2: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
+        T3: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
+        T4: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
+      };
+
+      ['T1', 'T2', 'T3', 'T4'].forEach(sk => {
+        const shiftNum = parseInt(sk.substring(1));
+        const shiftItems = dayItems.filter(i => i.shiftNumber === shiftNum);
+        const shiftAssigned = shiftItems.length;
+        const shiftCheckedIn = shiftItems.filter(i => i.status === 'confirmed').length;
+        const origReq = day.byShift[sk]?.required || 0;
+        const shiftRequired = selectedCommittees.length > 0 && data.uniqueCommittees.length > 0
+          ? Math.round(origReq * (selectedCommittees.length / data.uniqueCommittees.length))
+          : origReq;
+
+        byShift[sk] = {
+          required: shiftRequired,
+          assigned: shiftAssigned,
+          checkedIn: shiftCheckedIn,
+          missing: Math.max(0, shiftRequired - shiftAssigned),
+        };
+      });
+
+      return {
+        date: day.date,
+        dayLabel: day.dayLabel,
+        required: dayRequired,
+        assigned: dayAssigned,
+        checkedIn: dayCheckedIn,
+        missing,
+        coverageRate: dayRequired > 0 ? Math.round((dayAssigned / dayRequired) * 100) : 0,
+        byShift,
+      };
+    });
+  }, [data, filteredItems, selectedCommittees, selectedDates]);
 
   const totalPagesHistory = Math.ceil(filteredItems.length / pageSize) || 1;
   const totalPagesVolunteers = Math.ceil(volunteerRanking.length / pageSize) || 1;
@@ -916,27 +1055,58 @@ export default function ReportsPage() {
         </div>
       </div>
 
-        {/* Tab Selection */}
-        <div className="flex border-b border-border mb-6 gap-2 sm:gap-6">
+        {/* Tab Selection: Segmented 4-Column Control on Mobile, Underline Tabs on Desktop */}
+        <div className="grid grid-cols-4 sm:flex border-b border-border mb-6 gap-1 sm:gap-6 bg-dark2/60 sm:bg-transparent p-1 sm:p-0 rounded-2xl sm:rounded-none">
           <button
             onClick={() => setActiveTab('history')}
-            className={`pb-3 font-inter font-bold text-xs sm:text-sm transition-all border-b-2 flex items-center gap-1.5 ${
-              activeTab === 'history' ? 'border-[#4d7cfe] text-[#4d7cfe]' : 'border-transparent text-text-dim hover:text-text'
+            className={`py-2.5 sm:pb-3 font-inter font-bold text-[11px] sm:text-sm transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer rounded-xl sm:rounded-none ${
+              activeTab === 'history'
+                ? 'bg-[#4d7cfe] sm:bg-transparent text-white sm:text-[#4d7cfe] sm:border-b-2 sm:border-[#4d7cfe] shadow-sm sm:shadow-none'
+                : 'text-text-dim hover:text-text sm:border-b-2 sm:border-transparent'
             }`}
           >
             <span className="material-symbols-outlined text-[16px]">history</span>
-            <span className="hidden sm:inline">Historial de Turnos ({filteredItems.length})</span>
-            <span className="inline sm:hidden">Historial ({filteredItems.length})</span>
+            <span className="hidden sm:inline">Historial ({filteredItems.length})</span>
+            <span className="inline sm:hidden">Historial</span>
           </button>
+
           <button
             onClick={() => setActiveTab('volunteers')}
-            className={`pb-3 font-inter font-bold text-xs sm:text-sm transition-all border-b-2 flex items-center gap-1.5 ${
-              activeTab === 'volunteers' ? 'border-[#4d7cfe] text-[#4d7cfe]' : 'border-transparent text-text-dim hover:text-text'
+            className={`py-2.5 sm:pb-3 font-inter font-bold text-[11px] sm:text-sm transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer rounded-xl sm:rounded-none ${
+              activeTab === 'volunteers'
+                ? 'bg-[#4d7cfe] sm:bg-transparent text-white sm:text-[#4d7cfe] sm:border-b-2 sm:border-[#4d7cfe] shadow-sm sm:shadow-none'
+                : 'text-text-dim hover:text-text sm:border-b-2 sm:border-transparent'
             }`}
           >
             <span className="material-symbols-outlined text-[16px]">bar_chart</span>
             <span className="hidden sm:inline">Horas por Voluntario ({volunteerRanking.length})</span>
-            <span className="inline sm:hidden">Voluntarios ({volunteerRanking.length})</span>
+            <span className="inline sm:hidden">Ranking</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('recruitment')}
+            className={`py-2.5 sm:pb-3 font-inter font-bold text-[11px] sm:text-sm transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer rounded-xl sm:rounded-none ${
+              activeTab === 'recruitment'
+                ? 'bg-[#4d7cfe] sm:bg-transparent text-white sm:text-[#4d7cfe] sm:border-b-2 sm:border-[#4d7cfe] shadow-sm sm:shadow-none'
+                : 'text-text-dim hover:text-text sm:border-b-2 sm:border-transparent'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">group_add</span>
+            <span className="hidden sm:inline">Reclutamiento y Edades</span>
+            <span className="inline sm:hidden">Reclutamiento</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('daily')}
+            className={`py-2.5 sm:pb-3 font-inter font-bold text-[11px] sm:text-sm transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer rounded-xl sm:rounded-none ${
+              activeTab === 'daily'
+                ? 'bg-[#4d7cfe] sm:bg-transparent text-white sm:text-[#4d7cfe] sm:border-b-2 sm:border-[#4d7cfe] shadow-sm sm:shadow-none'
+                : 'text-text-dim hover:text-text sm:border-b-2 sm:border-transparent'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">calendar_month</span>
+            <span className="hidden sm:inline">Cobertura por Día</span>
+            <span className="inline sm:hidden">Cobertura</span>
           </button>
         </div>
 
@@ -1046,7 +1216,7 @@ export default function ReportsPage() {
                     ))}
                   </div>
                 </motion.div>
-              ) : (
+              ) : activeTab === 'volunteers' ? (
                 <motion.div
                   key="volunteers-tab"
                   initial={{ opacity: 0, y: 5 }}
@@ -1156,6 +1326,242 @@ export default function ReportsPage() {
                         </div>
                       );
                     })}
+                  </div>
+                </motion.div>
+              ) : activeTab === 'recruitment' ? (
+                <motion.div
+                  key="recruitment-tab"
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 5 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-6 sm:space-y-8"
+                >
+                  {/* Reclutamiento y Faltantes por Comité */}
+                  <div className="bg-dark2 border border-border rounded-[20px] p-4 sm:p-6 shadow-lg">
+                    <div className="flex items-center justify-between mb-4 sm:mb-6">
+                      <div>
+                        <h3 className="text-base sm:text-lg font-bold text-text flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[#4d7cfe]">group_add</span>
+                          Reclutamiento y Meta por Comité
+                        </h3>
+                        <p className="text-xs text-text-dim mt-0.5 font-inter">
+                          Total de voluntarios registrados, turnos asignados vs requeridos y faltantes por comité.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+                      {filteredRecruitmentSummary.map(rec => (
+                        <div key={rec.committeeId} className="bg-dark3/50 border border-border rounded-xl p-4 flex flex-col justify-between space-y-4 hover:border-border-strong transition-all">
+                          <div>
+                            <div className="flex items-center justify-between mb-2 gap-2">
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${getCommitteeColor(rec.committeeName)}`}>
+                                {rec.committeeName}
+                              </span>
+                              <Badge variant="outline" className={`text-[10px] font-bold ${rec.missingShifts === 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
+                                {rec.missingShifts === 0 ? 'Completado' : `Faltan ${rec.missingShifts} turnos`}
+                              </Badge>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 my-3 pt-2 border-t border-white/5 text-xs font-inter">
+                              <div className="bg-dark2/60 p-2.5 rounded-lg border border-white/5">
+                                <span className="text-[9px] text-text-dim uppercase font-bold block">Voluntarios</span>
+                                <span className="text-base font-bold text-text">{rec.totalVolunteers}</span>
+                              </div>
+                              <div className="bg-dark2/60 p-2.5 rounded-lg border border-white/5">
+                                <span className="text-[9px] text-text-dim uppercase font-bold block">Faltan Turnos</span>
+                                <span className={`text-base font-bold ${rec.missingShifts > 0 ? 'text-rose-400 font-extrabold' : 'text-emerald-400'}`}>
+                                  {rec.missingShifts}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5 pt-2 border-t border-white/5">
+                            <div className="flex justify-between text-[11px] font-inter font-bold">
+                              <span className="text-text-dim">Cobertura de Turnos:</span>
+                              <span className="text-text">{rec.assignedShifts} / {rec.totalRequiredShifts} ({rec.coverageRate}%)</span>
+                            </div>
+                            <div className="w-full bg-dark2 h-2 rounded-full overflow-hidden border border-white/5">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${rec.coverageRate >= 100 ? 'bg-emerald-500' : rec.coverageRate >= 70 ? 'bg-[#4d7cfe]' : 'bg-rose-500'}`}
+                                style={{ width: `${Math.min(100, rec.coverageRate)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Segmentación por Edades */}
+                  <div className="bg-dark2 border border-border rounded-[20px] p-4 sm:p-6 shadow-lg">
+                    <div className="mb-4 sm:mb-6">
+                      <h3 className="text-base sm:text-lg font-bold text-text flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[#4d7cfe]">cake</span>
+                        Segmentación Demográfica por Edad
+                      </h3>
+                      <p className="text-xs text-text-dim mt-0.5 font-inter">
+                        Distribución de voluntarios registrados por rangos de edad.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+                      {filteredAgeSegmentation.map(seg => (
+                        <div key={seg.range} className="bg-dark3/50 border border-border rounded-xl p-3.5 sm:p-4 space-y-2">
+                          <div className="flex items-center justify-between text-xs font-inter">
+                            <span className="font-bold text-text">Rango: <span className="text-[#4d7cfe] font-extrabold">{seg.range}</span></span>
+                            <span className="font-bold text-text-dim">{seg.count} vols ({seg.percentage}%)</span>
+                          </div>
+                          <div className="w-full bg-dark2 h-2.5 rounded-full overflow-hidden border border-white/5">
+                            <div
+                              className="h-full bg-[#4d7cfe] rounded-full transition-all duration-500"
+                              style={{ width: `${seg.percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="daily-tab"
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 5 }}
+                  transition={{ duration: 0.2 }}
+                  className="bg-dark2 border border-border rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full p-4 sm:p-6 space-y-6"
+                >
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-text flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[#4d7cfe]">calendar_month</span>
+                      Cobertura por Día de Evento
+                    </h3>
+                    <p className="text-xs text-text-dim mt-0.5 font-inter">
+                      Detalle diario de turnos requeridos, asignados, asistidos y faltantes del 10 al 26 de septiembre.
+                    </p>
+                  </div>
+
+                  {/* Desktop Table View (lg+) */}
+                  <div className="hidden lg:block overflow-x-auto">
+                    <table className="w-full text-sm text-left border-separate border-spacing-0">
+                      <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md text-[10px] font-inter font-bold text-text-dim uppercase tracking-wider">
+                        <tr>
+                          <th className="px-5 py-4 font-inter font-bold">Día / Fecha</th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">Requeridos</th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">Asignados</th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">Asistieron (Check-in)</th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">Faltantes</th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">% Cobertura</th>
+                          <th className="px-5 py-4 text-center font-inter font-bold">Desglose por Turno</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {filteredDailyCoverage.map(day => (
+                          <tr key={day.date} className="hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                            <td className="px-5 py-4 font-inter font-bold text-text text-sm">
+                              {day.dayLabel}
+                            </td>
+                            <td className="px-4 py-4 text-center font-inter font-bold text-text text-sm tabular-nums">
+                              {day.required}
+                            </td>
+                            <td className="px-4 py-4 text-center font-inter font-bold text-text text-sm tabular-nums">
+                              {day.assigned}
+                            </td>
+                            <td className="px-4 py-4 text-center font-inter font-bold text-emerald-400 text-sm tabular-nums">
+                              {day.checkedIn}
+                            </td>
+                            <td className="px-4 py-4 text-center font-inter font-bold tabular-nums">
+                              <span className={day.missing > 0 ? "text-rose-400 font-extrabold" : "text-emerald-400"}>
+                                {day.missing}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-center font-inter">
+                              <Badge variant="outline" className={`font-inter font-bold text-xs py-0.5 px-2 border ${
+                                day.coverageRate >= 100 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                day.coverageRate >= 70 ? 'bg-[#4d7cfe]/10 text-[#4d7cfe] border-[#4d7cfe]/20' :
+                                'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                              }`}>
+                                {day.coverageRate}%
+                              </Badge>
+                            </td>
+                            <td className="px-5 py-4 text-center">
+                              <div className="flex items-center justify-center gap-1.5 text-[10px] font-inter font-bold">
+                                {Object.entries(day.byShift).map(([sk, info]) => (
+                                  <span key={sk} className={`px-1.5 py-0.5 rounded border ${info.missing > 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                                    {sk}: {info.assigned}/{info.required}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Card List View (< lg) */}
+                  <div className="block lg:hidden space-y-3">
+                    {filteredDailyCoverage.map(day => (
+                      <div key={day.date} className="bg-dark3/50 border border-border rounded-xl p-4 space-y-3">
+                        {/* Line 1: Day Label + Badge */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="material-symbols-outlined text-[#4d7cfe] text-[18px]">calendar_today</span>
+                            <span className="font-inter font-bold text-text text-sm truncate">{day.dayLabel}</span>
+                          </div>
+                          <Badge variant="outline" className={`font-inter font-bold text-[11px] py-0.5 px-2.5 border shrink-0 ${
+                            day.coverageRate >= 100 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                            day.coverageRate >= 70 ? 'bg-[#4d7cfe]/10 text-[#4d7cfe] border-[#4d7cfe]/20' :
+                            'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                          }`}>
+                            {day.coverageRate}% Cobertura
+                          </Badge>
+                        </div>
+
+                        {/* Line 2: Stat Cards Grid */}
+                        <div className="grid grid-cols-4 gap-1.5 bg-dark2/70 p-2.5 rounded-xl border border-white/5 text-center text-xs font-inter">
+                          <div>
+                            <span className="text-[9px] text-text-dim uppercase font-bold block">Req.</span>
+                            <span className="font-bold text-text">{day.required}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-text-dim uppercase font-bold block">Asig.</span>
+                            <span className="font-bold text-text">{day.assigned}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-text-dim uppercase font-bold block">Check-in</span>
+                            <span className="font-bold text-emerald-400">{day.checkedIn}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-text-dim uppercase font-bold block">Faltan</span>
+                            <span className={`font-bold ${day.missing > 0 ? 'text-rose-400 font-extrabold' : 'text-emerald-400'}`}>
+                              {day.missing}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Line 3: Shifts Grid */}
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider block">Turnos del Día</span>
+                          <div className="grid grid-cols-2 gap-1.5 text-[11px] font-inter font-bold">
+                            {Object.entries(day.byShift).map(([sk, info]) => {
+                              const shiftLabels: Record<string, string> = { T1: 'T1 (8-12)', T2: 'T2 (12-3)', T3: 'T3 (3-6)', T4: 'T4 (5-10)' };
+                              return (
+                                <div key={sk} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border ${
+                                  info.missing > 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                }`}>
+                                  <span className="text-text-dim">{shiftLabels[sk] || sk}:</span>
+                                  <span>{info.assigned}/{info.required}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </motion.div>
               )}

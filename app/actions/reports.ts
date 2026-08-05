@@ -12,6 +12,7 @@ export interface ReportItem {
   registrationId: string;
   volunteerId: string;
   volunteerName: string;
+  age?: number | null;
   phone: string;
   neighborhood: string;
   stake: string;
@@ -48,12 +49,42 @@ export interface AttendanceSummary {
   byShift: { shiftKey: string; assigned: number; checkedIn: number; required: number; rate: number }[];
 }
 
+export interface CommitteeRecruitment {
+  committeeId: string;
+  committeeName: string;
+  totalVolunteers: number;
+  totalRequiredShifts: number;
+  assignedShifts: number;
+  missingShifts: number;
+  coverageRate: number;
+}
+
+export interface AgeSegmentation {
+  range: string;
+  count: number;
+  percentage: number;
+}
+
+export interface DailyCoverage {
+  date: string;       // ISO date "2026-09-10"
+  dayLabel: string;   // Short label "Jue 10 Sep"
+  required: number;
+  assigned: number;
+  checkedIn: number;
+  missing: number;
+  coverageRate: number;
+  byShift: Record<string, { required: number; assigned: number; checkedIn: number; missing: number }>;
+}
+
 export interface ReportsData {
   items: ReportItem[];
   uniqueNeighborhoods: string[];
   uniqueStakes: string[];
   uniqueCommittees: { id: string; name: string }[];
   attendanceSummary: AttendanceSummary;
+  recruitmentSummary: CommitteeRecruitment[];
+  ageSegmentation: AgeSegmentation[];
+  dailyCoverage: DailyCoverage[];
 }
 
 
@@ -261,6 +292,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
         registrationId: s.id,
         volunteerId: vol.id,
         volunteerName: `${vol.first_name || ''} ${vol.last_name || ''}`.trim(),
+        age: vol.age ? parseInt(vol.age) : null,
         phone: vol.phone || '',
         neighborhood: vol.neighborhood || 'Sin barrio',
         stake: vol.stake || 'Sin estaca',
@@ -377,6 +409,134 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
       byShift,
     };
 
+    // --- 1. RECRUITMENT BY COMMITTEE (Voluntarios por Comité y Faltantes) ---
+    const recruitmentSummary: CommitteeRecruitment[] = uniqueCommittees.map(c => {
+      // Filter volunteers belonging to this committee
+      const committeeVols = (volsData || []).filter((v: any) => {
+        const commName = v.committees?.name || 'Sin comité';
+        const commId = v.committees?.id || 'sin-comite';
+        return commId === c.id || commName.trim().toLowerCase() === c.name.trim().toLowerCase();
+      });
+
+      const totalVolunteers = committeeVols.length;
+      const commAtt = commAttMap[c.id];
+      const totalRequiredShifts = commAtt ? commAtt.required : 0;
+      const assignedShifts = commAtt ? commAtt.assigned : 0;
+      const missingShifts = Math.max(0, totalRequiredShifts - assignedShifts);
+      const coverageRate = totalRequiredShifts > 0 ? Math.round((assignedShifts / totalRequiredShifts) * 100) : 0;
+
+      return {
+        committeeId: c.id,
+        committeeName: c.name,
+        totalVolunteers,
+        totalRequiredShifts,
+        assignedShifts,
+        missingShifts,
+        coverageRate,
+      };
+    });
+
+    // --- 2. AGE SEGMENTATION (Distribución Demográfica por Edad) ---
+    const ageCounts: Record<string, number> = {
+      '< 18': 0,
+      '18 - 25': 0,
+      '26 - 35': 0,
+      '36 - 50': 0,
+      '50+': 0,
+      'Sin edad': 0,
+    };
+
+    const relevantVols = (volsData || []).filter((v: any) => {
+      const commName = v.committees?.name || 'Sin comité';
+      if (role !== 'Admin' && userCommittee && commName.trim().toLowerCase() !== userCommittee.trim().toLowerCase()) {
+        return false;
+      }
+      return true;
+    });
+
+    relevantVols.forEach((v: any) => {
+      const ageNum = parseInt(v.age);
+      if (isNaN(ageNum) || ageNum <= 0) {
+        ageCounts['Sin edad']++;
+      } else if (ageNum < 18) {
+        ageCounts['< 18']++;
+      } else if (ageNum <= 25) {
+        ageCounts['18 - 25']++;
+      } else if (ageNum <= 35) {
+        ageCounts['26 - 35']++;
+      } else if (ageNum <= 50) {
+        ageCounts['36 - 50']++;
+      } else {
+        ageCounts['50+']++;
+      }
+    });
+
+    const totalVolsCount = relevantVols.length;
+    const ageSegmentation: AgeSegmentation[] = Object.entries(ageCounts).map(([range, count]) => ({
+      range,
+      count,
+      percentage: totalVolsCount > 0 ? Math.round((count / totalVolsCount) * 100) : 0,
+    }));
+
+    // --- 3. DAILY COVERAGE BREAKDOWN (Informe de Cobertura por Día) ---
+    const dailyCoverageMap: Record<string, DailyCoverage> = {};
+
+    for (const dateObj of getActiveEventDays()) {
+      const isoDate = format(dateObj, 'yyyy-MM-dd');
+      const dayLabel = format(dateObj, 'EEE d MMM', { locale: es });
+      const dayKeyStr = format(dateObj, 'EEE d', { locale: es }).toLowerCase();
+
+      let dayRequired = 0;
+      const byShift: Record<string, { required: number; assigned: number; checkedIn: number; missing: number }> = {
+        T1: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
+        T2: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
+        T3: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
+        T4: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
+      };
+
+      uniqueCommittees.forEach(c => {
+        ['T1', 'T2', 'T3', 'T4'].forEach(sk => {
+          const req = getRequired(c.id, sk);
+          byShift[sk].required += req;
+          dayRequired += req;
+        });
+      });
+
+      // Filter shifts for this date
+      const dayShifts = items.filter(i => i.date === isoDate);
+
+      let dayAssigned = 0;
+      let dayCheckedIn = 0;
+
+      dayShifts.forEach(i => {
+        const sk = `T${i.shiftNumber}`;
+        dayAssigned++;
+        if (byShift[sk]) byShift[sk].assigned++;
+
+        if (i.status === 'confirmed') {
+          dayCheckedIn++;
+          if (byShift[sk]) byShift[sk].checkedIn++;
+        }
+      });
+
+      ['T1', 'T2', 'T3', 'T4'].forEach(sk => {
+        byShift[sk].missing = Math.max(0, byShift[sk].required - byShift[sk].assigned);
+      });
+
+      dailyCoverageMap[isoDate] = {
+        date: isoDate,
+        dayLabel: dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1),
+        required: dayRequired,
+        assigned: dayAssigned,
+        checkedIn: dayCheckedIn,
+        missing: Math.max(0, dayRequired - dayAssigned),
+        coverageRate: dayRequired > 0 ? Math.round((dayAssigned / dayRequired) * 100) : 0,
+        byShift,
+      };
+    }
+
+    const dailyCoverage = Object.values(dailyCoverageMap);
+
     return {
       data: {
         items,
@@ -384,6 +544,9 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
         uniqueStakes,
         uniqueCommittees,
         attendanceSummary,
+        recruitmentSummary,
+        ageSegmentation,
+        dailyCoverage,
       }
     };
   } catch (err: any) {
