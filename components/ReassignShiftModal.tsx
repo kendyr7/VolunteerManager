@@ -14,7 +14,7 @@ export interface ReassignShiftModalProps {
   } | null;
   sourceDayKey?: string;
   sourceShiftId?: string;
-  onSuccess?: (message: string) => void;
+  onSuccess?: (message: string, undoAction?: () => Promise<void>) => void;
   onError?: (error: string) => void;
   mode?: 'coordinator' | 'volunteer';
 }
@@ -77,6 +77,16 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
     }
     return false;
   }, [volunteer, sourceDayKey, sourceShiftId, shiftsData, checkedOutMap]);
+
+  // Regla 1b: Comprobar si el turno ORIGEN ya fue iniciado (Check-in activo)
+  const isSourceStarted = useMemo(() => {
+    if (!volunteer || !sourceDayKey || !sourceShiftId) return false;
+    const match = shiftsData.find(
+      (s: any) => s.volunteer_id === volunteer.id && s.day_key === sourceDayKey && s.shift_key === sourceShiftId
+    );
+    if (match && (match.checked_in || match.checked_in_at) && !match.checked_out) return true;
+    return false;
+  }, [volunteer, sourceDayKey, sourceShiftId, shiftsData]);
 
   // Regla 2 & 3: Obtener el estado del turno DESTINO para el voluntario
   const getTargetShiftStatus = (dayKey: string, shiftId: string) => {
@@ -151,7 +161,7 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
   if (!isOpen || !volunteer) return null;
 
   const isTargetBlocked = targetStatus.isCompleted || (targetStatus.isAssigned && !targetStatus.isSource);
-  const isActionDisabled = isSubmitting || !targetDayKey || !targetShiftId || isSameCurrentShift || isSourceCompleted || isTargetBlocked;
+  const isActionDisabled = isSubmitting || !targetDayKey || !targetShiftId || isSameCurrentShift || isSourceCompleted || isSourceStarted || isTargetBlocked;
 
   const handleConfirmReassign = async () => {
     if (!targetDayKey || !targetShiftId) {
@@ -161,6 +171,11 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
 
     if (isSourceCompleted) {
       if (onError) onError('No se puede reasignar un turno que ya ha sido completado y finalizado.');
+      return;
+    }
+
+    if (isSourceStarted) {
+      if (onError) onError('Este turno se encuentra activo en curso. Primero debes registrar la salida antes de reasignar a otra fecha.');
       return;
     }
 
@@ -208,8 +223,31 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
           if (onError) onError(`Error al reasignar: ${error.message}`);
         } else {
           await refresh(true);
+
+          const undoAction = async () => {
+            const client = createClient();
+            if (targetDayKey && targetShiftId) {
+              await client
+                .from('shifts')
+                .delete()
+                .eq('volunteer_id', volunteer.id)
+                .eq('day_key', targetDayKey)
+                .eq('shift_key', targetShiftId);
+            }
+            if (sourceDayKey && sourceShiftId) {
+              await client
+                .from('shifts')
+                .upsert({
+                  volunteer_id: volunteer.id,
+                  day_key: sourceDayKey,
+                  shift_key: sourceShiftId,
+                });
+            }
+            await refresh(true);
+          };
+
           const successMsg = `Turno de ${volunteer.name} reasignado a ${targetShiftId} el ${targetDayKey}.`;
-          if (onSuccess) onSuccess(successMsg);
+          if (onSuccess) onSuccess(successMsg, undoAction);
           onClose();
         }
       } else {
@@ -385,8 +423,21 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
               </div>
             </div>
 
+            {/* Advertencia si el turno origen está iniciado (Check-in activo) */}
+            {isSourceStarted && (
+              <div className="mt-4 p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                <span className="material-symbols-outlined text-[20px] text-amber-400 shrink-0">warning</span>
+                <div>
+                  <p className="text-amber-200 font-extrabold text-xs mb-0.5">Turno en Curso (Check-in Activo)</p>
+                  <p className="text-[11px] text-amber-300/90 font-medium leading-relaxed">
+                    Este turno ya fue iniciado por el voluntario y se encuentra activo. Para asignar un nuevo turno en otra fecha, primero debes registrar la salida (Check-out) de este turno.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Advertencia si es el mismo turno actual */}
-            {!isSourceCompleted && isSameCurrentShift && (
+            {!isSourceCompleted && !isSourceStarted && isSameCurrentShift && (
               <div className="mt-4 p-3.5 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-inter font-bold flex items-center gap-2.5 animate-in fade-in zoom-in-95">
                 <span className="material-symbols-outlined text-[20px] text-purple-400 shrink-0">info</span>
                 <span>Este es el turno actual origen del voluntario. Selecciona otro horario o día para reasignar.</span>

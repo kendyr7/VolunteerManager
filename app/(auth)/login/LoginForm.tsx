@@ -85,10 +85,6 @@ export function LoginForm() {
         if (!isSubscribed) return;
         const passkeyAvailable = !!data.hasPasskey;
         setHasPasskey(passkeyAvailable);
-        const preferredMethod = typeof window !== 'undefined' ? localStorage.getItem("preferred_auth_method") : null;
-        if (passkeyAvailable && (savedUserMode || preferredMethod === "biometrics")) {
-          setAuthMode('biometrics');
-        }
       })
       .catch(() => {
         if (isSubscribed) {
@@ -100,8 +96,8 @@ export function LoginForm() {
   }, [phone, savedUserMode]);
 
   const handleBiometricLogin = async () => {
-    if (!phone) {
-      setError("Ingresa tu número de teléfono primero.");
+    if (!phone || phone.length < 8) {
+      setError("Ingresa tu número de teléfono primero para autenticarte con Passkey.");
       return;
     }
     
@@ -116,6 +112,9 @@ export function LoginForm() {
       
       if (!resp.ok) {
         const errData = await resp.json();
+        if (resp.status === 400 || errData.error?.includes('huella') || errData.error?.includes('dispositivo')) {
+          throw new Error('No tienes ninguna huella o Passkey registrada para este número. Ingresa con tu PIN de 4 dígitos.');
+        }
         throw new Error(errData.error || 'Error al generar opciones de autenticación');
       }
 
@@ -142,7 +141,7 @@ export function LoginForm() {
       if (err.name === 'NotAllowedError') {
         setError(null);
       } else {
-        setError(err.message || "Huella no reconocida, inténtelo de nuevo.");
+        setError(err.message || "Huella o Passkey no reconocida. Inténtelo con su PIN.");
       }
     }
   };
@@ -376,18 +375,21 @@ export function LoginForm() {
                       </div>
                     )}
 
-                    {hasPasskey && (
-                      <div className="pt-3 flex flex-col items-center justify-center">
-                        <button
-                          type="button"
-                          onClick={() => setAuthMode('biometrics')}
-                          className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">fingerprint</span>
-                          <span>{isMobile ? 'O ingresa con tu huella dactilar' : 'O ingresa con passkey / Windows Hello'}</span>
-                        </button>
-                      </div>
-                    )}
+                    <div className="pt-3 flex flex-col items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthMode('biometrics');
+                          if (phone && phone.length >= 8) {
+                            handleBiometricLogin();
+                          }
+                        }}
+                        className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">fingerprint</span>
+                        <span>{isMobile ? 'O ingresa con tu huella dactilar' : 'O ingresa con passkey / Windows Hello'}</span>
+                      </button>
+                    </div>
                   </>
                 )}
               </>
@@ -506,18 +508,21 @@ export function LoginForm() {
                       </div>
                     )}
 
-                    {hasPasskey && (
-                      <div className="pt-3 flex flex-col items-center justify-center">
-                        <button
-                          type="button"
-                          onClick={() => setAuthMode('biometrics')}
-                          className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">fingerprint</span>
-                          <span>{isMobile ? 'O ingresa con tu huella dactilar' : 'O ingresa con passkey / Windows Hello'}</span>
-                        </button>
-                      </div>
-                    )}
+                    <div className="pt-3 flex flex-col items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthMode('biometrics');
+                          if (phone && phone.length >= 8) {
+                            handleBiometricLogin();
+                          }
+                        }}
+                        className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">fingerprint</span>
+                        <span>{isMobile ? 'O ingresa con tu huella dactilar' : 'O ingresa con passkey / Windows Hello'}</span>
+                      </button>
+                    </div>
                   </>
                 )}
               </>

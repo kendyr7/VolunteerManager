@@ -8,17 +8,22 @@ interface ToastProps {
   type?: 'success' | 'error' | 'info'
   isVisible: boolean
   onClose: () => void
+  actionLabel?: string
+  onAction?: () => void
 }
 
-export function Toast({ message, type = 'success', isVisible, onClose }: ToastProps) {
+export function Toast({ message, type = 'success', isVisible, onClose, actionLabel, onAction }: ToastProps) {
+  const [isHovered, setIsHovered] = React.useState(false)
+
   React.useEffect(() => {
-    if (isVisible) {
+    if (isVisible && !isHovered) {
+      const displayDuration = (actionLabel && onAction) ? 8000 : 5000;
       const timer = setTimeout(() => {
         onClose()
-      }, 3000)
+      }, displayDuration)
       return () => clearTimeout(timer)
     }
-  }, [isVisible, onClose])
+  }, [isVisible, isHovered, onClose, actionLabel, onAction])
 
   return (
     <AnimatePresence>
@@ -28,6 +33,8 @@ export function Toast({ message, type = 'success', isVisible, onClose }: ToastPr
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
             className="pointer-events-auto flex items-center gap-3 bg-white dark:bg-dark2 border border-slate-200 dark:border-border px-5 py-4 rounded-2xl shadow-premium w-full max-w-md md:w-auto min-w-[280px]"
           >
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
@@ -42,6 +49,19 @@ export function Toast({ message, type = 'success', isVisible, onClose }: ToastPr
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold font-inter text-slate-800 dark:text-text">{message}</p>
             </div>
+            {actionLabel && onAction && (
+              <button
+                type="button"
+                onClick={() => {
+                  onAction();
+                  onClose();
+                }}
+                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#4d7cfe]/15 text-[#4d7cfe] hover:bg-[#4d7cfe]/25 border border-[#4d7cfe]/30 transition-all shrink-0 cursor-pointer active:scale-95 flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[14px]">undo</span>
+                <span>{actionLabel}</span>
+              </button>
+            )}
             <button onClick={onClose} className="text-slate-400 dark:text-text-dim hover:text-slate-600 dark:hover:text-text transition-colors shrink-0">
               <span className="material-symbols-outlined text-[20px]">close</span>
             </button>

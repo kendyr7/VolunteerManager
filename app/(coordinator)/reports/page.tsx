@@ -18,6 +18,8 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn } from "@/lib/utils";
 import { getActiveEventDays, formatDateShort } from "@/lib/dates";
 import { canViewReports } from "@/lib/permissions";
+import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
+import { useCoordinatorData } from "@/lib/coordinator-data-context";
 
 // Day names for week headers
 const DAY_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -103,6 +105,24 @@ export default function ReportsPage() {
   // Pagination State (30 items per page for instant 1ms DOM rendering)
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 30;
+
+  // Drawer state for Volunteer Profile
+  const [drawerVolunteer, setDrawerVolunteer] = useState<any>(null);
+  const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
+
+  let rawVolunteers: any[] = [];
+  try {
+    const coordCtx = useCoordinatorData();
+    rawVolunteers = coordCtx.rawVolunteers || [];
+  } catch (e) {}
+
+  const handleOpenProfile = (item: any) => {
+    if (!item) return;
+    const itemVolId = item.id || item.volunteer_id || item.volunteerId;
+    const match = rawVolunteers.find((v: any) => v.id === itemVolId || v.name === item.name || v.name === item.volunteer);
+    setDrawerVolunteer(match || item);
+    setIsProfileDrawerOpen(true);
+  };
 
   const [permTick, setPermTick] = useState(0);
   const [mounted, setMounted] = useState(false);
@@ -1241,7 +1261,12 @@ export default function ReportsPage() {
                         {paginatedVolunteerItems.map((v, index) => {
                           const globalRank = (currentPage - 1) * pageSize + index + 1;
                           return (
-                            <tr key={v.id} className="hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors group">
+                            <tr
+                              key={v.id}
+                              onClick={() => handleOpenProfile(v)}
+                              className="hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors group cursor-pointer"
+                              title="Haz clic para ver el perfil completo del voluntario"
+                            >
                               <td className="px-5 py-4 flex items-center gap-3">
                                 <span className="font-inter font-bold text-text-dim text-sm w-4 shrink-0">#{globalRank}</span>
                                 <div>
@@ -1601,6 +1626,14 @@ export default function ReportsPage() {
           )}
         </div>
       </div>
+
+      {/* Unified Volunteer Profile Drawer */}
+      <VolunteerProfileDrawer
+        isOpen={isProfileDrawerOpen}
+        onClose={() => setIsProfileDrawerOpen(false)}
+        volunteer={drawerVolunteer}
+        mode="coordinator"
+      />
     </div>
   );
 }

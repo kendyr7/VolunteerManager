@@ -14,7 +14,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
-import { checkOutVolunteer } from "@/app/actions/attendance";
+import { checkOutVolunteer, adjustCheckoutTimeAction } from "@/app/actions/attendance";
+import { undoVolunteerCheckInAction } from "@/app/actions/audit-actions";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearch } from "@/lib/search-context";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
@@ -23,6 +24,7 @@ import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { canEditShifts } from "@/lib/permissions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
+import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -151,12 +153,12 @@ function HighlightText({ text, term }: { text: string; term: string }) {
 // ─── página ───────────────────────────────────────────────────────────────────
 export default function ShiftsPage() {
   const EVENT_DAYS_RAW = getActiveEventDays();
-  const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
+  const EVENT_DAYS_DEFAULT = useMemo(() => EVENT_DAYS_RAW.map(date => ({
     date,
     key: formatDateShort(date),                   // clave única: 'jue 10'
     label: formatDateShort(date).split(' ')[0],    // solo el día: 'jue'
     dateNum: formatDateShort(date).split(' ')[1],  // solo el número: '10'
-  }));
+  })), [EVENT_DAYS_RAW]);
 
   // Estados de filtros
   const [inputValue, setInputValue] = useState("");
@@ -231,16 +233,47 @@ export default function ShiftsPage() {
   // rawShiftsData comes directly from the shared coordinator context (no local fetch)
   const rawShiftsData = contextShiftsData;
 
+  const EVENT_DAYS = useMemo(() => {
+    const existingKeys = new Set(EVENT_DAYS_DEFAULT.map(d => d.key.toLowerCase()));
+    const extraDays: Array<{ date: Date; key: string; label: string; dateNum: string }> = [];
+
+    (rawShiftsData || []).forEach((s: any) => {
+      if (s.day_key && !existingKeys.has(s.day_key.toLowerCase())) {
+        existingKeys.add(s.day_key.toLowerCase());
+        const parts = s.day_key.split(' ');
+        extraDays.push({
+          date: new Date(),
+          key: s.day_key,
+          label: (parts[0] || s.day_key).substring(0, 3),
+          dateNum: parts[1] || ''
+        });
+      }
+    });
+
+    return [...EVENT_DAYS_DEFAULT, ...extraDays];
+  }, [EVENT_DAYS_DEFAULT, rawShiftsData]);
+
   // Toast State
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({
+  const [toast, setToast] = useState<{
+    message: string;
+    type: 'success' | 'error' | 'info';
+    isVisible: boolean;
+    actionLabel?: string;
+    onAction?: () => void;
+  }>({
     message: '',
     type: 'success',
     isVisible: false
   });
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message, type, isVisible: true });
-  };
+  const showToast = useCallback((
+    message: string,
+    type: 'success' | 'error' | 'info' = 'success',
+    actionLabel?: string,
+    onAction?: () => void
+  ) => {
+    setToast({ message, type, isVisible: true, actionLabel, onAction });
+  }, []);
 
   const stakes = useMemo(() => {
     const set = new Set<string>();
@@ -500,40 +533,34 @@ export default function ShiftsPage() {
   // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales
   const getAssignedVolunteers = useCallback((dateKey: string, shiftId: string) => {
     const dayAssignments = contextIndexedAssignments[dateKey]?.[shiftId] || {};
+    const assignedIdsFromProps = Object.values(dayAssignments).flat();
+
+    const dbShiftVols = rawShiftsData
+      .filter(s => (s.day_key === dateKey || (s.day_key && dateKey && s.day_key.toLowerCase() === dateKey.toLowerCase())) && s.shift_key === shiftId)
+      .map(s => s.volunteer_id);
+
+    const allCandidateIds = Array.from(new Set([...assignedIdsFromProps, ...dbShiftVols]));
     const result: VolunteerType[] = [];
 
-    // Instead of filtering all volunteers, we only look at those assigned to THIS shift
-    for (const [commName, ids] of Object.entries(dayAssignments)) {
-      // If we are filtering by committee, skip other committees early
-      if (selectedCommittees.length > 0 && !selectedCommittees.includes(commName)) continue;
+    for (const id of allCandidateIds) {
+      const vol = volunteerMap.get(id);
+      if (!vol) continue;
 
-      for (const id of ids) {
-        const vol = volunteerMap.get(id);
-        if (!vol) continue;
+      if (matchesFilters(vol, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole)) {
+        const s = rawShiftsData.find(r => r.volunteer_id === vol.id && (r.day_key === dateKey || (r.day_key && dateKey && r.day_key.toLowerCase() === dateKey.toLowerCase())) && r.shift_key === shiftId);
+        const completedLocal = completedShiftsMap[`${vol.id}-${dateKey}-${shiftId}`];
+        const isCheckedIn = !!(s && (s.checked_in || s.checked_in_at)) || contextCheckedInMap[`${vol.id}-${dateKey}-${shiftId}`];
+        const isCheckedOut = !!(s && (s.checked_out || s.checked_out_at)) || !!completedLocal;
 
-        // Check if volunteer matches other filters (search, stake, ward, role)
-        if (matchesFilters(vol, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole)) {
-          
-          if (viewMode === 'active') {
-            const s = rawShiftsData.find(r => r.volunteer_id === vol.id && r.day_key === dateKey && r.shift_key === shiftId);
-            const completedLocal = completedShiftsMap[`${vol.id}-${dateKey}-${shiftId}`];
-            const isCheckedIn = !!(s && (s.checked_in || s.checked_in_at)) || contextCheckedInMap[`${vol.id}-${dateKey}-${shiftId}`];
-            const isCheckedOut = !!(s && (s.checked_out || s.checked_out_at)) || !!completedLocal;
-
-            // En Turno: Muestra solo los que hicieron check-in y AÚN NO han completado/marcado salida.
-            // Si el día terminó pero no se le dio completar, isCheckedOut es false por lo que seguirá apareciendo.
-            if (!isCheckedIn || isCheckedOut) continue;
-          } else if (viewMode === 'completed') {
-            const s = rawShiftsData.find(r => r.volunteer_id === vol.id && r.day_key === dateKey && r.shift_key === shiftId);
-            const completedLocal = completedShiftsMap[`${vol.id}-${dateKey}-${shiftId}`];
-            const isCheckedOut = !!(s && (s.checked_out || s.checked_out_at)) || !!completedLocal;
-
-            // Completados: Muestra únicamente los que ya registraron salida
-            if (!isCheckedOut) continue;
-          }
-          
-          result.push(vol);
+        if (viewMode === 'active') {
+          // En Turno: Muestra solo los que hicieron check-in y AÚN NO han completado/marcado salida.
+          if (!isCheckedIn || isCheckedOut) continue;
+        } else if (viewMode === 'completed') {
+          // Completados: Muestra únicamente los que ya registraron salida
+          if (!isCheckedOut) continue;
         }
+
+        result.push(vol);
       }
     }
 
@@ -799,8 +826,59 @@ export default function ShiftsPage() {
       }
     }
 
-    showToast(`Turno completado para ${item.volunteer.name}`);
+    const undoCheckout = async () => {
+      const volId = item.volunteer?.id || item.volunteerId;
+      const dayKey = item.dayKey || item.dateKey;
+      const shiftKey = item.shiftKey || item.shiftId;
+      if (volId && dayKey && shiftKey) {
+        const key = `${volId}-${dayKey}-${shiftKey}`;
+        setCompletedShiftsMap(prev => {
+          const next = { ...prev };
+          delete next[key];
+          try {
+            localStorage.setItem('completed_shifts_map', JSON.stringify(next));
+          } catch (e) {}
+          return next;
+        });
+
+        try {
+          await supabase
+            .from('shifts')
+            .update({ checked_out: false, checked_out_at: null })
+            .eq('volunteer_id', volId)
+            .eq('day_key', dayKey)
+            .eq('shift_key', shiftKey);
+        } catch (e) {}
+
+        await refresh(true);
+      }
+    };
+
+    showToast(
+      `Turno completado para ${item.volunteer.name}`,
+      'success',
+      'Deshacer',
+      undoCheckout
+    );
     await refresh(true);
+  };
+
+  const handleUndoCheckInInShifts = async (vol: VolunteerType, dayKey: string, shiftKey: string) => {
+    if (currentRole !== 'Admin') return;
+    const res = await undoVolunteerCheckInAction({
+      volunteerId: vol.id,
+      dayKey,
+      shiftKey,
+      actorName: 'Administrador',
+      actorRole: currentRole
+    });
+
+    if (res.success) {
+      showToast(`Check-in de ${vol.name} revertido a pendiente`);
+      await refresh(true);
+    } else {
+      showToast(res.error || 'Error al revertir check-in', 'error');
+    }
   };
 
   const totalCompletedCount = useMemo(() => {
@@ -821,29 +899,118 @@ export default function ShiftsPage() {
     return dbCount + localCount;
   }, [rawShiftsData, completedShiftsMap]);
 
+  const formatManaguaTime = (isoString?: string) => {
+    if (!isoString) return undefined;
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return undefined;
+    return d.toLocaleTimeString('es-NI', {
+      timeZone: 'America/Managua',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
   const getElapsedInfoBetween = (startIso?: string, endIso?: string) => {
     if (!startIso || !endIso) return null;
-    const start = new Date(startIso).getTime();
-    const end = new Date(endIso).getTime();
-    if (isNaN(start) || isNaN(end)) return null;
-    const diffMs = Math.max(0, end - start);
-    let totalMins = Math.floor(diffMs / (1000 * 60));
+    const start = new Date(startIso);
+    const end = new Date(endIso);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
 
-    // Si la diferencia supera 16 horas (ej. marcas de prueba completadas días después), utilizar la duración de 4 horas por defecto
-    if (totalMins > 960) {
-      totalMins = 240;
-    }
+    const diffMs = Math.max(0, end.getTime() - start.getTime());
+    const totalMins = Math.round(diffMs / (1000 * 60));
+
+    // Comparación de días en zona horaria de Nicaragua
+    const startDateManagua = start.toLocaleDateString('es-NI', { timeZone: 'America/Managua' });
+    const endDateManagua = end.toLocaleDateString('es-NI', { timeZone: 'America/Managua' });
+    const isOverNextDay = startDateManagua !== endDateManagua || totalMins > 720;
 
     const hours = Math.floor(totalMins / 60);
     const minutes = totalMins % 60;
-    const isOver8Hours = hours > 8 || (hours === 8 && minutes > 0);
+    const isOver8Hours = hours > 8 || (hours === 8 && minutes > 0) || isOverNextDay;
 
     let text = '';
     if (hours > 0 && minutes > 0) text = `${hours}h ${minutes}m`;
     else if (hours > 0) text = `${hours}h`;
     else text = `${minutes}m`;
 
-    return { text, isOver8Hours, hours, minutes };
+    return { text, isOver8Hours, isOverNextDay, hours, minutes, startDateManagua, endDateManagua };
+  };
+
+  // Modal de Ajuste de Hora de Salida (Alerta de Siguiente Día)
+  const [adjustCheckoutModal, setAdjustCheckoutModal] = useState<{
+    isOpen: boolean;
+    shiftRecord: any;
+    volunteer: VolunteerType | null;
+    checkInTimeStr?: string;
+    checkOutTimeStr?: string;
+    elapsed?: any;
+  }>({
+    isOpen: false,
+    shiftRecord: null,
+    volunteer: null,
+  });
+
+  const [adjustCheckoutTargetTime, setAdjustCheckoutTargetTime] = useState<string>("12:00");
+  const [adjustCheckoutReason, setAdjustCheckoutReason] = useState<string>("Ajuste de marcación de salida al mismo día");
+  const [isSubmittingAdjustCheckout, setIsSubmittingAdjustCheckout] = useState<boolean>(false);
+
+  const handleOpenAdjustCheckoutModal = (
+    shiftRecord: any,
+    volunteer: VolunteerType,
+    checkInTimeStr?: string,
+    checkOutTimeStr?: string,
+    elapsed?: any
+  ) => {
+    setAdjustCheckoutModal({
+      isOpen: true,
+      shiftRecord,
+      volunteer,
+      checkInTimeStr,
+      checkOutTimeStr,
+      elapsed
+    });
+    setAdjustCheckoutReason("Ajuste de marcación de salida realizada al día siguiente");
+  };
+
+  const handleConfirmAdjustCheckout = async () => {
+    if (!adjustCheckoutModal.shiftRecord?.id || !adjustCheckoutModal.shiftRecord?.checked_in_at) return;
+    setIsSubmittingAdjustCheckout(true);
+
+    try {
+      const startIso = adjustCheckoutModal.shiftRecord.checked_in_at;
+      const startDate = new Date(startIso);
+
+      const [hStr, mStr] = adjustCheckoutTargetTime.split(':');
+      const targetH = parseInt(hStr) || 12;
+      const targetM = parseInt(mStr) || 0;
+
+      const year = parseInt(startDate.toLocaleDateString('es-NI', { timeZone: 'America/Managua', year: 'numeric' }));
+      const month = parseInt(startDate.toLocaleDateString('es-NI', { timeZone: 'America/Managua', month: '2-digit' }));
+      const day = parseInt(startDate.toLocaleDateString('es-NI', { timeZone: 'America/Managua', day: '2-digit' }));
+
+      // Nicaragua UTC-6
+      const newUtcMs = Date.UTC(year, month - 1, day, targetH + 6, targetM, 0);
+      const newCheckOutIso = new Date(newUtcMs).toISOString();
+
+      const res = await adjustCheckoutTimeAction({
+        shiftId: adjustCheckoutModal.shiftRecord.id,
+        newCheckOutIso,
+        reason: adjustCheckoutReason.trim()
+      });
+
+      setIsSubmittingAdjustCheckout(false);
+      if (res.success) {
+        showToast(res.message || "Hora de salida ajustada exitosamente.", "success");
+        setAdjustCheckoutModal({ isOpen: false, shiftRecord: null, volunteer: null });
+        await refresh(true);
+      } else {
+        showToast(res.error || "Ocurrió un error al ajustar la hora de salida.", "error");
+      }
+    } catch (err: any) {
+      setIsSubmittingAdjustCheckout(false);
+      showToast(err.message || "Error al procesar el ajuste.", "error");
+    }
   };
 
   const getReassignCapacityInfo = (targetDayKey: string, targetShiftId: string, volTarget?: VolunteerType | null) => {
@@ -1125,8 +1292,8 @@ export default function ShiftsPage() {
                                 const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
                                 const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
                                 const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
-                                const checkInTimeStr = shiftRecord?.checked_in_at ? format(new Date(shiftRecord.checked_in_at), "hh:mm a") : undefined;
-                                const checkOutTimeStr = shiftRecord?.checked_out_at ? format(new Date(shiftRecord.checked_out_at), "hh:mm a") : (completedLocal?.checkedOutAt ? format(new Date(completedLocal.checkedOutAt), "hh:mm a") : undefined);
+                                const checkInTimeStr = formatManaguaTime(shiftRecord?.checked_in_at);
+                                const checkOutTimeStr = formatManaguaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
                                 const elapsed = getElapsedInfoBetween(shiftRecord?.checked_in_at, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
 
                                 return (
@@ -1150,9 +1317,25 @@ export default function ShiftsPage() {
                                           <HighlightText text={vol.name} term={appliedSearch} />
                                         </span>
                                         {isCheckedOut ? (
-                                          <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOver8Hours ? 'text-red-400 font-extrabold' : 'text-gray-400 dark:text-gray-500'}`}>
-                                            Completado {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
-                                          </span>
+                                           <div className="flex flex-col gap-0.5 min-w-0">
+                                             <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOverNextDay || elapsed?.isOver8Hours ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-500'}`}>
+                                               Completado {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
+                                             </span>
+                                             {elapsed?.isOverNextDay && (
+                                               <button
+                                                 type="button"
+                                                 onClick={(e) => {
+                                                   e.stopPropagation();
+                                                   handleOpenAdjustCheckoutModal(shiftRecord, vol, checkInTimeStr, checkOutTimeStr, elapsed);
+                                                 }}
+                                                 className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold flex items-center gap-1 hover:bg-amber-500/30 transition-all cursor-pointer w-fit mt-0.5"
+                                                 title="El check-out ocurrió en un día distinto al check-in. Haz clic para ajustar la hora de salida al mismo día."
+                                               >
+                                                 <span className="material-symbols-outlined text-[11px] text-amber-400">warning</span>
+                                                 <span>⚠️ Pasó al siguiente día (Ajustar Salida)</span>
+                                               </button>
+                                             )}
+                                           </div>
                                         ) : isCheckedIn ? (
                                           <span className={`font-inter font-bold text-[9px] leading-tight ${
                                             shiftRecord?.checked_in_at && (Date.now() - new Date(shiftRecord.checked_in_at).getTime() > 8 * 3600 * 1000)
@@ -1171,6 +1354,19 @@ export default function ShiftsPage() {
 
                                       {isCheckedIn && !isCheckedOut ? (
                                         <div className="flex items-center gap-1">
+                                          {currentRole === 'Admin' && (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleUndoCheckInInShifts(vol, key, t);
+                                              }}
+                                              className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                                              title="Deshacer entrada accidental y regresar a pendiente"
+                                            >
+                                              <span className="material-symbols-outlined text-[12px]">undo</span>
+                                              <span>Deshacer</span>
+                                            </button>
+                                          )}
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
@@ -1414,8 +1610,8 @@ export default function ShiftsPage() {
                                   const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
                                   const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
                                   const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
-                                  const checkInTimeStr = shiftRecord?.checked_in_at ? format(new Date(shiftRecord.checked_in_at), "hh:mm a") : undefined;
-                                  const checkOutTimeStr = shiftRecord?.checked_out_at ? format(new Date(shiftRecord.checked_out_at), "hh:mm a") : (completedLocal?.checkedOutAt ? format(new Date(completedLocal.checkedOutAt), "hh:mm a") : undefined);
+                                  const checkInTimeStr = formatManaguaTime(shiftRecord?.checked_in_at);
+                                  const checkOutTimeStr = formatManaguaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
                                   const elapsed = getElapsedInfoBetween(shiftRecord?.checked_in_at, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
 
                                   return (
@@ -1443,9 +1639,25 @@ export default function ShiftsPage() {
                                             <HighlightText text={vol.name} term={appliedSearch} />
                                           </span>
                                           {isCheckedOut ? (
-                                            <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOver8Hours ? 'text-red-400 font-extrabold' : 'text-gray-400 dark:text-gray-400'}`}>
-                                              Completado {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
-                                            </span>
+                                             <div className="flex flex-col gap-0.5 min-w-0">
+                                               <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOverNextDay || elapsed?.isOver8Hours ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-400'}`}>
+                                                 Completado {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
+                                               </span>
+                                               {elapsed?.isOverNextDay && (
+                                                 <button
+                                                   type="button"
+                                                   onClick={(e) => {
+                                                     e.stopPropagation();
+                                                     handleOpenAdjustCheckoutModal(shiftRecord, vol, checkInTimeStr, checkOutTimeStr, elapsed);
+                                                   }}
+                                                   className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold flex items-center gap-1 hover:bg-amber-500/30 transition-all cursor-pointer w-fit mt-0.5"
+                                                   title="El check-out ocurrió en un día distinto al check-in. Haz clic para ajustar la hora de salida al mismo día."
+                                                 >
+                                                   <span className="material-symbols-outlined text-[11px] text-amber-400">warning</span>
+                                                   <span>⚠️ Pasó al siguiente día (Ajustar Salida)</span>
+                                                 </button>
+                                               )}
+                                             </div>
                                           ) : isCheckedIn ? (
                                             <span className={`font-inter font-bold text-[9px] leading-tight ${
                                               shiftRecord?.checked_in_at && (Date.now() - new Date(shiftRecord.checked_in_at).getTime() > 8 * 3600 * 1000)
@@ -1682,7 +1894,13 @@ export default function ShiftsPage() {
         </div>
       )}
 
-
+      {/* Unified Volunteer Profile Drawer */}
+      <VolunteerProfileDrawer
+        isOpen={isSheetOpen}
+        onClose={() => setIsSheetOpen(false)}
+        volunteer={editingVolunteer}
+        mode="coordinator"
+      />
 
       {/* Lista de días (layout unificado para Programación y En Turno) */}
       <div className="flex flex-col gap-2 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
@@ -1694,518 +1912,6 @@ export default function ShiftsPage() {
             </motion.div>
           ) : null;
         })}
-      </div>
-
-      {/* Editor Drawer (from Shifts) — MATCHING VOLUNTEERS DIRECTORY DRAWER */}
-      <div className={cn("fixed inset-0 z-[100] flex transition-all duration-300", isMobile ? "flex-col justify-end" : "justify-end", isSheetOpen ? "pointer-events-auto" : "pointer-events-none")}>
-        {/* Backdrop */}
-        <div
-          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isSheetOpen ? 'opacity-100' : 'opacity-0'}`}
-          onClick={() => setIsSheetOpen(false)}
-        />
-
-        {/* Drawer Content */}
-        <div
-          id="drawer-profile"
-          className={cn(
-            "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl border-l border-border",
-            isMobile
-              ? `w-full h-[94dvh] rounded-t-[40px] border-0 ${isSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
-              : `w-[450px] h-full ${isSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
-          )}
-          style={{ willChange: 'transform' }}
-        >
-          <div className="relative z-10 flex flex-col h-full w-full">
-            {/* Handle */}
-            {isMobile && (
-              <div className="w-12 h-1.5 bg-text-dim/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
-            )}
-
-          <div
-            className={cn("flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain", !isMobile && "pt-12 px-6")}
-            onTouchStart={(e) => {
-              if (!isMobile) return;
-              const drawer = document.getElementById('drawer-profile');
-              if (!drawer) return;
-              drawer.dataset.startY = e.touches[0].clientY.toString();
-              drawer.style.transition = 'none';
-            }}
-            onTouchMove={(e) => {
-              if (!isMobile) return;
-              const drawer = document.getElementById('drawer-profile');
-              if (!drawer) return;
-              const startY = parseFloat(drawer.dataset.startY || '0');
-              const currentY = e.touches[0].clientY;
-              const deltaY = currentY - startY;
-
-              if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
-                drawer.style.transform = `translateY(${deltaY}px)`;
-                drawer.dataset.swiping = 'true';
-              }
-            }}
-            onTouchEnd={(e) => {
-              if (!isMobile) return;
-              const drawer = document.getElementById('drawer-profile');
-              if (!drawer) return;
-
-              drawer.style.transition = 'transform 0.3s ease-out';
-
-              if (drawer.dataset.swiping === 'true') {
-                const startY = parseFloat(drawer.dataset.startY || '0');
-                const deltaY = e.changedTouches[0].clientY - startY;
-
-                drawer.dataset.swiping = 'false';
-
-                if (deltaY > 150) {
-                  setIsSheetOpen(false);
-                  setTimeout(() => { drawer.style.transform = ''; }, 300);
-                } else {
-                  drawer.style.transform = `translateY(0)`;
-                }
-              } else {
-                drawer.style.transform = '';
-              }
-            }}
-          >
-            {editingVolunteer && (
-              <AnimatePresence mode="wait">
-                {drawerMode === 'view' ? (
-                  <motion.div
-                    key="view"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    {/* Header Profile Info */}
-                    <div className="text-center mt-4 mb-8 px-4">
-                      <div className="flex flex-col items-center justify-center leading-[1.25] font-black text-[26px] sm:text-[30px] text-text tracking-tight">
-                        {(() => {
-                          const parts = (editingVolunteer.name || '').trim().split(/\s+/).filter(Boolean);
-                          if (parts.length >= 4) {
-                            return (
-                              <>
-                                <span>{parts.slice(0, 2).join(' ')}</span>
-                                <span className="text-text/90">{parts.slice(2).join(' ')}</span>
-                              </>
-                            );
-                          }
-                          return <span>{parts.join(' ')}</span>;
-                        })()}
-                      </div>
-                      <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
-                        {editingVolunteer.committee && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 shadow-sm">
-                            <span className="material-symbols-outlined text-[13px]">groups</span>
-                            {editingVolunteer.committee}
-                          </span>
-                        )}
-                        {editingVolunteer.stake && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25 shadow-sm">
-                            <span className="material-symbols-outlined text-[13px]">account_balance</span>
-                            {editingVolunteer.stake}
-                          </span>
-                        )}
-                        {editingVolunteer.ward && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/25 shadow-sm">
-                            <span className="material-symbols-outlined text-[13px]">location_on</span>
-                            {editingVolunteer.ward}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Top Stats Row */}
-                    <div className="flex items-center mb-8 -mx-4">
-                      {(() => {
-                        const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
-                        const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
-
-                        return (
-                          <>
-                            <div className="flex flex-col items-center flex-1 border-r border-border">
-                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{totalTurnos}</span>
-                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Turnos</span>
-                            </div>
-                            <div className="flex flex-col items-center flex-1 border-r border-border">
-                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{diasCubiertos}</span>
-                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Días</span>
-                            </div>
-                            <div className="flex flex-col items-center flex-1 border-r border-border">
-                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">
-                                {editingVolunteer.reliability}
-                                <span className="text-[16px] font-bold text-text-dim ml-0.5">%</span>
-                              </span>
-                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Confia.</span>
-                            </div>
-                            <div className="flex flex-col items-center flex-1">
-                              <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{editingVolunteer.age || '-'}</span>
-                              <span className="text-drawer-kpi-label text-text-dim mt-2 font-inter font-extrabold">Edad</span>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Acciones de Contacto y Edición de Datos */}
-                    <div className="px-2 mb-8">
-                      <div className="grid grid-cols-3 gap-2">
-                        <Button
-                          variant="outline"
-                          className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate"
-                          onClick={() => window.open(`https://wa.me/${editingVolunteer.phone.replace(/\s+/g, '')}`, '_blank')}
-                        >
-                          <span className="material-symbols-outlined text-[17px] shrink-0 text-[#25D366]">message</span>
-                          <span>WHATSAPP</span>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate"
-                          onClick={() => window.location.href = `tel:${editingVolunteer.phone.replace(/\s+/g, '')}`}
-                        >
-                          <span className="material-symbols-outlined text-[17px] shrink-0 text-blue-500">call</span>
-                          <span>LLAMAR</span>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate"
-                          onClick={() => handleStartEditProfile(editingVolunteer)}
-                        >
-                          <span className="material-symbols-outlined text-[17px] shrink-0 text-[#4d7cfe]">edit_square</span>
-                          <span>EDITAR</span>
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Squad/Schedule / Day Cards List */}
-                    <div className="w-full">
-                      <div className="flex items-center justify-between px-2 mb-4">
-                        <div className="flex items-center gap-2 relative">
-                          <p className="text-drawer-label text-text font-bold">Cronograma</p>
-                          
-                          {/* Helper Icon & Legend Popover */}
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={() => setShowLegend(prev => !prev)}
-                              className="text-text-dim hover:text-text transition-colors p-0.5 rounded-full flex items-center justify-center focus:outline-none"
-                              title="Ver leyenda del cronograma"
-                            >
-                              <span className="material-symbols-outlined text-[15px]">help_outline</span>
-                            </button>
-
-                            {showLegend && (
-                              <div className="absolute left-0 top-6 z-50 w-60 bg-dark2 border border-border rounded-xl p-3.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
-                                <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border">
-                                  <span className="text-xs font-bold text-text font-inter">Leyenda del Cronograma</span>
-                                  <button onClick={() => setShowLegend(false)} className="text-text-dim hover:text-text flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-[14px]">close</span>
-                                  </button>
-                                </div>
-                                <div className="space-y-2 text-[11px] font-inter">
-                                  <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-lg bg-[#4d7cfe]/20 border border-[#4d7cfe]/40 text-[#4d7cfe] flex items-center justify-center shrink-0">
-                                      <span className="material-symbols-outlined text-[13px]">check</span>
-                                    </span>
-                                    <div>
-                                      <p className="text-text font-bold leading-tight">Programado</p>
-                                      <p className="text-text-dim text-[10px]">Turno asignado</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-500 flex items-center justify-center shrink-0">
-                                      <span className="material-symbols-outlined text-[13px]">check</span>
-                                    </span>
-                                    <div>
-                                      <p className="text-emerald-500 font-bold leading-tight">Entrada</p>
-                                      <p className="text-text-dim text-[10px]">Turno registrado con QR</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-lg bg-slate-500/20 border border-slate-500/40 text-slate-500 flex items-center justify-center shrink-0">
-                                      <span className="material-symbols-outlined text-[13px]">check</span>
-                                    </span>
-                                    <div>
-                                      <p className="text-slate-500 font-bold leading-tight">Salida</p>
-                                      <p className="text-text-dim text-[10px]">Turno completado en el sistema</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-lg bg-dark3 border border-border text-text-dim flex items-center justify-center shrink-0 text-[12px] font-bold">
-                                      -
-                                    </span>
-                                    <div>
-                                      <p className="text-text-dim font-medium leading-tight">Sin Turnos</p>
-                                      <p className="text-text-dim/70 text-[10px]">Disponible / No programado</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          {saved && <span className="text-[11px] text-emerald-500 font-bold animate-pulse">✓ Listo</span>}
-                          {isEditingShifts ? (
-                            <button onClick={handleSaveShifts} className="h-7 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full font-bold text-[11px] shadow-md transition-all active:scale-[0.97]">
-                              Guardar
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                if (!canEditShifts()) {
-                                  showToast("No tienes permiso para editar turnos", "error");
-                                  return;
-                                }
-                                setIsEditingShifts(true);
-                                setSaved(false);
-                              }}
-                              className={cn(
-                                "h-7 px-4 backdrop-blur-sm border font-bold text-[11px] transition-all rounded-full",
-                                canEditShifts()
-                                  ? "bg-dark3 border-border hover:bg-dark text-text active:scale-[0.97]"
-                                  : "bg-dark3/50 border-border/50 text-text-dim/40 cursor-not-allowed"
-                              )}
-                              title={canEditShifts() ? "Editar turnos" : "Permiso deshabilitado por el administrador"}
-                            >
-                              Editar
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Shifts Content as Day Cards */}
-                      <div className="flex flex-col gap-2 pb-12">
-                        {EVENT_DAYS.map((d, index) => {
-                          const dayShifts = shiftsByDay[d.key] || [];
-                          const bgColors = [
-                            'bg-[#10a562]',
-                            'bg-[#4aa9df]',
-                            'bg-[#f1c130]',
-                            'bg-[#d54134]',
-                            'bg-[#981e32]',
-                            'bg-[#2c44c2]',
-                            'bg-[#f1c130]',
-                            'bg-[#ed1b24]'
-                          ];
-                          const cardBg = bgColors[index % bgColors.length];
-
-                          return (
-                            <div key={d.key} className="rounded-[20px] shadow-sm w-full overflow-hidden transition-transform duration-200 hover:scale-[1.01] bg-dark3 border border-border flex">
-                              {/* Etiqueta de color lateral estructural */}
-                              <div className={`w-3 shrink-0 ${cardBg} opacity-90`} />
-                              
-                              <div className="flex-1 flex items-center justify-between px-5 sm:px-6 py-4">
-                                {/* Left: Date */}
-                                <div className="flex-1 min-w-0 pr-4 flex items-center">
-                                  <p className="font-inter font-bold text-text text-[13px] truncate capitalize">
-                                    {d.label} {d.dateNum}
-                                  </p>
-                                </div>
-
-                                {/* Right: 4 Columns (T1 to T4) */}
-                                <div className="flex items-center shrink-0 ml-auto gap-1">
-                                  {(['T1', 'T2', 'T3', 'T4'] as const).map((t) => {
-                                    // Determinar ID del voluntario: si hay un voluntario en edición, usarlo. Si no, intentar usar el ID del usuario actual.
-                                    const volunteerId = editingVolunteer?.id || localStorage.getItem('user_id');
-                                    
-                                    // Obtener turnos activos: preferir estado local de edición si existe, si no, usar globalShifts del provider
-                                    const active = editingVolunteer 
-                                      ? dayShifts.includes(t)
-                                      : (globalShifts[volunteerId || '']?.[d.key]?.includes(t) ?? false);
-                                    
-                                    const isCheckedIn = checkedInMap[`${volunteerId}-${d.key}-${t}`];
-                                    const isCheckedOut = checkedOutMap[`${volunteerId}-${d.key}-${t}`] || !!completedShiftsMap[`${volunteerId}-${d.key}-${t}`];
-
-                                    let statusStyle = "bg-dark2 border-border text-text-dim/40";
-                                    let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-text-dim/40">-</span>;
-                                    let labelColor = "text-text-dim/40";
-
-                                    if (isCheckedOut) {
-                                      statusStyle = "bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm";
-                                      iconContent = <span className="material-symbols-outlined text-[15px] text-slate-500">check</span>;
-                                      labelColor = "text-slate-500 font-bold";
-                                    } else if (isCheckedIn) {
-                                      statusStyle = "bg-emerald-500/15 border-emerald-500/30 text-emerald-500 shadow-sm";
-                                      iconContent = <span className="material-symbols-outlined text-[15px] text-emerald-500">check</span>;
-                                      labelColor = "text-emerald-500 font-bold";
-                                    } else if (active) {
-                                      statusStyle = "bg-[#4d7cfe]/15 border-[#4d7cfe]/35 text-[#4d7cfe] font-bold shadow-sm";
-                                      iconContent = <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">check</span>;
-                                      labelColor = "text-[#4d7cfe] font-bold";
-                                    }
-
-                                    return (
-                                      <button
-                                        key={t}
-                                        disabled={!isEditingShifts || isCheckedIn || isCheckedOut || !canEditShifts()}
-                                        onClick={() => toggleShift(d.key, t)}
-                                        className={cn(
-                                          "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all",
-                                          statusStyle,
-                                          isEditingShifts && !isCheckedIn && !isCheckedOut && canEditShifts() && "hover:bg-dark hover:border-border cursor-pointer active:scale-95"
-                                        )}
-                                      >
-                                        <div className="h-4 flex items-center justify-center">
-                                          {iconContent}
-                                        </div>
-                                        <span className={cn("font-inter text-[10px] uppercase tracking-wider mt-0.5", labelColor)}>
-                                          {t}
-                                        </span>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="edit"
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    transition={{ duration: 0.15 }}
-                    className="pt-2 px-2"
-                  >
-                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
-                      <button
-                        onClick={() => setDrawerMode('view')}
-                        className="flex items-center gap-1.5 text-text font-bold text-xs bg-dark3 hover:bg-dark px-3.5 py-1.5 border border-border rounded-full transition-all"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-                        Volver al Perfil
-                      </button>
-                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-text-dim font-inter">Editar Información</span>
-                    </div>
-
-                    <form onSubmit={handleSaveProfile} className="space-y-5 pb-6">
-                      <div className="mb-6">
-                        <h3 className="font-black text-text text-xl leading-tight">Editar Perfil</h3>
-                        <p className="text-xs text-text-dim mt-1 font-inter">Actualiza los datos personales y comité asignado</p>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-text">Nombres</label>
-                            <Input
-                              value={editFirstName}
-                              onChange={(e) => setEditFirstName(e.target.value)}
-                              placeholder="Ej: Juan Carlos"
-                              required
-                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-text">Apellidos</label>
-                            <Input
-                              value={editLastName}
-                              onChange={(e) => setEditLastName(e.target.value)}
-                              placeholder="Ej: Pérez Rodríguez"
-                              required
-                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-text">Teléfono</label>
-                            <Input
-                              value={editPhone}
-                              onChange={(e) => setEditPhone(e.target.value)}
-                              placeholder="Ej: +52 5512345678"
-                              required
-                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-text">Edad</label>
-                            <Input
-                              type="text"
-                              inputMode="numeric"
-                              value={editAge}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (val === '' || /^\d{0,3}$/.test(val)) {
-                                  setEditAge(val);
-                                }
-                              }}
-                              placeholder="Ej: 24"
-                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-xs font-extrabold text-text">Comité</label>
-                          <Select value={editCommitteeId} onValueChange={(v) => setEditCommitteeId(v || '')}>
-                            <SelectTrigger className="w-full h-10 border text-text font-bold bg-dark3 border-border rounded-lg px-3">
-                              <SelectValue placeholder="Selecciona un comité">
-                                {committeesList.find(c => c.id === editCommitteeId || c.name === editCommitteeId)?.name || editingVolunteer?.committee || "Selecciona un comité"}
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent className="bg-dark2 border-border text-text font-bold z-[120]">
-                              {committeesList.map(c => (
-                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-text">Estaca</label>
-                            <Input
-                              value={editStake}
-                              onChange={(e) => setEditStake(e.target.value)}
-                              placeholder="Ej: Estaca Central"
-                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-text">Barrio / Rama</label>
-                            <Input
-                              value={editWard}
-                              onChange={(e) => setEditWard(e.target.value)}
-                              placeholder="Ej: Barrio 1"
-                              className="bg-dark3 border-border text-text text-sm h-10 font-bold placeholder:text-text-dim focus:border-[#4d7cfe] rounded-lg"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="pt-6 flex items-center gap-3 border-t border-border">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setDrawerMode('view')}
-                          className="flex-1 h-11 rounded-full text-xs font-bold border-border text-text bg-dark3 hover:bg-dark"
-                        >
-                          Cancelar
-                        </Button>
-                        <Button
-                          type="submit"
-                          disabled={isSavingProfile}
-                          className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full h-11 text-xs font-bold shadow-lg active:scale-95 transition-all"
-                        >
-                          {isSavingProfile ? 'Guardando...' : 'Guardar Cambios'}
-                        </Button>
-                      </div>
-                    </form>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            )}
-            </div>
-          </div>
-        </div>
       </div>
 
       <Toast
@@ -2285,11 +1991,130 @@ export default function ShiftsPage() {
         volunteer={reassignVolunteer}
         sourceDayKey={reassignSourceDayKey}
         sourceShiftId={reassignSourceShiftId}
-        onSuccess={(msg) => showToast(msg, 'success')}
+        onSuccess={(msg, undoAction) => showToast(msg, 'success', undoAction ? 'Deshacer' : undefined, undoAction)}
         onError={(err) => showToast(err, 'error')}
         mode="coordinator"
       />
 
+      {/* Modal Ajustar Hora de Salida (Alerta de Siguiente Día) */}
+      {adjustCheckoutModal.isOpen && adjustCheckoutModal.volunteer && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-dark2 border border-border rounded-3xl p-6 w-full max-w-md space-y-5 shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-border pb-4">
+              <h3 className="text-base font-bold text-amber-400 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[22px]">warning</span>
+                Ajustar Hora de Salida (Mismo Día)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setAdjustCheckoutModal({ isOpen: false, shiftRecord: null, volunteer: null })}
+                className="text-text-dim hover:text-text text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-3.5 bg-amber-500/15 border border-amber-500/30 rounded-2xl text-amber-300 text-xs font-inter leading-relaxed">
+                <p className="font-extrabold text-amber-200 mb-1 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px]">info</span>
+                  Se detectó marcación de salida al día siguiente
+                </p>
+                <p className="text-[11px] text-amber-300/90">
+                  La hora de entrada no se modificará. Elige la hora de salida correspondiente al mismo día de servicio para corregir los reportes e historial.
+                </p>
+              </div>
+
+              <div className="p-4 bg-dark3 border border-border rounded-2xl space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-text-dim font-medium">Voluntario:</span>
+                  <span className="font-bold text-text">{adjustCheckoutModal.volunteer.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-dim font-medium">Entrada (Fija, No modificable):</span>
+                  <span className="font-bold text-emerald-400">{adjustCheckoutModal.checkInTimeStr || 'Registrada'}</span>
+                </div>
+                <div className="flex justify-between border-t border-border/40 pt-1.5">
+                  <span className="text-text-dim font-medium">Salida Actual (Siguiente Día):</span>
+                  <span className="font-bold text-rose-400">{adjustCheckoutModal.checkOutTimeStr} ({adjustCheckoutModal.elapsed?.text})</span>
+                </div>
+              </div>
+
+              {/* Presets rápidos */}
+              <div>
+                <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block mb-2">
+                  Selección Rápida de Salida (Mismo Día):
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: '12:00 PM', val: '12:00' },
+                    { label: '03:00 PM', val: '15:00' },
+                    { label: '06:00 PM', val: '18:00' },
+                    { label: '08:00 PM', val: '20:00' },
+                    { label: '10:00 PM', val: '22:00' },
+                    { label: '11:00 PM', val: '23:00' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => setAdjustCheckoutTargetTime(preset.val)}
+                      className={`py-2 px-1 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                        adjustCheckoutTargetTime === preset.val
+                          ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md'
+                          : 'bg-dark3 border-border text-text hover:bg-dark3/80'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block mb-1.5">
+                  Motivo de la corrección:
+                </label>
+                <input
+                  type="text"
+                  value={adjustCheckoutReason}
+                  onChange={(e) => setAdjustCheckoutReason(e.target.value)}
+                  placeholder="Ej: Olvidó marcar salida y cerró sesión al día siguiente"
+                  className="w-full bg-dark3 border border-border text-text text-xs p-3 rounded-xl focus:outline-none focus:border-[#4d7cfe]"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-border flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setAdjustCheckoutModal({ isOpen: false, shiftRecord: null, volunteer: null })}
+                  className="flex-1 h-11 rounded-full text-xs font-bold border-border text-text bg-dark3 hover:bg-dark cursor-pointer"
+                >
+                  Cancelar
+                </Button>
+
+                <Button
+                  type="button"
+                  disabled={isSubmittingAdjustCheckout}
+                  onClick={handleConfirmAdjustCheckout}
+                  className="flex-1 bg-amber-500 hover:bg-amber-600 text-black font-extrabold rounded-full h-11 text-xs shadow-lg active:scale-95 transition-all cursor-pointer"
+                >
+                  {isSubmittingAdjustCheckout ? 'Guardando...' : 'Guardar Ajuste de Salida'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.isVisible}
+        actionLabel={toast.actionLabel}
+        onAction={toast.onAction}
+        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
+      />
     </motion.div>
   );
 }

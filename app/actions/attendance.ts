@@ -1,6 +1,7 @@
 'use server'
 
 import crypto from "crypto";
+import { createActivityLog } from "./activity-actions";
 import { createClient, getAdminClient } from "@/lib/supabase/server";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -430,6 +431,73 @@ export async function checkOutVolunteer(shiftId: string) {
   }
 }
 
+// 4c. Ajustar hora de salida (alerta de siguiente día)
+export async function adjustCheckoutTimeAction({
+  shiftId,
+  newCheckOutIso,
+  reason
+}: {
+  shiftId: string;
+  newCheckOutIso: string;
+  reason?: string;
+}) {
+  try {
+    const supabase = getAdminClient();
+
+    const { data: shift, error: fetchErr } = await supabase
+      .from('shifts')
+      .select('*, volunteers(first_name, last_name, phone)')
+      .eq('id', shiftId)
+      .maybeSingle();
+
+    if (fetchErr || !shift) {
+      return { error: "No se encontró el registro del turno para ajustar." };
+    }
+
+    const { error: updateErr } = await supabase
+      .from('shifts')
+      .update({
+        checked_in: true,
+        checked_out: true,
+        checked_out_at: newCheckOutIso
+      })
+      .eq('id', shiftId);
+
+    if (updateErr) {
+      return { error: updateErr.message };
+    }
+
+    const volName = shift.volunteers
+      ? `${shift.volunteers.first_name || ''} ${shift.volunteers.last_name || ''}`.trim()
+      : 'Voluntario';
+
+    const oldDateStr = shift.checked_out_at
+      ? new Date(shift.checked_out_at).toLocaleTimeString('es-NI', { timeZone: 'America/Managua', hour: '2-digit', minute: '2-digit', hour12: true })
+      : 'Desconocido';
+    const newDateStr = new Date(newCheckOutIso).toLocaleTimeString('es-NI', { timeZone: 'America/Managua', hour: '2-digit', minute: '2-digit', hour12: true });
+
+    await createActivityLog({
+      userName: 'Coordinación',
+      userRole: 'Admin',
+      actionType: 'Edición',
+      description: `Ajustó hora de salida de ${volName} (${shift.day_key} ${shift.shift_key}): de ${oldDateStr} a ${newDateStr}`,
+      details: reason ? `Motivo: ${reason}` : 'Ajuste de marcación de salida al mismo día',
+      targetId: shift.volunteer_id
+    });
+
+    try {
+      revalidatePath('/shifts');
+      revalidatePath('/reports');
+      revalidatePath('/volunteers');
+    } catch {}
+
+    return { success: true, message: `Hora de salida ajustada exitosamente a las ${newDateStr}` };
+  } catch (err: any) {
+    console.error("Error adjusting checkout time:", err);
+    return { error: err.message || "Error al ajustar hora de salida" };
+  }
+}
+
 // 4b. Reassign a shift to a new day and shift key
 export async function reassignVolunteerShift(shiftId: string, newDayKey: string, newShiftKey: string) {
   try {
@@ -505,7 +573,7 @@ export async function getHistoricalAttendanceLogs(limit = 150) {
         shiftKey: s.shift_key,
         timestamp: s.checked_in_at || new Date().toISOString(),
         type: 'success' as const,
-        isCompleted: !!s.checked_out
+        isCompleted: Boolean(s.checked_out)
       };
     });
   } catch (err) {

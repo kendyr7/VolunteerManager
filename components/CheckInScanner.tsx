@@ -19,6 +19,7 @@ import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { createClient } from "@/lib/supabase/client";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
+import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 
 interface CheckInScannerProps {
   coordinatorId: string;
@@ -94,13 +95,32 @@ export function CheckInScanner({
   } | null>(null);
   const [history, setHistory] = useState<ScanEntry[]>([]);
 
-  // Load persistent scan history from localStorage on component mount
+  // Unified Profile Drawer state
+  const [drawerVolunteer, setDrawerVolunteer] = useState<any>(null);
+  const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
+
+  const handleOpenVolunteerProfile = (vol: any) => {
+    if (!vol) return;
+    const volId = vol.volunteerId || vol.volunteer_id || vol.id;
+    const match = rawVolunteers.find((v: any) => v.id === volId || v.name === vol.volunteer || v.name === vol.name);
+    setDrawerVolunteer(match || vol);
+    setIsProfileDrawerOpen(true);
+  };
+
+  // Load persistent scan history from localStorage on component mount (only keep current day session)
   useEffect(() => {
     try {
       const saved = localStorage.getItem("volunteer_manager_scan_history");
       if (saved) {
         const parsed = JSON.parse(saved);
-        setHistory(parsed.map((item: any) => ({
+        const todayStr = new Date().toDateString();
+        const todayItems = parsed.filter((item: any) => {
+          if (!item.timestamp) return false;
+          const itemDate = new Date(item.timestamp);
+          return !isNaN(itemDate.getTime()) && itemDate.toDateString() === todayStr;
+        });
+
+        setHistory(todayItems.map((item: any) => ({
           ...item,
           timestamp: new Date(item.timestamp)
         })));
@@ -131,12 +151,14 @@ export function CheckInScanner({
   };
 
   let checkedOutMap: Record<string, boolean> = {};
+  let rawVolunteers: any[] = [];
   try {
     const coordCtx = useCoordinatorData();
     checkedOutMap = coordCtx.checkedOutMap || {};
+    rawVolunteers = coordCtx.rawVolunteers || [];
   } catch (e) {}
 
-  const [historyTab, setHistoryTab] = useState<'session' | 'db'>('session');
+  const [historyTab, setHistoryTab] = useState<'db' | 'session'>('db');
   const [dbHistory, setDbHistory] = useState<ScanEntry[]>([]);
   const [loadingDbHistory, setLoadingDbHistory] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -181,6 +203,7 @@ export function CheckInScanner({
         { event: '*', schema: 'public', table: 'shifts' },
         () => {
           fetchDbHistory();
+          if (refresh) refresh();
         }
       )
       .subscribe();
@@ -188,16 +211,34 @@ export function CheckInScanner({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchDbHistory]);
+  }, [fetchDbHistory, refresh]);
 
   const activeRawList = historyTab === 'session' ? history : dbHistory;
 
   const filteredList = useMemo(() => {
     return activeRawList.map(item => {
-      const isOutInContext = !!(checkedOutMap && (
+      let itemDayKey = item.dayKey;
+      let itemShiftKey = item.shiftKey;
+      if ((!itemDayKey || !itemShiftKey) && item.shiftDetail) {
+        const parts = item.shiftDetail.split(' - ');
+        if (parts.length >= 2) {
+          itemDayKey = itemDayKey || parts[0].trim();
+          itemShiftKey = itemShiftKey || parts[1].trim();
+        }
+      }
+
+      const dbMatch = dbHistory.find(dbItem =>
+        dbItem.id === item.id ||
+        (dbItem.volunteer.toLowerCase() === item.volunteer.toLowerCase() &&
+         dbItem.dayKey?.toLowerCase() === itemDayKey?.toLowerCase() &&
+         dbItem.shiftKey?.toLowerCase() === itemShiftKey?.toLowerCase())
+      );
+
+      const isOutInContext = item.isCompleted || (dbMatch && dbMatch.isCompleted) || !!(checkedOutMap && (
         checkedOutMap[item.id] ||
-        (item.dayKey && item.shiftKey && checkedOutMap[`${item.id}-${item.dayKey}-${item.shiftKey}`])
+        (itemDayKey && itemShiftKey && checkedOutMap[`${item.id}-${itemDayKey}-${itemShiftKey}`])
       ));
+
       if (isOutInContext) {
         return { ...item, isCompleted: true };
       }
@@ -216,7 +257,7 @@ export function CheckInScanner({
       }
       return true;
     });
-  }, [activeRawList, searchQuery, selectedDayFilter, checkedOutMap]);
+  }, [activeRawList, searchQuery, selectedDayFilter, checkedOutMap, dbHistory]);
 
   const uniqueDays = useMemo(() => {
     const daysSet = new Set<string>();
@@ -1299,6 +1340,18 @@ export function CheckInScanner({
                         />
                       )}
                     </button>
+
+                    {historyTab === 'session' && history.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearHistory}
+                        className="ml-auto text-[11px] font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Limpiar escaneos locales de esta sesión"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">delete</span>
+                        <span>Limpiar Historial Local</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Search Bar */}
@@ -1696,9 +1749,13 @@ export function CheckInScanner({
                                   entry.isCompleted ? 'bg-gray-400 dark:bg-gray-600' : 'bg-emerald-400 animate-pulse'
                                 }`} />
                                 <div className="flex flex-col min-w-0">
-                                  <span className={`font-inter font-bold text-[12px] truncate ${
-                                    entry.isCompleted ? 'text-gray-400 font-bold' : 'text-emerald-300 font-extrabold'
-                                  }`}>
+                                  <span
+                                    onClick={() => handleOpenVolunteerProfile(entry)}
+                                    className={`font-inter font-bold text-[12px] truncate cursor-pointer hover:underline hover:text-[#4d7cfe] ${
+                                      entry.isCompleted ? 'text-gray-400 font-bold' : 'text-emerald-300 font-extrabold'
+                                    }`}
+                                    title="Ver perfil completo del voluntario"
+                                  >
                                     {entry.type === 'error' ? '—' : entry.volunteer}
                                   </span>
                                   <span className={`font-inter font-bold text-[9px] leading-tight truncate ${
@@ -1818,6 +1875,14 @@ export function CheckInScanner({
         type="primary"
         onConfirm={handleConfirmCheckout}
         onCancel={() => setCheckoutModal({ isOpen: false, item: null })}
+      />
+
+      {/* Unified Volunteer Profile Drawer */}
+      <VolunteerProfileDrawer
+        isOpen={isProfileDrawerOpen}
+        onClose={() => setIsProfileDrawerOpen(false)}
+        volunteer={drawerVolunteer}
+        mode="coordinator"
       />
     </div>
   );

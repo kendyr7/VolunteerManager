@@ -249,3 +249,23 @@ export async function logImportActivityAction(
     return false;
   }
 }
+
+export async function fetchVolunteerShiftRecordsAction(volunteerId: string): Promise<{ success: boolean; shiftRecords: any[] }> {
+  try {
+    const supabase = await getAdminSupabase();
+    const { data, error } = await supabase
+      .from('shifts')
+      .select('*')
+      .eq('volunteer_id', volunteerId);
+
+    if (error) {
+      console.error("Error fetching volunteer shift records:", error);
+      return { success: false, shiftRecords: [] };
+    }
+
+    return { success: true, shiftRecords: data || [] };
+  } catch (err) {
+    console.error("Error in fetchVolunteerShiftRecordsAction:", err);
+    return { success: false, shiftRecords: [] };
+  }
+}

@@ -270,12 +270,8 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
 
         if (startTimeMs && endTimeMs && endTimeMs > startTimeMs) {
           const rawMins = Math.max(0, Math.round((endTimeMs - startTimeMs) / 60000));
-          // If checkout occurred > 16 hours later (e.g. multi-day test data or forgotten checkout), cap to standard shift hours
-          if (rawMins > 960) {
-            durationMinutes = shiftMeta.hours * 60;
-          } else {
-            durationMinutes = Math.min(rawMins, 720); // max 12 hours for a single shift
-          }
+          // Cap shift duration to official shift hours (4h or 5h for T4)
+          durationMinutes = Math.min(rawMins, shiftMeta.hours * 60);
         } else {
           // Default fallback to standard shift hours if checkout timestamp is not set
           durationMinutes = shiftMeta.hours * 60;
