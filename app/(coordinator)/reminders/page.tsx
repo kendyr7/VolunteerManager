@@ -8,6 +8,7 @@ import {
   generateReminderMessage,
   generateWaMeLink
 } from "@/lib/whatsapp";
+import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { sendShiftReminderAction } from "@/app/actions/whatsapp";
 import {
   getActiveEventDays,
@@ -2089,123 +2090,32 @@ export default function RemindersPage() {
           )}
         </AnimatePresence>
 
-        {/* Reasignar Turno Drawer */}
-        <div className={`fixed inset-0 z-[105] flex flex-col justify-end transition-all duration-300 ${isReassignSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-          <div
-            className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isReassignSheetOpen ? 'opacity-100' : 'opacity-0'}`}
-            onClick={() => setIsReassignSheetOpen(false)}
-          />
-
-          <div
-            className={`relative w-full md:w-[400px] md:mx-auto bg-dark2 border border-white/10 rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isReassignSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
-          >
-            <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
-            
-            <div className="p-6">
-              <div className="text-center mb-6">
-                <h3 className="text-xl font-bold text-text mb-1">Reasignar Turno</h3>
-                <p className="text-sm text-text-dim">Moviendo a {selectedVolunteers.size} voluntarios</p>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-bold text-text-dim tracking-widest uppercase mb-3 block">FECHA DESTINO</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {EVENT_DAYS.map((d, index) => {
-                      const isSelected = reassignDayKey === d.key;
-                      const dayAbbr = d.label.substring(0, 3);
-                      const bgColors = [
-                        'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
-                        'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
-                      ];
-                      const cardBg = bgColors[index % bgColors.length];
-                      
-                      return (
-                        <button
-                          key={d.key}
-                          onClick={() => setReassignDayKey(d.key)}
-                          className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-lg border transition-all bg-dark3 ${isSelected
-                            ? 'border-text text-text shadow-sm scale-105 z-10'
-                            : 'border-border text-text-dim opacity-70 hover:opacity-100'
-                            }`}
-                        >
-                          <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${cardBg} opacity-90`} />
-                          <span className={`font-inter font-bold text-[9px] uppercase tracking-widest ${isSelected ? 'text-text' : 'text-text-dim'}`}>
-                            {dayAbbr}
-                          </span>
-                          <span className="text-sm font-black leading-none mt-0.5 drop-shadow-sm">{d.dateNum}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <label className="text-[10px] font-bold text-text-dim tracking-widest uppercase mb-3 block">TURNO DESTINO</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {['T1', 'T2', 'T3', 'T4'].map((t) => {
-                      const isSelected = reassignShiftId === t;
-                      const capInfo = reassignDayKey ? getReassignCapacityInfo(reassignDayKey, t) : null;
-                      const isFull = capInfo?.isFull;
-
-                      return (
-                        <button
-                          key={t}
-                          disabled={!reassignDayKey}
-                          onClick={() => setReassignShiftId(t)}
-                          className={`flex flex-col items-center justify-center py-2.5 rounded-lg border text-sm font-bold transition-all relative ${
-                            !reassignDayKey ? 'bg-dark2 border-border text-text-dim opacity-50 cursor-not-allowed' :
-                            isFull
-                            ? 'bg-rose-500/15 border-rose-500/40 text-rose-400 hover:bg-rose-500/25'
-                            : isSelected
-                            ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-sm scale-105 z-10'
-                            : 'bg-dark3 border-border text-text hover:bg-dark3/80 hover:text-text'
-                            }`}
-                        >
-                          <span>{t}</span>
-                          {isFull && (
-                            <span className="text-[8px] font-extrabold text-rose-400 leading-none mt-0.5 uppercase tracking-wider">Lleno</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Warning message for full shift */}
-                {(() => {
-                  const currentCap = (reassignDayKey && reassignShiftId) ? getReassignCapacityInfo(reassignDayKey, reassignShiftId) : null;
-                  if (!currentCap?.isFull) return null;
-
-                  return (
-                    <div className="mt-4 p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-inter font-bold flex items-start gap-3 animate-in fade-in zoom-in-95">
-                      <span className="material-symbols-outlined text-[22px] text-rose-400 shrink-0">block</span>
-                      <div>
-                        <p className="text-rose-200 font-extrabold text-xs mb-1">Turno Lleno</p>
-                        <p className="text-[11px] text-rose-300/90 font-medium leading-relaxed">
-                          El turno <strong className="text-white">{reassignShiftId}</strong> del <strong className="text-white">{reassignDayKey}</strong> ya alcanzó la meta máxima para el comité de <strong className="text-white">{currentCap.committeeName}</strong> ({currentCap.currentCount}/{currentCap.maxReq} requeridos).
-                        </p>
-                        <p className="text-[11px] text-white font-bold mt-2">
-                          Por favor selecciona otra fecha u otro turno disponible para reasignar.
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div className="pt-4">
-                  <Button 
-                    onClick={handleBulkReassign}
-                    disabled={!reassignDayKey || !reassignShiftId || !!(reassignDayKey && reassignShiftId && getReassignCapacityInfo(reassignDayKey, reassignShiftId)?.isFull)}
-                    className="w-full bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-dark3 disabled:text-text-dim disabled:border-border text-white font-bold h-12 rounded-xl transition-all"
-                  >
-                    Confirmar Reasignación
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Reasignar Turno Modal Unificado */}
+        <ReassignShiftModal
+          isOpen={isReassignSheetOpen}
+          onClose={() => setIsReassignSheetOpen(false)}
+          volunteer={(() => {
+            const firstItem = Array.from(selectedVolunteers)[0];
+            if (!firstItem) return null;
+            if (typeof firstItem === 'string') {
+              const found = rawVolunteers.find((v: any) => v.id === firstItem);
+              if (found) {
+                return {
+                  id: found.id,
+                  name: found.name || `${found.first_name || ''} ${found.last_name || ''}`.trim() || 'Voluntario',
+                  committee: found.committee
+                };
+              }
+              return { id: firstItem, name: 'Voluntario Seleccionado' };
+            }
+            return firstItem as any;
+          })()}
+          sourceDayKey={selectedDayKey}
+          sourceShiftId={selectedShiftId}
+          onSuccess={(msg) => showToast(msg, 'success')}
+          onError={(err) => showToast(err, 'error')}
+          mode="coordinator"
+        />
 
         <Toast
           message={toast.message}

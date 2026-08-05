@@ -18,6 +18,7 @@ import {
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { createClient } from "@/lib/supabase/client";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
+import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 
 interface CheckInScannerProps {
   coordinatorId: string;
@@ -77,6 +78,7 @@ export function CheckInScanner({
   role,
   committeeName
 }: CheckInScannerProps) {
+  const { refresh } = useCoordinatorData();
   const [state, setState] = useState<ScannerState>('idle');
   const [mainView, setMainView] = useState<'scanner' | 'history'>('scanner');
   const [errorMsg, setErrorMsg] = useState("");
@@ -1563,121 +1565,25 @@ export function CheckInScanner({
         </div>
       </div>
 
-      {/* REASSIGN SHIFT MODAL DIALOG */}
-      {/* Reasignar Turno Drawer (Matching /shifts page drawer) */}
-      <div className={`fixed inset-0 z-[115] flex flex-col justify-end transition-all duration-300 ${reassignTarget ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-        <div
-          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${reassignTarget ? 'opacity-100' : 'opacity-0'}`}
-          onClick={() => setReassignTarget(null)}
-        />
-
-        <div
-          className={`relative w-full md:w-[440px] md:mx-auto bg-dark2 border border-white/10 rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out max-h-[90vh] ${reassignTarget ? 'translate-y-0' : 'translate-y-full'}`}
-        >
-          <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
-
-          <div className="p-6 overflow-y-auto space-y-6">
-            <div className="text-center">
-              <h3 className="text-xl font-bold text-text mb-1">Reasignar Turno</h3>
-              <p className="text-sm font-inter font-bold text-text-dim">Moviendo a {reassignTarget?.volunteerName}</p>
-              {reassignTarget?.committee && (
-                <span className="inline-block mt-2 px-3 py-1 rounded-full text-xs font-inter font-bold bg-[#4d7cfe]/20 text-[#8bb0ff] border border-[#4d7cfe]/30">
-                  {reassignTarget.committee}
-                </span>
-              )}
-            </div>
-
-            {reassignSuccessMsg ? (
-              <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 rounded-2xl text-xs font-bold font-inter text-center animate-in zoom-in-95">
-                ✓ {reassignSuccessMsg}
-              </div>
-            ) : (
-              <div className="space-y-5">
-                {/* FECHA DESTINO */}
-                <div>
-                  <label className="text-[10px] font-bold text-text-dim tracking-widest uppercase mb-3 block">FECHA DESTINO</label>
-                  <div className="grid grid-cols-4 gap-2 max-h-[180px] overflow-y-auto pr-1">
-                    {EVENT_DAYS.map((d, index) => {
-                      const isSelected = reassignDayKey.toLowerCase() === d.key.toLowerCase();
-                      const bgColors = [
-                        'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
-                        'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
-                      ];
-                      const cardBg = bgColors[index % bgColors.length];
-
-                      return (
-                        <button
-                          key={d.key}
-                          type="button"
-                          onClick={() => setReassignDayKey(d.key)}
-                          className={`relative overflow-hidden flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all bg-dark3 cursor-pointer ${isSelected
-                            ? 'border-text text-text shadow-sm scale-105 z-10'
-                            : 'border-border text-text-dim opacity-70 hover:opacity-100'
-                          }`}
-                        >
-                          <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${cardBg} opacity-90`} />
-                          <span className={`font-inter font-bold text-[9px] uppercase tracking-widest ${isSelected ? 'text-text' : 'text-text-dim'}`}>
-                            {d.label}
-                          </span>
-                          <span className="text-sm font-black leading-none mt-1 drop-shadow-sm">{d.dateNum}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* TURNO DESTINO */}
-                <div>
-                  <label className="text-[10px] font-bold text-text-dim tracking-widest uppercase mb-3 block">TURNO DESTINO</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {['T1', 'T2', 'T3', 'T4'].map((t) => {
-                      const isSelected = reassignShiftKey === t;
-
-                      return (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setReassignShiftKey(t)}
-                          className={`flex flex-col items-center justify-center py-3 rounded-xl border text-sm font-black transition-all cursor-pointer ${
-                            isSelected
-                            ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-md shadow-blue-500/20 scale-105 z-10'
-                            : 'bg-dark3 border-border text-text hover:bg-dark3/80 hover:text-text'
-                          }`}
-                        >
-                          <span>{t}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* ACTION BUTTONS */}
-                <div className="pt-3 flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setReassignTarget(null)}
-                    className="flex-1 bg-dark3 hover:bg-dark2 text-text border border-border font-bold text-xs font-inter h-11 rounded-full cursor-pointer transition-all active:scale-95"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmReassign}
-                    disabled={!reassignDayKey || !reassignShiftKey || isReassigning}
-                    className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-dark3 disabled:text-text-dim disabled:border-border text-white font-extrabold text-xs font-inter h-11 rounded-full transition-all shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    {isReassigning ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      "Confirmar Reasignación"
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* Reasignar Turno Modal Unificado */}
+      <ReassignShiftModal
+        isOpen={!!reassignTarget}
+        onClose={() => setReassignTarget(null)}
+        volunteer={reassignTarget ? {
+          id: (reassignTarget as any).volunteerId || (reassignTarget as any).shiftId || (scanResult as any)?.volunteerId || (scanResult as any)?.id || '',
+          name: reassignTarget.volunteerName,
+          committee: reassignTarget.committee
+        } : null}
+        sourceDayKey={reassignTarget?.dayKey}
+        sourceShiftId={reassignTarget?.shiftKey}
+        onSuccess={(msg) => {
+          refresh(true);
+        }}
+        onError={(err) => {
+          alert(err);
+        }}
+        mode="coordinator"
+      />
 
       {/* MOBILE BOTTOM SHEET DRAWER (Matching /shifts page mobile drawer 100%) */}
       <div className={`fixed inset-0 z-[110] md:hidden flex flex-col justify-end transition-all duration-300 ${mobileDrawerDayGroup ? 'pointer-events-auto' : 'pointer-events-none'}`}>

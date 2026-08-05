@@ -5,6 +5,7 @@ import { USER_TABLE_STYLES } from '@/app/(coordinator)/users/page';
 import { HighlightText } from '@/components/HighlightText';
 
 export interface SwipeableMobileCardProps {
+  id?: string;
   name: string;
   phone: string;
   searchTerm: string;
@@ -30,6 +31,7 @@ export interface SwipeableMobileCardProps {
 }
 
 export const SwipeableMobileCard: React.FC<SwipeableMobileCardProps> = React.memo(({
+  id,
   name,
   phone,
   searchTerm,
@@ -103,7 +105,7 @@ export const SwipeableMobileCard: React.FC<SwipeableMobileCardProps> = React.mem
   };
 
   return (
-    <div className={cn("relative overflow-hidden w-full bg-dark2 select-none border-b border-white/5", isSelected && "bg-[#4d7cfe]/5")}>
+    <div id={id} className={cn("relative overflow-hidden w-full bg-dark2 select-none border-b border-white/5", isSelected && "bg-[#4d7cfe]/5")}>
       <motion.div 
         style={{ background }}
         className="absolute inset-0 flex items-center justify-between px-5 pointer-events-none"

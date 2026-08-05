@@ -57,6 +57,7 @@ export interface VolunteerType {
 }
 
 interface VolunteerTableRowProps {
+  id?: string;
   vol: VolunteerType;
   appliedSearch: string;
   onEditClick: (vol: VolunteerType, startInEditMode?: boolean) => void;
@@ -65,6 +66,7 @@ interface VolunteerTableRowProps {
 }
 
 export const VolunteerTableRow = React.memo(function VolunteerTableRow({
+  id,
   vol,
   appliedSearch,
   onEditClick,
@@ -75,6 +77,7 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
 
   return (
     <div
+      id={id}
       className="flex items-center w-full px-5 py-3.5 hover:bg-white/[0.02] border-b border-white/5 transition-colors group cursor-pointer text-sm"
       onClick={() => onEditClick(vol)}
     >

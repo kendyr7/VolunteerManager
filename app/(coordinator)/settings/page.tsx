@@ -1725,7 +1725,7 @@ export default function SettingsPage() {
                   {/* Controles de Filtro y Búsqueda */}
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2 border-b border-border/50">
                     <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
-                      {['Todas', 'Creación', 'Edición', 'Reasignación', 'Seguridad', 'Configuración', 'Eliminación'].map((type) => (
+                      {['Todas', 'Creación', 'Edición', 'Reasignación', 'Deshacer', 'Seguridad', 'Configuración', 'Eliminación'].map((type) => (
                         <button
                           key={type}
                           type="button"
@@ -1771,12 +1771,14 @@ export default function SettingsPage() {
                   ) : (
                     <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1 scrollbar-thin">
                       {filteredLogs.map((log) => {
-                        const dateStr = new Date(log.created_at).toLocaleString('es-ES', {
+                        const dateStr = new Date(log.created_at).toLocaleString('es-NI', {
+                          timeZone: 'America/Managua',
                           day: '2-digit',
                           month: 'short',
                           year: 'numeric',
                           hour: '2-digit',
-                          minute: '2-digit'
+                          minute: '2-digit',
+                          hour12: true
                         });
 
                         let badgeColor = 'bg-[#4d7cfe]/10 text-[#3b66e0] dark:text-[#4d7cfe] border-[#4d7cfe]/30';
@@ -1791,6 +1793,9 @@ export default function SettingsPage() {
                         } else if (log.action_type === 'Reasignación') {
                           badgeColor = 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30';
                           iconName = 'sync_alt';
+                        } else if (log.action_type === 'Deshacer') {
+                          badgeColor = 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30';
+                          iconName = 'undo';
                         } else if (log.action_type === 'Seguridad') {
                           badgeColor = 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30';
                           iconName = 'key';

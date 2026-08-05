@@ -737,16 +737,29 @@ export default function VolunteersPage() {
 
                   {/* Cuerpo de la Tabla */}
                   <div className="divide-y divide-white/5">
-                    {filteredVolunteers.map((vol: VolunteerType) => (
-                      <VolunteerTableRow
-                        key={vol.id}
-                        vol={vol}
-                        appliedSearch={appliedSearch}
-                        onEditClick={handleEditClick}
-                        onResetPin={handleResetPin}
-                        onArchive={handleArchive}
-                      />
-                    ))}
+                    {(() => {
+                      const seenLetters = new Set<string>();
+                      return filteredVolunteers.map((vol: VolunteerType) => {
+                        const firstChar = (vol.name || '').charAt(0).toUpperCase();
+                        const letterKey = /^[A-Z]$/.test(firstChar) ? firstChar : '#';
+                        let anchorId: string | undefined = undefined;
+                        if (!seenLetters.has(letterKey)) {
+                          seenLetters.add(letterKey);
+                          anchorId = `letter-${letterKey}`;
+                        }
+                        return (
+                          <VolunteerTableRow
+                            key={vol.id}
+                            id={anchorId}
+                            vol={vol}
+                            appliedSearch={appliedSearch}
+                            onEditClick={handleEditClick}
+                            onResetPin={handleResetPin}
+                            onArchive={handleArchive}
+                          />
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               ) : (
@@ -763,40 +776,53 @@ export default function VolunteersPage() {
             <div className="bg-dark2 w-full pb-10">
               {filteredVolunteers.length > 0 ? (
                 <div className="divide-y divide-white/5 w-full">
-                  {filteredVolunteers.map((vol: VolunteerType) => (
-                    <SwipeableMobileCard
-                      key={vol.id}
-                      name={vol.name}
-                      phone={vol.phone}
-                      searchTerm={appliedSearch}
-                      onEdit={() => handleEditClick(vol)}
-
-                      onSwipeRight={() => handleResetPin(vol)}
-                      swipeRightIcon="lock_reset"
-                      swipeRightText="Reset PIN"
-                      swipeRightColorClass="text-amber-500"
-                      swipeRightBgColor="rgba(245, 158, 11, 0.2)"
-
-                      onSwipeLeft={() => handleArchive(vol)}
-                      swipeLeftIcon={vol.status === 'archived' ? 'unarchive' : 'archive'}
-                      swipeLeftText={vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
-                      swipeLeftColorClass="text-red"
-                      swipeLeftBgColor="rgba(254, 77, 151, 0.2)"
-
-                      badges={
-                        <>
-                          {vol.committee && (
-                            <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
-                              {vol.committee}
-                            </Badge>
-                          )}
-                          <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, vol.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)}>
-                            {vol.status === 'active' ? 'Activo' : 'Archivado'}
-                          </Badge>
-                        </>
+                  {(() => {
+                    const seenLetters = new Set<string>();
+                    return filteredVolunteers.map((vol: VolunteerType) => {
+                      const firstChar = (vol.name || '').charAt(0).toUpperCase();
+                      const letterKey = /^[A-Z]$/.test(firstChar) ? firstChar : '#';
+                      let anchorId: string | undefined = undefined;
+                      if (!seenLetters.has(letterKey)) {
+                        seenLetters.add(letterKey);
+                        anchorId = `letter-mobile-${letterKey}`;
                       }
-                    />
-                  ))}
+                      return (
+                        <SwipeableMobileCard
+                          key={vol.id}
+                          id={anchorId}
+                          name={vol.name}
+                          phone={vol.phone}
+                          searchTerm={appliedSearch}
+                          onEdit={() => handleEditClick(vol)}
+
+                          onSwipeRight={() => handleResetPin(vol)}
+                          swipeRightIcon="lock_reset"
+                          swipeRightText="Reset PIN"
+                          swipeRightColorClass="text-amber-500"
+                          swipeRightBgColor="rgba(245, 158, 11, 0.2)"
+
+                          onSwipeLeft={() => handleArchive(vol)}
+                          swipeLeftIcon={vol.status === 'archived' ? 'unarchive' : 'archive'}
+                          swipeLeftText={vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
+                          swipeLeftColorClass="text-red"
+                          swipeLeftBgColor="rgba(254, 77, 151, 0.2)"
+
+                          badges={
+                            <>
+                              {vol.committee && (
+                                <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
+                                  {vol.committee}
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, vol.status === 'active' ? USER_TABLE_STYLES.statusActive : USER_TABLE_STYLES.statusPending)}>
+                                {vol.status === 'active' ? 'Activo' : 'Archivado'}
+                              </Badge>
+                            </>
+                          }
+                        />
+                      );
+                    });
+                  })()}
                 </div>
               ) : (
                 <div className="px-5 py-8 text-center flex flex-col items-center">

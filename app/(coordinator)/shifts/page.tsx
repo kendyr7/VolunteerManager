@@ -22,6 +22,7 @@ import { cn, normalizeSearch } from "@/lib/utils";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { canEditShifts } from "@/lib/permissions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
+import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -515,8 +516,20 @@ export default function ShiftsPage() {
           
           if (viewMode === 'active') {
             const s = rawShiftsData.find(r => r.volunteer_id === vol.id && r.day_key === dateKey && r.shift_key === shiftId);
-            const isAssistanceRecord = !!(s && (s.checked_in || s.checked_out || s.checked_in_at || s.checked_out_at));
-            if (!isAssistanceRecord) continue;
+            const completedLocal = completedShiftsMap[`${vol.id}-${dateKey}-${shiftId}`];
+            const isCheckedIn = !!(s && (s.checked_in || s.checked_in_at)) || contextCheckedInMap[`${vol.id}-${dateKey}-${shiftId}`];
+            const isCheckedOut = !!(s && (s.checked_out || s.checked_out_at)) || !!completedLocal;
+
+            // En Turno: Muestra solo los que hicieron check-in y AÚN NO han completado/marcado salida.
+            // Si el día terminó pero no se le dio completar, isCheckedOut es false por lo que seguirá apareciendo.
+            if (!isCheckedIn || isCheckedOut) continue;
+          } else if (viewMode === 'completed') {
+            const s = rawShiftsData.find(r => r.volunteer_id === vol.id && r.day_key === dateKey && r.shift_key === shiftId);
+            const completedLocal = completedShiftsMap[`${vol.id}-${dateKey}-${shiftId}`];
+            const isCheckedOut = !!(s && (s.checked_out || s.checked_out_at)) || !!completedLocal;
+
+            // Completados: Muestra únicamente los que ya registraron salida
+            if (!isCheckedOut) continue;
           }
           
           result.push(vol);
@@ -525,7 +538,7 @@ export default function ShiftsPage() {
     }
 
     return result.sort((a, b) => a.committee.localeCompare(b.committee));
-  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, rawShiftsData, matchesFilters]);
+  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, rawShiftsData, matchesFilters, completedShiftsMap, contextCheckedInMap]);
 
   const handleStartEditProfile = (vol: VolunteerType) => {
     const parts = (vol.name || '').trim().split(/\s+/);
@@ -1151,7 +1164,11 @@ export default function ShiftsPage() {
                                         ) : null}
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                      <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
+                                        {vol.committee}
+                                      </Badge>
+
                                       {isCheckedIn && !isCheckedOut ? (
                                         <div className="flex items-center gap-1">
                                           <button
@@ -1159,7 +1176,7 @@ export default function ShiftsPage() {
                                               e.stopPropagation();
                                               setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, volunteer: vol, checkedInAt: shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
                                             }}
-                                            className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                                            className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
                                             title="Turno Completado"
                                           >
                                             <span className="material-symbols-outlined text-[12px]">task_alt</span>
@@ -1170,29 +1187,25 @@ export default function ShiftsPage() {
                                               e.stopPropagation();
                                               handleOpenReassign(vol, key, t);
                                             }}
-                                            className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                                            className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
                                             title="Reasignar Turno"
                                           >
                                             <span className="material-symbols-outlined text-[12px]">sync_alt</span>
                                             <span>Reasignar</span>
                                           </button>
                                         </div>
-                                      ) : isCheckedOut ? (
+                                      ) : (
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleOpenReassign(vol, key, t);
                                           }}
-                                          className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                                          className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
                                           title="Reasignar Turno"
                                         >
                                           <span className="material-symbols-outlined text-[12px]">sync_alt</span>
                                           <span>Reasignar</span>
                                         </button>
-                                      ) : (
-                                        <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
-                                          {vol.committee}
-                                        </Badge>
                                       )}
                                     </div>
                                   </div>
@@ -2262,135 +2275,20 @@ export default function ShiftsPage() {
         onCancel={() => setCheckoutModal({ isOpen: false, item: null })}
       />
 
-      {/* Reasignar Turno Drawer */}
-      <div className={`fixed inset-0 z-[115] flex flex-col justify-end transition-all duration-300 ${isReassignSheetOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-        <div
-          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isReassignSheetOpen ? 'opacity-100' : 'opacity-0'}`}
-          onClick={() => setIsReassignSheetOpen(false)}
-        />
-
-        <div
-          className={`relative w-full md:w-[420px] md:mx-auto bg-dark2 border border-white/10 rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isReassignSheetOpen ? 'translate-y-0' : 'translate-y-full'}`}
-        >
-          <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
-          
-          <div className="p-6">
-            <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-text mb-1">Reasignar Turno</h3>
-              <p className="text-sm font-inter font-bold text-text-dim">Moviendo a {reassignVolunteer?.name}</p>
-              {reassignVolunteer?.committee && (
-                <span className="inline-block mt-2 px-3 py-1 rounded-full text-xs font-inter font-bold bg-[#4d7cfe]/20 text-[#8bb0ff] border border-[#4d7cfe]/30">
-                  {reassignVolunteer.committee}
-                </span>
-              )}
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] font-bold text-text-dim tracking-widest uppercase mb-3 block">FECHA DESTINO</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {EVENT_DAYS.map((d, index) => {
-                    const isSelected = reassignDayKey === d.key;
-                    const dayAbbr = d.label.substring(0, 3);
-                    const bgColors = [
-                      'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
-                      'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
-                    ];
-                    const cardBg = bgColors[index % bgColors.length];
-                    
-                    return (
-                      <button
-                        key={d.key}
-                        onClick={() => setReassignDayKey(d.key)}
-                        className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-lg border transition-all bg-dark3 ${isSelected
-                          ? 'border-text text-text shadow-sm scale-105 z-10'
-                          : 'border-border text-text-dim opacity-70 hover:opacity-100'
-                          }`}
-                      >
-                        <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${cardBg} opacity-90`} />
-                        <span className={`font-inter font-bold text-[9px] uppercase tracking-widest ${isSelected ? 'text-text' : 'text-text-dim'}`}>
-                          {dayAbbr}
-                        </span>
-                        <span className="text-sm font-black leading-none mt-0.5 drop-shadow-sm">{d.dateNum}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <label className="text-[10px] font-bold text-text-dim tracking-widest uppercase mb-3 block">TURNO DESTINO</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {['T1', 'T2', 'T3', 'T4'].map((t) => {
-                    const isSelected = reassignShiftId === t;
-                    const capInfo = reassignDayKey ? getReassignCapacityInfo(reassignDayKey, t) : null;
-                    const isFull = capInfo?.isFull;
-
-                    return (
-                      <button
-                        key={t}
-                        disabled={!reassignDayKey}
-                        onClick={() => setReassignShiftId(t)}
-                        className={`flex flex-col items-center justify-center py-2.5 rounded-lg border text-sm font-bold transition-all relative ${
-                          !reassignDayKey ? 'bg-dark2 border-border text-text-dim opacity-50 cursor-not-allowed' :
-                          isFull
-                          ? 'bg-rose-500/15 border-rose-500/40 text-rose-400 hover:bg-rose-500/25'
-                          : isSelected
-                          ? 'bg-[#4d7cfe] border-[#4d7cfe] text-white shadow-sm scale-105 z-10'
-                          : 'bg-dark3 border-border text-text hover:bg-dark3/80 hover:text-text'
-                          }`}
-                      >
-                        <span>{t}</span>
-                        {isFull && (
-                          <span className="text-[8px] font-extrabold text-rose-400 leading-none mt-0.5 uppercase tracking-wider">Lleno</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Warning message for full shift */}
-              {(() => {
-                const currentCap = (reassignDayKey && reassignShiftId) ? getReassignCapacityInfo(reassignDayKey, reassignShiftId) : null;
-                if (!currentCap?.isFull) return null;
-
-                return (
-                  <div className="mt-4 p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-inter font-bold flex items-start gap-3 animate-in fade-in zoom-in-95">
-                    <span className="material-symbols-outlined text-[22px] text-rose-400 shrink-0">block</span>
-                    <div>
-                      <p className="text-rose-200 font-extrabold text-xs mb-1">Turno Lleno</p>
-                      <p className="text-[11px] text-rose-300/90 font-medium leading-relaxed">
-                        El turno <strong className="text-white">{reassignShiftId}</strong> del <strong className="text-white">{reassignDayKey}</strong> ya alcanzó la meta máxima para el comité de <strong className="text-white">{currentCap.committeeName}</strong> ({currentCap.currentCount}/{currentCap.maxReq} requeridos).
-                      </p>
-                      <p className="text-[11px] text-white font-bold mt-2">
-                        Por favor selecciona otra fecha u otro turno disponible para reasignar.
-                      </p>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="pt-4 flex gap-3">
-                <Button 
-                  variant="outline"
-                  onClick={() => setIsReassignSheetOpen(false)}
-                  className="flex-1 bg-dark3 border-border text-text hover:bg-dark2 font-bold h-12 rounded-xl"
-                >
-                  Cancelar
-                </Button>
-                <Button 
-                  onClick={handleConfirmReassignInShifts}
-                  disabled={!reassignDayKey || !reassignShiftId || !!(reassignDayKey && reassignShiftId && getReassignCapacityInfo(reassignDayKey, reassignShiftId)?.isFull)}
-                  className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-dark3 disabled:text-text-dim disabled:border-border text-white font-bold h-12 rounded-xl transition-all"
-                >
-                  Confirmar Reasignación
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Reasignar Turno Modal Unificado */}
+      <ReassignShiftModal
+        isOpen={isReassignSheetOpen}
+        onClose={() => {
+          setIsReassignSheetOpen(false);
+          setReassignVolunteer(null);
+        }}
+        volunteer={reassignVolunteer}
+        sourceDayKey={reassignSourceDayKey}
+        sourceShiftId={reassignSourceShiftId}
+        onSuccess={(msg) => showToast(msg, 'success')}
+        onError={(err) => showToast(err, 'error')}
+        mode="coordinator"
+      />
 
     </motion.div>
   );
