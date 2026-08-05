@@ -283,9 +283,12 @@ export default function ImportPage() {
           return;
         }
 
-        // Fetch current volunteers to pre-validate duplicate phone numbers
+        // Fetch active volunteers to pre-validate duplicate phone numbers (archived do not count as duplicates)
         const supabase = createClient();
-        const { data: existingVols } = await supabase.from('volunteers').select('phone');
+        const { data: existingVols } = await supabase
+          .from('volunteers')
+          .select('phone')
+          .neq('status', 'archived');
         const existingPhonesSet = new Set(existingVols?.map(v => formatE164(v.phone || '')) || []);
         setExistingPhones(existingPhonesSet);
 

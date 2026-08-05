@@ -28,7 +28,7 @@ import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { USER_TABLE_STYLES } from "../users/page";
 import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
-import { formatE164, validatePhone8Digits } from "@/lib/whatsapp";
+import { formatE164, validatePhone8Digits, getLocal8Digits } from "@/lib/whatsapp";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
 import { VolunteerProfileView } from "@/components/VolunteerProfileView";
@@ -217,6 +217,19 @@ export default function VolunteersPage() {
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [volunteerToArchive, setVolunteerToArchive] = useState<VolunteerType | null>(null);
+  const [unarchiveConflict, setUnarchiveConflict] = useState<{
+    isOpen: boolean;
+    targetVolunteer: VolunteerType | null;
+    activeVolunteer: { id: string; name: string; phone: string; stake?: string; ward?: string; committee?: string } | null;
+    newPhoneInput: string;
+    isEditingPhone: boolean;
+  }>({
+    isOpen: false,
+    targetVolunteer: null,
+    activeVolunteer: null,
+    newPhoneInput: '',
+    isEditingPhone: false,
+  });
   const [isEditingShifts, setIsEditingShifts] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
@@ -284,7 +297,47 @@ export default function VolunteersPage() {
   const handleArchiveVolunteer = async () => {
     if (!volunteerToArchive) return;
 
-    const newStatus = volunteerToArchive.status === 'archived' ? 'active' : 'archived';
+    const isUnarchiving = volunteerToArchive.status === 'archived';
+    const newStatus = isUnarchiving ? 'active' : 'archived';
+
+    // Validation when unarchiving: Check if another ACTIVE volunteer uses the same phone number
+    if (isUnarchiving) {
+      const targetPhoneE164 = formatE164(volunteerToArchive.phone);
+      const targetPhoneLocal = getLocal8Digits(volunteerToArchive.phone);
+
+      const { data: activeVols } = await supabase
+        .from('volunteers')
+        .select('id, first_name, last_name, phone, stake, neighborhood, committees(name)')
+        .neq('status', 'archived')
+        .neq('id', volunteerToArchive.id);
+
+      const existingActive = activeVols?.find(v => {
+        if (!v.phone) return false;
+        const vE164 = formatE164(v.phone);
+        const vLocal = getLocal8Digits(v.phone);
+        return (targetPhoneE164 && vE164 === targetPhoneE164) || (targetPhoneLocal && vLocal === targetPhoneLocal);
+      });
+
+      if (existingActive) {
+        setIsArchiveModalOpen(false);
+        setUnarchiveConflict({
+          isOpen: true,
+          targetVolunteer: volunteerToArchive,
+          activeVolunteer: {
+            id: existingActive.id,
+            name: `${existingActive.first_name || ''} ${existingActive.last_name || ''}`.trim(),
+            phone: existingActive.phone || volunteerToArchive.phone,
+            stake: existingActive.stake || '',
+            ward: existingActive.neighborhood || '',
+            committee: (existingActive as any).committees?.name || '',
+          },
+          newPhoneInput: volunteerToArchive.phone || '',
+          isEditingPhone: false,
+        });
+        setVolunteerToArchive(null);
+        return;
+      }
+    }
 
     const { error } = await supabase
       .from('volunteers')
@@ -303,6 +356,77 @@ export default function VolunteersPage() {
 
     setIsArchiveModalOpen(false);
     setVolunteerToArchive(null);
+  };
+
+  const handleSwapAndActivate = async () => {
+    if (!unarchiveConflict.targetVolunteer || !unarchiveConflict.activeVolunteer) return;
+
+    // 1. Archive current active volunteer
+    const { error: archiveErr } = await supabase
+      .from('volunteers')
+      .update({ status: 'archived' })
+      .eq('id', unarchiveConflict.activeVolunteer.id);
+
+    if (archiveErr) {
+      showToast("Error al archivar el voluntario activo actual.", "error");
+      return;
+    }
+
+    // 2. Unarchive target volunteer
+    const { error: unarchiveErr } = await supabase
+      .from('volunteers')
+      .update({ status: 'active' })
+      .eq('id', unarchiveConflict.targetVolunteer.id);
+
+    if (unarchiveErr) {
+      showToast("Error al desarchivar el voluntario.", "error");
+      return;
+    }
+
+    showToast(`Se archivó a "${unarchiveConflict.activeVolunteer.name}" y se activó a "${unarchiveConflict.targetVolunteer.name}".`, "success");
+    setUnarchiveConflict(prev => ({ ...prev, isOpen: false }));
+    await refresh(true);
+  };
+
+  const handleUpdatePhoneAndActivate = async () => {
+    if (!unarchiveConflict.targetVolunteer) return;
+
+    const phoneValidation = validatePhone8Digits(unarchiveConflict.newPhoneInput);
+    if (!phoneValidation.isValid) {
+      showToast(phoneValidation.error || "El número debe tener 8 dígitos.", "error");
+      return;
+    }
+
+    const sanitizedPhone = phoneValidation.formatted;
+
+    const { data: existingActive } = await supabase
+      .from('volunteers')
+      .select('id, first_name, last_name')
+      .eq('phone', sanitizedPhone)
+      .neq('status', 'archived')
+      .neq('id', unarchiveConflict.targetVolunteer.id)
+      .maybeSingle();
+
+    if (existingActive) {
+      showToast(`El teléfono ${sanitizedPhone} ya pertenece al voluntario activo "${existingActive.first_name} ${existingActive.last_name}".`, "error");
+      return;
+    }
+
+    const { error } = await supabase
+      .from('volunteers')
+      .update({
+        phone: sanitizedPhone,
+        status: 'active'
+      })
+      .eq('id', unarchiveConflict.targetVolunteer.id);
+
+    if (error) {
+      showToast("Error al actualizar y desarchivar voluntario.", "error");
+    } else {
+      showToast(`Teléfono actualizado a ${sanitizedPhone} y voluntario desarchivado exitosamente.`, "success");
+      setUnarchiveConflict(prev => ({ ...prev, isOpen: false }));
+      await refresh(true);
+    }
   };
 
   // Días reales del evento (Sep 10-26, sin domingos)
@@ -426,6 +550,21 @@ export default function VolunteersPage() {
 
     setIsSavingProfile(true);
     const supabase = createClient();
+
+    // Check if another active volunteer already uses this phone number
+    const { data: existingActive } = await supabase
+      .from('volunteers')
+      .select('id, first_name, last_name')
+      .eq('phone', sanitizedPhone)
+      .neq('status', 'archived')
+      .neq('id', editingVolunteer.id)
+      .maybeSingle();
+
+    if (existingActive) {
+      showToast(`Ya existe un voluntario activo ("${existingActive.first_name} ${existingActive.last_name}") con el teléfono ${sanitizedPhone}.`, "error");
+      setIsSavingProfile(false);
+      return;
+    }
 
     const fullName = `${trimmedFirstName} ${trimmedLastName}`.trim();
     const commObj = committeesList.find(c => c.id === editCommitteeId || c.name === editCommitteeId);
@@ -809,6 +948,11 @@ export default function VolunteersPage() {
 
                           badges={
                             <>
+                              {vol.age != null && vol.age > 0 && vol.age < 18 && (
+                                <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-[9px] font-extrabold px-1.5 py-0">
+                                  Menor ({vol.age}a)
+                                </Badge>
+                              )}
                               {vol.committee && (
                                 <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
                                   {vol.committee}
@@ -1152,6 +1296,139 @@ export default function VolunteersPage() {
         onConfirm={handleArchiveVolunteer}
         onCancel={() => setIsArchiveModalOpen(false)}
       />
+
+      {/* Modal de Resolución de Conflicto de Desarchivado */}
+      <AnimatePresence>
+        {unarchiveConflict.isOpen && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              onClick={() => setUnarchiveConflict(prev => ({ ...prev, isOpen: false }))}
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative bg-dark2 border border-border rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 text-text z-10"
+            >
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-2xl shrink-0">
+                  <span className="material-symbols-outlined text-[28px]">warning</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-text leading-tight">
+                    Conflicto al Desarchivar
+                  </h3>
+                  <p className="text-xs text-text-dim mt-1 font-inter leading-relaxed">
+                    El número <strong className="text-text font-bold">{unarchiveConflict.activeVolunteer?.phone}</strong> pertenece al voluntario activo <strong className="text-amber-600 dark:text-amber-400 font-bold">{unarchiveConflict.activeVolunteer?.name}</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-dark3/80 dark:bg-dark3/40 border border-border/80 rounded-2xl p-4 space-y-3 text-xs font-inter">
+                {/* Target (Archived) Volunteer details */}
+                <div className="space-y-1 pb-3 border-b border-border/80">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-extrabold text-text-dim">Registro Archivado (A activar)</span>
+                    <Badge variant="outline" className="text-[9px] bg-dark3 text-text border-border font-bold">Archivado</Badge>
+                  </div>
+                  <p className="font-bold text-text text-sm">{unarchiveConflict.targetVolunteer?.name}</p>
+                  <p className="text-[11px] text-text-dim font-medium">
+                    Comité: <span className="text-text font-bold">{unarchiveConflict.targetVolunteer?.committee || 'Sin comité'}</span>
+                    {(unarchiveConflict.targetVolunteer?.ward || unarchiveConflict.targetVolunteer?.stake) && (
+                      <span> · {unarchiveConflict.targetVolunteer?.ward || ''} {unarchiveConflict.targetVolunteer?.stake ? `(${unarchiveConflict.targetVolunteer.stake})` : ''}</span>
+                    )}
+                  </p>
+                </div>
+
+                {/* Active Volunteer details in conflict */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-extrabold text-amber-600 dark:text-amber-400">Registro Activo Actual (En uso)</span>
+                    <Badge variant="outline" className="text-[9px] bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 font-bold">Activo</Badge>
+                  </div>
+                  <p className="font-bold text-amber-600 dark:text-amber-400 text-sm">{unarchiveConflict.activeVolunteer?.name}</p>
+                  <p className="text-[11px] text-text-dim font-medium">
+                    Comité: <span className="text-text font-bold">{unarchiveConflict.activeVolunteer?.committee || 'Sin comité'}</span>
+                    {(unarchiveConflict.activeVolunteer?.ward || unarchiveConflict.activeVolunteer?.stake) && (
+                      <span> · {unarchiveConflict.activeVolunteer?.ward || ''} {unarchiveConflict.activeVolunteer?.stake ? `(${unarchiveConflict.activeVolunteer.stake})` : ''}</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {!unarchiveConflict.isEditingPhone ? (
+                <div className="space-y-2.5 pt-2">
+                  <p className="text-xs font-bold text-text-dim">¿Cómo deseas resolver este conflicto?</p>
+                  
+                  {/* Option 1: Swap & Activate */}
+                  <Button
+                    onClick={handleSwapAndActivate}
+                    className="w-full bg-amber-500 hover:bg-amber-600 text-white h-11 rounded-xl text-xs font-bold font-inter transition-all flex items-center justify-center gap-2 shadow-md active:scale-98 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">swap_horiz</span>
+                    Reemplazar: Archivar el activo actual y activar este
+                  </Button>
+
+                  {/* Option 2: Change phone */}
+                  <Button
+                    variant="outline"
+                    onClick={() => setUnarchiveConflict(prev => ({ ...prev, isEditingPhone: true }))}
+                    className="w-full bg-dark3 border-border text-text hover:bg-dark3/80 h-11 rounded-xl text-xs font-bold font-inter transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">edit</span>
+                    Asignar nuevo número a este registro para activar ambos
+                  </Button>
+
+                  {/* Option 3: Cancel */}
+                  <Button
+                    variant="ghost"
+                    onClick={() => setUnarchiveConflict(prev => ({ ...prev, isOpen: false }))}
+                    className="w-full text-text-dim hover:text-text h-10 text-xs font-bold font-inter cursor-pointer"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-text">Nuevo Número de Teléfono (8 dígitos)</label>
+                    <Input
+                      value={unarchiveConflict.newPhoneInput}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 8);
+                        setUnarchiveConflict(prev => ({ ...prev, newPhoneInput: val }));
+                      }}
+                      placeholder="Ej: 88881111"
+                      className="bg-dark3 border-border text-text text-sm h-11 font-bold rounded-xl placeholder:text-text-dim"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setUnarchiveConflict(prev => ({ ...prev, isEditingPhone: false }))}
+                      className="flex-1 h-10 text-xs font-bold border-border bg-dark3 text-text rounded-xl cursor-pointer"
+                    >
+                      Volver
+                    </Button>
+                    <Button
+                      onClick={handleUpdatePhoneAndActivate}
+                      className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white h-10 text-xs font-bold rounded-xl shadow-md cursor-pointer"
+                    >
+                      Guardar y Activar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <RealtimeDebugOverlay />
     </motion.div>

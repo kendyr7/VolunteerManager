@@ -82,8 +82,13 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
       onClick={() => onEditClick(vol)}
     >
       <div className="flex-1 min-w-0 pr-4">
-        <p className={USER_TABLE_STYLES.name}>
+        <p className={cn(USER_TABLE_STYLES.name, "flex items-center gap-2 flex-wrap")}>
           <HighlightText text={vol.name} term={appliedSearch} />
+          {vol.age != null && vol.age > 0 && vol.age < 18 && (
+            <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-[10px] font-extrabold px-1.5 py-0">
+              Menor ({vol.age}a)
+            </Badge>
+          )}
         </p>
       </div>
       <div className="w-32 text-center font-inter font-bold text-[13px] text-text-dim shrink-0">

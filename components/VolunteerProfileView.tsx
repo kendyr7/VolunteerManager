@@ -428,6 +428,12 @@ export function VolunteerProfileView({
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+          {volunteer.age != null && volunteer.age > 0 && volunteer.age < 18 && (mode === 'coordinator' || userRole !== 'Lector') && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30 shadow-sm animate-pulse">
+              <span className="material-symbols-outlined text-[13px]">child_care</span>
+              Menor de edad ({volunteer.age} años)
+            </span>
+          )}
           {volunteer.committee && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 shadow-sm">
               <span className="material-symbols-outlined text-[13px]">groups</span>

@@ -81,6 +81,15 @@ export function validatePhone8Digits(phone: string, defaultCountryCode: string =
   };
 }
 
+export function getLocal8Digits(phone: string): string {
+  if (!phone) return '';
+  const digitsOnly = phone.replace(/\D/g, '');
+  if (digitsOnly.length === 8) return digitsOnly;
+  if (digitsOnly.startsWith('505') && digitsOnly.length === 11) return digitsOnly.slice(3);
+  if (digitsOnly.length > 8) return digitsOnly.slice(-8);
+  return digitsOnly;
+}
+
 export function formatPhoneNumber(phone: string): string {
   const e164 = formatE164(phone);
   return e164.replace('+', '');

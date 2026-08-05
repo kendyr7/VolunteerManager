@@ -59,6 +59,21 @@ export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast
     }
 
     const sanitizedPhone = phoneValidation.formatted;
+
+    // Check if an active volunteer with the same phone number already exists
+    const { data: existingActive } = await supabase
+      .from('volunteers')
+      .select('id, first_name, last_name')
+      .eq('phone', sanitizedPhone)
+      .neq('status', 'archived')
+      .maybeSingle();
+
+    if (existingActive) {
+      showToast(`Ya existe un voluntario activo ("${existingActive.first_name} ${existingActive.last_name}") con el teléfono ${sanitizedPhone}.`, "error");
+      setIsSubmitting(false);
+      return;
+    }
+
     const pin = String(Math.floor(1000 + Math.random() * 9000));
 
     const { error } = await supabase
