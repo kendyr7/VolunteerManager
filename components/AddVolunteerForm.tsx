@@ -141,8 +141,8 @@ export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast
             <Input required className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Managua Sur" value={newStake} onChange={(e) => setNewStake(e.target.value)} />
         </div>
         <div className="space-y-2">
-            <label className="block text-xs font-extrabold text-text">Barrio</label>
-            <Input required className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Barrio 1" value={newWard} onChange={(e) => setNewWard(e.target.value)} />
+            <label className="block text-xs font-extrabold text-text">Barrio / Rama</label>
+            <Input required className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Barrio / Rama 1" value={newWard} onChange={(e) => setNewWard(e.target.value)} />
         </div>
         <div className="space-y-2">
             <label className="block text-xs font-extrabold text-text">Comité</label>

@@ -145,7 +145,7 @@ export function VolunteerProfileClient({
 
               {/* Barrio */}
               <div className="space-y-2">
-                <label className="block mb-2 text-xs font-normal text-text">Barrio / Congregación</label>
+                <label className="block mb-2 text-xs font-normal text-text">Barrio / Rama</label>
                 <div className="w-full h-10 px-3 rounded-sm border border-white/5 bg-dark/50 text-text-dim text-sm font-inter font-bold flex items-center cursor-not-allowed">
                   {volunteer.neighborhood || "No especificado"}
                 </div>

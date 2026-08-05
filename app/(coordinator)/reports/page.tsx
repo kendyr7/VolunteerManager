@@ -367,7 +367,7 @@ export default function ReportsPage() {
     let filename = "";
 
     if (activeTab === 'history') {
-      headers = ["Nombre Voluntario", "Teléfono", "Comité", "Barrio", "Estaca", "Fecha", "Turno", "Horario", "Duración", "Estado"];
+      headers = ["Nombre Voluntario", "Teléfono", "Comité", "Barrio / Rama", "Estaca", "Fecha", "Turno", "Horario", "Duración", "Estado"];
       rows = filteredItems.map(item => [
         item.volunteerName,
         item.phone,
@@ -384,7 +384,7 @@ export default function ReportsPage() {
       ]);
       filename = `historial_asistencia_${new Date().toISOString().split('T')[0]}.csv`;
     } else {
-      headers = ["Nombre Voluntario", "Teléfono", "Comité", "Barrio", "Estaca", "Turnos Totales", "Asistidos", "Ausencias", "Fiabilidad (%)", "Total Tiempo"];
+      headers = ["Nombre Voluntario", "Teléfono", "Comité", "Barrio / Rama", "Estaca", "Turnos Totales", "Asistidos", "Ausencias", "Fiabilidad (%)", "Total Tiempo"];
       rows = volunteerRanking.map(v => [
         v.name,
         v.phone,
@@ -519,7 +519,7 @@ export default function ReportsPage() {
       {/* Neighborhood Select using Shadcn Select */}
       {data?.uniqueNeighborhoods && data.uniqueNeighborhoods.length > 0 && (
         <div>
-          <label className="text-[10px] font-inter font-bold uppercase text-text-dim mb-2 block">Barrio / Colonia</label>
+          <label className="text-[10px] font-inter font-bold uppercase text-text-dim mb-2 block">Barrio / Rama</label>
           <Select
             value={selectedNeighborhoods[0] || ""}
             onValueChange={(val) => {
@@ -527,10 +527,10 @@ export default function ReportsPage() {
             }}
           >
             <SelectTrigger className="w-full h-11 bg-dark2 border-border text-xs text-text rounded-xl px-3 font-medium font-inter hover:border-border-strong transition-all outline-none">
-              <SelectValue placeholder="Todos los barrios" />
+              <SelectValue placeholder="Todos los barrios / ramas" />
             </SelectTrigger>
             <SelectContent className="bg-dark2 border-border text-text font-inter text-xs z-[200]">
-              <SelectItem value="">Todos los barrios</SelectItem>
+              <SelectItem value="">Todos los barrios / ramas</SelectItem>
               {data.uniqueNeighborhoods.map(n => (
                 <SelectItem key={n} value={n}>
                   {n}
@@ -968,7 +968,7 @@ export default function ReportsPage() {
                         <tr>
                           <th className="px-5 py-4 font-inter font-bold">Voluntario</th>
                           <th className="px-4 py-4 font-inter font-bold">Comité</th>
-                          <th className="px-4 py-4 font-inter font-bold">Barrio / Estaca</th>
+                          <th className="px-4 py-4 font-inter font-bold">Barrio / Rama · Estaca</th>
                           <th className="px-4 py-4 text-center font-inter font-bold">Fecha y Turno</th>
                           <th className="px-4 py-4 text-center font-inter font-bold">Horas</th>
                           <th className="px-5 py-4 text-right font-inter font-bold">Estado</th>

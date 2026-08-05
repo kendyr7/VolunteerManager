@@ -727,7 +727,7 @@ export default function VolunteersPage() {
                   {/* Encabezado Fijo de Tabla */}
                   <div className="flex items-center w-full px-5 py-3.5 bg-dark3 sticky top-0 z-20 text-[10px] font-bold text-text-dim uppercase tracking-wider border-b border-white/10">
                     <div className="flex-1 min-w-0 pr-4">Nombre y Apellido</div>
-                    <div className="w-32 text-center shrink-0">Barrio</div>
+                    <div className="w-32 text-center shrink-0">Barrio / Rama</div>
                     <div className="w-32 text-center shrink-0">Estaca</div>
                     <div className="w-40 text-center shrink-0">Comité</div>
                     <div className="w-24 text-center shrink-0">Turnos</div>
@@ -1048,7 +1048,7 @@ export default function VolunteersPage() {
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-text">Barrio / Vecindario</label>
+                            <label className="text-xs font-extrabold text-text">Barrio / Rama</label>
                             <Input
                               value={editWard}
                               onChange={(e) => setEditWard(e.target.value)}

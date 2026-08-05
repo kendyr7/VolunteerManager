@@ -91,6 +91,10 @@ export default function ImportPage() {
     const isMyCommittee = match ? match.name.toLowerCase() === userComm.toLowerCase() : false;
     const isValidCommittee = isRoleAdmin || isMyCommittee;
 
+    const ageRaw = (vol.age || '').trim();
+    const wardTrimmed = (vol.ward || '').trim();
+    const stakeTrimmed = (vol.stake || '').trim();
+
     let errorMsg = '';
     if (!fullName) {
       errorMsg = "El nombre es obligatorio.";
@@ -98,6 +102,14 @@ export default function ImportPage() {
       errorMsg = "El número telefónico es obligatorio.";
     } else if (!phoneValidation.isValid) {
       errorMsg = phoneValidation.error || "El teléfono debe tener 8 dígitos.";
+    } else if (ageRaw && /\D/.test(ageRaw)) {
+      errorMsg = "No se aceptan letras ni caracteres en la Edad. Ingrese solo números.";
+    } else if (wardTrimmed && /^(barrio|rama)\b/i.test(wardTrimmed)) {
+      const matchWord = wardTrimmed.match(/^(barrio|rama)\b/i)?.[0] || 'Barrio/Rama';
+      errorMsg = `Remueva la palabra '${matchWord}' en el campo Barrio / Rama. Escriba solo el nombre.`;
+    } else if (stakeTrimmed && /^(estaca|distrito)\b/i.test(stakeTrimmed)) {
+      const matchWord = stakeTrimmed.match(/^(estaca|distrito)\b/i)?.[0] || 'Estaca';
+      errorMsg = `Remueva la palabra '${matchWord}' en el campo Estaca. Escriba solo el nombre.`;
     } else if (!vol.committeeName) {
       errorMsg = "El nombre del comité es obligatorio.";
     } else if (!match) {
@@ -155,7 +167,7 @@ export default function ImportPage() {
 
     // Row data — 7 data cols + 1 note col
     const headerRow = [
-      "Nombres y Apellidos", "Edad", "Barrio", "Estaca", "Teléfono", "Comité",
+      "Nombres y Apellidos", "Edad", "Barrio / Rama", "Estaca", "Teléfono", "Comité",
       "", // empty spacer col G
       "Nota",
     ];
@@ -615,7 +627,8 @@ export default function ImportPage() {
                             <th className="px-3 py-3 w-56">Nombre y Apellido</th>
                             <th className="px-2 py-3 text-center w-20">Edad</th>
                             <th className="px-3 py-3 w-40">Teléfono</th>
-                            <th className="px-3 py-3 w-52">Barrio / Estaca</th>
+                            <th className="px-3 py-3 w-36">Barrio / Rama</th>
+                            <th className="px-3 py-3 w-36">Estaca</th>
                             <th className="px-3 py-3 w-44">Comité</th>
                             <th className="px-4 py-3 text-center w-52">Estado</th>
                             <th className="px-2 py-3 text-center w-10"></th>
@@ -657,7 +670,12 @@ export default function ImportPage() {
                                     value={vol.age || ''}
                                     onChange={(e) => handleUpdateRow(originalIndex, { age: e.target.value })}
                                     placeholder="Edad"
-                                    className="w-full text-center bg-dark3/60 border border-border focus:border-[#4d7cfe] text-text text-[12px] font-bold font-inter rounded-lg px-1 py-1.5 outline-none transition-all"
+                                    className={cn(
+                                      "w-full text-center bg-dark3/60 border text-[12px] font-bold font-inter rounded-lg px-1 py-1.5 outline-none transition-all",
+                                      vol.error?.toLowerCase().includes('edad')
+                                        ? "border-rose-500/50 text-rose-500 focus:border-rose-500"
+                                        : "border-border text-text focus:border-[#4d7cfe]"
+                                    )}
                                   />
                                 </td>
 
@@ -677,24 +695,36 @@ export default function ImportPage() {
                                   />
                                 </td>
 
-                                {/* Barrio / Estaca */}
+                                {/* Barrio / Rama */}
                                 <td className="px-3 py-2.5">
-                                  <div className="flex gap-1.5">
-                                    <input
-                                      type="text"
-                                      value={vol.ward || ''}
-                                      onChange={(e) => handleUpdateRow(originalIndex, { ward: e.target.value })}
-                                      placeholder="Barrio"
-                                      className="w-1/2 bg-dark3/60 border border-border focus:border-[#4d7cfe] text-text text-[11px] font-bold font-inter rounded-lg px-2 py-1.5 outline-none transition-all"
-                                    />
-                                    <input
-                                      type="text"
-                                      value={vol.stake || ''}
-                                      onChange={(e) => handleUpdateRow(originalIndex, { stake: e.target.value })}
-                                      placeholder="Estaca"
-                                      className="w-1/2 bg-dark3/60 border border-border focus:border-[#4d7cfe] text-text text-[11px] font-bold font-inter rounded-lg px-2 py-1.5 outline-none transition-all"
-                                    />
-                                  </div>
+                                  <input
+                                    type="text"
+                                    value={vol.ward || ''}
+                                    onChange={(e) => handleUpdateRow(originalIndex, { ward: e.target.value })}
+                                    placeholder="Barrio / Rama"
+                                    className={cn(
+                                      "w-full bg-dark3/60 border text-text text-[11px] font-bold font-inter rounded-lg px-2 py-1.5 outline-none transition-all",
+                                      (vol.error?.toLowerCase().includes('barrio') || vol.error?.toLowerCase().includes('rama'))
+                                        ? "border-rose-500/50 text-rose-500 focus:border-rose-500"
+                                        : "border-border text-text focus:border-[#4d7cfe]"
+                                    )}
+                                  />
+                                </td>
+
+                                {/* Estaca */}
+                                <td className="px-3 py-2.5">
+                                  <input
+                                    type="text"
+                                    value={vol.stake || ''}
+                                    onChange={(e) => handleUpdateRow(originalIndex, { stake: e.target.value })}
+                                    placeholder="Estaca"
+                                    className={cn(
+                                      "w-full bg-dark3/60 border text-text text-[11px] font-bold font-inter rounded-lg px-2 py-1.5 outline-none transition-all",
+                                      (vol.error?.toLowerCase().includes('estaca') || vol.error?.toLowerCase().includes('distrito'))
+                                        ? "border-rose-500/50 text-rose-500 focus:border-rose-500"
+                                        : "border-border text-text focus:border-[#4d7cfe]"
+                                    )}
+                                  />
                                 </td>
 
                                 {/* Comité */}
@@ -861,7 +891,7 @@ export default function ImportPage() {
                                   type="text"
                                   value={vol.ward || ''}
                                   onChange={(e) => handleUpdateRow(originalIndex, { ward: e.target.value })}
-                                  placeholder="Barrio"
+                                  placeholder="Barrio / Rama"
                                   className="w-full bg-dark3/60 border border-border text-text text-xs font-bold rounded-lg px-2.5 py-1.5 outline-none"
                                 />
                               </div>

@@ -2170,7 +2170,7 @@ export default function ShiftsPage() {
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs font-extrabold text-text">Barrio / Vecindario</label>
+                            <label className="text-xs font-extrabold text-text">Barrio / Rama</label>
                             <Input
                               value={editWard}
                               onChange={(e) => setEditWard(e.target.value)}

@@ -349,30 +349,35 @@ export default function UsersPage() {
 
     setIsUpdating(true);
 
-    const supabase = createClient();
     let commId: string | null = null;
-
     if (newRole === 'Editor') {
       const targetComm = committeesList.find(c => c.name === newCommittee);
       if (targetComm) commId = targetComm.id;
     }
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        full_name: newName.trim(),
-        phone: sanitizedPhone,
-        role: newRole,
-        committee_id: commId
-      })
-      .eq('id', editingUser.id);
+    const { updateUserProfileAction } = await import('@/app/actions/user-actions');
+    const result = await updateUserProfileAction({
+      userId: editingUser.id,
+      fullName: newName.trim(),
+      phone: sanitizedPhone,
+      role: newRole,
+      committeeId: commId
+    });
 
-    if (error) {
-      console.error("Error updating user:", error);
-      showToast("Error al actualizar usuario", "error");
+    if (!result.success) {
+      console.error("Error updating user:", result.error);
+      showToast(result.error || "Error al actualizar usuario", "error");
     } else {
       showToast("Usuario actualizado correctamente");
       setIsEditSheetOpen(false);
+
+      // If updating the currently logged-in user in mock mode, sync local role
+      const activePhone = typeof window !== 'undefined' ? localStorage.getItem('volunteer_phone') : null;
+      if (activePhone && (activePhone === sanitizedPhone || activePhone === editingUser.phone)) {
+        const { setMockRole } = await import('@/lib/permissions');
+        setMockRole(newRole);
+      }
+
       loadData();
     }
     setIsUpdating(false);

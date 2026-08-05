@@ -1418,9 +1418,9 @@ export default function RemindersPage() {
                                     </button>
                                   </th>
                                   <th className="px-5 py-4 text-left w-36">Estado</th>
-                                  <th className="px-5 py-4 text-left">Nombre y Apellido</th>
-                                  <th className="px-5 py-4 text-center">Barrio</th>
-                                  <th className="px-5 py-4 text-center">Estaca</th>
+                                  <th className="px-5 py-4 text-left font-bold text-text-dim uppercase text-[10px]">Nombre y Apellido</th>
+                                  <th className="px-5 py-4 text-center font-bold text-text-dim uppercase text-[10px]">Barrio / Rama</th>
+                                  <th className="px-5 py-4 text-center font-bold text-text-dim uppercase text-[10px]">Estaca</th>
                                   <th className="px-5 py-4 text-center">Comité</th>
                                   <th className="px-5 py-4 text-center w-px whitespace-nowrap">Acciones</th>
                                 </tr>
