@@ -14,6 +14,7 @@ import {
   undoVolunteerCheckInAction,
   reopenCompletedShiftAction
 } from "@/app/actions/audit-actions";
+import { fetchVolunteerAuditLogsAction } from "@/app/actions/activity-actions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 
 export interface VolunteerProfileData {
@@ -32,31 +33,50 @@ export interface VolunteerProfileData {
 export interface VolunteerProfileViewProps {
   volunteer: VolunteerProfileData;
   mode?: 'volunteer' | 'coordinator';
-  onClose?: () => void;
-  onEditProfile?: (vol: VolunteerProfileData) => void;
-  onArchiveProfile?: (vol: VolunteerProfileData) => void;
-  currentUserId?: string;
+
+  // Shift state
   shiftsByDay?: Record<string, string[]>;
-  checkedInMap?: Record<string, any>;
-  checkedOutMap?: Record<string, any>;
+  checkedInMap?: Record<string, boolean> | Record<string, string[]>;
+  checkedOutMap?: Record<string, boolean> | Record<string, string[]>;
+
+  // Handlers
   onToggleShift?: (dayKey: string, shiftKey: string) => void;
+
+  // Coordinator controls
   isEditingShifts?: boolean;
-  setIsEditingShifts?: (val: boolean) => void;
   canEditShifts?: boolean;
   onStartEditShifts?: () => void;
-  onStartEditProfile?: () => void;
   onSaveShifts?: () => void;
+  onStartEditProfile?: () => void;
+  onArchiveProfile?: (vol: VolunteerProfileData) => void;
+  onClose?: () => void;
   savedNotice?: boolean;
+  isPendingSave?: boolean;
+
+  // Custom Action Buttons override
+  customActions?: React.ReactNode;
 }
 
 export function VolunteerProfileView({
   volunteer,
-  mode = 'coordinator',
-  onClose,
-  onEditProfile,
-  onArchiveProfile,
+  mode = 'volunteer',
+  shiftsByDay: externalShiftsByDay,
+  checkedInMap: externalCheckedInMap,
+  checkedOutMap: externalCheckedOutMap,
+  onToggleShift: externalOnToggleShift,
+  isEditingShifts = false,
+  canEditShifts = true,
+  onStartEditShifts,
+  onSaveShifts,
+  onStartEditProfile,
+  savedNotice = false,
+  isPendingSave = false,
+  customActions,
 }: VolunteerProfileViewProps) {
-  const [activeTab, setActiveTab] = useState<'details' | 'shifts' | 'requests'>('details');
+  const [showLegend, setShowLegend] = useState(false);
+  const [activeTab, setActiveTab] = useState<'schedule' | 'requests' | 'audit'>('schedule');
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
 
   const { refresh } = useCoordinatorData();
 
@@ -65,24 +85,16 @@ export function VolunteerProfileView({
   const userName = typeof window !== 'undefined' ? localStorage.getItem('mock_user_name') || 'Administrador' : 'Administrador';
   const isAdmin = userRole === 'Admin';
 
-  // Historial de solicitudes
-  const [requests, setRequests] = useState<any[]>([]);
-  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
-
-  // Formulario de Solicitud de Cambio de Turno (Modo Voluntario)
-  const [sourceDayKey, setSourceDayKey] = useState<string>("");
-  const [sourceShiftKey, setSourceShiftKey] = useState<string>("");
-  const [targetDayKey, setTargetDayKey] = useState<string>("");
-  const [targetShiftKey, setTargetShiftKey] = useState<string>("");
-  const [requestReason, setRequestReason] = useState<string>("");
-  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
-  const [requestNotice, setRequestNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
-
   // Auditoría State
   const [auditMessage, setAuditMessage] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [isProcessingAudit, setIsProcessingAudit] = useState(false);
 
-  // Días de Evento
+  // Fallback Local Shift State if not provided externally
+  const [localShiftsByDay, setLocalShiftsByDay] = useState<Record<string, string[]>>({});
+  const [localCheckedInMap, setLocalCheckedInMap] = useState<Record<string, boolean>>({});
+  const [localCheckedOutMap, setLocalCheckedOutMap] = useState<Record<string, boolean>>({});
+  const [localEditingShifts, setLocalEditingShifts] = useState(false);
+
   const EVENT_DAYS_RAW = useMemo(() => getActiveEventDays(), []);
   const EVENT_DAYS = useMemo(() => EVENT_DAYS_RAW.map(date => ({
     date,
@@ -91,22 +103,14 @@ export function VolunteerProfileView({
     dateNum: formatDateShort(date).split(' ')[1],
   })), [EVENT_DAYS_RAW]);
 
-  // Turnos mock o sincronizados
-  const [shiftsByDayState, setShiftsByDayState] = useState<Record<string, string[]>>({});
-  const [checkedInMapState, setCheckedInMapState] = useState<Record<string, boolean>>({});
-  const [checkedOutMapState, setCheckedOutMapState] = useState<Record<string, boolean>>({});
-  const [isEditingShiftsState, setIsEditingShiftsState] = useState(false);
-  const [savedNoticeState, setSavedNoticeState] = useState(false);
-
-  // Cargar datos iniciales
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (!externalShiftsByDay && typeof window !== 'undefined') {
       try {
         const storedShifts = localStorage.getItem(`vol_shifts_${volunteer.id}`);
         if (storedShifts) {
-          setShiftsByDayState(JSON.parse(storedShifts));
+          setLocalShiftsByDay(JSON.parse(storedShifts));
         } else {
-          setShiftsByDayState({
+          setLocalShiftsByDay({
             [EVENT_DAYS[0]?.key || "Jue 10"]: ["T1"],
             [EVENT_DAYS[2]?.key || "Sáb 12"]: ["T2"]
           });
@@ -114,7 +118,7 @@ export function VolunteerProfileView({
 
         const storedCheckIn = localStorage.getItem(`vol_checkin_${volunteer.id}`);
         if (storedCheckIn) {
-          setCheckedInMapState(JSON.parse(storedCheckIn));
+          setLocalCheckedInMap(JSON.parse(storedCheckIn));
         }
 
         const storedCheckOut = localStorage.getItem(`completed_shifts_map`);
@@ -127,49 +131,132 @@ export function VolunteerProfileView({
               userOut[subKey] = true;
             }
           });
-          setCheckedOutMapState(userOut);
+          setLocalCheckedOutMap(userOut);
         }
       } catch (e) {
-        console.error("Error loading volunteer state:", e);
+        console.error("Error loading volunteer local state:", e);
       }
     }
-  }, [volunteer.id, EVENT_DAYS]);
+  }, [volunteer.id, externalShiftsByDay, EVENT_DAYS]);
 
-  // Cargar solicitudes de cambio de turno
-  useEffect(() => {
-    async function loadRequests() {
-      setIsLoadingRequests(true);
-      const res = await fetchVolunteerShiftChangeRequestsAction(volunteer.id);
-      if (res.success && res.requests) {
-        setRequests(res.requests);
-      }
-      setIsLoadingRequests(false);
+  const shiftsByDay = externalShiftsByDay || localShiftsByDay;
+
+  // Reagendamiento State
+  const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
+  const [allRequests, setAllRequests] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+
+  const [sourceDayKey, setSourceDayKey] = useState<string>("");
+  const [sourceShiftKey, setSourceShiftKey] = useState<string>("");
+  const [targetDayKey, setTargetDayKey] = useState<string>("");
+  const [targetShiftKey, setTargetShiftKey] = useState<string>("");
+  const [requestReason, setRequestReason] = useState<string>("");
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+
+  const loadRequests = async () => {
+    if (!volunteer.id) return;
+    setLoadingRequests(true);
+    const res = await fetchVolunteerShiftChangeRequestsAction(volunteer.id);
+    if (res.success && res.requests) {
+      setAllRequests(res.requests);
     }
-    loadRequests();
-  }, [volunteer.id]);
-
-  const assignedDayKeys = useMemo(() => {
-    return Object.keys(shiftsByDayState).filter(d => (shiftsByDayState[d] || []).length > 0);
-  }, [shiftsByDayState]);
-
-  const handleToggleShift = (dayKey: string, shiftKey: string) => {
-    if (!isEditingShiftsState) return;
-    setShiftsByDayState(prev => {
-      const current = prev[dayKey] || [];
-      const updated = current.includes(shiftKey)
-        ? current.filter(s => s !== shiftKey)
-        : [...current, shiftKey];
-      return { ...prev, [dayKey]: updated };
-    });
+    setLoadingRequests(false);
   };
 
-  const handleSaveShifts = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`vol_shifts_${volunteer.id}`, JSON.stringify(shiftsByDayState));
+  const loadAuditLogs = async () => {
+    if (!volunteer.id) return;
+    setLoadingAuditLogs(true);
+    const fullName = volunteer.first_name
+      ? `${volunteer.first_name} ${volunteer.last_name || ''}`.trim()
+      : volunteer.name;
+    const res = await fetchVolunteerAuditLogsAction(
+      volunteer.id,
+      fullName,
+      volunteer.phone,
+      (volunteer as any).created_at
+    );
+    if (res.success && res.logs) {
+      setAuditLogs(res.logs);
     }
-    setIsEditingShiftsState(false);
-    setSavedNoticeState(true);
-    setTimeout(() => setSavedNoticeState(false), 3000);
+    setLoadingAuditLogs(false);
+  };
+
+  useEffect(() => {
+    loadRequests();
+    loadAuditLogs();
+  }, [volunteer.id]);
+
+  const pendingRequests = useMemo(() => {
+    return allRequests.filter((r: any) => r.status === 'pending');
+  }, [allRequests]);
+
+  const assignedDayKeys = Object.keys(shiftsByDay).filter(d => (shiftsByDay[d] || []).length > 0);
+
+  const handleSendRescheduleRequest = async () => {
+    if (!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey) return;
+    if (!requestReason.trim()) {
+      setSubmitError("Por favor ingresa la razón o motivo por el cual solicitas el cambio.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+    setSubmitSuccess(null);
+
+    const res = await createShiftChangeRequestAction({
+      volunteerId: volunteer.id,
+      currentDayKey: sourceDayKey,
+      currentShiftKey: sourceShiftKey,
+      requestedDayKey: targetDayKey,
+      requestedShiftKey: targetShiftKey,
+      reason: requestReason.trim(),
+    });
+
+    if (res.success) {
+      setSubmitSuccess("✓ Solicitud enviada exitosamente. El coordinador la revisará en breve.");
+      await loadRequests();
+      setTimeout(() => {
+        setIsRescheduleModalOpen(false);
+        setSubmitSuccess(null);
+        setSourceDayKey("");
+        setSourceShiftKey("");
+        setTargetDayKey("");
+        setTargetShiftKey("");
+        setRequestReason("");
+      }, 2000);
+    } else {
+      setSubmitError(res.error || "Ocurrió un error al enviar la solicitud.");
+    }
+    setIsSubmitting(false);
+  };
+
+  const isShiftCheckedIn = (dayKey: string, shiftKey: string): boolean => {
+    const map = externalCheckedInMap || localCheckedInMap;
+    if (!map) return false;
+    const arrayVal = (map as Record<string, string[]>)[dayKey];
+    if (Array.isArray(arrayVal)) {
+      return arrayVal.includes(shiftKey);
+    }
+    return (
+      !!(map as Record<string, boolean>)[`${volunteer.id}-${dayKey}-${shiftKey}`] ||
+      !!(map as Record<string, boolean>)[`${dayKey}-${shiftKey}`]
+    );
+  };
+
+  const isShiftCheckedOut = (dayKey: string, shiftKey: string): boolean => {
+    const map = externalCheckedOutMap || localCheckedOutMap;
+    if (!map) return false;
+    const arrayVal = (map as Record<string, string[]>)[dayKey];
+    if (Array.isArray(arrayVal)) {
+      return arrayVal.includes(shiftKey);
+    }
+    return (
+      !!(map as Record<string, boolean>)[`${volunteer.id}-${dayKey}-${shiftKey}`] ||
+      !!(map as Record<string, boolean>)[`${dayKey}-${shiftKey}`]
+    );
   };
 
   // Reversión exclusiva para Admins: Deshacer Check-in
@@ -187,7 +274,7 @@ export function VolunteerProfileView({
     });
 
     if (res.success) {
-      setCheckedInMapState(prev => ({ ...prev, [`${dayKey}-${shiftKey}`]: false }));
+      setLocalCheckedInMap(prev => ({ ...prev, [`${dayKey}-${shiftKey}`]: false }));
       setAuditMessage({ type: 'success', msg: res.message || 'Check-in revertido correctamente.' });
       await refresh(true);
     } else {
@@ -211,8 +298,8 @@ export function VolunteerProfileView({
     });
 
     if (res.success) {
-      setCheckedOutMapState(prev => ({ ...prev, [`${dayKey}-${shiftKey}`]: false }));
-      setCheckedInMapState(prev => ({ ...prev, [`${dayKey}-${shiftKey}`]: true }));
+      setLocalCheckedOutMap(prev => ({ ...prev, [`${dayKey}-${shiftKey}`]: false }));
+      setLocalCheckedInMap(prev => ({ ...prev, [`${dayKey}-${shiftKey}`]: true }));
       setAuditMessage({ type: 'success', msg: res.message || 'Turno reabierto correctamente.' });
       await refresh(true);
     } else {
@@ -221,436 +308,735 @@ export function VolunteerProfileView({
     setIsProcessingAudit(false);
   };
 
-  // Solicitar Cambio de Turno (Modo Voluntario)
-  const handleSubmitReschedule = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey) {
-      setRequestNotice({ type: 'error', msg: 'Por favor completa todos los campos requeridos.' });
-      return;
+  const handleToggleShift = (dayKey: string, shiftKey: string) => {
+    if (externalOnToggleShift) {
+      externalOnToggleShift(dayKey, shiftKey);
+    } else if (localEditingShifts) {
+      setLocalShiftsByDay(prev => {
+        const current = prev[dayKey] || [];
+        const updated = current.includes(shiftKey)
+          ? current.filter(s => s !== shiftKey)
+          : [...current, shiftKey];
+        return { ...prev, [dayKey]: updated };
+      });
     }
-
-    setIsSubmittingRequest(true);
-    setRequestNotice(null);
-
-    const res = await createShiftChangeRequestAction({
-      volunteerId: volunteer.id,
-      currentDayKey: sourceDayKey,
-      currentShiftKey: sourceShiftKey,
-      requestedDayKey: targetDayKey,
-      requestedShiftKey: targetShiftKey,
-      reason: requestReason
-    });
-
-    if (res.success) {
-      setRequestNotice({ type: 'success', msg: 'Solicitud enviada correctamente. El administrador la revisará en breve.' });
-      setSourceDayKey("");
-      setSourceShiftKey("");
-      setTargetDayKey("");
-      setTargetShiftKey("");
-      setRequestReason("");
-      
-      const reqRes = await fetchVolunteerShiftChangeRequestsAction(volunteer.id);
-      if (reqRes.success && reqRes.requests) {
-        setRequests(reqRes.requests);
-      }
-    } else {
-      setRequestNotice({ type: 'error', msg: res.error || 'No se pudo enviar la solicitud.' });
-    }
-    setIsSubmittingRequest(false);
   };
 
-  const isShiftCheckedIn = (dayKey: string, shiftKey: string) => {
-    return !!checkedInMapState[`${dayKey}-${shiftKey}`];
-  };
-
-  const isShiftCheckedOut = (dayKey: string, shiftKey: string) => {
-    return !!checkedOutMapState[`${dayKey}-${shiftKey}`];
-  };
+  // KPIs
+  const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
+  const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
+  const reliabilityScore = volunteer.reliability ?? 100;
+  const nameParts = (volunteer.name || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`).trim().split(/\s+/).filter(Boolean);
 
   return (
-    <div className="flex flex-col h-full bg-dark text-text font-sans">
-      {/* Target/Header */}
-      <div className="p-4 sm:p-6 bg-dark2 border-b border-border space-y-4">
-        <div className="flex items-center justify-between">
+    <div className="flex flex-col w-full relative">
+      {/* Mensaje de auditoría */}
+      {auditMessage && (
+        <div className={cn(
+          "mb-4 p-3.5 rounded-xl border text-xs font-bold flex items-center justify-between animate-in fade-in",
+          auditMessage.type === 'success'
+            ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+            : "bg-rose-500/15 border-rose-500/30 text-rose-300"
+        )}>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px]">
+              {auditMessage.type === 'success' ? 'check_circle' : 'error'}
+            </span>
+            <span>{auditMessage.msg}</span>
+          </div>
+          <button onClick={() => setAuditMessage(null)} className="text-text-dim hover:text-text">✕</button>
+        </div>
+      )}
+
+      {/* Pending Shift Change Banner */}
+      {pendingRequests.length > 0 && (
+        <div className="mb-4 p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center justify-between gap-3 animate-in fade-in shadow-lg">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-[#4d7cfe]/15 border border-[#4d7cfe]/30 flex items-center justify-center text-[#4d7cfe] font-bold text-lg">
-              {(volunteer.first_name || volunteer.name || "V").charAt(0).toUpperCase()}
+            <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-[18px] text-amber-400">schedule</span>
             </div>
             <div>
-              <h2 className="text-lg font-bold text-text leading-tight">
-                {volunteer.first_name ? `${volunteer.first_name} ${volunteer.last_name || ''}` : volunteer.name}
-              </h2>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className="text-[10px] bg-dark3 border-border font-bold">
-                  {volunteer.committee || 'Sin comité'}
-                </Badge>
-                {volunteer.stake && (
-                  <span className="text-[10px] text-text-dim">Estaca {volunteer.stake}</span>
-                )}
-              </div>
+              <span className="font-bold text-amber-300 block text-xs">Solicitud de reagendamiento pendiente</span>
+              <span className="text-text-dim text-[11px]">
+                {pendingRequests[0].current_shift_key} ({pendingRequests[0].current_day_key}) ➔ {pendingRequests[0].requested_shift_key} ({pendingRequests[0].requested_day_key})
+              </span>
             </div>
           </div>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-full bg-dark3 border border-border flex items-center justify-center text-text-dim hover:text-text cursor-pointer"
-            >
-              ✕
-            </button>
+          <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] shrink-0 font-bold">
+            En revisión
+          </Badge>
+        </div>
+      )}
+
+      {/* 1. Encabezado con Nombre Grande y Badges */}
+      <div className="text-center mt-2 mb-6 px-4">
+        <div className="flex flex-col items-center justify-center leading-[1.25] font-black text-[26px] sm:text-[30px] text-text tracking-tight">
+          {nameParts.length >= 4 ? (
+            <>
+              <span>{nameParts.slice(0, 2).join(' ')}</span>
+              <span className="text-text/90">{nameParts.slice(2).join(' ')}</span>
+            </>
+          ) : (
+            <span>{nameParts.join(' ')}</span>
           )}
         </div>
 
-        {/* Modal Tabs */}
-        <div className="flex items-center gap-2 border-b border-border/50 pb-1">
-          <button
-            onClick={() => setActiveTab('details')}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
-              activeTab === 'details'
-                ? "bg-[#4d7cfe] text-white shadow-sm"
-                : "text-text-dim hover:text-text hover:bg-dark3"
-            )}
-          >
-            Detalles
-          </button>
-          <button
-            onClick={() => setActiveTab('shifts')}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
-              activeTab === 'shifts'
-                ? "bg-[#4d7cfe] text-white shadow-sm"
-                : "text-text-dim hover:text-text hover:bg-dark3"
-            )}
-          >
-            Turnos y Asistencia
-          </button>
-          <button
-            onClick={() => setActiveTab('requests')}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-              activeTab === 'requests'
-                ? "bg-[#4d7cfe] text-[#ffffff] shadow-sm"
-                : "text-text-dim hover:text-text hover:bg-dark3"
-            )}
-          >
-            <span>Solicitudes</span>
-            {requests.filter(r => r.status === 'pending').length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            )}
-          </button>
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+          {volunteer.committee && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 shadow-sm">
+              <span className="material-symbols-outlined text-[13px]">groups</span>
+              {volunteer.committee}
+            </span>
+          )}
+          {volunteer.stake && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25 shadow-sm">
+              <span className="material-symbols-outlined text-[13px]">account_balance</span>
+              {volunteer.stake}
+            </span>
+          )}
+          {volunteer.ward && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/25 shadow-sm">
+              <span className="material-symbols-outlined text-[13px]">location_on</span>
+              {volunteer.ward}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Body Content */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-        {/* Mensaje de auditoría */}
-        {auditMessage && (
-          <div className={cn(
-            "p-3.5 rounded-xl border text-xs font-bold flex items-center justify-between animate-in fade-in",
-            auditMessage.type === 'success'
-              ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
-              : "bg-rose-500/15 border-rose-500/30 text-rose-300"
-          )}>
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]">
-                {auditMessage.type === 'success' ? 'check_circle' : 'error'}
-              </span>
-              <span>{auditMessage.msg}</span>
-            </div>
-            <button onClick={() => setAuditMessage(null)} className="text-text-dim hover:text-text">✕</button>
+      {/* 2. Top Stats Row */}
+      <div className="flex items-center mb-6 py-3 border-y border-border -mx-2 sm:mx-0">
+        <div className="flex flex-col items-center flex-1 border-r border-border">
+          <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{totalTurnos}</span>
+          <span className="text-drawer-kpi-label text-text-dim mt-1.5 font-inter font-extrabold">Turnos</span>
+        </div>
+        <div className="flex flex-col items-center flex-1 border-r border-border">
+          <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{diasCubiertos}</span>
+          <span className="text-drawer-kpi-label text-text-dim mt-1.5 font-inter font-extrabold">Días</span>
+        </div>
+        <div className="flex flex-col items-center flex-1 border-r border-border">
+          <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">
+            {reliabilityScore}
+            <span className="text-[15px] font-bold text-text-dim ml-0.5">%</span>
+          </span>
+          <span className="text-drawer-kpi-label text-text-dim mt-1.5 font-inter font-extrabold">Confia.</span>
+        </div>
+        <div className="flex flex-col items-center flex-1">
+          <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{volunteer.age || '-'}</span>
+          <span className="text-drawer-kpi-label text-text-dim mt-1.5 font-inter font-extrabold">Edad</span>
+        </div>
+      </div>
+
+      {/* 3. Acciones de Botones */}
+      <div className="mb-6 px-1 flex flex-col gap-3">
+        {customActions ? (
+          customActions
+        ) : mode === 'volunteer' ? (
+          <div className="grid grid-cols-2 gap-3">
+            <EntryPassButton
+              volunteerId={volunteer.id}
+              volunteerName={volunteer.name}
+              committeeName={volunteer.committee || ''}
+            />
+            <Button
+              variant="outline"
+              className="h-10 px-3 gap-2 text-text border-border bg-dark3 hover:bg-dark font-bold text-xs rounded-full shadow-sm active:scale-95 transition-all truncate flex items-center justify-center cursor-pointer"
+              onClick={() => setIsRescheduleModalOpen(true)}
+            >
+              <span className="material-symbols-outlined text-[18px] shrink-0 text-[#4d7cfe]">published_with_changes</span>
+              <span>REAGENDAR TURNO</span>
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              variant="outline"
+              className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate cursor-pointer"
+              onClick={() => window.open(`https://wa.me/${(volunteer.phone || '').replace(/\s+/g, '')}`, '_blank')}
+            >
+              <span className="material-symbols-outlined text-[17px] shrink-0 text-[#25D366]">message</span>
+              <span>WHATSAPP</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate cursor-pointer"
+              onClick={() => window.location.href = `tel:${(volunteer.phone || '').replace(/\s+/g, '')}`}
+            >
+              <span className="material-symbols-outlined text-[17px] shrink-0 text-blue-500">call</span>
+              <span>LLAMAR</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate cursor-pointer"
+              onClick={onStartEditProfile}
+            >
+              <span className="material-symbols-outlined text-[17px] shrink-0 text-[#4d7cfe]">edit_square</span>
+              <span>EDITAR</span>
+            </Button>
           </div>
         )}
+      </div>
 
-        {/* Tab 1: Detalles */}
-        {activeTab === 'details' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 bg-dark2 border border-border rounded-xl">
-                <span className="text-[10px] text-text-dim uppercase font-bold block mb-1">Teléfono</span>
-                <span className="text-xs font-bold text-text">{volunteer.phone || 'No registrado'}</span>
-              </div>
-              <div className="p-3 bg-dark2 border border-border rounded-xl">
-                <span className="text-[10px] text-text-dim uppercase font-bold block mb-1">Barrio / Confiabilidad</span>
-                <span className="text-xs font-bold text-text">{volunteer.ward || 'N/A'} · {volunteer.reliability ?? 100}%</span>
-              </div>
-            </div>
+      {/* Pestaña opcional de Navegación (Cronograma vs Solicitudes) */}
+      <div className="flex items-center gap-2 mb-4 border-b border-border pb-2">
+        <button
+          onClick={() => setActiveTab('schedule')}
+          className={cn(
+            "px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all cursor-pointer",
+            activeTab === 'schedule'
+              ? "bg-[#4d7cfe] text-white shadow-sm"
+              : "text-text-dim hover:text-text hover:bg-dark3"
+          )}
+        >
+          Cronograma
+        </button>
+        <button
+          onClick={() => setActiveTab('requests')}
+          className={cn(
+            "px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5",
+            activeTab === 'requests'
+              ? "bg-[#4d7cfe] text-white shadow-sm"
+              : "text-text-dim hover:text-text hover:bg-dark3"
+          )}
+        >
+          <span>Solicitudes</span>
+          {allRequests.length > 0 && (
+            <span className={cn(
+              "px-1.5 py-0.2 text-[10px] rounded-full font-bold transition-colors",
+              activeTab === 'requests'
+                ? "bg-white/25 text-white"
+                : "bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+            )}>
+              {allRequests.length}
+            </span>
+          )}
+        </button>
 
-            {/* Pases de entrada */}
-            <div className="pt-2">
-              <span className="text-xs font-bold text-text uppercase tracking-wider block mb-3">Pase de Entrada</span>
-              <EntryPassButton volunteerId={volunteer.id} volunteerName={volunteer.name} committeeName={volunteer.committee || ''} />
-            </div>
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={cn(
+            "px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5",
+            activeTab === 'audit'
+              ? "bg-[#4d7cfe] text-white shadow-sm"
+              : "text-text-dim hover:text-text hover:bg-dark3"
+          )}
+        >
+          <span>Auditoría</span>
+          {auditLogs.length > 0 && (
+            <span className={cn(
+              "px-1.5 py-0.2 text-[10px] rounded-full font-bold transition-colors",
+              activeTab === 'audit'
+                ? "bg-white/25 text-white"
+                : "bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30"
+            )}>
+              {auditLogs.length}
+            </span>
+          )}
+        </button>
+      </div>
 
-            {/* Acciones de administración */}
-            {mode === 'coordinator' && (
-              <div className="pt-4 border-t border-border flex gap-3">
-                {onEditProfile && (
-                  <Button
-                    onClick={() => onEditProfile(volunteer)}
-                    className="flex-1 bg-dark3 border-border text-text hover:bg-dark2 font-bold text-xs h-10 rounded-xl"
-                  >
-                    Editar Datos
-                  </Button>
-                )}
-                {onArchiveProfile && (
-                  <Button
-                    onClick={() => onArchiveProfile(volunteer)}
-                    variant="outline"
-                    className="flex-1 bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20 font-bold text-xs h-10 rounded-xl"
-                  >
-                    Archivar Voluntario
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tab 2: Turnos y Asistencia */}
-        {activeTab === 'shifts' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-border">
-              <div>
-                <h3 className="text-xs font-bold text-text uppercase tracking-wider">Programación de Turnos</h3>
-                <p className="text-[10px] text-text-dim">Horarios asignados para el evento</p>
-              </div>
-              {mode === 'coordinator' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => isEditingShiftsState ? handleSaveShifts() : setIsEditingShiftsState(true)}
-                  className="h-8 px-3 text-xs font-bold bg-[#4d7cfe]/15 border-[#4d7cfe]/30 text-[#4d7cfe]"
+      {/* 4. Cronograma Stylized Day Cards */}
+      {activeTab === 'schedule' ? (
+        <div className="w-full">
+          <div className="flex items-center justify-between px-1 mb-4">
+            <div className="flex items-center gap-2 relative">
+              <p className="text-drawer-label text-text font-bold">Cronograma</p>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowLegend(prev => !prev)}
+                  className="text-text-dim hover:text-text transition-colors p-0.5 rounded-full flex items-center justify-center focus:outline-none cursor-pointer"
                 >
-                  {isEditingShiftsState ? 'Guardar Cambios' : 'Editar Turnos'}
-                </Button>
-              )}
+                  <span className="material-symbols-outlined text-[17px]">info</span>
+                </button>
+
+                {showLegend && (
+                  <div className="absolute left-0 top-full mt-2 w-56 p-3 bg-dark2 border border-border rounded-xl shadow-xl z-50 text-xs text-text space-y-2 animate-in fade-in zoom-in-95">
+                    <p className="font-bold text-text-dim text-[11px] border-b border-border pb-1">Leyenda de Estados</p>
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-md bg-[#4d7cfe]/15 border border-[#4d7cfe]/35 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[12px] text-[#4d7cfe]">check</span>
+                      </span>
+                      <span>Programado</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-md bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[12px] text-emerald-500">check</span>
+                      </span>
+                      <span>Asistió (Check-in)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-md bg-slate-500/15 border border-slate-500/30 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[12px] text-slate-500">check</span>
+                      </span>
+                      <span>Completado (Out)</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {savedNoticeState && (
-              <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-xl text-center">
-                ¡Turnos actualizados correctamente!
+            {canEditShifts && (onStartEditShifts || !externalOnToggleShift) && (
+              <div>
+                {(isEditingShifts || localEditingShifts) ? (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (onSaveShifts) onSaveShifts();
+                      setLocalEditingShifts(false);
+                    }}
+                    disabled={isPendingSave}
+                    className="h-8 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">save</span>
+                    <span>{isPendingSave ? 'Guardando...' : 'Guardar'}</span>
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      if (onStartEditShifts) onStartEditShifts();
+                      setLocalEditingShifts(true);
+                    }}
+                    className="h-8 px-2.5 text-xs font-bold text-[#4d7cfe] hover:bg-[#4d7cfe]/10 rounded-full transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">edit</span>
+                    <span>Editar Turnos</span>
+                  </Button>
+                )}
               </div>
             )}
+          </div>
 
-            <div className="grid grid-cols-1 gap-3">
-              {EVENT_DAYS.map((d, index) => {
-                const dayKey = d.key;
-                const assignedList = shiftsByDayState[dayKey] || [];
-                const dayAbbr = d.label.substring(0, 3);
+          {savedNotice && (
+            <div className="mb-3 px-3 py-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-xl text-center animate-in fade-in">
+              ¡Turnos actualizados correctamente!
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-3">
+            {EVENT_DAYS.map((d, index) => {
+              const dayKey = d.key;
+              const assignedList = shiftsByDay[dayKey] || [];
+              const dayAbbr = d.label.substring(0, 3);
+              const bgColors = [
+                'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
+                'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
+              ];
+              const cardBg = bgColors[index % bgColors.length];
+
+              return (
+                <div
+                  key={dayKey}
+                  className="relative overflow-hidden bg-dark2 border border-border rounded-xl p-3 sm:p-4 flex items-center justify-between shadow-sm transition-all"
+                >
+                  <div className={`absolute left-0 top-0 bottom-0 w-2 ${cardBg} opacity-90`} />
+
+                  <div className="flex items-center gap-3 pl-2">
+                    <div className="flex flex-col items-center justify-center min-w-[36px]">
+                      <span className="font-inter font-black text-xs uppercase tracking-widest text-text-dim leading-none">
+                        {dayAbbr}
+                      </span>
+                      <span className="text-lg font-black text-text leading-none mt-1">{d.dateNum}</span>
+                    </div>
+                    <div className="h-8 w-[1px] bg-border" />
+                  </div>
+
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                      const active = assignedList.includes(t);
+                      const inCheck = isShiftCheckedIn(dayKey, t);
+                      const outCheck = isShiftCheckedOut(dayKey, t);
+
+                      const canClick = isEditingShifts || localEditingShifts;
+
+                      let statusStyle = "bg-dark3/50 border-border/50 text-text-dim/40";
+                      let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-text-dim/40">-</span>;
+                      let labelColor = "text-text-dim/40";
+
+                      if (outCheck) {
+                        statusStyle = "bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm";
+                        iconContent = <span className="material-symbols-outlined text-[15px] text-slate-500">check</span>;
+                        labelColor = "text-slate-500 font-bold";
+                      } else if (inCheck) {
+                        statusStyle = "bg-[#10b981]/15 border-[#10b981]/30 text-[#10b981] shadow-sm";
+                        iconContent = <span className="material-symbols-outlined text-[15px] text-[#10b981]">check</span>;
+                        labelColor = "text-[#10b981] font-bold";
+                      } else if (active) {
+                        statusStyle = "bg-[#4d7cfe]/15 border-[#4d7cfe]/35 text-[#4d7cfe] font-bold shadow-sm";
+                        iconContent = <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">check</span>;
+                        labelColor = "text-[#4d7cfe] font-bold";
+                      }
+
+                      return (
+                        <div key={t} className="flex flex-col items-center">
+                          <button
+                            type="button"
+                            disabled={!canClick}
+                            onClick={() => handleToggleShift(dayKey, t)}
+                            className={cn(
+                              "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all",
+                              statusStyle,
+                              canClick && "hover:bg-dark hover:border-border cursor-pointer active:scale-95"
+                            )}
+                            title={`${t}: ${active ? 'Programado' : 'Disponible'}${inCheck ? ' (Check-in)' : ''}`}
+                          >
+                            <div className="h-4 flex items-center justify-center">
+                              {iconContent}
+                            </div>
+                            <span className={cn("font-inter text-[10px] uppercase tracking-wider mt-0.5", labelColor)}>
+                              {t}
+                            </span>
+                          </button>
+
+                          {/* Acciones de Reversión Exclusivas para Admin (Espacio de altura fija para evitar desalineación) */}
+                          {isAdmin && mode === 'coordinator' && (
+                            <div className="h-4 mt-1 flex items-center justify-center shrink-0">
+                              {outCheck ? (
+                                <button
+                                  type="button"
+                                  disabled={isProcessingAudit}
+                                  onClick={() => handleReopenShift(dayKey, t)}
+                                  title="Reabrir turno completado"
+                                  className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 text-[8px] font-bold transition-all cursor-pointer shadow-sm"
+                                >
+                                  Reabrir
+                                </button>
+                              ) : inCheck ? (
+                                <button
+                                  type="button"
+                                  disabled={isProcessingAudit}
+                                  onClick={() => handleUndoCheckIn(dayKey, t)}
+                                  title="Deshacer entrada"
+                                  className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 text-[8px] font-bold transition-all cursor-pointer shadow-sm"
+                                >
+                                  Deshacer
+                                </button>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : activeTab === 'requests' ? (
+        /* Pestaña de Solicitudes */
+        <div className="space-y-4">
+          {loadingRequests ? (
+            <div className="py-6 text-center text-text-dim text-xs font-bold">Cargando solicitudes...</div>
+          ) : allRequests.length === 0 ? (
+            <div className="p-6 text-center text-text-dim border border-dashed border-border rounded-xl text-xs font-bold">
+              No hay solicitudes de reagendamiento registradas para este voluntario.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {allRequests.map((r: any) => (
+                <div key={r.id} className="p-3.5 bg-dark2 border border-border rounded-xl text-xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-text">
+                      {r.current_shift_key} ({r.current_day_key}) ➔ {r.requested_shift_key} ({r.requested_day_key})
+                    </span>
+                    <Badge className={cn(
+                      "text-[9px] uppercase font-bold px-2 py-0.5 rounded-full",
+                      r.status === 'approved' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
+                      r.status === 'rejected' ? "bg-rose-500/20 text-rose-400 border-rose-500/30" :
+                      "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                    )}>
+                      {r.status === 'approved' ? 'Aprobada' : r.status === 'rejected' ? 'Rechazada' : 'Pendiente'}
+                    </Badge>
+                  </div>
+                  {r.reason && <p className="text-text-dim text-[11px]">Motivo: {r.reason}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Pestaña de Auditoría de Cambios */
+        <div className="space-y-4">
+          {loadingAuditLogs ? (
+            <div className="py-6 text-center text-text-dim text-xs font-bold">Cargando bitácora de auditoría...</div>
+          ) : auditLogs.length === 0 ? (
+            <div className="p-6 text-center text-text-dim border border-dashed border-border rounded-xl text-xs font-bold">
+              No hay registros de auditoría ni cambios registrados para este voluntario.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {auditLogs.map((log: any) => {
+                const d = log.created_at ? new Date(log.created_at) : new Date();
+                const datePart = d.toLocaleDateString('es-NI', {
+                  timeZone: 'America/Managua',
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric'
+                });
+                const timePart = d.toLocaleTimeString('es-NI', {
+                  timeZone: 'America/Managua',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: true
+                });
+                const formattedDate = `${datePart}, ${timePart}`;
+
+                const isImport = log.description?.includes('Importó masivamente') || log.action_type === 'Importación';
 
                 return (
-                  <div
-                    key={dayKey}
-                    className="bg-dark2 border border-border rounded-xl p-3 sm:p-4 flex items-center justify-between shadow-sm"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex flex-col items-center justify-center min-w-[36px]">
-                        <span className="font-inter font-black text-xs uppercase tracking-widest text-text-dim leading-none">
-                          {dayAbbr}
+                  <div key={log.id} className="p-3.5 bg-dark2 border border-border rounded-xl text-xs space-y-1.5 shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-text-dim text-[11px]">Por:</span>
+                        <span className="font-bold text-text">{log.user_name}</span>
+                        <span className="text-[10px] text-text-dim px-2 py-0.5 rounded-full bg-dark3 border border-border font-bold">
+                          {log.user_role || 'Admin'}
                         </span>
-                        <span className="text-lg font-black text-text leading-none mt-1">{d.dateNum}</span>
                       </div>
-                      <div className="h-8 w-[1px] bg-border" />
+                      <Badge className={cn(
+                        "text-[9px] uppercase font-bold px-2 py-0.5 rounded-full",
+                        log.action_type === 'Deshacer' ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30" :
+                        log.action_type === 'Reasignación' ? "bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30" :
+                        log.action_type === 'Edición' ? "bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/30" :
+                        "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                      )}>
+                        {log.action_type}
+                      </Badge>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {['T1', 'T2', 'T3', 'T4'].map((t) => {
-                        const active = assignedList.includes(t);
-                        const inCheck = isShiftCheckedIn(dayKey, t);
-                        const outCheck = isShiftCheckedOut(dayKey, t);
+                    <p className="text-text font-semibold text-[11px] leading-snug">{log.description}</p>
+                    {log.details && <p className="text-text-dim text-[10px] italic">{log.details}</p>}
 
-                        return (
-                          <div key={t} className="flex flex-col items-center gap-1">
-                            <button
-                              type="button"
-                              disabled={!isEditingShiftsState}
-                              onClick={() => handleToggleShift(dayKey, t)}
-                              className={cn(
-                                "flex flex-col items-center justify-center w-10 h-10 rounded-lg border text-xs font-bold transition-all",
-                                outCheck
-                                  ? "bg-slate-500/20 border-slate-500/40 text-slate-400"
-                                  : inCheck
-                                  ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-                                  : active
-                                  ? "bg-[#4d7cfe]/20 border-[#4d7cfe]/40 text-[#8bb0ff]"
-                                  : "bg-dark3 border-border text-text-dim opacity-50"
-                              )}
-                            >
-                              <span>{t}</span>
-                              {outCheck ? (
-                                <span className="text-[7px] font-extrabold text-slate-400 uppercase">Fin</span>
-                              ) : inCheck ? (
-                                <span className="text-[7px] font-extrabold text-emerald-400 uppercase">Entró</span>
-                              ) : null}
-                            </button>
-
-                            {/* Opciones exclusivas de Administrador: Reversión de Asistencia */}
-                            {isAdmin && mode === 'coordinator' && (
-                              <div className="flex gap-1">
-                                {outCheck ? (
-                                  <button
-                                    type="button"
-                                    disabled={isProcessingAudit}
-                                    onClick={() => handleReopenShift(dayKey, t)}
-                                    title="Reabrir turno completado"
-                                    className="px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[8px] font-bold border border-amber-500/30 hover:bg-amber-500/30 transition-all cursor-pointer"
-                                  >
-                                    Reabrir
-                                  </button>
-                                ) : inCheck ? (
-                                  <button
-                                    type="button"
-                                    disabled={isProcessingAudit}
-                                    onClick={() => handleUndoCheckIn(dayKey, t)}
-                                    title="Deshacer entrada"
-                                    className="px-1 py-0.5 rounded bg-rose-500/20 text-rose-300 text-[8px] font-bold border border-rose-500/30 hover:bg-rose-500/30 transition-all cursor-pointer"
-                                  >
-                                    Deshacer
-                                  </button>
-                                ) : null}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div className="pt-1.5 text-[10px] text-text-dim border-t border-border/40 flex items-center justify-between font-mono">
+                      <span className="flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[12px]">schedule</span>
+                        <span>{formattedDate}</span>
+                      </span>
+                      <span className="text-[9px] text-text-dim/60 uppercase">Nicaragua</span>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-        {/* Tab 3: Solicitudes de Reagendamiento */}
-        {activeTab === 'requests' && (
-          <div className="space-y-4">
-            <h3 className="text-xs font-bold text-text uppercase tracking-wider">Historial de Solicitudes</h3>
+      {/* REAGENDAMIENTO MODAL PARA VOLUNTARIO */}
+      {isRescheduleModalOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-dark2 border border-border rounded-3xl p-6 w-full max-w-md space-y-5 shadow-2xl relative">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-text flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#4d7cfe]">published_with_changes</span>
+                Solicitar Reagendamiento
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsRescheduleModalOpen(false)}
+                className="text-text-dim hover:text-text text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
 
-            {/* Formulario de Reagendamiento para Voluntarios */}
-            {mode === 'volunteer' && (
-              <form onSubmit={handleSubmitReschedule} className="p-4 bg-dark2 border border-border rounded-xl space-y-4">
-                <h4 className="text-xs font-bold text-[#4d7cfe] uppercase">Solicitar Reagendamiento de Turno</h4>
-                
-                {requestNotice && (
-                  <div className={cn(
-                    "p-3 rounded-xl text-xs font-bold border",
-                    requestNotice.type === 'success' ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300" : "bg-rose-500/15 border-rose-500/30 text-rose-300"
-                  )}>
-                    {requestNotice.msg}
+            {submitSuccess ? (
+              <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-2xl text-center">
+                {submitSuccess}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {submitError && (
+                  <div className="p-3 bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-bold rounded-xl">
+                    {submitError}
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-text-dim uppercase block mb-1">Día Actual</label>
-                    <select
-                      value={sourceDayKey}
-                      onChange={e => setSourceDayKey(e.target.value)}
-                      className="w-full h-9 px-2 bg-dark3 border border-border rounded-lg text-xs font-bold text-text outline-none"
-                    >
-                      <option value="">Seleccionar día</option>
-                      {assignedDayKeys.map(k => (
-                        <option key={k} value={k}>{k}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-text-dim uppercase block mb-1">Turno Actual</label>
-                    <select
-                      value={sourceShiftKey}
-                      onChange={e => setSourceShiftKey(e.target.value)}
-                      className="w-full h-9 px-2 bg-dark3 border border-border rounded-lg text-xs font-bold text-text outline-none"
-                    >
-                      <option value="">Seleccionar turno</option>
-                      {(shiftsByDayState[sourceDayKey] || []).map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-text-dim uppercase block mb-1">Día Deseado</label>
-                    <select
-                      value={targetDayKey}
-                      onChange={e => setTargetDayKey(e.target.value)}
-                      className="w-full h-9 px-2 bg-dark3 border border-border rounded-lg text-xs font-bold text-text outline-none"
-                    >
-                      <option value="">Seleccionar fecha</option>
-                      {EVENT_DAYS.map(d => (
-                        <option key={d.key} value={d.key}>{d.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-text-dim uppercase block mb-1">Turno Deseado</label>
-                    <select
-                      value={targetShiftKey}
-                      onChange={e => setTargetShiftKey(e.target.value)}
-                      className="w-full h-9 px-2 bg-dark3 border border-border rounded-lg text-xs font-bold text-text outline-none"
-                    >
-                      <option value="">Seleccionar horario</option>
-                      {['T1', 'T2', 'T3', 'T4'].map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
+                {/* Paso 1: Seleccionar turno origen */}
                 <div>
-                  <label className="text-[10px] font-bold text-text-dim uppercase block mb-1">Motivo (Opcional)</label>
-                  <input
-                    type="text"
-                    placeholder="Ej. Compromiso personal / Choque de horario"
-                    value={requestReason}
-                    onChange={e => setRequestReason(e.target.value)}
-                    className="w-full h-9 px-3 bg-dark3 border border-border rounded-lg text-xs font-bold text-text outline-none"
-                  />
+                  <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block mb-2">
+                    1. Selecciona el turno asignado que deseas cambiar:
+                  </label>
+                  {assignedDayKeys.length === 0 ? (
+                    <p className="text-xs text-amber-400 italic">No tienes turnos asignados actualmente.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-4 gap-2">
+                        {EVENT_DAYS.map((d, index) => {
+                          const hasShifts = (shiftsByDay[d.key] || []).length > 0;
+                          const isSelected = sourceDayKey === d.key;
+                          const bgColors = [
+                            'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
+                            'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
+                          ];
+                          const cardBg = bgColors[index % bgColors.length];
+
+                          return (
+                            <button
+                              key={d.key}
+                              type="button"
+                              disabled={!hasShifts}
+                              onClick={() => {
+                                setSourceDayKey(d.key);
+                                setSourceShiftKey("");
+                              }}
+                              className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-xl border transition-all bg-dark3 cursor-pointer ${
+                                !hasShifts
+                                  ? 'opacity-30 border-border cursor-not-allowed'
+                                  : isSelected
+                                  ? 'border-[#4d7cfe] text-[#4d7cfe] shadow-md bg-[#4d7cfe]/10'
+                                  : 'border-border text-text-dim hover:text-text'
+                              }`}
+                            >
+                              <div className={`absolute left-0 top-0 bottom-0 w-1 ${cardBg}`} />
+                              <span className="text-[9px] uppercase font-bold tracking-wider">{d.label.substring(0, 3)}</span>
+                              <span className="text-sm font-black">{d.dateNum}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {sourceDayKey && (
+                        <div className="animate-in fade-in">
+                          <span className="text-[10px] text-text-dim uppercase font-bold block mb-1.5">Turno del {sourceDayKey}:</span>
+                          <div className="grid grid-cols-4 gap-2">
+                            {(shiftsByDay[sourceDayKey] || []).map((t) => {
+                              const isSelected = sourceShiftKey === t;
+                              return (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  onClick={() => setSourceShiftKey(t)}
+                                  className={`py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-rose-500 border-rose-500 text-white shadow-md'
+                                      : 'bg-dark3 border-border text-text hover:bg-dark3/80'
+                                  }`}
+                                >
+                                  {t}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <Button
-                  type="submit"
-                  disabled={isSubmittingRequest}
-                  className="w-full bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold h-10 rounded-xl text-xs"
-                >
-                  {isSubmittingRequest ? 'Enviando...' : 'Enviar Solicitud al Administrador'}
-                </Button>
-              </form>
-            )}
+                {/* Paso 2: Seleccionar turno destino */}
+                {sourceDayKey && sourceShiftKey && (
+                  <div className="space-y-4 pt-3 border-t border-border animate-in fade-in">
+                    <div>
+                      <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block mb-2">
+                        2. Selecciona la nueva fecha deseada:
+                      </label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {EVENT_DAYS.map((d, index) => {
+                          const isSelected = targetDayKey === d.key;
+                          const bgColors = [
+                            'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
+                            'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
+                          ];
+                          const cardBg = bgColors[index % bgColors.length];
 
-            {/* Lista de Solicitudes Registradas */}
-            {isLoadingRequests ? (
-              <div className="py-6 text-center text-text-dim text-xs font-bold">Cargando solicitudes...</div>
-            ) : requests.length === 0 ? (
-              <div className="p-6 text-center text-text-dim border border-dashed border-border rounded-xl text-xs">
-                No hay solicitudes de cambio registradas.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {requests.map(r => (
-                  <div key={r.id} className="p-3 bg-dark2 border border-border rounded-xl text-xs space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-text">
-                        Cambio: {r.current_shift_key} ({r.current_day_key}) ➔ {r.requested_shift_key} ({r.requested_day_key})
-                      </span>
-                      <Badge className={cn(
-                        "text-[9px] uppercase font-bold",
-                        r.status === 'approved' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
-                        r.status === 'rejected' ? "bg-rose-500/20 text-rose-400 border-rose-500/30" :
-                        "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                      )}>
-                        {r.status === 'approved' ? 'Aprobada' : r.status === 'rejected' ? 'Rechazada' : 'Pendiente'}
-                      </Badge>
+                          return (
+                            <button
+                              key={d.key}
+                              type="button"
+                              onClick={() => setTargetDayKey(d.key)}
+                              className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-xl border transition-all bg-dark3 cursor-pointer ${
+                                isSelected
+                                  ? 'border-[#4d7cfe] text-[#4d7cfe] shadow-md bg-[#4d7cfe]/10'
+                                  : 'border-border text-text-dim hover:text-text'
+                              }`}
+                            >
+                              <div className={`absolute left-0 top-0 bottom-0 w-1 ${cardBg}`} />
+                              <span className="text-[9px] uppercase font-bold tracking-wider">{d.label.substring(0, 3)}</span>
+                              <span className="text-sm font-black">{d.dateNum}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    {r.reason && <p className="text-text-dim text-[11px]">Motivo: {r.reason}</p>}
+
+                    {targetDayKey && (
+                      <div className="animate-in fade-in">
+                        <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block mb-2">
+                          Nuevo turno para {targetDayKey}:
+                        </label>
+                        <div className="grid grid-cols-4 gap-2">
+                          {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                            const isSameShift = sourceDayKey === targetDayKey && sourceShiftKey === t;
+                            const isSelected = targetShiftKey === t;
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                disabled={isSameShift}
+                                onClick={() => setTargetShiftKey(t)}
+                                className={`py-2 rounded-xl border text-xs font-bold transition-all ${
+                                  isSameShift
+                                    ? 'bg-dark2 border-border text-text-dim/40 cursor-not-allowed opacity-40'
+                                    : isSelected
+                                    ? 'bg-emerald-600 border-emerald-600 text-white shadow-md cursor-pointer'
+                                    : 'bg-dark3 border-border text-text hover:bg-dark3/80 cursor-pointer'
+                                }`}
+                              >
+                                <span>{t}</span>
+                                {isSameShift && <span className="block text-[8px] text-text-dim/60 font-normal leading-none">Actual</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Paso 3: Razón o Motivo */}
+                    {targetShiftKey && (
+                      <div className="space-y-1.5 pt-2 border-t border-border animate-in fade-in">
+                        <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block">
+                          3. Motivo o razón del cambio:
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder="Explica brevemente el motivo por el cual necesitas reagendar tu turno (ej: compromiso laboral, asunto de salud...)"
+                          value={requestReason}
+                          onChange={(e) => setRequestReason(e.target.value)}
+                          className="w-full bg-dark3 border border-border text-text text-xs p-3 rounded-xl focus:outline-none focus:border-[#4d7cfe] font-medium placeholder:text-text-dim"
+                        />
+                      </div>
+                    )}
                   </div>
-                ))}
+                )}
+
+                {/* Botón de Enviar */}
+                <div className="pt-4 border-t border-border flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsRescheduleModalOpen(false)}
+                    className="flex-1 h-11 rounded-full text-xs font-bold border-border text-text bg-dark3 hover:bg-dark cursor-pointer"
+                  >
+                    Cancelar
+                  </Button>
+
+                  <Button
+                    type="button"
+                    disabled={!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey || !requestReason.trim() || isSubmitting}
+                    onClick={handleSendRescheduleRequest}
+                    className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-dark3 disabled:text-text-dim disabled:border-border text-white rounded-full h-11 text-xs font-bold shadow-lg active:scale-95 transition-all cursor-pointer"
+                  >
+                    {isSubmitting ? 'Enviando...' : 'Enviar Solicitud'}
+                  </Button>
+                </div>
               </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

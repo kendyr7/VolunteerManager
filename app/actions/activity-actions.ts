@@ -117,6 +117,47 @@ export async function getActivityLogs(limit = 100): Promise<ActivityLog[]> {
   }
 }
 
+export async function fetchVolunteerAuditLogsAction(
+  volunteerId: string,
+  volunteerName: string,
+  volunteerPhone?: string,
+  volunteerCreatedAt?: string
+): Promise<{ success: boolean; logs: ActivityLog[] }> {
+  try {
+    const logs = await getActivityLogs(1000);
+
+    const nameParts = (volunteerName || '').trim().split(/\s+/).filter(Boolean);
+    const fn = (nameParts[0] || '').toLowerCase();
+    const ln = (nameParts.slice(1).join(' ') || '').toLowerCase();
+    const phoneClean = (volunteerPhone || '').replace(/\D/g, '');
+    const createdAt = volunteerCreatedAt ? new Date(volunteerCreatedAt).getTime() : null;
+
+    const matched = logs.filter(log => {
+      if (log.target_id === volunteerId) return true;
+
+      const desc = (log.description || '').toLowerCase();
+      const det = (log.details || '').toLowerCase();
+
+      if (phoneClean && phoneClean.length >= 8 && (desc.includes(phoneClean) || det.includes(phoneClean))) return true;
+
+      if (fn && fn.length > 2 && (desc.includes(fn) || det.includes(fn))) {
+        if (ln && ln.length > 2 && (desc.includes(ln) || det.includes(ln))) return true;
+        if (desc.includes('creó al voluntario') || desc.includes('creó el usuario')) {
+          const timeDiff = Math.abs(new Date(log.created_at).getTime() - (createdAt || Date.now()));
+          if (timeDiff < 24 * 3600 * 1000) return true;
+        }
+      }
+
+      return false;
+    });
+
+    return { success: true, logs: matched };
+  } catch (err) {
+    console.error("Error in fetchVolunteerAuditLogsAction:", err);
+    return { success: false, logs: [] };
+  }
+}
+
 export async function createActivityLog({
   userName,
   userRole,
