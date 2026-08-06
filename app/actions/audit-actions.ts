@@ -169,25 +169,36 @@ export async function rollbackReassignmentAction({
 
     const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : 'Voluntario';
 
-    // 1. Eliminar asignación actual
-    await supabase
+    // 1. Actualización atómica del turno sin flicker por DELETE + UPSERT
+    const { error: insErr } = await supabase
       .from('shifts')
-      .delete()
+      .update({
+        day_key: previousDayKey,
+        shift_key: previousShiftKey,
+        checked_in: false,
+        checked_out: false,
+        checked_in_at: null,
+        checked_out_at: null
+      })
       .eq('volunteer_id', volunteerId)
       .eq('day_key', currentDayKey)
       .eq('shift_key', currentShiftKey);
 
-    // 2. Restaurar turno previo
-    const { error: insErr } = await supabase
-      .from('shifts')
-      .upsert(
-        {
-          volunteer_id: volunteerId,
-          day_key: previousDayKey,
-          shift_key: previousShiftKey,
-        },
-        { onConflict: 'volunteer_id,day_key,shift_key', ignoreDuplicates: true }
-      );
+    if (insErr) {
+      // Fallback a upsert directo sin eliminar la fila si no existía previamente
+      await supabase
+        .from('shifts')
+        .upsert(
+          {
+            volunteer_id: volunteerId,
+            day_key: previousDayKey,
+            shift_key: previousShiftKey,
+            checked_in: false,
+            checked_out: false
+          },
+          { onConflict: 'volunteer_id,day_key,shift_key' }
+        );
+    }
 
     if (insErr) {
       return { success: false, error: insErr.message };

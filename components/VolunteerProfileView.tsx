@@ -29,6 +29,7 @@ import {
   getUnifiedShiftWorkedMinutes,
   formatUnifiedDuration
 } from "@/lib/shift-calculations";
+import { getVolunteerProfileMetrics } from "@/lib/services/volunteer-profile.service";
 
 export interface VolunteerProfileData {
   id: string;
@@ -70,6 +71,9 @@ export interface VolunteerProfileViewProps {
   customActions?: React.ReactNode;
 }
 
+const volunteerAuditLogsCache = new Map<string, any[]>();
+const volunteerShiftRecordsCache = new Map<string, any[]>();
+
 export function VolunteerProfileView({
   volunteer,
   mode = 'volunteer',
@@ -86,14 +90,23 @@ export function VolunteerProfileView({
   isPendingSave = false,
   customActions,
 }: VolunteerProfileViewProps) {
+  const coordinatorData = useOptionalCoordinatorData();
+  const { refresh } = coordinatorData ?? {};
+
   const [showLegend, setShowLegend] = useState(false);
   const [activeTab, setActiveTab] = useState<'schedule' | 'requests' | 'audit'>('schedule');
   const [auditViewMode, setAuditViewMode] = useState<'timeline' | 'logs'>('timeline');
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [dbShiftRecords, setDbShiftRecords] = useState<any[]>([]);
-  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
 
-  const { refresh } = useOptionalCoordinatorData() ?? {};
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [fetchedDbRecords, setFetchedDbRecords] = useState<any[]>([]);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState<boolean>(false);
+
+  // Combined real-time shift records from coordinator context + fetched records
+  const dbShiftRecords = useMemo(() => {
+    const fromCoordinator = (coordinatorData?.shiftsData || []).filter((s: any) => s.volunteer_id === volunteer.id);
+    if (fromCoordinator.length > 0) return fromCoordinator;
+    return fetchedDbRecords;
+  }, [coordinatorData?.shiftsData, fetchedDbRecords, volunteer.id]);
 
   // Permisos y Usuario
   const userRole = typeof window !== 'undefined' ? localStorage.getItem('mock_role') || 'Admin' : 'Admin';
@@ -336,15 +349,20 @@ export function VolunteerProfileView({
       setAuditLogs(auditRes.logs);
     }
     if (shiftRecordsRes.success && shiftRecordsRes.shiftRecords) {
-      setDbShiftRecords(shiftRecordsRes.shiftRecords);
+      setFetchedDbRecords(shiftRecordsRes.shiftRecords);
     }
     setLoadingAuditLogs(false);
   };
 
   useEffect(() => {
     loadRequests();
-    loadAuditLogs();
   }, [volunteer.id]);
+
+  useEffect(() => {
+    if (activeTab === 'audit' && auditLogs.length === 0) {
+      loadAuditLogs();
+    }
+  }, [activeTab, volunteer.id]);
 
   const pendingRequests = useMemo(() => {
     return allRequests.filter((r: any) => r.status === 'pending');
@@ -655,7 +673,7 @@ export function VolunteerProfileView({
 
     if (res.success) {
       setLocalCheckedInMap(prev => ({ ...prev, [`${dayKey}-${shiftKey}`]: false }));
-      setDbShiftRecords(prev => prev.map(rec => {
+      setFetchedDbRecords(prev => prev.map(rec => {
         if (rec.day_key === dayKey && rec.shift_key === shiftKey) {
           return { ...rec, checked_in: false, checked_in_at: null, checked_out: false, checked_out_at: null };
         }
@@ -700,7 +718,7 @@ export function VolunteerProfileView({
     if (res.success) {
       setLocalCheckedOutMap(prev => ({ ...prev, [`${dayKey}-${shiftKey}`]: false }));
       setLocalCheckedInMap(prev => ({ ...prev, [`${dayKey}-${shiftKey}`]: true }));
-      setDbShiftRecords(prev => prev.map(rec => {
+      setFetchedDbRecords(prev => prev.map(rec => {
         if (rec.day_key === dayKey && rec.shift_key === shiftKey) {
           return { ...rec, checked_in: true, checked_out: false, checked_out_at: null };
         }
@@ -748,20 +766,16 @@ export function VolunteerProfileView({
   const reliabilityScore = volunteer.reliability ?? 100;
   const nameParts = (volunteer.name || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`).trim().split(/\s+/).filter(Boolean);
 
+  const profileMetrics = useMemo(() => {
+    return getVolunteerProfileMetrics(volunteer.id, dbShiftRecords, auditLogs);
+  }, [volunteer.id, dbShiftRecords, auditLogs]);
+
   const kpiHoursDisplay = useMemo(() => {
-    if (totalCompletedMinutes <= 0) {
-      return { value: '0', label: 'Horas' };
-    }
-    if (totalCompletedMinutes < 60) {
-      return { value: `${totalCompletedMinutes}`, label: 'MIN.' };
-    }
-    const hrs = Math.floor(totalCompletedMinutes / 60);
-    const mins = totalCompletedMinutes % 60;
-    if (mins === 0) {
-      return { value: `${hrs}h`, label: 'Horas' };
-    }
-    return { value: `${hrs}h ${mins}m`, label: 'Horas' };
-  }, [totalCompletedMinutes]);
+    return {
+      value: profileMetrics.kpiValue,
+      label: profileMetrics.kpiLabel,
+    };
+  }, [profileMetrics]);
 
   return (
     <div className="flex flex-col w-full max-w-full overflow-x-hidden relative">

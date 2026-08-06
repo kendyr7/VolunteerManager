@@ -11,17 +11,21 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { getActiveEventDays, formatDateShort } from '@/lib/dates';
 
+import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
+
 export interface VolunteerProfileDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  volunteer: any | null;
+  volunteer?: any | null;
+  volunteerId?: string | null;
   mode?: 'coordinator' | 'volunteer';
 }
 
 export function VolunteerProfileDrawer({
   isOpen,
   onClose,
-  volunteer,
+  volunteer: propVolunteer,
+  volunteerId: propVolunteerId,
   mode = 'coordinator',
 }: VolunteerProfileDrawerProps) {
   const [isMobile, setIsMobile] = useState(false);
@@ -68,20 +72,20 @@ export function VolunteerProfileDrawer({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Sync volunteer object with latest data from context
+  useEffect(() => {
+    if (isOpen) {
+      const openedAt = performance.now();
+      console.log(`[Profile Drawer Render Telemetry] Profile opened for volunteer ID: ${propVolunteerId || propVolunteer?.id} at ${openedAt.toFixed(2)}ms`);
+    }
+  }, [isOpen, propVolunteerId, propVolunteer]);
+
+  const targetId = propVolunteerId || propVolunteer?.id || propVolunteer?.volunteer_id || propVolunteer?.volunteerId;
+  const storeVolunteer = useVolunteerStore(s => targetId ? s.volunteersMap.get(targetId) : undefined);
+
+  // Sync volunteer object with latest data from context or store
   const activeVolunteer = useMemo(() => {
-    if (!volunteer) return null;
-    const volId = volunteer.id || volunteer.volunteer_id || volunteer.volunteerId;
-    const volName = (volunteer.name || volunteer.volunteerName || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`).trim().toLowerCase();
-
-    const match = rawVolunteers.find((v: any) => {
-      if (volId && v.id === volId) return true;
-      const vName = (v.name || `${v.first_name || ''} ${v.last_name || ''}`).trim().toLowerCase();
-      if (volName && vName === volName) return true;
-      return false;
-    });
-
-    const target = match || volunteer;
+    const target = storeVolunteer || (targetId ? rawVolunteers.find((v: any) => v.id === targetId) : null) || propVolunteer;
+    if (!target) return null;
 
     let commName = target.committee || target.committeeName || target.committees?.name || '';
     if (!commName && target.committee_id && committeesList.length > 0) {
@@ -91,7 +95,7 @@ export function VolunteerProfileDrawer({
 
     return {
       ...target,
-      id: volId || target.id,
+      id: target.id || targetId,
       name: target.name || target.volunteerName || `${target.first_name || ''} ${target.last_name || ''}`.trim(),
       first_name: target.first_name || (target.name || target.volunteerName || '').split(' ')[0] || '',
       last_name: target.last_name || (target.name || target.volunteerName || '').split(' ').slice(1).join(' ') || '',
@@ -102,7 +106,7 @@ export function VolunteerProfileDrawer({
       reliability: target.reliability ?? target.computedReliability ?? 100,
       age: target.age ?? undefined,
     };
-  }, [volunteer, rawVolunteers, committeesList]);
+  }, [propVolunteer, propVolunteerId, storeVolunteer, rawVolunteers, committeesList, targetId]);
 
   // Compute shifts by day for active volunteer
   const shiftsByDay = useMemo(() => {

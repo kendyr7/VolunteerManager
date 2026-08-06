@@ -22,6 +22,7 @@ import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
 import { useRealtimeStore } from '@/lib/store/use-realtime-store';
 import { RealtimeEventQueue } from '@/lib/services/realtime-event-queue';
 import { SupabaseReconnectManager } from '@/lib/services/supabase-reconnect-manager';
+import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
 
 const STALE_TIME_MS = 60_000;
 
@@ -91,22 +92,34 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
   if (!eventQueueRef.current) {
     eventQueueRef.current = new RealtimeEventQueue((processed) => {
-      setRawVolunteers((prev) => {
-        let updatedList = [...prev];
-        processed.forEach((evt) => {
-          if (evt.eventType === 'DELETE') {
-            updatedList = updatedList.filter((v) => v.id !== evt.payload.id);
-          } else if (evt.eventType === 'INSERT') {
-            if (!updatedList.some((v) => v.id === evt.payload.id)) {
-              updatedList = [evt.payload, ...updatedList];
+      processed.forEach((evt) => {
+        if (evt.table === 'shifts') {
+          setShiftsData((prev) => {
+            if (evt.eventType === 'DELETE') {
+              return prev.filter((s) => s.id !== evt.payload.id);
             }
-          } else {
-            updatedList = updatedList.map((v) =>
-              v.id === evt.payload.id ? { ...v, ...evt.payload } : v
-            );
-          }
-        });
-        return updatedList;
+            const idx = prev.findIndex((s) => s.id === evt.payload.id);
+            if (idx !== -1) {
+              const copy = [...prev];
+              copy[idx] = mergeRealtimeRecord(copy[idx], evt.payload);
+              return copy;
+            }
+            return [evt.payload, ...prev];
+          });
+        } else {
+          setRawVolunteers((prev) => {
+            if (evt.eventType === 'DELETE') {
+              return prev.filter((v) => v.id !== evt.payload.id);
+            }
+            const idx = prev.findIndex((v) => v.id === evt.payload.id);
+            if (idx !== -1) {
+              const copy = [...prev];
+              copy[idx] = mergeRealtimeRecord(copy[idx], evt.payload);
+              return copy;
+            }
+            return [evt.payload, ...prev];
+          });
+        }
       });
     });
   }
@@ -180,6 +193,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           useVolunteerStore.getState().setInitialVolunteers(volsData ?? []);
           setCommitteesList(activeComms);
           setShiftsData(shiftsResult ?? []);
+          useVolunteerStore.getState().setInitialShifts(shiftsResult ?? []);
 
           const parsedReqs = parseRequirementsData(reqsData ?? [], commsData);
           if (Object.keys(parsedReqs).length > 0) {
@@ -224,18 +238,10 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'shifts' },
         (payload) => {
-          if (payload.eventType === 'UPDATE' && payload.new) {
-            setShiftsData(prev => {
-              const idx = prev.findIndex((s: any) => s.id === payload.new.id);
-              if (idx !== -1) {
-                const copy = [...prev];
-                copy[idx] = { ...copy[idx], ...payload.new };
-                return copy;
-              }
-              return [...prev, payload.new];
-            });
-          } else {
-            fetchData(true);
+          if (payload.eventType === 'DELETE' && payload.old) {
+            eventQueueRef.current?.enqueue('DELETE', payload.old, 'shifts');
+          } else if (payload.eventType && payload.new) {
+            eventQueueRef.current?.enqueue(payload.eventType as any, payload.new, 'shifts');
           }
         }
       )
@@ -244,11 +250,9 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         { event: '*', schema: 'public', table: 'volunteers' },
         (payload) => {
           if (payload.eventType === 'DELETE' && payload.old) {
-            eventQueueRef.current?.enqueue('DELETE', payload.old);
+            eventQueueRef.current?.enqueue('DELETE', payload.old, 'volunteers');
           } else if (payload.eventType && payload.new) {
-            eventQueueRef.current?.enqueue(payload.eventType as any, payload.new);
-          } else {
-            fetchData(true);
+            eventQueueRef.current?.enqueue(payload.eventType as any, payload.new, 'volunteers');
           }
         }
       )

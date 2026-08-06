@@ -1,10 +1,12 @@
 import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
 import { useRealtimeStore } from '@/lib/store/use-realtime-store';
+import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
 
 export type RealtimeEventType = 'INSERT' | 'UPDATE' | 'DELETE';
 
 export interface PendingRealtimeEvent {
   eventType: RealtimeEventType;
+  table?: 'volunteers' | 'shifts';
   payload: any;
   timestamp: number;
 }
@@ -21,7 +23,7 @@ export class RealtimeEventQueue {
     this.onBatchProcessed = onBatchProcessed;
   }
 
-  public enqueue(eventType: RealtimeEventType, payload: any) {
+  public enqueue(eventType: RealtimeEventType, payload: any, table: 'volunteers' | 'shifts' = 'volunteers') {
     const id = payload.id || (payload.new && payload.new.id) || (payload.old && payload.old.id);
     if (!id) return;
 
@@ -29,20 +31,22 @@ export class RealtimeEventQueue {
     const data = payload.new || payload.old || payload;
     const incomingTs = data.updated_at ? new Date(data.updated_at).getTime() : Date.now();
 
-    // Event Coalescing: Si ya existe un evento para este ID en la cola actual,
-    // se retiene únicamente el más reciente basado en timestamp.
     const existing = this.queue.get(id);
+    let mergedData = data;
+
     if (existing) {
       this.totalMerged++;
-      if (existing.timestamp >= incomingTs) {
+      if (existing.timestamp > incomingTs) {
         this.updateTelemetry();
         return;
       }
+      mergedData = mergeRealtimeRecord(existing.payload, data);
     }
 
     this.queue.set(id, {
       eventType,
-      payload: data,
+      table,
+      payload: mergedData,
       timestamp: incomingTs,
     });
 
@@ -69,12 +73,22 @@ export class RealtimeEventQueue {
     const processed: PendingRealtimeEvent[] = [];
 
     eventsToProcess.forEach(evt => {
-      if (evt.eventType === 'DELETE') {
-        const applied = useVolunteerStore.getState().deleteVolunteer(evt.payload.id);
-        if (applied) processed.push(evt);
+      if (evt.table === 'shifts') {
+        if (evt.eventType === 'DELETE') {
+          const applied = useVolunteerStore.getState().deleteShift(evt.payload.id);
+          if (applied) processed.push(evt);
+        } else {
+          const applied = useVolunteerStore.getState().upsertShift(evt.payload);
+          if (applied) processed.push(evt);
+        }
       } else {
-        const applied = useVolunteerStore.getState().upsertVolunteer(evt.payload);
-        if (applied) processed.push(evt);
+        if (evt.eventType === 'DELETE') {
+          const applied = useVolunteerStore.getState().deleteVolunteer(evt.payload.id);
+          if (applied) processed.push(evt);
+        } else {
+          const applied = useVolunteerStore.getState().upsertVolunteer(evt.payload);
+          if (applied) processed.push(evt);
+        }
       }
     });
 
