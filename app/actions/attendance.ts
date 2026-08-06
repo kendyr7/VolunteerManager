@@ -422,6 +422,9 @@ export async function checkOutVolunteer(shiftId: string) {
     try {
       revalidatePath('/shifts');
       revalidatePath('/check-in');
+      revalidatePath('/reports');
+      revalidatePath('/volunteers');
+      revalidatePath('/dashboard');
     } catch {}
 
     return { success: true, message: "Turno completado exitosamente." };

@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { getActiveEventDays, formatDateShort } from "@/lib/dates";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EntryPassButton } from "@/components/EntryPassButton";
@@ -22,6 +24,11 @@ import {
 } from "@/app/actions/audit-actions";
 import { fetchVolunteerAuditLogsAction, fetchVolunteerShiftRecordsAction } from "@/app/actions/activity-actions";
 import { useOptionalCoordinatorData } from "@/lib/coordinator-data-context";
+import {
+  getUnifiedShiftTimes,
+  getUnifiedShiftWorkedMinutes,
+  formatUnifiedDuration
+} from "@/lib/shift-calculations";
 
 export interface VolunteerProfileData {
   id: string;
@@ -180,25 +187,30 @@ export function VolunteerProfileView({
     }
   }, [volunteer.id, externalShiftsByDay, EVENT_DAYS]);
 
-  const isShiftCheckedIn = useCallback((dayKey: string, shiftKey: string): boolean => {
-    const dbRec = dbShiftRecords.find(r => r.day_key === dayKey && r.shift_key === shiftKey);
-    if (dbRec && (dbRec.checked_in || dbRec.checked_in_at)) return true;
-
-    const map = externalCheckedInMap || localCheckedInMap;
-    if (!map) return false;
-    const arrayVal = (map as Record<string, string[]>)[dayKey];
-    if (Array.isArray(arrayVal)) {
-      return arrayVal.includes(shiftKey);
-    }
-    return (
-      !!(map as Record<string, boolean>)[`${volunteer.id}-${dayKey}-${shiftKey}`] ||
-      !!(map as Record<string, boolean>)[`${dayKey}-${shiftKey}`]
-    );
-  }, [dbShiftRecords, externalCheckedInMap, localCheckedInMap, volunteer.id]);
-
   const isShiftCheckedOut = useCallback((dayKey: string, shiftKey: string): boolean => {
     const dbRec = dbShiftRecords.find(r => r.day_key === dayKey && r.shift_key === shiftKey);
-    if (dbRec && (dbRec.checked_out || dbRec.checked_out_at)) return true;
+    if (dbRec && (dbRec.checked_out || dbRec.checked_out_at || dbRec.status === 'completed')) return true;
+
+    // Check relevant audit logs for this specific shift sorted by newest first
+    const relevantLogs = auditLogs.filter((l: any) => {
+      const desc = (l.description || '').toLowerCase();
+      const det = (l.details || '').toLowerCase();
+      const matchDay = desc.includes(dayKey.toLowerCase()) || det.includes(dayKey.toLowerCase());
+      const matchShift = desc.includes(shiftKey.toLowerCase()) || det.includes(shiftKey.toLowerCase());
+      return matchDay && matchShift;
+    });
+
+    if (relevantLogs.length > 0) {
+      // If there is any completed / checkout adjustment log in history, restoring / undoing accidental reopen keeps it completed
+      const hasCheckoutInHistory = relevantLogs.some((l: any) => {
+        const d = (l.description || '').toLowerCase();
+        return d.includes('check-out') || d.includes('salida') || d.includes('ajustó hora de salida') || d.includes('completó');
+      });
+
+      if (hasCheckoutInHistory) {
+        return true;
+      }
+    }
 
     const map = externalCheckedOutMap || localCheckedOutMap;
     if (!map) return false;
@@ -210,12 +222,59 @@ export function VolunteerProfileView({
       !!(map as Record<string, boolean>)[`${volunteer.id}-${dayKey}-${shiftKey}`] ||
       !!(map as Record<string, boolean>)[`${dayKey}-${shiftKey}`]
     );
-  }, [dbShiftRecords, externalCheckedOutMap, localCheckedOutMap, volunteer.id]);
+  }, [dbShiftRecords, auditLogs, externalCheckedOutMap, localCheckedOutMap, volunteer.id]);
+
+  const isShiftCheckedIn = useCallback((dayKey: string, shiftKey: string): boolean => {
+    if (isShiftCheckedOut(dayKey, shiftKey)) return false;
+
+    const dbRec = dbShiftRecords.find(r => r.day_key === dayKey && r.shift_key === shiftKey);
+    if (dbRec) {
+      if (!dbRec.checked_in && !dbRec.checked_in_at && dbRec.status !== 'confirmed') {
+        return false;
+      }
+      if (dbRec.checked_in || dbRec.checked_in_at || dbRec.status === 'confirmed') {
+        return true;
+      }
+    }
+
+    const relevantLogs = auditLogs.filter((l: any) => {
+      const desc = (l.description || '').toLowerCase();
+      const det = (l.details || '').toLowerCase();
+      const matchDay = desc.includes(dayKey.toLowerCase()) || det.includes(dayKey.toLowerCase());
+      const matchShift = desc.includes(shiftKey.toLowerCase()) || det.includes(shiftKey.toLowerCase());
+      return matchDay && matchShift;
+    });
+
+    if (relevantLogs.length > 0) {
+      const latestLog = relevantLogs[0];
+      const desc = (latestLog.description || '').toLowerCase();
+
+      if (desc.includes('revirtió la entrada') || desc.includes('revertido a estado programado') || desc.includes('deshacer')) {
+        return false;
+      }
+
+      if (desc.includes('check-in') || desc.includes('escaneó') || desc.includes('llegada') || desc.includes('entrada') || desc.includes('registró asistencia')) {
+        return true;
+      }
+    }
+
+    const map = externalCheckedInMap || localCheckedInMap;
+    if (!map) return false;
+    const arrayVal = (map as Record<string, string[]>)[dayKey];
+    if (Array.isArray(arrayVal)) {
+      return arrayVal.includes(shiftKey);
+    }
+    return (
+      !!(map as Record<string, boolean>)[`${volunteer.id}-${dayKey}-${shiftKey}`] ||
+      !!(map as Record<string, boolean>)[`${dayKey}-${shiftKey}`]
+    );
+  }, [dbShiftRecords, auditLogs, isShiftCheckedOut, externalCheckedInMap, localCheckedInMap, volunteer.id]);
 
   // Contexto de validación para reagendamiento (turnos propios + capacidad por comité)
   const rescheduleCtx = useVolunteerRescheduleContext(volunteer.id);
 
   // Reagendamiento State
+  const [activeShiftTooltipKey, setActiveShiftTooltipKey] = useState<string | null>(null);
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
   const [allRequests, setAllRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
@@ -292,63 +351,62 @@ export function VolunteerProfileView({
   }, [allRequests]);
 
   const formatDurationMinutes = useCallback((totalMins: number) => {
-    if (totalMins <= 0) return '0 min';
-    const hrs = Math.floor(totalMins / 60);
-    const mins = totalMins % 60;
-    if (hrs === 0) return `${mins} min`;
-    if (mins === 0) return `${hrs}h`;
-    return `${hrs}h ${mins}m`;
+    return formatUnifiedDuration(totalMins);
   }, []);
 
+  const getShiftTimesFormatted = useCallback((dayKey: string, shiftKey: string) => {
+    return getUnifiedShiftTimes(dayKey, shiftKey, dbShiftRecords, auditLogs);
+  }, [dbShiftRecords, auditLogs]);
+
   const getShiftWorkedMinutes = useCallback((dayKey: string, shiftKey: string) => {
-    const maxMins = shiftKey === 'T4' ? 300 : 240;
     if (!isShiftCheckedOut(dayKey, shiftKey)) return 0;
-
-    const rec = dbShiftRecords.find((s: any) => s.day_key === dayKey && s.shift_key === shiftKey);
-    if (rec?.checked_in_at && rec?.checked_out_at) {
-      const inTime = new Date(rec.checked_in_at).getTime();
-      const outTime = new Date(rec.checked_out_at).getTime();
-      if (!isNaN(inTime) && !isNaN(outTime) && outTime > inTime) {
-        const diffMins = Math.round((outTime - inTime) / 60000);
-        return Math.min(maxMins, diffMins);
-      }
-    }
-
-    const checkInLog = auditLogs.find((l: any) =>
-      (l.description || '').toLowerCase().includes(dayKey.toLowerCase()) &&
-      (l.description || '').toLowerCase().includes(shiftKey.toLowerCase()) &&
-      ((l.description || '').toLowerCase().includes('check-in') || (l.description || '').toLowerCase().includes('escaneó') || (l.action_type || '').toLowerCase().includes('check-in'))
-    );
-
-    const checkOutLog = auditLogs.find((l: any) =>
-      (l.description || '').toLowerCase().includes(dayKey.toLowerCase()) &&
-      (l.description || '').toLowerCase().includes(shiftKey.toLowerCase()) &&
-      ((l.description || '').toLowerCase().includes('check-out') || (l.description || '').toLowerCase().includes('salida') || (l.description || '').toLowerCase().includes('completó'))
-    );
-
-    if (checkInLog?.created_at && checkOutLog?.created_at) {
-      const inTime = new Date(checkInLog.created_at).getTime();
-      const outTime = new Date(checkOutLog.created_at).getTime();
-      if (!isNaN(inTime) && !isNaN(outTime) && outTime > inTime) {
-        const diffMins = Math.round((outTime - inTime) / 60000);
-        return Math.min(maxMins, diffMins);
-      }
-    }
-
-    return maxMins;
+    return getUnifiedShiftWorkedMinutes(dayKey, shiftKey, dbShiftRecords, auditLogs);
   }, [isShiftCheckedOut, dbShiftRecords, auditLogs]);
 
   const totalCompletedMinutes = useMemo(() => {
     let count = 0;
+    const countedKeys = new Set<string>();
+
+    // 1. Check dbShiftRecords directly
+    dbShiftRecords.forEach((rec: any) => {
+      const key = `${rec.day_key}-${rec.shift_key}`;
+      if (rec.checked_out || rec.checked_out_at || rec.status === 'completed') {
+        countedKeys.add(key);
+        count += getShiftWorkedMinutes(rec.day_key, rec.shift_key);
+      }
+    });
+
+    // 2. Check auditLogs for checkout / output adjustments
+    auditLogs.forEach((log: any) => {
+      const desc = (log.description || '').toLowerCase();
+      if (desc.includes('salida') || desc.includes('check-out') || desc.includes('completó') || desc.includes('ajustó hora de salida')) {
+        EVENT_DAYS.forEach(d => {
+          ['T1', 'T2', 'T3', 'T4'].forEach(t => {
+            const key = `${d.key}-${t}`;
+            if (!countedKeys.has(key)) {
+              if (desc.includes(d.key.toLowerCase()) && desc.includes(t.toLowerCase())) {
+                countedKeys.add(key);
+                count += getShiftWorkedMinutes(d.key, t);
+              }
+            }
+          });
+        });
+      }
+    });
+
+    // 3. Fallback for shiftsByDay
     Object.entries(shiftsByDay).forEach(([dayKey, shifts]) => {
       shifts.forEach((shiftKey) => {
-        if (isShiftCheckedOut(dayKey, shiftKey)) {
+        const key = `${dayKey}-${shiftKey}`;
+        if (!countedKeys.has(key) && isShiftCheckedOut(dayKey, shiftKey)) {
+          countedKeys.add(key);
           count += getShiftWorkedMinutes(dayKey, shiftKey);
         }
       });
     });
+
     return count;
-  }, [shiftsByDay, isShiftCheckedOut, getShiftWorkedMinutes]);
+  }, [dbShiftRecords, auditLogs, shiftsByDay, EVENT_DAYS, isShiftCheckedOut, getShiftWorkedMinutes]);
 
   const volunteerTimeline = useMemo(() => {
     const items: Array<{
@@ -690,6 +748,21 @@ export function VolunteerProfileView({
   const reliabilityScore = volunteer.reliability ?? 100;
   const nameParts = (volunteer.name || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`).trim().split(/\s+/).filter(Boolean);
 
+  const kpiHoursDisplay = useMemo(() => {
+    if (totalCompletedMinutes <= 0) {
+      return { value: '0', label: 'Horas' };
+    }
+    if (totalCompletedMinutes < 60) {
+      return { value: `${totalCompletedMinutes}`, label: 'MIN.' };
+    }
+    const hrs = Math.floor(totalCompletedMinutes / 60);
+    const mins = totalCompletedMinutes % 60;
+    if (mins === 0) {
+      return { value: `${hrs}h`, label: 'Horas' };
+    }
+    return { value: `${hrs}h ${mins}m`, label: 'Horas' };
+  }, [totalCompletedMinutes]);
+
   return (
     <div className="flex flex-col w-full max-w-full overflow-x-hidden relative">
       {/* Mensaje de auditoría */}
@@ -750,10 +823,10 @@ export function VolunteerProfileView({
               Menor de edad ({volunteer.age} años)
             </span>
           )}
-          {volunteer.committee && (
+          {Boolean(volunteer.committee || (volunteer as any).committeeName || (volunteer as any).committees?.name) && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 shadow-sm">
               <span className="material-symbols-outlined text-[13px]">groups</span>
-              {volunteer.committee}
+              {volunteer.committee || (volunteer as any).committeeName || (volunteer as any).committees?.name}
             </span>
           )}
           {volunteer.stake && (
@@ -762,10 +835,10 @@ export function VolunteerProfileView({
               {volunteer.stake}
             </span>
           )}
-          {volunteer.ward && (
+          {(volunteer.ward || (volunteer as any).neighborhood) && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/25 shadow-sm">
               <span className="material-symbols-outlined text-[13px]">location_on</span>
-              {volunteer.ward}
+              {volunteer.ward || (volunteer as any).neighborhood}
             </span>
           )}
         </div>
@@ -778,8 +851,8 @@ export function VolunteerProfileView({
           <span className="text-drawer-kpi-label text-text-dim mt-1.5 font-inter font-extrabold">Turnos</span>
         </div>
         <div className="flex flex-col items-center flex-1 border-r border-border">
-          <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{diasCubiertos}</span>
-          <span className="text-drawer-kpi-label text-text-dim mt-1.5 font-inter font-extrabold">Días</span>
+          <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{kpiHoursDisplay.value}</span>
+          <span className="text-drawer-kpi-label text-text-dim mt-1.5 font-inter font-extrabold uppercase">{kpiHoursDisplay.label}</span>
         </div>
         <div className="flex flex-col items-center flex-1 border-r border-border">
           <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">
@@ -1009,9 +1082,9 @@ export function VolunteerProfileView({
               return (
                 <div
                   key={dayKey}
-                  className="relative overflow-hidden bg-dark2 border border-border rounded-xl p-3 sm:p-4 flex items-center justify-between shadow-sm transition-all"
+                  className="relative bg-dark2 border border-border rounded-xl p-3 sm:p-4 flex items-center justify-between shadow-sm transition-all"
                 >
-                  <div className={`absolute left-0 top-0 bottom-0 w-2 ${cardBg} opacity-90`} />
+                  <div className={`absolute left-0 top-0 bottom-0 w-2 ${cardBg} opacity-90 rounded-l-xl`} />
 
                   <div className="flex items-center gap-3 pl-2">
                     <div className="flex flex-col items-center justify-center min-w-[36px]">
@@ -1049,18 +1122,36 @@ export function VolunteerProfileView({
                         labelColor = "text-[#4d7cfe] font-bold";
                       }
 
+                      const times = getShiftTimesFormatted(dayKey, t);
+                      const titleText = outCheck
+                        ? `Turno ${t} Completado | Entrada: ${times.startTime} · Salida: ${times.endTime}`
+                        : inCheck
+                        ? `Turno ${t} en servicio (Check-in activo)`
+                        : active
+                        ? `Turno ${t} Programado`
+                        : `Turno ${t} Disponible`;
+
+                      const tooltipKey = `${dayKey}-${t}`;
+                      const isTooltipOpen = activeShiftTooltipKey === tooltipKey;
+
                       return (
-                        <div key={t} className="flex flex-col items-center">
+                        <div key={t} className="flex flex-col items-center relative group">
                           <button
                             type="button"
-                            disabled={!canClick}
-                            onClick={() => handleToggleShift(dayKey, t)}
+                            onClick={(e) => {
+                              if (outCheck) {
+                                e.stopPropagation();
+                                setActiveShiftTooltipKey(prev => prev === tooltipKey ? null : tooltipKey);
+                              } else if (canClick) {
+                                handleToggleShift(dayKey, t);
+                              }
+                            }}
                             className={cn(
-                              "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all",
+                              "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all cursor-pointer",
                               statusStyle,
-                              canClick && "hover:bg-dark hover:border-border cursor-pointer active:scale-95"
+                              (canClick || outCheck) && "hover:bg-dark hover:border-border active:scale-95"
                             )}
-                            title={`${t}: ${active ? 'Programado' : 'Disponible'}${inCheck ? ' (Check-in)' : ''}`}
+                            title={titleText}
                           >
                             <div className="h-4 flex items-center justify-center">
                               {iconContent}
@@ -1069,6 +1160,30 @@ export function VolunteerProfileView({
                               {t}
                             </span>
                           </button>
+
+                          {/* Micro-Tooltip inteligente adaptado a los bordes de la pantalla (Hover Desktop + Touch/Tap Móvil) */}
+                          {outCheck && (
+                            <div
+                              className={cn(
+                                "absolute bottom-full mb-2 flex-col z-[100] transition-all duration-200",
+                                isTooltipOpen ? "flex" : "hidden group-hover:flex",
+                                t === 'T4' || t === 'T3' ? 'right-0 items-end' : t === 'T1' ? 'left-0 items-start' : 'left-1/2 -translate-x-1/2 items-center'
+                              )}
+                            >
+                              <div className="bg-[#18181b] border border-slate-700/90 text-white text-[10px] sm:text-[11px] font-semibold px-2.5 py-1.5 rounded-lg shadow-2xl whitespace-nowrap flex items-center gap-1.5 border-t-2 border-t-slate-400">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                                <span><strong className="text-slate-300 font-bold">Entrada:</strong> {times.startTime}</span>
+                                <span className="text-slate-500">·</span>
+                                <span><strong className="text-slate-300 font-bold">Salida:</strong> {times.endTime}</span>
+                              </div>
+                              <div
+                                className={cn(
+                                  "w-2 h-2 bg-[#18181b] border-r border-b border-slate-700/90 rotate-45 -mt-1",
+                                  t === 'T4' || t === 'T3' ? 'mr-4' : t === 'T1' ? 'ml-4' : ''
+                                )}
+                              />
+                            </div>
+                          )}
 
                           {/* Acciones de Reversión Exclusivas para Admin (Espacio de altura fija para evitar desalineación) */}
                           {isAdmin && mode === 'coordinator' && (
@@ -1139,14 +1254,11 @@ export function VolunteerProfileView({
         </div>
       ) : activeTab === 'audit' && (isAdmin || mode === 'coordinator') ? (
         <div className="space-y-4">
-          {/* Tarjeta Resumen de Horas */}
-          <div className="p-4 bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 rounded-2xl flex items-center justify-between">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-text-dim block">Tiempo Acumulado</span>
-              <span className="text-xl font-black text-[#4d7cfe]">{formatDurationMinutes(totalCompletedMinutes)}</span>
-            </div>
-            <Badge className="bg-[#4d7cfe]/20 text-[#4d7cfe] border border-[#4d7cfe]/30 text-xs font-extrabold px-3 py-1">
-              Historial Completo de Actividad
+          {/* Encabezado de Auditoría */}
+          <div className="flex items-center justify-between px-1 mb-2">
+            <span className="text-xs font-extrabold text-text uppercase tracking-wider">Historial de Auditoría</span>
+            <Badge className="bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-bold px-2.5 py-0.5">
+              Registro de Actividad
             </Badge>
           </div>
 

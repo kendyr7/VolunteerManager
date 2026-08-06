@@ -126,24 +126,43 @@ export async function fetchVolunteerAuditLogsAction(
   try {
     const logs = await getActivityLogs(1000);
 
-    const nameParts = (volunteerName || '').trim().split(/\s+/).filter(Boolean);
-    const fn = (nameParts[0] || '').toLowerCase();
-    const ln = (nameParts.slice(1).join(' ') || '').toLowerCase();
-    const phoneClean = (volunteerPhone || '').replace(/\D/g, '');
+    const cleanVolId = (volunteerId || '').trim();
+    const cleanPhone = (volunteerPhone || '').replace(/\D/g, '');
+
+    // Extract individual name tokens (length >= 3)
+    const nameTokens = (volunteerName || '')
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .split(/\s+/)
+      .filter(t => t.length >= 3);
+
     const createdAt = volunteerCreatedAt ? new Date(volunteerCreatedAt).getTime() : null;
 
     const matched = logs.filter(log => {
-      if (log.target_id === volunteerId) return true;
+      // 1. Direct target_id match
+      if (cleanVolId && log.target_id === cleanVolId) return true;
 
-      const desc = (log.description || '').toLowerCase();
-      const det = (log.details || '').toLowerCase();
+      const descNorm = (log.description || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const detNorm = (log.details || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-      if (phoneClean && phoneClean.length >= 8 && (desc.includes(phoneClean) || det.includes(phoneClean))) return true;
+      // 2. Phone match
+      if (cleanPhone && cleanPhone.length >= 8 && (descNorm.includes(cleanPhone) || detNorm.includes(cleanPhone))) {
+        return true;
+      }
 
-      if (fn && fn.length > 2 && (desc.includes(fn) || det.includes(fn))) {
-        if (ln && ln.length > 2 && (desc.includes(ln) || det.includes(ln))) return true;
-        if (desc.includes('creó al voluntario') || desc.includes('creó el usuario')) {
-          const timeDiff = Math.abs(new Date(log.created_at).getTime() - (createdAt || Date.now()));
+      // 3. Name token match (matches if any name token like "kendyr" or "quintanilla" is present)
+      if (nameTokens.length > 0) {
+        const matchesCount = nameTokens.filter(token => descNorm.includes(token) || detNorm.includes(token)).length;
+        if (matchesCount >= 1) {
+          return true;
+        }
+      }
+
+      // 4. Creation log match
+      if (descNorm.includes('creo al voluntario') || descNorm.includes('creo el usuario')) {
+        if (createdAt) {
+          const timeDiff = Math.abs(new Date(log.created_at).getTime() - createdAt);
           if (timeDiff < 24 * 3600 * 1000) return true;
         }
       }

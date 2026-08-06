@@ -71,9 +71,38 @@ export function VolunteerProfileDrawer({
   // Sync volunteer object with latest data from context
   const activeVolunteer = useMemo(() => {
     if (!volunteer) return null;
-    const match = rawVolunteers.find((v: any) => v.id === volunteer.id);
-    return match || volunteer;
-  }, [volunteer, rawVolunteers]);
+    const volId = volunteer.id || volunteer.volunteer_id || volunteer.volunteerId;
+    const volName = (volunteer.name || volunteer.volunteerName || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`).trim().toLowerCase();
+
+    const match = rawVolunteers.find((v: any) => {
+      if (volId && v.id === volId) return true;
+      const vName = (v.name || `${v.first_name || ''} ${v.last_name || ''}`).trim().toLowerCase();
+      if (volName && vName === volName) return true;
+      return false;
+    });
+
+    const target = match || volunteer;
+
+    let commName = target.committee || target.committeeName || target.committees?.name || '';
+    if (!commName && target.committee_id && committeesList.length > 0) {
+      const foundComm = committeesList.find((c: any) => c.id === target.committee_id);
+      if (foundComm) commName = foundComm.name;
+    }
+
+    return {
+      ...target,
+      id: volId || target.id,
+      name: target.name || target.volunteerName || `${target.first_name || ''} ${target.last_name || ''}`.trim(),
+      first_name: target.first_name || (target.name || target.volunteerName || '').split(' ')[0] || '',
+      last_name: target.last_name || (target.name || target.volunteerName || '').split(' ').slice(1).join(' ') || '',
+      committee: commName,
+      ward: target.ward || target.neighborhood || target.barrio || '',
+      stake: target.stake || '',
+      phone: target.phone || '',
+      reliability: target.reliability ?? target.computedReliability ?? 100,
+      age: target.age ?? undefined,
+    };
+  }, [volunteer, rawVolunteers, committeesList]);
 
   // Compute shifts by day for active volunteer
   const shiftsByDay = useMemo(() => {

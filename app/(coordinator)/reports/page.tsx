@@ -20,6 +20,7 @@ import { getActiveEventDays, formatDateShort } from "@/lib/dates";
 import { canViewReports } from "@/lib/permissions";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
+import { formatUnifiedDuration } from "@/lib/shift-calculations";
 
 // Day names for week headers
 const DAY_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -69,13 +70,13 @@ function formatDateDDMMYYYY(dateStr: string): string {
 }
 
 function formatMinutes(totalMinutes: number): string {
-  if (totalMinutes === 0) return "0 h";
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  if (h > 0 && m > 0) return `${h} h ${m} min`;
-  if (h > 0) return `${h} h`;
-  return `${m} min`;
+  return formatUnifiedDuration(totalMinutes);
 }
+
+type SortOrder = 'asc' | 'desc';
+type HistorySortField = 'volunteerName' | 'committeeName' | 'neighborhood' | 'date' | 'durationMinutes' | 'status';
+type VolunteerSortField = 'name' | 'committee' | 'confirmed' | 'reliability' | 'minutes';
+
 export default function ReportsPage() {
   const [data, setData] = useState<ReportsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -86,14 +87,40 @@ export default function ReportsPage() {
   const [inputValue, setInputValue] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
 
+  // Table Column Sort States
+  const [historySortField, setHistorySortField] = useState<HistorySortField | null>(null);
+  const [historySortOrder, setHistorySortOrder] = useState<SortOrder>('asc');
+
+  const handleHistorySort = (field: HistorySortField) => {
+    if (historySortField === field) {
+      setHistorySortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setHistorySortField(field);
+      setHistorySortOrder('asc');
+    }
+  };
+
+  const [volunteerSortField, setVolunteerSortField] = useState<VolunteerSortField | null>(null);
+  const [volunteerSortOrder, setVolunteerSortOrder] = useState<SortOrder>('asc');
+
+  const handleVolunteerSort = (field: VolunteerSortField) => {
+    if (volunteerSortField === field) {
+      setVolunteerSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setVolunteerSortField(field);
+      setVolunteerSortOrder('asc');
+    }
+  };
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
       setAppliedSearch(inputValue);
-    }, 300);
+    }, 250);
     return () => clearTimeout(timer);
   }, [inputValue]);
 
+  // Selected multi-filters
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedNeighborhoods, setSelectedNeighborhoods] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
@@ -118,9 +145,34 @@ export default function ReportsPage() {
 
   const handleOpenProfile = (item: any) => {
     if (!item) return;
-    const itemVolId = item.id || item.volunteer_id || item.volunteerId;
-    const match = rawVolunteers.find((v: any) => v.id === itemVolId || v.name === item.name || v.name === item.volunteer);
-    setDrawerVolunteer(match || item);
+    const targetVolId = item.id || item.volunteer_id || item.volunteerId;
+    const targetName = item.volunteerName || item.name || item.volunteer || '';
+
+    // Precise search by ID or full name match
+    const match = rawVolunteers.find((v: any) => {
+      if (targetVolId && v.id === targetVolId) return true;
+      const vName = (v.name || `${v.first_name || ''} ${v.last_name || ''}`).trim().toLowerCase();
+      if (targetName && vName === targetName.trim().toLowerCase()) return true;
+      return false;
+    });
+
+    if (match) {
+      setDrawerVolunteer(match);
+    } else {
+      // Normalize item properties for drawer display
+      setDrawerVolunteer({
+        id: targetVolId || item.id,
+        name: targetName,
+        first_name: item.first_name || targetName.split(' ')[0] || '',
+        last_name: item.last_name || targetName.split(' ').slice(1).join(' ') || '',
+        committee: item.committee || item.committeeName || '',
+        ward: item.ward || item.neighborhood || '',
+        stake: item.stake || '',
+        phone: item.phone || '',
+        reliability: item.reliability ?? 100,
+        age: item.age ?? undefined,
+      });
+    }
     setIsProfileDrawerOpen(true);
   };
 
@@ -487,19 +539,56 @@ export default function ReportsPage() {
     });
   }, [data, filteredItems, selectedCommittees, selectedDates]);
 
-  const totalPagesHistory = Math.ceil(filteredItems.length / pageSize) || 1;
-  const totalPagesVolunteers = Math.ceil(volunteerRanking.length / pageSize) || 1;
-  const currentTotalPages = activeTab === 'history' ? totalPagesHistory : totalPagesVolunteers;
+  const sortedHistoryItems = useMemo(() => {
+    if (!historySortField) return filteredItems;
 
-  const paginatedHistoryItems = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredItems.slice(start, start + pageSize);
-  }, [filteredItems, currentPage, pageSize]);
+    return [...filteredItems].sort((a, b) => {
+      let valA: any = a[historySortField];
+      let valB: any = b[historySortField];
 
-  const paginatedVolunteerItems = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return volunteerRanking.slice(start, start + pageSize);
-  }, [volunteerRanking, currentPage, pageSize]);
+      if (typeof valA === 'string' || typeof valB === 'string') {
+        valA = (valA || '').trim();
+        valB = (valB || '').trim();
+        const cmp = valA.localeCompare(valB, 'es', { sensitivity: 'base', numeric: true });
+        return historySortOrder === 'asc' ? cmp : -cmp;
+      }
+
+      if (typeof valA === 'number' || typeof valB === 'number') {
+        const numA = valA ?? 0;
+        const numB = valB ?? 0;
+        return historySortOrder === 'asc' ? numA - numB : numB - numA;
+      }
+
+      return 0;
+    });
+  }, [filteredItems, historySortField, historySortOrder]);
+
+  const sortedVolunteerRanking = useMemo(() => {
+    if (!volunteerSortField) return volunteerRanking;
+
+    return [...volunteerRanking].sort((a, b) => {
+      let valA: any = a[volunteerSortField];
+      let valB: any = b[volunteerSortField];
+
+      if (typeof valA === 'string' || typeof valB === 'string') {
+        valA = (valA || '').trim();
+        valB = (valB || '').trim();
+        const cmp = valA.localeCompare(valB, 'es', { sensitivity: 'base', numeric: true });
+        return volunteerSortOrder === 'asc' ? cmp : -cmp;
+      }
+
+      if (typeof valA === 'number' || typeof valB === 'number') {
+        const numA = valA ?? 0;
+        const numB = valB ?? 0;
+        return volunteerSortOrder === 'asc' ? numA - numB : numB - numA;
+      }
+
+      return 0;
+    });
+  }, [volunteerRanking, volunteerSortField, volunteerSortOrder]);
+
+  const paginatedHistoryItems = sortedHistoryItems;
+  const paginatedVolunteerItems = sortedVolunteerRanking;
 
   if (loading) {
     return (
@@ -914,7 +1003,7 @@ export default function ReportsPage() {
               </div>
               <div className="space-y-1">
                 <p className="text-2xl sm:text-3xl font-inter font-bold text-text tracking-tight flex items-baseline gap-1">
-                  {Math.round(totalMinutes / 60)} <span className="text-xs font-inter font-bold text-text-dim">hrs</span>
+                  {formatMinutes(totalMinutes)}
                 </p>
                 <p className="text-[10px] text-text-dim font-inter font-bold">Horas de servicio confirmadas</p>
               </div>
@@ -1154,14 +1243,104 @@ export default function ReportsPage() {
                   {/* Desktop Table View */}
                   <div className="hidden lg:block overflow-x-auto">
                     <table className="w-full text-sm text-left border-separate border-spacing-0">
-                      <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md text-[10px] font-inter font-bold text-text-dim uppercase tracking-wider">
+                      <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md text-[10px] font-inter font-bold text-text-dim uppercase tracking-wider select-none">
                         <tr>
-                          <th className="px-5 py-4 font-inter font-bold">Voluntario</th>
-                          <th className="px-4 py-4 font-inter font-bold">Comité</th>
-                          <th className="px-4 py-4 font-inter font-bold">Barrio / Rama · Estaca</th>
-                          <th className="px-4 py-4 text-center font-inter font-bold">Fecha y Turno</th>
-                          <th className="px-4 py-4 text-center font-inter font-bold">Horas</th>
-                          <th className="px-5 py-4 text-right font-inter font-bold">Estado</th>
+                          <th className="px-5 py-4 font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleHistorySort('volunteerName')}
+                              className="flex items-center gap-1.5 hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Voluntario"
+                            >
+                              <span className={cn(historySortField === 'volunteerName' && "text-[#4d7cfe] font-extrabold")}>Voluntario</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                historySortField === 'volunteerName' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {historySortField === 'volunteerName' ? (historySortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleHistorySort('committeeName')}
+                              className="flex items-center gap-1.5 hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Comité"
+                            >
+                              <span className={cn(historySortField === 'committeeName' && "text-[#4d7cfe] font-extrabold")}>Comité</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                historySortField === 'committeeName' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {historySortField === 'committeeName' ? (historySortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleHistorySort('neighborhood')}
+                              className="flex items-center gap-1.5 hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Barrio / Estaca"
+                            >
+                              <span className={cn(historySortField === 'neighborhood' && "text-[#4d7cfe] font-extrabold")}>Barrio / Rama · Estaca</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                historySortField === 'neighborhood' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {historySortField === 'neighborhood' ? (historySortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleHistorySort('date')}
+                              className="flex items-center justify-center gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Fecha"
+                            >
+                              <span className={cn(historySortField === 'date' && "text-[#4d7cfe] font-extrabold")}>Fecha y Turno</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                historySortField === 'date' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {historySortField === 'date' ? (historySortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleHistorySort('durationMinutes')}
+                              className="flex items-center justify-center gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Horas"
+                            >
+                              <span className={cn(historySortField === 'durationMinutes' && "text-[#4d7cfe] font-extrabold")}>Horas</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                historySortField === 'durationMinutes' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {historySortField === 'durationMinutes' ? (historySortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-5 py-4 text-right font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleHistorySort('status')}
+                              className="flex items-center justify-end gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Estado"
+                            >
+                              <span className={cn(historySortField === 'status' && "text-[#4d7cfe] font-extrabold")}>Estado</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                historySortField === 'status' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {historySortField === 'status' ? (historySortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -1248,13 +1427,88 @@ export default function ReportsPage() {
                   {/* Desktop Table View */}
                   <div className="hidden lg:block overflow-x-auto">
                     <table className="w-full text-sm text-left border-separate border-spacing-0">
-                      <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md text-[10px] font-inter font-bold text-text-dim uppercase tracking-wider">
+                      <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md text-[10px] font-inter font-bold text-text-dim uppercase tracking-wider select-none">
                         <tr>
-                          <th className="px-5 py-4 font-inter font-bold">Voluntario</th>
-                          <th className="px-4 py-4 font-inter font-bold">Comité / Estaca</th>
-                          <th className="px-4 py-4 text-center font-inter font-bold">Turnos Asistidos</th>
-                          <th className="px-4 py-4 text-center font-inter font-bold">Fiabilidad</th>
-                          <th className="px-5 py-4 text-right font-inter font-bold">Horas Acumuladas</th>
+                          <th className="px-5 py-4 font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleVolunteerSort('name')}
+                              className="flex items-center gap-1.5 hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Voluntario"
+                            >
+                              <span className={cn(volunteerSortField === 'name' && "text-[#4d7cfe] font-extrabold")}>Voluntario</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                volunteerSortField === 'name' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {volunteerSortField === 'name' ? (volunteerSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleVolunteerSort('committee')}
+                              className="flex items-center gap-1.5 hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Comité / Estaca"
+                            >
+                              <span className={cn(volunteerSortField === 'committee' && "text-[#4d7cfe] font-extrabold")}>Comité / Estaca</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                volunteerSortField === 'committee' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {volunteerSortField === 'committee' ? (volunteerSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleVolunteerSort('confirmed')}
+                              className="flex items-center justify-center gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Turnos Asistidos"
+                            >
+                              <span className={cn(volunteerSortField === 'confirmed' && "text-[#4d7cfe] font-extrabold")}>Turnos Asistidos</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                volunteerSortField === 'confirmed' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {volunteerSortField === 'confirmed' ? (volunteerSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleVolunteerSort('reliability')}
+                              className="flex items-center justify-center gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Fiabilidad"
+                            >
+                              <span className={cn(volunteerSortField === 'reliability' && "text-[#4d7cfe] font-extrabold")}>Fiabilidad</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                volunteerSortField === 'reliability' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {volunteerSortField === 'reliability' ? (volunteerSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-5 py-4 text-right font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleVolunteerSort('minutes')}
+                              className="flex items-center justify-end gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Horas Acumuladas"
+                            >
+                              <span className={cn(volunteerSortField === 'minutes' && "text-[#4d7cfe] font-extrabold")}>Horas Acumuladas</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                volunteerSortField === 'minutes' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {volunteerSortField === 'minutes' ? (volunteerSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -1591,38 +1845,6 @@ export default function ReportsPage() {
                 </motion.div>
               )}
             </AnimatePresence>
-          )}
-
-          {/* Pagination Controls */}
-          {currentTotalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 mt-6 bg-dark2 border border-border rounded-2xl shadow-lg">
-              <p className="text-xs text-text-dim font-inter font-bold">
-                Página <span className="text-text">{currentPage}</span> de <span className="text-text">{currentTotalPages}</span> (
-                {activeTab === 'history' ? filteredItems.length : volunteerRanking.length} registros)
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  className="h-8 px-3 text-xs font-inter font-bold rounded-xl border-border bg-dark2 text-text hover:bg-dark3 disabled:opacity-30 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[16px] mr-1">chevron_left</span>
-                  Anterior
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= currentTotalPages}
-                  onClick={() => setCurrentPage(p => Math.min(currentTotalPages, p + 1))}
-                  className="h-8 px-3 text-xs font-inter font-bold rounded-xl border-border bg-dark2 text-text hover:bg-dark3 disabled:opacity-30 cursor-pointer"
-                >
-                  Siguiente
-                  <span className="material-symbols-outlined text-[16px] ml-1">chevron_right</span>
-                </Button>
-              </div>
-            </div>
           )}
         </div>
       </div>

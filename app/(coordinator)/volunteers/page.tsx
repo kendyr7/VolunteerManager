@@ -126,6 +126,9 @@ function HighlightText({ text, term }: { text: string; term: string }) {
 
 
 
+type SortField = 'name' | 'ward' | 'stake' | 'committee' | 'shifts' | 'reliability';
+type SortOrder = 'asc' | 'desc';
+
 export default function VolunteersPage() {
   const supabase = createClient();
   const {
@@ -144,6 +147,19 @@ export default function VolunteersPage() {
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
+
+  // Table Column Sort State
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
 
   // Debounce search input to match Shifts page performance
   useEffect(() => {
@@ -709,6 +725,35 @@ export default function VolunteersPage() {
     selectedWards,
   ]);
 
+  const sortedFilteredVolunteers = useMemo(() => {
+    if (!sortField) return filteredVolunteers;
+
+    return [...filteredVolunteers].sort((a, b) => {
+      let valA: any = a[sortField];
+      let valB: any = b[sortField];
+
+      if (sortField === 'reliability') {
+        valA = a.computedReliability ?? a.reliability ?? 0;
+        valB = b.computedReliability ?? b.reliability ?? 0;
+      }
+
+      if (typeof valA === 'string' || typeof valB === 'string') {
+        valA = (valA || '').trim();
+        valB = (valB || '').trim();
+        const cmp = valA.localeCompare(valB, 'es', { sensitivity: 'base', numeric: true });
+        return sortOrder === 'asc' ? cmp : -cmp;
+      }
+
+      if (typeof valA === 'number' || typeof valB === 'number') {
+        const numA = valA ?? 0;
+        const numB = valB ?? 0;
+        return sortOrder === 'asc' ? numA - numB : numB - numA;
+      }
+
+      return 0;
+    });
+  }, [filteredVolunteers, sortField, sortOrder]);
+
   const { activeCount, archivedCount } = useMemo(() => {
     const baseList = augmentedVolunteers.filter(v => {
       if (currentRole === 'Editor' && v.committee !== currentCommittee) return false;
@@ -721,8 +766,8 @@ export default function VolunteersPage() {
   }, [augmentedVolunteers, currentRole, currentCommittee]);
 
   const { letters: sortedLetters, groupCounts, groupedVolunteers, groupsRecord, flatVolunteers } = useMemo(() => {
-    return groupVolunteersAlphabetically(filteredVolunteers);
-  }, [filteredVolunteers]);
+    return groupVolunteersAlphabetically(sortedFilteredVolunteers);
+  }, [sortedFilteredVolunteers]);
 
   if (loading) {
     return (
@@ -862,16 +907,100 @@ export default function VolunteersPage() {
           {/* Contenedor de Datos: Escritorio PC vs Móvil */}
           {!isMobile ? (
             <div className="bg-dark2 flex-1 relative w-full pb-10">
-              {filteredVolunteers.length > 0 ? (
+              {sortedFilteredVolunteers.length > 0 ? (
                 <div className="w-full overflow-x-auto">
-                  {/* Encabezado Fijo de Tabla */}
-                  <div className="flex items-center w-full px-5 py-3.5 bg-dark3 sticky top-0 z-20 text-[10px] font-bold text-text-dim uppercase tracking-wider border-b border-white/10">
-                    <div className="flex-1 min-w-0 pr-4">Nombre y Apellido</div>
-                    <div className="w-32 text-center shrink-0">Barrio / Rama</div>
-                    <div className="w-32 text-center shrink-0">Estaca</div>
-                    <div className="w-40 text-center shrink-0">Comité</div>
-                    <div className="w-24 text-center shrink-0">Turnos</div>
-                    <div className="w-28 text-center shrink-0">Confiabilidad</div>
+                  {/* Encabezado Fijo de Tabla con Ordenamiento */}
+                  <div className="flex items-center w-full px-5 py-3.5 bg-dark3 sticky top-0 z-20 text-[10px] font-bold text-text-dim uppercase tracking-wider border-b border-white/10 select-none">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('name')}
+                      className="flex-1 min-w-0 pr-4 flex items-center gap-1.5 hover:text-text transition-colors text-left cursor-pointer group"
+                      title="Ordenar por Nombre y Apellido"
+                    >
+                      <span className={cn(sortField === 'name' && "text-[#4d7cfe] font-extrabold")}>Nombre y Apellido</span>
+                      <span className={cn(
+                        "material-symbols-outlined text-[14px] transition-all",
+                        sortField === 'name' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                      )}>
+                        {sortField === 'name' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSort('ward')}
+                      className="w-32 flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group"
+                      title="Ordenar por Barrio / Rama"
+                    >
+                      <span className={cn(sortField === 'ward' && "text-[#4d7cfe] font-extrabold")}>Barrio / Rama</span>
+                      <span className={cn(
+                        "material-symbols-outlined text-[14px] transition-all",
+                        sortField === 'ward' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                      )}>
+                        {sortField === 'ward' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSort('stake')}
+                      className="w-32 flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group"
+                      title="Ordenar por Estaca"
+                    >
+                      <span className={cn(sortField === 'stake' && "text-[#4d7cfe] font-extrabold")}>Estaca</span>
+                      <span className={cn(
+                        "material-symbols-outlined text-[14px] transition-all",
+                        sortField === 'stake' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                      )}>
+                        {sortField === 'stake' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSort('committee')}
+                      className="w-40 flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group"
+                      title="Ordenar por Comité"
+                    >
+                      <span className={cn(sortField === 'committee' && "text-[#4d7cfe] font-extrabold")}>Comité</span>
+                      <span className={cn(
+                        "material-symbols-outlined text-[14px] transition-all",
+                        sortField === 'committee' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                      )}>
+                        {sortField === 'committee' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSort('shifts')}
+                      className="w-24 flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group"
+                      title="Ordenar por Turnos"
+                    >
+                      <span className={cn(sortField === 'shifts' && "text-[#4d7cfe] font-extrabold")}>Turnos</span>
+                      <span className={cn(
+                        "material-symbols-outlined text-[14px] transition-all",
+                        sortField === 'shifts' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                      )}>
+                        {sortField === 'shifts' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSort('reliability')}
+                      className="w-28 flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group"
+                      title="Ordenar por Confiabilidad"
+                    >
+                      <span className={cn(sortField === 'reliability' && "text-[#4d7cfe] font-extrabold")}>Confiabilidad</span>
+                      <span className={cn(
+                        "material-symbols-outlined text-[14px] transition-all",
+                        sortField === 'reliability' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                      )}>
+                        {sortField === 'reliability' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                      </span>
+                    </button>
+
                     <div className="w-32 text-center shrink-0">Acciones</div>
                   </div>
 
@@ -879,7 +1008,7 @@ export default function VolunteersPage() {
                   <div className="divide-y divide-white/5">
                     {(() => {
                       const seenLetters = new Set<string>();
-                      return filteredVolunteers.map((vol: VolunteerType) => {
+                      return sortedFilteredVolunteers.map((vol: VolunteerType) => {
                         const firstChar = (vol.name || '').charAt(0).toUpperCase();
                         const letterKey = /^[A-Z]$/.test(firstChar) ? firstChar : '#';
                         let anchorId: string | undefined = undefined;
@@ -914,11 +1043,11 @@ export default function VolunteersPage() {
             </div>
           ) : (
             <div className="bg-dark2 w-full pb-10">
-              {filteredVolunteers.length > 0 ? (
+              {sortedFilteredVolunteers.length > 0 ? (
                 <div className="divide-y divide-white/5 w-full">
                   {(() => {
                     const seenLetters = new Set<string>();
-                    return filteredVolunteers.map((vol: VolunteerType) => {
+                    return sortedFilteredVolunteers.map((vol: VolunteerType) => {
                       const firstChar = (vol.name || '').charAt(0).toUpperCase();
                       const letterKey = /^[A-Z]$/.test(firstChar) ? firstChar : '#';
                       let anchorId: string | undefined = undefined;
