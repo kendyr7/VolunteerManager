@@ -22,9 +22,8 @@ import {
 import { changeUserPin } from "@/app/actions/update-pin";
 import { formatE164 } from "@/lib/whatsapp";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
-import { createCommitteeAction, archiveCommitteeAction, unarchiveCommitteeAction } from "@/app/actions/committee-actions";
+import { createCommitteeAction, archiveCommitteeAction, unarchiveCommitteeAction, updateCommitteeRequirementsAction } from "@/app/actions/committee-actions";
 import { getActivityLogs, ActivityLog } from "@/app/actions/activity-actions";
-import { recordActivityLog } from "@/lib/activity-logger";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -594,25 +593,10 @@ export default function SettingsPage() {
     });
     localStorage.setItem("committee_requirements", JSON.stringify(allReqs));
 
-    // 2. Persist to Supabase committee_shift_requirements
-    const supabaseClient = createClient();
-    const shiftKeys: Array<'T1' | 'T2' | 'T3' | 'T4'> = ['T1', 'T2', 'T3', 'T4'];
-    for (const commName of selectedConfigCommittees) {
-      const commObj = committees.find(c => c.name === commName);
-      if (!commObj) continue;
-      const rows = shiftKeys.map(sk => ({
-        committee_id: commObj.id,
-        shift_key: sk,
-        required: capacities[sk],
-        updated_at: new Date().toISOString(),
-      }));
-      const { error } = await supabaseClient
-        .from('committee_shift_requirements')
-        .upsert(rows, { onConflict: 'committee_id,shift_key' });
-      if (error) {
-        // Table may not exist yet — silently fall back to localStorage only
-        console.warn('committee_shift_requirements upsert skipped:', error.message);
-      }
+    // 2. Persist to Supabase via Server Action and CommitteeMutationService
+    const res = await updateCommitteeRequirementsAction(selectedConfigCommittees, capacities);
+    if (!res.success) {
+      console.warn('updateCommitteeRequirementsAction warning:', res.error);
     }
 
     setIsSavingConfig(false);
@@ -1808,13 +1792,19 @@ export default function SettingsPage() {
                         }
 
                         let parsedImportDetails: any = null;
+                        let parsedEditChanges: any[] | null = null;
                         if (log.details) {
                           try {
                             if (log.details.trim().startsWith('{')) {
-                              parsedImportDetails = JSON.parse(log.details);
+                              const parsedJSON = JSON.parse(log.details);
+                              parsedImportDetails = parsedJSON;
+                              if (Array.isArray(parsedJSON.changes)) {
+                                parsedEditChanges = parsedJSON.changes;
+                              }
                             }
                           } catch (e) {
                             parsedImportDetails = null;
+                            parsedEditChanges = null;
                           }
                         }
 
@@ -1838,11 +1828,27 @@ export default function SettingsPage() {
                                   </span>
                                 </div>
 
-                                {log.details && !isImportBatch && (
+                                {parsedEditChanges && parsedEditChanges.length > 0 ? (
+                                  <div className="mt-1.5 p-2.5 rounded-lg bg-slate-100 dark:bg-dark3/80 border border-slate-200 dark:border-border/60 space-y-1">
+                                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-text-dim block mb-1">
+                                      Modificaciones:
+                                    </span>
+                                    {parsedEditChanges.map((c: any, idx: number) => (
+                                      <div key={idx} className="flex items-center justify-between text-[11px] py-0.5 border-b border-slate-200/50 dark:border-white/5 last:border-0 gap-2">
+                                        <span className="font-semibold text-slate-700 dark:text-text-dim">{c.label || c.field}</span>
+                                        <div className="flex items-center gap-1.5 text-[10px]">
+                                          <span className="text-slate-400 line-through">{String(c.oldValue ?? 'Sin datos')}</span>
+                                          <span className="text-slate-400">➔</span>
+                                          <span className="font-bold text-indigo-600 dark:text-indigo-400">{String(c.newValue ?? 'Sin datos')}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : log.details && !isImportBatch ? (
                                   <p className="text-[11px] font-inter text-slate-600 dark:text-text-dim leading-relaxed">
                                     {log.details}
                                   </p>
-                                )}
+                                ) : null}
 
                                 <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-500 dark:text-text-dim font-inter">
                                   <span className="font-semibold text-slate-700 dark:text-text/80">👤 {log.user_name} ({log.user_role})</span>

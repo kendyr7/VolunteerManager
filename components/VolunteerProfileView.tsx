@@ -24,6 +24,7 @@ import {
 } from "@/app/actions/audit-actions";
 import { fetchVolunteerAuditLogsAction, fetchVolunteerShiftRecordsAction } from "@/app/actions/activity-actions";
 import { useOptionalCoordinatorData } from "@/lib/coordinator-data-context";
+import { useVolunteerStore } from "@/lib/store/use-volunteer-store";
 import {
   getUnifiedShiftTimes,
   getUnifiedShiftWorkedMinutes,
@@ -101,12 +102,15 @@ export function VolunteerProfileView({
   const [fetchedDbRecords, setFetchedDbRecords] = useState<any[]>([]);
   const [loadingAuditLogs, setLoadingAuditLogs] = useState<boolean>(false);
 
-  // Combined real-time shift records from coordinator context + fetched records
+  const storeShifts = useVolunteerStore((s) => s.shiftsByVolunteerMap.get(volunteer.id)) || [];
+
+  // Combined real-time shift records from O(1) store index + coordinator context + fetched records
   const dbShiftRecords = useMemo(() => {
+    if (storeShifts.length > 0) return storeShifts;
     const fromCoordinator = (coordinatorData?.shiftsData || []).filter((s: any) => s.volunteer_id === volunteer.id);
     if (fromCoordinator.length > 0) return fromCoordinator;
     return fetchedDbRecords;
-  }, [coordinatorData?.shiftsData, fetchedDbRecords, volunteer.id]);
+  }, [storeShifts, coordinatorData?.shiftsData, fetchedDbRecords, volunteer.id]);
 
   // Permisos y Usuario
   const userRole = typeof window !== 'undefined' ? localStorage.getItem('mock_role') || 'Admin' : 'Admin';
@@ -359,7 +363,7 @@ export function VolunteerProfileView({
   }, [volunteer.id]);
 
   useEffect(() => {
-    if (activeTab === 'audit' && auditLogs.length === 0) {
+    if (activeTab === 'audit') {
       loadAuditLogs();
     }
   }, [activeTab, volunteer.id]);
@@ -427,173 +431,20 @@ export function VolunteerProfileView({
   }, [dbShiftRecords, auditLogs, shiftsByDay, EVENT_DAYS, isShiftCheckedOut, getShiftWorkedMinutes]);
 
   const volunteerTimeline = useMemo(() => {
-    const items: Array<{
-      id: string;
-      timestamp: number;
-      timeOrDate: string;
-      title: string;
-      subtitle?: string;
-      authorName?: string;
-      authorRole?: string;
-      badge?: string;
-      badgeStyle?: string;
-      colorBg: string;
-      type: 'pin' | 'assigned' | 'checkin' | 'checkout' | 'audit';
-    }> = [];
-
-    // Helper to find author from audit logs with smart fallbacks
-    const primaryAuditLog = auditLogs.length > 0 ? auditLogs[auditLogs.length - 1] : null;
-    const defaultAuthorName = primaryAuditLog?.user_name || userName || 'Coordinador General';
-    const defaultAuthorRole = primaryAuditLog?.user_role || userRole || 'Admin';
-
-    const findAuditAuthor = (keywords: string[]) => {
-      const match = auditLogs.find(l => {
-        const desc = (l.description || '').toLowerCase();
-        const action = (l.action_type || '').toLowerCase();
-        return keywords.some(k => desc.includes(k.toLowerCase()) || action.includes(k.toLowerCase()));
-      });
-      return match ? { name: match.user_name, role: match.user_role } : null;
-    };
-
-    // 1. PIN / Creation milestone
-    const creationLog = findAuditAuthor(['creó', 'importó', 'registro', 'pin', 'voluntario']);
-    const volCreatedAt = (volunteer as any).created_at ? new Date((volunteer as any).created_at) : null;
-    if (volCreatedAt && !isNaN(volCreatedAt.getTime())) {
-      const timeStr = volCreatedAt.toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const dateStr = volCreatedAt.toLocaleDateString('es-NI', { day: '2-digit', month: 'short' });
-      items.push({
-        id: 'creation-pin',
-        timestamp: volCreatedAt.getTime(),
-        timeOrDate: `${dateStr}, ${timeStr}`,
-        title: 'PIN Enviado / Generado',
-        subtitle: `Credenciales de acceso vinculadas al número ${volunteer.phone || ''}`,
-        authorName: creationLog?.name || defaultAuthorName,
-        authorRole: creationLog?.role || defaultAuthorRole,
-        badge: '✓',
-        badgeStyle: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-bold',
-        colorBg: 'bg-emerald-500',
-        type: 'pin'
-      });
-    } else {
-      items.push({
-        id: 'creation-pin-fallback',
-        timestamp: Date.now() - 86400000 * 10,
-        timeOrDate: 'Fecha de Registro',
-        title: 'PIN Enviado / Generado',
-        subtitle: `Credenciales de acceso activadas`,
-        authorName: creationLog?.name || defaultAuthorName,
-        authorRole: creationLog?.role || defaultAuthorRole,
-        badge: '✓',
-        badgeStyle: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-bold',
-        colorBg: 'bg-emerald-500',
-        type: 'pin'
-      });
-    }
-
-    // 2. Shifts: Assigned, Check-in, Check-out
-    Object.entries(shiftsByDay).forEach(([dayKey, shifts]) => {
-      shifts.forEach((shiftKey) => {
-        const isCheckedIn = isShiftCheckedIn(dayKey, shiftKey);
-        const isCheckedOut = isShiftCheckedOut(dayKey, shiftKey);
-        const assignLog = findAuditAuthor(['asign', 'turno', 'creó', 'importó', 'agregó']);
-
-        items.push({
-          id: `assigned-${dayKey}-${shiftKey}`,
-          timestamp: Date.now() - 86400000 * 3,
-          timeOrDate: dayKey,
-          title: 'Turno Asignado',
-          subtitle: `Turno ${shiftKey} programado en cronograma`,
-          authorName: assignLog?.name || defaultAuthorName,
-          authorRole: assignLog?.role || defaultAuthorRole,
-          badge: shiftKey,
-          badgeStyle: 'bg-purple-500/10 text-purple-600 dark:text-purple-300 border-purple-500/20 font-extrabold',
-          colorBg: 'bg-purple-500',
-          type: 'assigned'
-        });
-
-        if (isCheckedIn || isCheckedOut) {
-          const checkinLog = findAuditAuthor(['check-in', 'escaneó', 'llegada', 'entrada']);
-          items.push({
-            id: `checkin-${dayKey}-${shiftKey}`,
-            timestamp: Date.now() - 3600000 * 12,
-            timeOrDate: dayKey,
-            title: 'Check-in (Entrada)',
-            subtitle: `Voluntario escaneado para turno ${shiftKey}`,
-            authorName: checkinLog?.name || defaultAuthorName,
-            authorRole: checkinLog?.role || defaultAuthorRole,
-            badge: '✓ Escaneado',
-            badgeStyle: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-bold',
-            colorBg: 'bg-emerald-500',
-            type: 'checkin'
-          });
-        }
-
-        if (isCheckedOut) {
-          const checkoutLog = findAuditAuthor(['check-out', 'salida', 'finalizó', 'completó']);
-          const shiftMins = getShiftWorkedMinutes(dayKey, shiftKey);
-          const displayLabel = formatDurationMinutes(shiftMins);
-          items.push({
-            id: `checkout-${dayKey}-${shiftKey}`,
-            timestamp: Date.now() - 3600000 * 4,
-            timeOrDate: dayKey,
-            title: 'Check-out (Salida)',
-            subtitle: `Turno ${shiftKey} completado (${displayLabel})`,
-            authorName: checkoutLog?.name || defaultAuthorName,
-            authorRole: checkoutLog?.role || defaultAuthorRole,
-            badge: displayLabel,
-            badgeStyle: 'bg-blue-500/10 text-blue-500 border-blue-500/20 font-bold',
-            colorBg: 'bg-blue-500',
-            type: 'checkout'
-          });
-        }
-      });
-    });
-
-    // 3. Additional Activity Logs (PIN Resets, Reassignments, Undos, Edits)
-    auditLogs.forEach(log => {
-      const desc = (log.description || '').toLowerCase();
-      // Skip redundant raw logs that duplicate shift assignments or check-ins
-      if (desc.includes('check-in') || desc.includes('check-out')) return;
-
-      const logTime = log.created_at ? new Date(log.created_at) : new Date();
-      const timeStr = logTime.toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const dateStr = logTime.toLocaleDateString('es-NI', { day: '2-digit', month: 'short' });
-
-      let badgeText = '✓';
-      let badgeStyle = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-bold';
-      let colorBg = 'bg-emerald-500';
-
-      if (log.action_type === 'Reasignación' || desc.includes('reagend')) {
-        badgeText = 'Reasignado';
-        badgeStyle = 'bg-purple-500/10 text-purple-600 dark:text-purple-300 border-purple-500/20 font-bold';
-        colorBg = 'bg-purple-500';
-      } else if (log.action_type === 'Edición' || desc.includes('pin')) {
-        badgeText = 'PIN Reset';
-        badgeStyle = 'bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-500/20 font-bold';
-        colorBg = 'bg-amber-500';
-      } else if (log.action_type === 'Deshacer') {
-        badgeText = 'Revertido';
-        badgeStyle = 'bg-rose-500/10 text-rose-500 border-rose-500/20 font-bold';
-        colorBg = 'bg-rose-500';
-      }
-
-      items.push({
-        id: `log-${log.id}`,
-        timestamp: logTime.getTime(),
-        timeOrDate: `${dateStr}, ${timeStr}`,
-        title: log.description || log.action_type,
-        subtitle: log.details,
-        authorName: log.user_name || 'Coordinación',
-        authorRole: log.user_role || 'Admin',
-        badge: badgeText,
-        badgeStyle,
-        colorBg,
-        type: 'audit'
-      });
-    });
-
-    return items.sort((a, b) => b.timestamp - a.timestamp);
-  }, [volunteer, shiftsByDay, auditLogs, externalCheckedInMap, externalCheckedOutMap, localCheckedInMap, localCheckedOutMap]);
+    return auditLogs.map((log: any) => ({
+      id: log.id,
+      timestamp: log.timestamp || Date.now(),
+      timeOrDate: log.formattedDate || '',
+      title: log.title || 'Evento registrado',
+      subtitle: log.subtitle || '',
+      authorName: log.actorName || 'Coordinación',
+      authorRole: log.actorRole || 'Admin',
+      badge: log.badgeText || '✓',
+      badgeStyle: log.badgeStyle || 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-bold',
+      colorBg: log.colorClass || 'bg-emerald-500',
+      parsedChanges: log.parsedChanges || null,
+    }));
+  }, [auditLogs]);
 
   const assignedDayKeys = Object.keys(shiftsByDay).filter(d => (shiftsByDay[d] || []).length > 0);
 
@@ -1302,7 +1153,29 @@ export function VolunteerProfileView({
                     )}
                   </div>
 
-                  {item.subtitle && <p className="text-[11px] text-text-dim font-medium leading-snug">{item.subtitle}</p>}
+                  {item.parsedChanges && item.parsedChanges.length > 0 ? (
+                    <div className="mt-1.5 p-3 rounded-xl bg-dark3/80 border border-border/70 space-y-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-text-dim/80 block mb-1">
+                        Cambios realizados:
+                      </span>
+                      {item.parsedChanges.map((change: any, cIdx: number) => (
+                        <div key={cIdx} className="flex items-center justify-between text-xs py-1 border-b border-border/30 last:border-0 gap-2">
+                          <span className="font-bold text-text-dim text-[11px] shrink-0">{change.label || change.field}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap justify-end min-w-0">
+                            <span className="px-2 py-0.5 rounded-md bg-dark2 text-text-dim border border-border text-[11px] line-through opacity-70 truncate max-w-[120px]">
+                              {String(change.oldValue ?? 'Sin datos')}
+                            </span>
+                            <span className="text-text-dim text-[10px] shrink-0">➔</span>
+                            <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 text-[11px] font-bold truncate max-w-[140px]">
+                              {String(change.newValue ?? 'Sin datos')}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : item.subtitle ? (
+                    <p className="text-[11px] text-text-dim font-medium leading-snug">{item.subtitle}</p>
+                  ) : null}
 
                   <div className="pt-2 border-t border-border/40 flex items-center justify-between text-[10px] text-text-dim font-inter">
                     <div className="flex items-center gap-1.5">

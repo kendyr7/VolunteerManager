@@ -25,6 +25,7 @@ import { canEditShifts } from "@/lib/permissions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
+import { updateVolunteerAction } from "@/app/actions/volunteer-actions";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -624,27 +625,23 @@ export default function ShiftsPage() {
     }
 
     setIsSavingProfile(true);
-    const supabase = createClient();
 
     const fullName = `${trimmedFirstName} ${trimmedLastName}`.trim();
     const commObj = committeesList.find(c => c.id === editCommitteeId || c.name === editCommitteeId);
     const commName = commObj ? commObj.name : editingVolunteer.committee;
 
-    const { error } = await supabase
-      .from('volunteers')
-      .update({
-        first_name: trimmedFirstName,
-        last_name: trimmedLastName,
-        phone: trimmedPhone,
-        stake: trimmedStake,
-        neighborhood: trimmedWard,
-        committee_id: commObj ? commObj.id : (editCommitteeId || null),
-        age: ageNum,
-      })
-      .eq('id', editingVolunteer.id);
+    const res = await updateVolunteerAction(editingVolunteer.id, {
+      firstName: trimmedFirstName,
+      lastName: trimmedLastName,
+      phone: trimmedPhone,
+      stake: trimmedStake,
+      neighborhood: trimmedWard,
+      committeeId: commObj ? commObj.id : (editCommitteeId || null),
+      age: ageNum,
+    });
 
-    if (error) {
-      showToast("Error al guardar cambios del perfil", "error");
+    if (!res.success) {
+      showToast(res.error || "Error al guardar cambios del perfil", "error");
     } else {
       showToast("Perfil de voluntario actualizado correctamente");
 

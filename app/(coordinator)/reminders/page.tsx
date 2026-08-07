@@ -11,6 +11,7 @@ import {
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 import { sendShiftReminderAction } from "@/app/actions/whatsapp";
+import { updateVolunteerStatusAction } from "@/app/actions/volunteer-actions";
 import {
   getActiveEventDays,
   formatDateShort,
@@ -829,15 +830,15 @@ export default function RemindersPage() {
 
   const handleArchiveVolunteer = async (vol: VolunteerType) => {
     if (!window.confirm(`¿Estás seguro de que quieres archivar a ${vol.name}?`)) return;
-    
-    const { error } = await supabase
-      .from('volunteers')
-      .update({ status: 'archived' })
-      .eq('id', vol.id);
 
-    if (error) {
-      console.error("Error updating status:", error);
-      showToast(`Error al archivar a ${vol.name}`, "error");
+    const res = await updateVolunteerStatusAction({
+      volunteerId: vol.id,
+      toStatus: 'archived',
+    });
+
+    if (!res.success) {
+      console.error("Error updating status:", res.error);
+      showToast(res.error || `Error al archivar a ${vol.name}`, "error");
     } else {
       showToast(`${vol.name} archivado con éxito`);
       await refresh(true);

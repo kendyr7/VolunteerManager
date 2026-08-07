@@ -2,19 +2,18 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 import { validatePhone8Digits } from "@/lib/whatsapp";
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
-import { createClient } from "@/lib/supabase/client";
+import { createVolunteerAction } from "@/app/actions/volunteer-actions";
 
 interface AddVolunteerFormProps {
-  committeesList: { id: string; name: string }[];
-  onSuccess: () => void;
-  onClose: () => void;
+  committeesList?: { id: string; name: string }[];
+  onSuccess?: () => void;
+  onClose?: () => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast }: AddVolunteerFormProps) {
+export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, showToast }: AddVolunteerFormProps) {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newAge, setNewAge] = useState('');
@@ -24,26 +23,21 @@ export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast
   const [sendWelcomeMessage, setSendWelcomeMessage] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const supabase = createClient();
-
   const handleAddVolunteer = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-    
+
     const parts = newName.trim().split(/\s+/);
     const first_name = parts[0] || '';
     const last_name = parts.slice(1).join(' ') || '';
 
     if (parts.length < 2 || !last_name) {
       showToast("Por favor, introduce al menos un nombre y un apellido.", "error");
-      setIsSubmitting(false);
       return;
     }
 
     const phoneValidation = validatePhone8Digits(newPhone);
     if (!phoneValidation.isValid) {
       showToast(phoneValidation.error || "El celular debe tener exactamente 8 dígitos.", "error");
-      setIsSubmitting(false);
       return;
     }
 
@@ -52,60 +46,31 @@ export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast
       const parsedAge = parseInt(newAge.trim(), 10);
       if (isNaN(parsedAge) || parsedAge < 10 || parsedAge > 120) {
         showToast("La edad debe ser un número entre 10 y 120 años.", "error");
-        setIsSubmitting(false);
         return;
       }
       ageNum = parsedAge;
     }
 
     const sanitizedPhone = phoneValidation.formatted;
+    setIsSubmitting(true);
 
-    // Check if an active volunteer with the same phone number already exists
-    const { data: existingActive } = await supabase
-      .from('volunteers')
-      .select('id, first_name, last_name')
-      .eq('phone', sanitizedPhone)
-      .neq('status', 'archived')
-      .maybeSingle();
-
-    if (existingActive) {
-      showToast(`Ya existe un voluntario activo ("${existingActive.first_name} ${existingActive.last_name}") con el teléfono ${sanitizedPhone}.`, "error");
-      setIsSubmitting(false);
-      return;
-    }
-
-    const pin = String(Math.floor(1000 + Math.random() * 9000));
-
-    const { error } = await supabase
-      .from('volunteers')
-      .insert([
-        {
-          first_name,
-          last_name,
-          phone: sanitizedPhone,
-          age: ageNum,
-          committee_id: newCommitteeId || null,
-          stake: newStake,
-          neighborhood: newWard,
-          pin: pin,
-          status: 'active'
-        }
-      ]);
-
-    if (error) {
-      console.error("Error adding volunteer:", error);
-      showToast("Error al añadir voluntario", "error");
-      setIsSubmitting(false);
-      return;
-    }
-
-    const { recordActivityLog } = await import('@/lib/activity-logger');
-    const selectedComm = committeesList.find(c => c.id === newCommitteeId)?.name || '';
-    await recordActivityLog({
-      actionType: 'Creación',
-      description: `Creó al voluntario "${first_name} ${last_name}"`,
-      details: `Tel: ${sanitizedPhone} · Comité: ${selectedComm || 'Sin comité'}${ageNum ? ` · Edad: ${ageNum}` : ''} · PIN: ${pin}`
+    const result = await createVolunteerAction({
+      firstName: first_name,
+      lastName: last_name,
+      phone: sanitizedPhone,
+      age: ageNum,
+      committeeId: newCommitteeId || null,
+      stake: newStake,
+      neighborhood: newWard,
     });
+
+    if (!result.success || !result.volunteer) {
+      showToast(result.error || "Error al añadir voluntario", "error");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const pin = result.volunteer.pin;
 
     if (sendWelcomeMessage) {
       const waResult = await sendWelcomeWhatsAppAction(sanitizedPhone, first_name, pin);
@@ -118,8 +83,8 @@ export function AddVolunteerForm({ committeesList, onSuccess, onClose, showToast
       showToast("Voluntario añadido");
     }
 
-    onSuccess();
-    onClose();
+    if (onSuccess) onSuccess();
+    if (onClose) onClose();
   };
 
   return (

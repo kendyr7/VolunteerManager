@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 import { signSession } from '@/lib/auth'
 import { formatE164 } from '@/lib/whatsapp'
+import { getCurrentUserSession } from '@/lib/auth-helpers'
+import { VolunteerMutationService } from '@/lib/services/volunteer-mutation.service'
 
 function isSequential(pin: string): boolean {
   let asc = true;
@@ -36,7 +38,6 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     return { error: "Por motivos de seguridad, no utilices un PIN secuencial (ej: 1234, 4321)." };
   }
 
-  // Usar SERVICE_ROLE_KEY para ignorar RLS durante la actualización del PIN inicial
   let supabase;
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
@@ -48,20 +49,31 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     supabase = await createClient();
   }
 
-  const table = userType === 'profile' ? 'profiles' : 'volunteers';
-  const updateData: any = { pin: newPin };
+  const sessionUser = await getCurrentUserSession();
 
-  const { error } = await supabase
-    .from(table)
-    .update(updateData)
-    .eq('id', userId);
+  if (userType === 'volunteer') {
+    const res = await VolunteerMutationService.setInitialPin(userId, newPin, {
+      name: sessionUser.userName || 'Voluntario',
+      role: sessionUser.userRole || 'Lector',
+    });
 
-  if (error) {
-    console.error("Error updating initial PIN:", error);
-    return { error: "No se pudo actualizar el PIN." };
+    if (!res.success) {
+      return { error: res.error || "No se pudo actualizar el PIN." };
+    }
+  } else {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ pin: newPin })
+      .eq('id', userId);
+
+    if (error) {
+      console.error("Error updating initial PIN for profile:", error);
+      return { error: "No se pudo actualizar el PIN." };
+    }
   }
 
   // 2. Si se actualizó correctamente, recuperar el usuario y crear el token de sesión criptográfico
+  const table = userType === 'profile' ? 'profiles' : 'volunteers';
   const { data: user, error: fetchError } = await supabase
     .from(table)
     .select('*, committees(name)')
@@ -80,10 +92,10 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
 
   const cookieStore = await cookies();
   const committeeName = user.committees?.name || '';
-  
+
   if (userType === 'profile') {
     const role = user.role;
-    
+
     const sessionToken = signSession({
       userId: user.id,
       userType: 'profile',
@@ -97,7 +109,7 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
       maxAge: 60 * 60 * 24 * 7,
       path: '/',
     });
-    
+
     let redirectTo = '/dashboard';
     if (role === 'Editor') redirectTo = '/dashboard';
     if (role === 'Lector') redirectTo = '/shifts';
@@ -233,13 +245,24 @@ export async function changeUserPin(currentPin: string, newPin: string, userPhon
       return { success: false, error: "Usuario no encontrado para actualizar PIN." };
     }
 
+    const sessionUser = await getCurrentUserSession();
+    const actor = {
+      name: sessionUser.userName || 'Usuario',
+      role: sessionUser.userRole || 'Lector',
+    };
+
+    // Si es un voluntario, delegar a VolunteerMutationService para mutación y auditoría estandarizada
+    if (matchedTable === 'volunteers') {
+      return VolunteerMutationService.changePin(user.id, currentPin, newPin, actor);
+    }
+
+    // Si es un perfil de usuario de plataforma (profiles)
     if (user.pin !== currentPin) {
       return { success: false, error: "El PIN actual ingresado es incorrecto." };
     }
 
-    // Actualizar el PIN
     const { error: updateError } = await supabase
-      .from(matchedTable)
+      .from('profiles')
       .update({ pin: newPin })
       .eq('id', user.id);
 
@@ -247,16 +270,12 @@ export async function changeUserPin(currentPin: string, newPin: string, userPhon
       return { success: false, error: "Error al actualizar el PIN." };
     }
 
-    // Audit log
-    const { getCurrentUserSession } = await import('@/lib/auth-helpers');
-    const sessionUser = await getCurrentUserSession();
-
     await supabase.from('activity_logs').insert({
       user_name: sessionUser.userName,
       user_role: sessionUser.userRole,
       action_type: 'Seguridad',
       description: `Cambió su PIN de seguridad de acceso`,
-      details: `ID de usuario: ${user.id} (${matchedTable})`
+      details: JSON.stringify({ context: { operation: 'profile_pin_change', targetUserId: user.id } }),
     });
 
     return { success: true };
@@ -265,3 +284,4 @@ export async function changeUserPin(currentPin: string, newPin: string, userPhon
     return { success: false, error: "Error interno del servidor al actualizar PIN." };
   }
 }
+

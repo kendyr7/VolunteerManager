@@ -2,11 +2,13 @@ import { create } from 'zustand';
 import type { VolunteerType } from '@/components/VolunteerTableRow';
 import { useRealtimeStore } from '@/lib/store/use-realtime-store';
 import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
+import { assertShiftConsistency } from '@/lib/utils/shift-invariants';
 
 interface VolunteerStoreState {
   // Single Source of Truth for Volunteers and Shifts
   volunteersMap: Map<string, VolunteerType>;
   shiftsMap: Map<string, any>;
+  shiftsByVolunteerMap: Map<string, any[]>;
 
   // Volunteers Actions
   setInitialVolunteers: (volunteers: VolunteerType[]) => void;
@@ -22,11 +24,28 @@ interface VolunteerStoreState {
   getVolunteersList: () => VolunteerType[];
   getVolunteerById: (id: string) => VolunteerType | undefined;
   getShiftsList: () => any[];
+  getShiftsByVolunteerId: (volunteerId: string) => any[];
 }
+
+function rebuildShiftsByVolunteerMap(shiftsMap: Map<string, any>): Map<string, any[]> {
+  const index = new Map<string, any[]>();
+  shiftsMap.forEach(shift => {
+    const volId = shift.volunteer_id || shift.volunteerId || shift.volunteer?.id;
+    if (volId) {
+      const list = index.get(volId) || [];
+      list.push(shift);
+      index.set(volId, list);
+    }
+  });
+  return index;
+}
+
+const EMPTY_SHIFTS_ARRAY: any[] = [];
 
 export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
   volunteersMap: new Map<string, VolunteerType>(),
   shiftsMap: new Map<string, any>(),
+  shiftsByVolunteerMap: new Map<string, any[]>(),
 
   setInitialVolunteers: (volunteers: VolunteerType[]) => {
     const map = new Map<string, VolunteerType>();
@@ -42,25 +61,17 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     const currentMap = get().volunteersMap;
     const existing = currentMap.get(incoming.id);
 
-    const isInitialCompleted = useRealtimeStore.getState().initialSyncCompleted;
-    if (!existing && !isInitialCompleted) {
-      return false;
-    }
-
-    const currentTsVal = (existing as any)?.updated_at || (existing as any)?.created_at;
+    const existingTsVal = (existing as any)?.updated_at || (existing as any)?.created_at;
     const incomingTsVal = (incoming as any)?.updated_at || (incoming as any)?.created_at;
 
-    if (existing && currentTsVal && incomingTsVal) {
-      const currentTs = new Date(currentTsVal).getTime();
+    if (existingTsVal && incomingTsVal) {
+      const existingTs = new Date(existingTsVal).getTime();
       const incomingTs = new Date(incomingTsVal).getTime();
-      if (incomingTs < currentTs) return false;
-      if (incomingTs === currentTs && JSON.stringify(existing) === JSON.stringify(incoming)) {
-        return false;
-      }
+      if (incomingTs < existingTs) return false;
     }
 
-    const newMap = new Map(currentMap);
     const merged = mergeRealtimeRecord(existing, incoming);
+    const newMap = new Map(currentMap);
     newMap.set(incoming.id, merged);
     set({ volunteersMap: newMap });
     useRealtimeStore.getState().recordSync();
@@ -81,9 +92,13 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
   setInitialShifts: (shifts: any[]) => {
     const map = new Map<string, any>();
     shifts.forEach(s => {
-      if (s.id) map.set(s.id, s);
+      if (s.id) {
+        map.set(s.id, assertShiftConsistency(s));
+      }
     });
-    set({ shiftsMap: map });
+    const byVolMap = rebuildShiftsByVolunteerMap(map);
+    set({ shiftsMap: map, shiftsByVolunteerMap: byVolMap });
+    useRealtimeStore.getState().setInitialSyncCompleted(true);
   },
 
   upsertShift: (incoming: any) => {
@@ -91,19 +106,23 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     const currentMap = get().shiftsMap;
     const existing = currentMap.get(incoming.id);
 
-    const currentTsVal = existing?.updated_at || existing?.created_at;
-    const incomingTsVal = incoming?.updated_at || incoming?.created_at;
+    const existingTsVal = existing?.updated_at || existing?.updatedAt || existing?.created_at;
+    const incomingTsVal = incoming?.updated_at || incoming?.updatedAt || incoming?.created_at;
 
-    if (existing && currentTsVal && incomingTsVal) {
-      const currentTs = new Date(currentTsVal).getTime();
+    if (existingTsVal && incomingTsVal) {
+      const currentTs = new Date(existingTsVal).getTime();
       const incomingTs = new Date(incomingTsVal).getTime();
       if (incomingTs < currentTs) return false;
     }
 
-    const newMap = new Map(currentMap);
     const merged = mergeRealtimeRecord(existing, incoming);
-    newMap.set(incoming.id, merged);
-    set({ shiftsMap: newMap });
+    const sanitized = assertShiftConsistency(merged);
+
+    const newMap = new Map(currentMap);
+    newMap.set(incoming.id, sanitized);
+
+    const byVolMap = rebuildShiftsByVolunteerMap(newMap);
+    set({ shiftsMap: newMap, shiftsByVolunteerMap: byVolMap });
     useRealtimeStore.getState().recordSync();
     return true;
   },
@@ -114,7 +133,9 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
 
     const newMap = new Map(currentMap);
     newMap.delete(id);
-    set({ shiftsMap: newMap });
+
+    const byVolMap = rebuildShiftsByVolunteerMap(newMap);
+    set({ shiftsMap: newMap, shiftsByVolunteerMap: byVolMap });
     useRealtimeStore.getState().recordSync();
     return true;
   },
@@ -129,5 +150,9 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
 
   getShiftsList: () => {
     return Array.from(get().shiftsMap.values());
+  },
+
+  getShiftsByVolunteerId: (volunteerId: string) => {
+    return get().shiftsByVolunteerMap.get(volunteerId) || EMPTY_SHIFTS_ARRAY;
   },
 }));

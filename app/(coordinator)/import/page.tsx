@@ -15,7 +15,7 @@ import { motion, AnimatePresence } from "framer-motion";
 // xlsx is loaded dynamically inside downloadExcelTemplate() and processFile()
 // to avoid bundling ~800 KB into the initial JS chunk for this route.
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
-import { logImportActivityAction } from "@/app/actions/activity-actions";
+import { bulkImportVolunteersAction } from "@/app/actions/volunteer-actions";
 
 interface ParsedVolunteer {
   rowNum: number;
@@ -373,11 +373,8 @@ export default function ImportPage() {
 
   const handleImport = async () => {
     setIsImporting(true);
-    const supabase = createClient();
-    
     try {
-      const results: ParsedVolunteer[] = [];
-      let skippedCount = 0;
+      const results: any[] = [];
 
       // Filter only valid ones (without errors or duplicates)
       const toImport = parsedData.filter(v => !v.error && !v.isDuplicate);
@@ -388,40 +385,42 @@ export default function ImportPage() {
         return;
       }
 
-      for (const vol of toImport) {
-        const pin = String(Math.floor(1000 + Math.random() * 9000)); // Generate a random 4-digit PIN for improved security
-        const sanitizedPhone = formatE164(vol.phone);
-        
-        const { data: inserted, error } = await supabase
-          .from('volunteers')
-          .insert({
-            first_name: vol.firstName,
-            last_name: vol.lastName,
-            age: parseInt(vol.age) || null,
-            neighborhood: vol.ward,
-            stake: vol.stake,
-            phone: sanitizedPhone,
-            committee_id: vol.committeeId || null,
-            pin: pin,
-            status: 'active'
-          })
-          .select()
-          .single();
+      const importPayloads = toImport.map(vol => ({
+        firstName: vol.firstName,
+        lastName: vol.lastName,
+        phone: formatE164(vol.phone),
+        age: parseInt(vol.age) || null,
+        neighborhood: vol.ward,
+        stake: vol.stake,
+        committeeId: vol.committeeId || null,
+        committeeName: vol.committeeName || undefined,
+      }));
 
-        if (error) {
-          console.error(`Error importing ${vol.firstName}:`, error);
-          continue;
-        }
+      const res = await bulkImportVolunteersAction(importPayloads);
 
-        const message = generatePinMessage(`${vol.firstName} ${vol.lastName}`, pin, "https://volunteermanager.org");
-        const waLink = generateWaMeLink(sanitizedPhone, message);
-        
+      if (!res.success) {
+        showToast(res.error || "Error crítico durante la importación.", "error");
+        setIsImporting(false);
+        return;
+      }
+
+      for (const vol of res.importedVolunteers) {
+        const message = generatePinMessage(`${vol.firstName} ${vol.lastName}`, vol.pin, "https://volunteermanager.org");
+        const waLink = generateWaMeLink(vol.phone, message);
+
         if (sendWelcomeMessage) {
           // Send automatic WhatsApp message
-          await sendWelcomeWhatsAppAction(sanitizedPhone, vol.firstName, pin);
+          await sendWelcomeWhatsAppAction(vol.phone, vol.firstName, vol.pin);
         }
-        
-        results.push({ ...vol, phone: sanitizedPhone, pin, waLink });
+
+        results.push({
+          firstName: vol.firstName,
+          lastName: vol.lastName,
+          phone: vol.phone,
+          pin: vol.pin,
+          committeeName: vol.committeeName || '',
+          waLink,
+        });
       }
 
       const totalDuplicatesCount = parsedData.filter(v => v.isDuplicate).length;
@@ -431,9 +430,6 @@ export default function ImportPage() {
         setStep(3);
         const skippedMsg = totalDuplicatesCount > 0 ? ` (${totalDuplicatesCount} duplicados omitidos)` : '';
         showToast(`Importados ${results.length} voluntarios exitosamente${skippedMsg}.`, "success");
-
-        const currentUserName = typeof window !== 'undefined' ? localStorage.getItem('volunteer_name') || '' : '';
-        await logImportActivityAction(results, currentUserName);
       } else {
         showToast("No se pudo importar ningún voluntario. Verifique los datos.", "error");
       }

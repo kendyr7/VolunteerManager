@@ -39,6 +39,8 @@ import { filterVolunteerIds } from "@/lib/services/volunteer-filter.service";
 import { groupVolunteersAlphabetically } from "@/lib/services/volunteer-grouping.service";
 import { RealtimeDebugOverlay } from "@/components/RealtimeDebugOverlay";
 import { useVolunteerStore } from "@/lib/store/use-volunteer-store";
+import { updateVolunteerAction } from "@/app/actions/volunteer-actions";
+
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -128,6 +130,8 @@ function HighlightText({ text, term }: { text: string; term: string }) {
 
 type SortField = 'name' | 'ward' | 'stake' | 'committee' | 'shifts' | 'reliability';
 type SortOrder = 'asc' | 'desc';
+
+import { updateVolunteerStatusAction, swapVolunteerActivationAction, resetVolunteerPinAction } from "@/app/actions/volunteer-actions";
 
 export default function VolunteersPage() {
   const supabase = createClient();
@@ -295,14 +299,11 @@ export default function VolunteersPage() {
       confirmText: 'Resetear PIN',
       type: 'primary',
       onConfirm: async () => {
-        const { error } = await supabase
-          .from('volunteers')
-          .update({ pin: '1234' })
-          .eq('id', vol.id);
+        const res = await resetVolunteerPinAction(vol.id);
 
-        if (error) {
-          console.error("Error resetting PIN:", error);
-          showToast("Error al resetear el PIN", "error");
+        if (!res.success) {
+          console.error("Error resetting PIN:", res.error);
+          showToast(res.error || "Error al resetear el PIN", "error");
         } else {
           showToast(`PIN de ${vol.name} reseteado a '1234'`, "success");
         }
@@ -315,60 +316,31 @@ export default function VolunteersPage() {
     if (!volunteerToArchive) return;
 
     const isUnarchiving = volunteerToArchive.status === 'archived';
-    const newStatus = isUnarchiving ? 'active' : 'archived';
+    const newStatus: 'active' | 'archived' = isUnarchiving ? 'active' : 'archived';
 
-    // Validation when unarchiving: Check if another ACTIVE volunteer uses the same phone number
-    if (isUnarchiving) {
-      const targetPhoneE164 = formatE164(volunteerToArchive.phone);
-      const targetPhoneLocal = getLocal8Digits(volunteerToArchive.phone);
+    const res = await updateVolunteerStatusAction({
+      volunteerId: volunteerToArchive.id,
+      toStatus: newStatus,
+    });
 
-      const { data: activeVols } = await supabase
-        .from('volunteers')
-        .select('id, first_name, last_name, phone, stake, neighborhood, committees(name)')
-        .neq('status', 'archived')
-        .neq('id', volunteerToArchive.id);
-
-      const existingActive = activeVols?.find(v => {
-        if (!v.phone) return false;
-        const vE164 = formatE164(v.phone);
-        const vLocal = getLocal8Digits(v.phone);
-        return (targetPhoneE164 && vE164 === targetPhoneE164) || (targetPhoneLocal && vLocal === targetPhoneLocal);
-      });
-
-      if (existingActive) {
+    if (!res.success) {
+      if (res.reason === 'phone_conflict' && res.conflictingVolunteer) {
         setIsArchiveModalOpen(false);
         setUnarchiveConflict({
           isOpen: true,
           targetVolunteer: volunteerToArchive,
-          activeVolunteer: {
-            id: existingActive.id,
-            name: `${existingActive.first_name || ''} ${existingActive.last_name || ''}`.trim(),
-            phone: existingActive.phone || volunteerToArchive.phone,
-            stake: existingActive.stake || '',
-            ward: existingActive.neighborhood || '',
-            committee: (existingActive as any).committees?.name || '',
-          },
+          activeVolunteer: res.conflictingVolunteer,
           newPhoneInput: volunteerToArchive.phone || '',
           isEditingPhone: false,
         });
         setVolunteerToArchive(null);
         return;
       }
-    }
-
-    const { error } = await supabase
-      .from('volunteers')
-      .update({ status: newStatus })
-      .eq('id', volunteerToArchive.id);
-
-    if (error) {
-      console.error("Error updating status:", error);
-      showToast(`Error al ${newStatus === 'archived' ? 'archivar' : 'desarchivar'}`, "error");
+      showToast(res.error || `Error al ${newStatus === 'archived' ? 'archivar' : 'desarchivar'}`, "error");
     } else {
       showToast(`Voluntario ${newStatus === 'archived' ? 'archivado' : 'desarchivado'}`);
       const updatedVol = { ...volunteerToArchive, status: newStatus };
       useVolunteerStore.getState().upsertVolunteer(updatedVol);
-      await refresh(true);
     }
 
     setIsArchiveModalOpen(false);
@@ -378,31 +350,18 @@ export default function VolunteersPage() {
   const handleSwapAndActivate = async () => {
     if (!unarchiveConflict.targetVolunteer || !unarchiveConflict.activeVolunteer) return;
 
-    // 1. Archive current active volunteer
-    const { error: archiveErr } = await supabase
-      .from('volunteers')
-      .update({ status: 'archived' })
-      .eq('id', unarchiveConflict.activeVolunteer.id);
+    const res = await swapVolunteerActivationAction(
+      unarchiveConflict.activeVolunteer.id,
+      unarchiveConflict.targetVolunteer.id
+    );
 
-    if (archiveErr) {
-      showToast("Error al archivar el voluntario activo actual.", "error");
-      return;
-    }
-
-    // 2. Unarchive target volunteer
-    const { error: unarchiveErr } = await supabase
-      .from('volunteers')
-      .update({ status: 'active' })
-      .eq('id', unarchiveConflict.targetVolunteer.id);
-
-    if (unarchiveErr) {
-      showToast("Error al desarchivar el voluntario.", "error");
+    if (!res.success) {
+      showToast(res.error || "Error al intercambiar voluntarios.", "error");
       return;
     }
 
     showToast(`Se archivó a "${unarchiveConflict.activeVolunteer.name}" y se activó a "${unarchiveConflict.targetVolunteer.name}".`, "success");
     setUnarchiveConflict(prev => ({ ...prev, isOpen: false }));
-    await refresh(true);
   };
 
   const handleUpdatePhoneAndActivate = async () => {
@@ -416,33 +375,17 @@ export default function VolunteersPage() {
 
     const sanitizedPhone = phoneValidation.formatted;
 
-    const { data: existingActive } = await supabase
-      .from('volunteers')
-      .select('id, first_name, last_name')
-      .eq('phone', sanitizedPhone)
-      .neq('status', 'archived')
-      .neq('id', unarchiveConflict.targetVolunteer.id)
-      .maybeSingle();
+    const res = await updateVolunteerStatusAction({
+      volunteerId: unarchiveConflict.targetVolunteer.id,
+      toStatus: 'active',
+      newPhone: sanitizedPhone,
+    });
 
-    if (existingActive) {
-      showToast(`El teléfono ${sanitizedPhone} ya pertenece al voluntario activo "${existingActive.first_name} ${existingActive.last_name}".`, "error");
-      return;
-    }
-
-    const { error } = await supabase
-      .from('volunteers')
-      .update({
-        phone: sanitizedPhone,
-        status: 'active'
-      })
-      .eq('id', unarchiveConflict.targetVolunteer.id);
-
-    if (error) {
-      showToast("Error al actualizar y desarchivar voluntario.", "error");
+    if (!res.success) {
+      showToast(res.error || "Error al actualizar y desarchivar voluntario.", "error");
     } else {
       showToast(`Teléfono actualizado a ${sanitizedPhone} y voluntario desarchivado exitosamente.`, "success");
       setUnarchiveConflict(prev => ({ ...prev, isOpen: false }));
-      await refresh(true);
     }
   };
 
@@ -565,51 +508,32 @@ export default function VolunteersPage() {
       ageNum = parsedAge;
     }
 
-    setIsSavingProfile(true);
-    const supabase = createClient();
-
-    // Check if another active volunteer already uses this phone number
-    const { data: existingActive } = await supabase
-      .from('volunteers')
-      .select('id, first_name, last_name')
-      .eq('phone', sanitizedPhone)
-      .neq('status', 'archived')
-      .neq('id', editingVolunteer.id)
-      .maybeSingle();
-
-    if (existingActive) {
-      showToast(`Ya existe un voluntario activo ("${existingActive.first_name} ${existingActive.last_name}") con el teléfono ${sanitizedPhone}.`, "error");
-      setIsSavingProfile(false);
-      return;
-    }
-
     const fullName = `${trimmedFirstName} ${trimmedLastName}`.trim();
     const commObj = committeesList.find(c => c.id === editCommitteeId || c.name === editCommitteeId);
     const commName = commObj ? commObj.name : editingVolunteer.committee;
 
-    const { error } = await supabase
-      .from('volunteers')
-      .update({
-        first_name: trimmedFirstName,
-        last_name: trimmedLastName,
-        phone: sanitizedPhone,
-        stake: trimmedStake,
-        neighborhood: trimmedWard,
-        committee_id: commObj ? commObj.id : (editCommitteeId || null),
-        age: ageNum,
-      })
-      .eq('id', editingVolunteer.id);
+    setIsSavingProfile(true);
 
-    if (error) {
-      console.error("Error updating profile:", error);
-      showToast(`Error al guardar cambios: ${error.message}`, "error");
+    const result = await updateVolunteerAction(editingVolunteer.id, {
+      firstName:   trimmedFirstName,
+      lastName:    trimmedLastName,
+      phone:       sanitizedPhone,
+      stake:       trimmedStake || null,
+      neighborhood: trimmedWard || null,
+      committeeId: commObj ? commObj.id : (editCommitteeId || null),
+      age:         ageNum,
+    });
+
+    if (!result.success) {
+      console.error("Error updating profile:", result.error);
+      showToast(`Error al guardar cambios: ${result.error}`, "error");
     } else {
       showToast("Perfil de voluntario actualizado correctamente");
 
       const updatedVol: VolunteerType = {
         ...editingVolunteer,
         name: fullName,
-        phone: trimmedPhone,
+        phone: sanitizedPhone,
         stake: trimmedStake,
         ward: trimmedWard,
         committee: commName,
@@ -619,7 +543,6 @@ export default function VolunteersPage() {
       useVolunteerStore.getState().upsertVolunteer(updatedVol);
       setEditingVolunteer(updatedVol);
       setDrawerMode('view');
-      await refresh(true);
     }
     setIsSavingProfile(false);
   };

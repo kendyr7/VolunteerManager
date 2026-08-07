@@ -57,10 +57,10 @@ export function getVolunteerProfileMetrics(
     };
   }
 
-  // Filter shifts belonging to this volunteer
+  // Filter shifts belonging to this volunteer (O(1) if already filtered or O(k) for volunteer shifts)
   const userShifts = shiftsData.filter((s: any) => {
     const sVolId = s.volunteer_id || s.volunteerId || s.volunteer?.id;
-    return sVolId === volunteerId;
+    return !sVolId || sVolId === volunteerId;
   });
 
   const countedKeys = new Set<string>();

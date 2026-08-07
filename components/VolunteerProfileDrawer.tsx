@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils';
 import { getActiveEventDays, formatDateShort } from '@/lib/dates';
 
 import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
+import { updateVolunteerAction } from '@/app/actions/volunteer-actions';
+
 
 export interface VolunteerProfileDrawerProps {
   isOpen: boolean;
@@ -74,8 +76,17 @@ export function VolunteerProfileDrawer({
 
   useEffect(() => {
     if (isOpen) {
-      const openedAt = performance.now();
-      console.log(`[Profile Drawer Render Telemetry] Profile opened for volunteer ID: ${propVolunteerId || propVolunteer?.id} at ${openedAt.toFixed(2)}ms`);
+      const volId = propVolunteerId || propVolunteer?.id || 'unknown';
+      performance.mark(`profile-open-${volId}`);
+      console.log(`[Profile Drawer Telemetry] Open mark recorded for ${volId}`);
+      return () => {
+        try {
+          performance.mark(`profile-close-${volId}`);
+          performance.measure(`profile-visible-duration-${volId}`, `profile-open-${volId}`, `profile-close-${volId}`);
+        } catch (e) {
+          // ignore if mark missing
+        }
+      };
     }
   }, [isOpen, propVolunteerId, propVolunteer]);
 
@@ -215,31 +226,26 @@ export function VolunteerProfileDrawer({
     }
 
     setIsSavingProfile(true);
-    const supabase = createClient();
 
     const commObj = committeesList.find((c: any) => c.id === editCommitteeId || c.name === editCommitteeId);
 
-    const { error } = await supabase
-      .from('volunteers')
-      .update({
-        first_name: trimmedFirstName,
-        last_name: trimmedLastName,
-        phone: trimmedPhone,
-        stake: trimmedStake,
-        neighborhood: trimmedWard,
-        committee_id: commObj ? commObj.id : (editCommitteeId || null),
-        age: ageNum,
-      })
-      .eq('id', activeVolunteer.id);
+    const result = await updateVolunteerAction(activeVolunteer.id, {
+      firstName:    trimmedFirstName,
+      lastName:     trimmedLastName,
+      phone:        trimmedPhone,
+      stake:        trimmedStake || null,
+      neighborhood: trimmedWard || null,
+      committeeId:  commObj ? commObj.id : (editCommitteeId || null),
+      age:          ageNum,
+    });
 
     setIsSavingProfile(false);
 
-    if (error) {
+    if (!result.success) {
       showToast('Error al guardar cambios del perfil', 'error');
     } else {
       showToast('Perfil de voluntario actualizado correctamente');
       setDrawerMode('view');
-      await refresh(true);
     }
   };
 
