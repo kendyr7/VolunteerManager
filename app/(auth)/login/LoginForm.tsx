@@ -52,6 +52,7 @@ export function LoginForm() {
   } | null>(null);
 
   // Remember User State
+  const [rememberMe, setRememberMe] = useState(false);
   const [savedUserMode, setSavedUserMode] = useState(false);
   const [savedName, setSavedName] = useState("");
   const [isMounted, setIsMounted] = useState(false);
@@ -73,14 +74,30 @@ export function LoginForm() {
     const mobileCheck = isMobileDevice();
     setIsMobile(mobileCheck);
 
-    const savedPhone = localStorage.getItem("volunteer_phone");
-    if (savedPhone) {
-      setPhone(savedPhone);
+    const isRemembered = localStorage.getItem("remember_me") === "true";
+    setRememberMe(isRemembered);
+
+    if (isRemembered) {
+      const savedPhone = localStorage.getItem("volunteer_phone");
+      if (savedPhone) {
+        setPhone(savedPhone);
+      }
+      const savedName = localStorage.getItem("volunteer_name");
+      if (savedName && savedPhone) {
+        setSavedUserMode(true);
+        setSavedName(savedName);
+      }
+    } else {
+      localStorage.removeItem("volunteer_name");
+      localStorage.removeItem("volunteer_phone");
+      setSavedUserMode(false);
     }
-    const savedName = localStorage.getItem("volunteer_name");
-    if (savedName && savedPhone) {
-      setSavedUserMode(true);
-      setSavedName(savedName);
+
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('expired') === 'true') {
+        setError('Tu sesión ha expirado por seguridad. Ingresa tu PIN de nuevo.');
+      }
     }
 
     setIsMounted(true);
@@ -251,9 +268,17 @@ export function LoginForm() {
 
   const finishLogin = (result: any) => {
     setIsRedirecting(true);
-    localStorage.setItem("volunteer_phone", phone || result.phone);
-    if (result.name) {
-      localStorage.setItem("volunteer_name", result.name);
+
+    if (rememberMe) {
+      localStorage.setItem("remember_me", "true");
+      localStorage.setItem("volunteer_phone", phone || result.phone);
+      if (result.name) {
+        localStorage.setItem("volunteer_name", result.name);
+      }
+    } else {
+      localStorage.removeItem("remember_me");
+      localStorage.removeItem("volunteer_phone");
+      localStorage.removeItem("volunteer_name");
     }
     if (!localStorage.getItem("preferred_auth_method")) {
       localStorage.setItem("preferred_auth_method", "pin");
@@ -291,49 +316,91 @@ export function LoginForm() {
               /* Usuario nuevo / No recordado */
               <>
                 {requireProfileSelection && !selectedProfile ? (
-                  <div className="space-y-3 p-4 bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 rounded-xl mb-4">
-                    <p className="text-xs font-bold text-[#4d7cfe] flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[18px]">group</span>
-                      Encontramos varios perfiles asociados a este número:
-                    </p>
+                  <div className="p-4 bg-dark2/90 dark:bg-white/[0.04] border border-border dark:border-white/10 rounded-2xl shadow-2xl space-y-3 mb-4 backdrop-blur-md">
+                    <div className="flex items-center gap-3 pb-1 border-b border-border/50 dark:border-white/5">
+                      <div className="w-9 h-9 rounded-full bg-[#4d7cfe]/15 border border-[#4d7cfe]/30 text-[#4d7cfe] flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[20px]">badge</span>
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                          Selecciona tu Perfil
+                        </h4>
+                        <p className="text-[11px] font-bold text-slate-500 dark:text-text-dim">
+                          Este número de teléfono está compartido por varias personas:
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="space-y-2 pt-1">
                       {candidateProfiles.map((p) => (
                         <button
                           key={p.id}
                           type="button"
-                          onClick={() => {
-                            setSelectedProfile({ id: p.id, name: `${p.firstName} ${p.lastName}`.trim(), type: p.userType });
+                          onClick={async () => {
+                            const choice = { id: p.id, name: `${p.firstName} ${p.lastName}`.trim(), type: p.userType };
+                            setSelectedProfile(choice);
                             setError(null);
+
+                            if (pin && pin.length === 4) {
+                              setIsSubmittingPin(true);
+                              try {
+                                const formData = new FormData();
+                                formData.append("phone", phone);
+                                formData.append("pin", pin);
+                                formData.append("selectedUserId", choice.id);
+                                formData.append("selectedUserType", choice.type);
+
+                                const result = await loginWithPin({}, formData);
+                                if (result.error) {
+                                  setError(result.error);
+                                  setPin("");
+                                  setIsSubmittingPin(false);
+                                } else if (result.force_pin_change) {
+                                  setUserData({ id: result.user_id!, type: result.user_type! });
+                                  setNeedsNewPin(true);
+                                  setIsSubmittingPin(false);
+                                } else if (result.success) {
+                                  finishLogin(result);
+                                } else {
+                                  setIsSubmittingPin(false);
+                                }
+                              } catch (err) {
+                                setError("Error de conexión con el servidor.");
+                                setIsSubmittingPin(false);
+                              }
+                            }
                           }}
-                          className="w-full text-left p-3 rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:border-[#4d7cfe] hover:bg-[#4d7cfe]/10 transition-all flex items-center justify-between group"
+                          className="w-full text-left p-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-dark3/70 hover:border-[#4d7cfe] hover:bg-[#4d7cfe]/10 transition-all flex items-center justify-between group shadow-sm cursor-pointer"
                         >
                           <div>
-                            <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#4d7cfe]">
+                            <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#4d7cfe] transition-colors">
                               {p.firstName} {p.lastName}
                             </p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {p.committee}
+                            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                              {p.committee || (p.userType === 'profile' ? 'Coordinador' : 'Voluntario')}
                             </p>
                           </div>
-                          <span className="material-symbols-outlined text-slate-400 group-hover:text-[#4d7cfe] text-[20px]">
-                            chevron_right
-                          </span>
+                          <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-white/5 group-hover:bg-[#4d7cfe]/20 flex items-center justify-center transition-colors">
+                            <span className="material-symbols-outlined text-slate-400 group-hover:text-[#4d7cfe] text-[18px] transition-transform group-hover:translate-x-0.5">
+                              arrow_forward
+                            </span>
+                          </div>
                         </button>
                       ))}
                     </div>
                   </div>
                 ) : selectedProfile ? (
-                  <div className="flex items-center justify-between p-3 bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 rounded-lg mb-2">
+                  <div className="flex items-center justify-between p-3.5 bg-[#4d7cfe]/10 border border-[#4d7cfe]/25 rounded-2xl mb-3 shadow-md backdrop-blur-md">
                     <div>
-                      <p className="text-xs font-bold text-[#4d7cfe]">Perfil Seleccionado:</p>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">{selectedProfile.name}</p>
+                      <p className="text-[10px] font-extrabold text-[#4d7cfe] uppercase tracking-wider">Perfil Seleccionado</p>
+                      <p className="text-sm font-extrabold text-slate-900 dark:text-white">{selectedProfile.name}</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedProfile(null);
                       }}
-                      className="text-xs text-[#4d7cfe] hover:underline font-bold"
+                      className="px-3 py-1 text-xs font-bold text-[#4d7cfe] hover:bg-[#4d7cfe]/15 rounded-lg transition-colors border border-[#4d7cfe]/30 cursor-pointer"
                     >
                       Cambiar
                     </button>
@@ -443,6 +510,17 @@ export function LoginForm() {
                           )}
                         </button>
                       </div>
+                      <div className="flex items-center justify-between pt-1">
+                        <label className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-400 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={rememberMe}
+                            onChange={(e) => setRememberMe(e.target.checked)}
+                            className="w-4 h-4 rounded border-slate-300 dark:border-white/20 bg-white/80 dark:bg-white/5 text-[#4d7cfe] focus:ring-[#4d7cfe] cursor-pointer"
+                          />
+                          <span>Recordar mi teléfono</span>
+                        </label>
+                      </div>
                     </div>
 
                     {error && (
@@ -490,6 +568,8 @@ export function LoginForm() {
                       setSavedUserMode(false); 
                       localStorage.removeItem('volunteer_name'); 
                       localStorage.removeItem('volunteer_phone');
+                      localStorage.removeItem('remember_me');
+                      setRememberMe(false);
                       setPhone(''); 
                       setAuthMode('pin');
                     }}

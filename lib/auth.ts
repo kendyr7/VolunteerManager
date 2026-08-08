@@ -20,14 +20,14 @@ function base64urlEncode(str: string | Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-export function signSession(data: SessionData): string {
+export function signSession(data: SessionData, expiresInDays = 30): string {
   const secret = getSecret();
   
   const header = { alg: "HS256", typ: "JWT" };
   
-  // Expiración: 7 días
+  // Expiración: 30 días (ampliado para evitar cierres de sesión intempestivos)
   const iat = Math.floor(Date.now() / 1000);
-  const exp = iat + (7 * 24 * 60 * 60);
+  const exp = iat + (expiresInDays * 24 * 60 * 60);
 
   // Payload estándar compatible con Supabase (RLS)
   const payload = {

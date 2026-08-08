@@ -109,7 +109,8 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
       cookieStore.set('session', sessionToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * 60 * 24 * 7,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30,
         path: '/',
       });
 
@@ -158,7 +159,8 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
       cookieStore.set('session', sessionToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * 60 * 24 * 7,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30,
         path: '/',
       });
 
@@ -240,12 +242,20 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
       return { error: 'El teléfono o PIN es incorrecto.' };
     }
 
-    // Si existen MÚLTIPLES perfiles asociados a este teléfono y NO se ha seleccionado uno aún
-    if (allCandidates.length > 1) {
+    // Filtrar candidatos cuyo PIN coincide exactamente con el ingresado
+    const validPinCandidates = allCandidates.filter(c => c.pin === pin);
+
+    if (validPinCandidates.length === 1) {
+      // Exactamente 1 perfil coincide con el teléfono y el PIN: ingresar directamente sin mostrar menú de desambiguación
+      const singleUser = validPinCandidates[0];
+      const authResult = await authenticateSpecificUser(singleUser.id, singleUser.userType);
+      if (authResult) return authResult;
+    } else if (validPinCandidates.length > 1) {
+      // Múltiples perfiles comparten el mismo teléfono Y el mismo PIN (ej. ambos con PIN por defecto '1234'). Mostrar menú de selección
       return {
         success: false,
         require_profile_selection: true,
-        profiles: allCandidates.map(c => ({
+        profiles: validPinCandidates.map(c => ({
           id: c.id,
           firstName: c.firstName,
           lastName: c.lastName,
@@ -254,11 +264,6 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
         })),
       };
     }
-
-    // Si existe EXACTAMENTE 1 perfil asociado a este teléfono
-    const singleUser = allCandidates[0];
-    const authResult = await authenticateSpecificUser(singleUser.id, singleUser.userType);
-    if (authResult) return authResult;
   }
 
   // Registrar Intento Fallido para Rate Limiting

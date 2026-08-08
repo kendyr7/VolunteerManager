@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { verifySessionToken } from '@/lib/auth'
+import { verifySessionToken, signSession } from '@/lib/auth'
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -61,7 +61,12 @@ export function proxy(request: NextRequest) {
   // Redirección si no está autenticado y busca páginas protegidas
   if (!session && (isVolunteerRoute || isCoordinatorRoute)) {
     const loginUrl = new URL('/login', request.url)
-    return NextResponse.redirect(loginUrl)
+    if (sessionCookie) {
+      loginUrl.searchParams.set('expired', 'true')
+    }
+    const response = NextResponse.redirect(loginUrl)
+    response.cookies.delete('session')
+    return response
   }
 
   // Redirección si ya está autenticado e intenta acceder al login
@@ -88,7 +93,27 @@ export function proxy(request: NextRequest) {
     }
   }
 
-  return NextResponse.next()
+  const response = NextResponse.next()
+
+  // Renovación automática de sesión activa (Sliding Expiration Window) para usuarios en uso activo
+  if (session && (isVolunteerRoute || isCoordinatorRoute)) {
+    const refreshedToken = signSession({
+      userId: session.userId,
+      userType: session.userType,
+      role: session.role,
+      committee: session.committee
+    }, 30);
+
+    response.cookies.set('session', refreshedToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30,
+      path: '/',
+    });
+  }
+
+  return response
 }
 
 export const config = {
