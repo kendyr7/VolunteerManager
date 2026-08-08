@@ -28,24 +28,22 @@ export async function GET(request: Request) {
 
     let userId: string | null = null;
 
-    const { data: profile } = await supabase.from('profiles').select('id').in('phone', targetPhones).maybeSingle();
-    if (profile) {
-      userId = profile.id;
-    } else {
-      const { data: volunteer } = await supabase.from('volunteers').select('id').in('phone', targetPhones).maybeSingle();
-      if (volunteer) {
-        userId = volunteer.id;
-      }
-    }
+    const { data: profiles } = await supabase.from('profiles').select('id').in('phone', targetPhones);
+    const { data: volunteers } = await supabase.from('volunteers').select('id').in('phone', targetPhones).neq('status', 'archived');
 
-    if (!userId) {
+    const userIds = [
+      ...(profiles || []).map(p => p.id),
+      ...(volunteers || []).map(v => v.id),
+    ];
+
+    if (userIds.length === 0) {
       return NextResponse.json({ hasPasskey: false });
     }
 
     const { data: passkeys } = await supabase
       .from('passkeys')
       .select('id')
-      .eq('user_id', userId);
+      .in('user_id', userIds);
 
     return NextResponse.json({ hasPasskey: !!(passkeys && passkeys.length > 0) });
   } catch (error: any) {

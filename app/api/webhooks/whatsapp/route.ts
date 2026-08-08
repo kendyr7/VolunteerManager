@@ -104,20 +104,41 @@ export async function POST(req: NextRequest) {
     if (!targetVolId) {
       const { data: volunteers } = await supabase
         .from('volunteers')
-        .select('id, first_name, last_name, phone, committee_id, committees(name)');
+        .select('id, first_name, last_name, phone, status, committee_id, committees(name)')
+        .neq('status', 'archived');
 
-      const matchedVol = (volunteers || []).find(v => {
+      const matchedVols = (volunteers || []).filter(v => {
         if (!v.phone) return false;
         const vDigits = v.phone.replace(/\D/g, '');
         if (!vDigits || !senderDigits) return false;
         return senderDigits.endsWith(vDigits.slice(-8)) || vDigits.endsWith(senderDigits.slice(-8));
       });
 
-      if (matchedVol) {
-        targetVol = matchedVol;
-        targetVolId = matchedVol.id;
-        firstName = matchedVol.first_name || 'Voluntario(a)';
-        committeeName = (matchedVol as any).committees?.name || 'Servicio';
+      if (matchedVols.length === 1) {
+        targetVol = matchedVols[0];
+        targetVolId = matchedVols[0].id;
+        firstName = matchedVols[0].first_name || 'Voluntario(a)';
+        committeeName = (matchedVols[0] as any).committees?.name || 'Servicio';
+      } else if (matchedVols.length > 1) {
+        // Verificar si el mensaje de texto es un número de opción (1, 2, 3...)
+        const rawText = (message.text?.body || '').trim();
+        const selectedIndex = parseInt(rawText, 10) - 1;
+
+        if (!isNaN(selectedIndex) && selectedIndex >= 0 && selectedIndex < matchedVols.length) {
+          const selectedVol = matchedVols[selectedIndex];
+          targetVol = selectedVol;
+          targetVolId = selectedVol.id;
+          firstName = selectedVol.first_name || 'Voluntario(a)';
+          committeeName = (selectedVol as any).committees?.name || 'Servicio';
+        } else {
+          // Desambiguar: Enviar menú de selección de perfil vía WhatsApp
+          const profileList = matchedVols.map((v, i) => `${i + 1}. ${v.first_name} ${v.last_name || ''}`).join('\n');
+          await sendWhatsAppText({
+            to: rawFrom,
+            text: `Hola 👋 Encontramos varios perfiles asociados a este número de WhatsApp:\n\n${profileList}\n\nPor favor responde únicamente con el número de tu perfil (ej: 1 o 2) para continuar.`
+          });
+          return NextResponse.json({ status: 'success' }, { status: 200 });
+        }
       }
     }
 

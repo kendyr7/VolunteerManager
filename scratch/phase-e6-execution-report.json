@@ -1,0 +1,950 @@
+{
+  "executionTimestamp": "2026-08-08T02:35:13.409Z",
+  "mode": "LIVE_BATCH_EXECUTION",
+  "summary": {
+    "totalRequested": 39,
+    "processedCount": 38,
+    "alreadyProcessedCount": 0,
+    "conflictCount": 1,
+    "requiresInfoCount": 0,
+    "errorCount": 0
+  },
+  "items": [
+    {
+      "index": 1,
+      "volunteerName": "Camila Mercedes Caceres Picado",
+      "volunteerId": "119a7436-96ff-4453-8917-63420c9dd9f5",
+      "itemId": "21478405-fb3e-444f-8be1-55261ef8398c",
+      "decision": "SHARED_PHONE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50578976493",
+        "phoneNormalized": "+50578976493",
+        "isSharedPhone": true,
+        "sharedPhoneOwnerId": "814b1d80-cda4-48ba-b564-9980ee87cb02",
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50578976493",
+        "phoneNormalized": "+50578976493",
+        "isSharedPhone": true,
+        "sharedPhoneOwnerId": "814b1d80-cda4-48ba-b564-9980ee87cb02",
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:28.153+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 2,
+      "volunteerName": "Mariela Elizabeth Gonzalez Benavides",
+      "volunteerId": "b0fe328e-0a07-4e2c-ab43-53295a3ac514",
+      "itemId": "8abb9c03-87d9-4de1-8776-6dc8d155fadd",
+      "decision": "ARCHIVE_DUPLICATE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50557081704",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "afterState": {
+        "phone": "+50557081704",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "processedAt": "2026-08-08T02:34:29.904+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 3,
+      "volunteerName": "Mariela Elizabeth Gonzalez Benavides",
+      "volunteerId": "b9f187a9-7410-49d7-b538-23aa9eea2900",
+      "itemId": "820c7514-9900-4e64-ba9d-074e1864bbd5",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50557081704",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50557081704",
+        "phoneNormalized": "+50557081704",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:30.655+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 4,
+      "volunteerName": "Celestino cuaresma Mendez",
+      "volunteerId": "3558ca55-d035-4eb6-a9d1-1353e10f84f6",
+      "itemId": "66f00a21-09af-4aac-8d41-0378bf6604ea",
+      "decision": "ARCHIVE_DUPLICATE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50585857058",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "afterState": {
+        "phone": "+50585857058",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "processedAt": "2026-08-08T02:34:31.987+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 5,
+      "volunteerName": "Oscar Bradley Ochoa Jimenez",
+      "volunteerId": "80e38f21-5b1f-46c5-a6df-e4950c8e82c6",
+      "itemId": "c2d33bf9-7fcc-4cf0-831c-992d936d43b8",
+      "decision": "SHARED_PHONE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50578003003",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50578003003",
+        "phoneNormalized": "+50578003003",
+        "isSharedPhone": true,
+        "sharedPhoneOwnerId": "627b93f9-d491-4438-9d19-0936654097fd",
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:32.757+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 6,
+      "volunteerName": "Oscar Danilo ochoa",
+      "volunteerId": "627b93f9-d491-4438-9d19-0936654097fd",
+      "itemId": "50479f0f-403b-4561-bbbe-828551a5f03a",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50578003003",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50578003003",
+        "phoneNormalized": "+50578003003",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:34.087+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 7,
+      "volunteerName": "Josué Samuel Ruiz Sánchez",
+      "volunteerId": "4b975da4-061d-43f8-b73b-443082b18d61",
+      "itemId": "ca9c7f6e-0b28-4a86-91f8-950893240d23",
+      "decision": "PHONE_DOES_NOT_BELONG",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50557859639",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "83350226",
+        "phoneNormalized": "+50583350226",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:35.456+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 8,
+      "volunteerName": "Izamara Yanneth Navarrete García de Ruiz",
+      "volunteerId": "f33a0d5a-907e-4e57-b941-d5f9acd83d8f",
+      "itemId": "f08c5a27-b029-4a63-86d5-3bb3d6f31af1",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "57859639",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "57859639",
+        "phoneNormalized": "+50557859639",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:36.203+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 9,
+      "volunteerName": "Alvin Jafet Cruz Barea",
+      "volunteerId": "5b56a494-6bb8-43e6-b6ad-1f9e363f86d6",
+      "itemId": "362d0095-2940-4155-8498-689fa7fc1964",
+      "decision": "PHONE_DOES_NOT_BELONG",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50576096922",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "78635289",
+        "phoneNormalized": "+50578635289",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:37.62+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 10,
+      "volunteerName": "Maudiel Antonio Cruz",
+      "volunteerId": "f0fd7b91-8e40-41ca-9dbf-3d705ed0beeb",
+      "itemId": "3fd14ea4-8a6a-4bd3-ae21-256bc18a1b62",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50576096922",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50576096922",
+        "phoneNormalized": "+50576096922",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:38.357+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 11,
+      "volunteerName": "Sarah Anali Chavarria Salinas",
+      "volunteerId": "0cdea6a8-4182-4fa3-9037-2a0f3d2ed57b",
+      "itemId": "41d810ba-d574-4dd4-8567-74647cbb2f68",
+      "decision": "SHARED_PHONE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50581233738",
+        "phoneNormalized": "+50581233738",
+        "isSharedPhone": true,
+        "sharedPhoneOwnerId": "16744c32-ccae-486f-85f7-a49696d383cc",
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50581233738",
+        "phoneNormalized": "+50581233738",
+        "isSharedPhone": true,
+        "sharedPhoneOwnerId": "16744c32-ccae-486f-85f7-a49696d383cc",
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:39.708+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 12,
+      "volunteerName": "Sayda Raquel Rubio de Gonzalez",
+      "volunteerId": "54b5b3d6-3751-40f3-a11f-cf1f2a146676",
+      "itemId": "4be1acd0-3aed-447d-9144-b2f1e817b21c",
+      "decision": "PHONE_DOES_NOT_BELONG",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50588714650",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "85275235",
+        "phoneNormalized": "+50585275235",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:41.018+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 13,
+      "volunteerName": "Juan Rivera Benavides",
+      "volunteerId": "e816e427-2933-432d-bd88-22a9c7f3bf08",
+      "itemId": "014f72e3-e5e1-482b-99f1-906a0e061e26",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50589005590",
+        "phoneNormalized": "+50589005590",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50589005590",
+        "phoneNormalized": "+50589005590",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:41.763+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 14,
+      "volunteerName": "Camila Salazar",
+      "volunteerId": "60909675-1e19-4f5a-aaef-03434b9d1f9b",
+      "itemId": "f281f8b0-03ae-47eb-89ba-c7ef4d6fac5b",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50584363933",
+        "phoneNormalized": "+50584363933",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50584363933",
+        "phoneNormalized": "+50584363933",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:43.096+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 15,
+      "volunteerName": "Victor Salazar",
+      "volunteerId": "f2c5361d-2611-4e79-8e5d-c951ed5aca91",
+      "itemId": "f0effb12-dfec-4d69-83fd-4b1d41170c3d",
+      "decision": "PHONE_DOES_NOT_BELONG",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50584363933",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "86949009",
+        "phoneNormalized": "+50586949009",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:44.443+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 16,
+      "volunteerName": "Mirna Mireya Mendoza de Bravo",
+      "volunteerId": "f608dccc-a38d-43ca-b61a-8c9552189293",
+      "itemId": "fc9d4024-5b0f-43b0-b9a7-888d88391c37",
+      "decision": "PHONE_DOES_NOT_BELONG",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50586965155",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "87482612",
+        "phoneNormalized": "+50587482612",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:45.193+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 17,
+      "volunteerName": "Nadia Camila Davila de Mejia",
+      "volunteerId": "61bede17-b1c7-41fa-b4d7-20f14e7db235",
+      "itemId": "82531629-9ab6-4648-aacf-e4cfa4340d1f",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "86965155",
+        "phoneNormalized": "+50586965155",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "86965155",
+        "phoneNormalized": "+50586965155",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:45.942+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 18,
+      "volunteerName": "Freddy Alfonso Cruz Flores",
+      "volunteerId": "b75ba851-e048-4e8a-a5e0-1a08a135f690",
+      "itemId": "06a96ee1-98ac-4ebf-a6c1-4aed43526784",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50577977321",
+        "phoneNormalized": "+50577977321",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50577977321",
+        "phoneNormalized": "+50577977321",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:47.253+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 19,
+      "volunteerName": "Jorge Jesus Hernández",
+      "volunteerId": "c8cc7156-db63-4a55-82ba-07b7da092383",
+      "itemId": "70bc6ad2-4efb-4188-92b9-205be4aa618b",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50586263843",
+        "phoneNormalized": "+50586263843",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50586263843",
+        "phoneNormalized": "+50586263843",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:48.532+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 20,
+      "volunteerName": "Marian Elizabeth Caceres Picado",
+      "volunteerId": "814b1d80-cda4-48ba-b564-9980ee87cb02",
+      "itemId": "f2c45a05-081f-4e47-8a2e-40101f5dad80",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50578976493",
+        "phoneNormalized": "+50578976493",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50578976493",
+        "phoneNormalized": "+50578976493",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:49.862+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 21,
+      "volunteerName": "Briana Isamara Ortega Gonzales",
+      "volunteerId": "43c720f5-91db-425b-901f-35c2ad0b9d3f",
+      "itemId": "d66b3eb1-f9fc-4c89-8d6e-932eb35e41dd",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50581417825",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50581417825",
+        "phoneNormalized": "+50581417825",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:51.147+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 22,
+      "volunteerName": "Martha Carolina González Lacayo",
+      "volunteerId": "2c88bc6d-773b-4e08-b745-c17f5873bb7e",
+      "itemId": "3f440779-8de1-4772-8328-7a80ecd27fe8",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50587713398",
+        "phoneNormalized": "+50587713398",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50587713398",
+        "phoneNormalized": "+50587713398",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:52.515+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 23,
+      "volunteerName": "Carolina Gonzalez",
+      "volunteerId": "ed02a044-5bb6-4351-ae62-148e00d1cc30",
+      "itemId": "1356753b-8f75-40d2-9787-69f9ba2049f0",
+      "decision": "ARCHIVE_DUPLICATE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50587713398",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "afterState": {
+        "phone": "+50587713398",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "processedAt": "2026-08-08T02:34:53.833+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 24,
+      "volunteerName": "Haronyd Daniela Hernández Dávila",
+      "volunteerId": "8e9cf31d-f769-416c-aed5-b6f2e2a83b53",
+      "itemId": "da7c2bee-d241-4b4f-8c4e-8bd18cd7df03",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50586191864",
+        "phoneNormalized": "+50586191864",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50586191864",
+        "phoneNormalized": "+50586191864",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:54.647+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 25,
+      "volunteerName": "Nathaly Marcela Ferrufino Escobar",
+      "volunteerId": "4b9b2d21-06db-40f0-ac75-1d7ed1876da6",
+      "itemId": "2eba30ec-aaaa-4865-b8a7-5b0b7877cd14",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50588328115",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "afterState": {
+        "phone": "+50588328115",
+        "phoneNormalized": "+50588328115",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "processedAt": "2026-08-08T02:34:55.975+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 26,
+      "volunteerName": "Nathaly Marcela Ferrufino Escobar",
+      "volunteerId": "5cb4eb4e-7558-4fe1-ae9f-c1143c0dd1a2",
+      "itemId": "9d41c254-a617-4ca4-8cde-9e62b895bbc1",
+      "decision": "ARCHIVE_DUPLICATE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50588328115",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50588328115",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "processedAt": "2026-08-08T02:34:57.278+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 27,
+      "volunteerName": "Olga Maria Gutierrez de Raudez",
+      "volunteerId": "ce6e77c7-419c-4e86-8680-fdeb9e70ba83",
+      "itemId": "e42300c0-51e8-4466-bd30-f3ead5cd62fc",
+      "decision": "PHONE_DOES_NOT_BELONG",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50589510000",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "78126032",
+        "phoneNormalized": "+50578126032",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:58.434+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 28,
+      "volunteerName": "Linda Regina Obando Ponce",
+      "volunteerId": "f61a8920-45c0-4e48-ae4d-1f26c0855edf",
+      "itemId": "fc882185-ed73-4353-a286-e43340b76abd",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50577407948",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50577407948",
+        "phoneNormalized": "+50577407948",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:34:59.17+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 29,
+      "volunteerName": "Angel Mosiah Sequeira Obando",
+      "volunteerId": "57ba9ddd-4495-401e-abad-bb7290b3ed1d",
+      "itemId": "5eb521b5-bc6c-4a5c-9ad0-6aeb0b617dea",
+      "decision": "SHARED_PHONE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50577407948",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50577407948",
+        "phoneNormalized": "+50577407948",
+        "isSharedPhone": true,
+        "sharedPhoneOwnerId": "f61a8920-45c0-4e48-ae4d-1f26c0855edf",
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:35:00.481+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 30,
+      "volunteerName": "Nahomi Paola Ampie Somarriba",
+      "volunteerId": "f032c7d1-8321-4442-b612-2a3950425b34",
+      "itemId": "dc50c1d0-74d9-413e-94c2-7256ce5f70ad",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50587823513",
+        "phoneNormalized": "+50587823513",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50587823513",
+        "phoneNormalized": "+50587823513",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:35:01.778+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 31,
+      "volunteerName": "Silma Herenia De Coronado Chavarria",
+      "volunteerId": "16744c32-ccae-486f-85f7-a49696d383cc",
+      "itemId": "2528e075-0456-4e01-b099-b6dd9797e315",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50581233738",
+        "phoneNormalized": "+50581233738",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50581233738",
+        "phoneNormalized": "+50581233738",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:35:03.042+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 32,
+      "volunteerName": "Yara Francel Rocha Velásquez",
+      "volunteerId": "f3f4508d-4674-4988-8544-88816a4c77af",
+      "itemId": "ba97f733-9c9f-434f-a364-32b36bf797e8",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50588714650",
+        "phoneNormalized": "+50588714650",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50588714650",
+        "phoneNormalized": "+50588714650",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:35:04.317+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 33,
+      "volunteerName": "Sheyla Patricia Blandón Somarriba",
+      "volunteerId": "64aa3181-8b3b-4eea-899d-ab8b01ba23b8",
+      "itemId": "259fce83-6293-4e71-9d45-0aded6b32f7a",
+      "decision": "PHONE_OWNER",
+      "resultCode": "CONFLICT",
+      "beforeState": {
+        "phone": "+50587823513",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50587823513",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:35:13.409Z",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 34,
+      "volunteerName": "Drevel Jha Canel Aristhomene Forbes",
+      "volunteerId": "3675328e-1707-46e3-b011-66cc6335ea9a",
+      "itemId": "09c6f74c-5c86-45df-94b5-c9088c87d887",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50588546327",
+        "phoneNormalized": "+50588546327",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50588546327",
+        "phoneNormalized": "+50588546327",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:35:06.82+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 35,
+      "volunteerName": "Drevel jha canel aristhomene forbes",
+      "volunteerId": "105ee4b4-7ead-4c86-8448-4c9006327d8f",
+      "itemId": "9ee48155-5e05-4e38-a51b-a51b1da7c1bd",
+      "decision": "ARCHIVE_DUPLICATE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50588546327",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "afterState": {
+        "phone": "+50588546327",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "processedAt": "2026-08-08T02:35:08.155+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 36,
+      "volunteerName": "Mauricio Celestino Cuarezma Mendez",
+      "volunteerId": "6b9d4bc4-b917-4887-abe4-73385e06d23c",
+      "itemId": "21bc1aa5-3619-4eda-b69b-5a939a0dd392",
+      "decision": "PHONE_OWNER",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50585857058",
+        "phoneNormalized": "+50585857058",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50585857058",
+        "phoneNormalized": "+50585857058",
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:35:08.89+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 37,
+      "volunteerName": "Mauricio Celestino Cuarezma Méndez",
+      "volunteerId": "31fc9b9e-f840-4d63-b488-9944376bedc7",
+      "itemId": "794aeb6d-e4be-49bf-9eec-432ddf356b86",
+      "decision": "ARCHIVE_DUPLICATE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50585857058",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "afterState": {
+        "phone": "+50585857058",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "processedAt": "2026-08-08T02:35:10.186+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 38,
+      "volunteerName": "Winston Ivan Morales Blandon",
+      "volunteerId": "4d7fd9f8-c969-4ab8-bd89-ad375c31528e",
+      "itemId": "f826d7da-78ca-4de2-bb98-9d8a0c18dfd2",
+      "decision": "ARCHIVE_DUPLICATE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50587823513",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "afterState": {
+        "phone": "+50587823513",
+        "phoneNormalized": null,
+        "isSharedPhone": false,
+        "sharedPhoneOwnerId": null,
+        "status": "archived"
+      },
+      "processedAt": "2026-08-08T02:35:10.893+00:00",
+      "processedBy": "Administrador"
+    },
+    {
+      "index": 39,
+      "volunteerName": "Nataly del Pilar Ampie Somarriba",
+      "volunteerId": "0a3529eb-b8c2-43f5-8f80-8fb235561448",
+      "itemId": "35603384-ce3b-40b4-8fd2-8c69d99ead35",
+      "decision": "SHARED_PHONE",
+      "resultCode": "PROCESSED",
+      "beforeState": {
+        "phone": "+50587823513",
+        "phoneNormalized": "+50587823513",
+        "isSharedPhone": true,
+        "sharedPhoneOwnerId": "f032c7d1-8321-4442-b612-2a3950425b34",
+        "status": "active"
+      },
+      "afterState": {
+        "phone": "+50587823513",
+        "phoneNormalized": "+50587823513",
+        "isSharedPhone": true,
+        "sharedPhoneOwnerId": "f032c7d1-8321-4442-b612-2a3950425b34",
+        "status": "active"
+      },
+      "processedAt": "2026-08-08T02:35:11.622+00:00",
+      "processedBy": "Administrador"
+    }
+  ]
+}

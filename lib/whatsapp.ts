@@ -37,6 +37,18 @@ export function formatE164(phone: string, defaultCountryCode: string = '505'): s
 }
 
 /**
+ * Normalización canónica de teléfonos para comparaciones y validaciones.
+ * Convierte formatos locales de 8 dígitos, 505XXXXXXXX y +505XXXXXXXX a E.164 (+505XXXXXXXX).
+ * Retorna cadena vacía si es inválido o nulo.
+ */
+export function normalizePhoneE164(phone: string | null | undefined): string {
+  if (!phone) return '';
+  const validation = validatePhone8Digits(phone);
+  if (!validation.isValid) return '';
+  return validation.formatted;
+}
+
+/**
  * Valida que un número telefónico tenga exactamente 8 dígitos en su número local (ej. Nicaragua).
  * Devuelve un objeto con isValid, error y el número sanitizado en formato E.164.
  * 

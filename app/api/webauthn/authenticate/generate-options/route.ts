@@ -28,35 +28,35 @@ export async function POST(request: Request) {
 
     const supabase = await getAdminSupabase();
 
-    // Buscar si existe el teléfono en Profiles o Volunteers
-    let userId = null;
-    let userType = null;
+    // Buscar si existe el teléfono en Profiles o Volunteers (evitando crashes por maybeSingle)
+    const { data: profiles } = await supabase.from('profiles').select('id').in('phone', targetPhones);
+    const { data: volunteers } = await supabase.from('volunteers').select('id').in('phone', targetPhones).neq('status', 'archived');
 
-    const { data: profile } = await supabase.from('profiles').select('id').in('phone', targetPhones).maybeSingle();
-    if (profile) {
-      userId = profile.id;
-      userType = 'profile';
-    } else {
-      const { data: volunteer } = await supabase.from('volunteers').select('id').in('phone', targetPhones).maybeSingle();
-      if (volunteer) {
-        userId = volunteer.id;
-        userType = 'volunteer';
-      }
-    }
+    const candidateUsers = [
+      ...(profiles || []).map(p => ({ id: p.id, type: 'profile' as const })),
+      ...(volunteers || []).map(v => ({ id: v.id, type: 'volunteer' as const })),
+    ];
 
-    if (!userId) {
+    if (candidateUsers.length === 0) {
       return NextResponse.json({ error: 'Usuario no encontrado con ese teléfono' }, { status: 404 });
     }
 
-    // Buscar si este usuario tiene passkeys
+    const candidateIds = candidateUsers.map(u => u.id);
+
+    // Buscar si estos usuarios tienen passkeys
     const { data: passkeys } = await supabase
       .from('passkeys')
       .select('*')
-      .eq('user_id', userId);
+      .in('user_id', candidateIds);
 
     if (!passkeys || passkeys.length === 0) {
       return NextResponse.json({ error: 'No tienes huellas o dispositivos registrados' }, { status: 400 });
     }
+
+    const activeUserId = passkeys[0].user_id;
+    const activeUserObj = candidateUsers.find(u => u.id === activeUserId) || candidateUsers[0];
+    const userId = activeUserObj.id;
+    const userType = activeUserObj.type;
 
     const rpID = process.env.WEBAUTHN_RP_ID || 'localhost';
 

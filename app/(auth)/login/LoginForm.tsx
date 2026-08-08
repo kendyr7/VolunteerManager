@@ -36,6 +36,21 @@ export function LoginForm() {
   const [confirmPin, setConfirmPin] = useState("");
   const [userData, setUserData] = useState<{ id: string, type: 'profile' | 'volunteer' } | null>(null);
 
+  // Multi-Profile Selection States
+  const [requireProfileSelection, setRequireProfileSelection] = useState(false);
+  const [candidateProfiles, setCandidateProfiles] = useState<Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    committee: string;
+    userType: 'profile' | 'volunteer';
+  }>>([]);
+  const [selectedProfile, setSelectedProfile] = useState<{
+    id: string;
+    name: string;
+    type: 'profile' | 'volunteer';
+  } | null>(null);
+
   // Remember User State
   const [savedUserMode, setSavedUserMode] = useState(false);
   const [savedName, setSavedName] = useState("");
@@ -165,10 +180,18 @@ export function LoginForm() {
       const formData = new FormData();
       formData.append("phone", phone);
       formData.append("pin", pin);
+      if (selectedProfile) {
+        formData.append("selectedUserId", selectedProfile.id);
+        formData.append("selectedUserType", selectedProfile.type);
+      }
 
       const result = await loginWithPin({}, formData);
 
-      if (result.error) {
+      if (result.require_profile_selection && result.profiles) {
+        setCandidateProfiles(result.profiles);
+        setRequireProfileSelection(true);
+        setIsSubmittingPin(false);
+      } else if (result.error) {
         setError(result.error);
         setPin("");
         setIsSubmittingPin(false);
@@ -267,6 +290,56 @@ export function LoginForm() {
             {!savedUserMode ? (
               /* Usuario nuevo / No recordado */
               <>
+                {requireProfileSelection && !selectedProfile ? (
+                  <div className="space-y-3 p-4 bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 rounded-xl mb-4">
+                    <p className="text-xs font-bold text-[#4d7cfe] flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px]">group</span>
+                      Encontramos varios perfiles asociados a este número:
+                    </p>
+                    <div className="space-y-2 pt-1">
+                      {candidateProfiles.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedProfile({ id: p.id, name: `${p.firstName} ${p.lastName}`.trim(), type: p.userType });
+                            setError(null);
+                          }}
+                          className="w-full text-left p-3 rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:border-[#4d7cfe] hover:bg-[#4d7cfe]/10 transition-all flex items-center justify-between group"
+                        >
+                          <div>
+                            <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#4d7cfe]">
+                              {p.firstName} {p.lastName}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {p.committee}
+                            </p>
+                          </div>
+                          <span className="material-symbols-outlined text-slate-400 group-hover:text-[#4d7cfe] text-[20px]">
+                            chevron_right
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : selectedProfile ? (
+                  <div className="flex items-center justify-between p-3 bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 rounded-lg mb-2">
+                    <div>
+                      <p className="text-xs font-bold text-[#4d7cfe]">Perfil Seleccionado:</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{selectedProfile.name}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedProfile(null);
+                      }}
+                      className="text-xs text-[#4d7cfe] hover:underline font-bold"
+                    >
+                      Cambiar
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="space-y-2">
                   <Label htmlFor="phone" className="text-[11px] font-dela uppercase tracking-wider text-slate-600 dark:text-slate-400 ml-1">
                     Número de Teléfono
@@ -282,7 +355,11 @@ export function LoginForm() {
                       placeholder="88888888"
                       required
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                      onChange={(e) => {
+                        setPhone(e.target.value.replace(/\D/g, '').slice(0, 8));
+                        setRequireProfileSelection(false);
+                        setSelectedProfile(null);
+                      }}
                       className="w-full h-12 bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-sm pl-12 pr-4 text-slate-900 dark:text-white font-inter font-bold focus:bg-white focus:dark:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm"
                       disabled={isSubmittingPin || isRedirecting}
                     />

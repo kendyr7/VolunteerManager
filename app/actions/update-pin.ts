@@ -205,7 +205,7 @@ export async function changeUserPin(currentPin: string, newPin: string, userPhon
       user = data;
     }
 
-    // 2. Si no se encontró por ID y se provee userPhone, buscar por teléfono multiformato
+    // 2. Si no se encontró por ID y se provee userPhone, buscar por teléfono multiformato (evitando maybeSingle y fallbacks)
     if (!user && userPhone) {
       const formattedPhone = formatE164(userPhone);
       const rawDigits = userPhone.replace(/\D/g, '');
@@ -218,27 +218,28 @@ export async function changeUserPin(currentPin: string, newPin: string, userPhon
       ])).filter(Boolean);
 
       // Probar en profiles
-      const { data: prof } = await supabase.from('profiles').select('id, pin').in('phone', targetPhones).maybeSingle();
-      if (prof) {
-        user = prof;
-        matchedTable = 'profiles';
-      } else {
-        // Probar en volunteers
-        const { data: vol } = await supabase.from('volunteers').select('id, pin').in('phone', targetPhones).maybeSingle();
-        if (vol) {
-          user = vol;
-          matchedTable = 'volunteers';
-        }
-      }
-    }
+      const { data: profs } = await supabase.from('profiles').select('id, pin').in('phone', targetPhones);
+      // Probar en volunteers activos
+      const { data: vols } = await supabase.from('volunteers').select('id, pin, status').in('phone', targetPhones).neq('status', 'archived');
 
-    // 3. Fallback: buscar el primer perfil si no se encontró por ID ni por teléfono
-    if (!user) {
-      const { data: fallbackProf } = await supabase.from('profiles').select('id, pin').order('created_at', { ascending: true }).limit(1).maybeSingle();
-      if (fallbackProf) {
-        user = fallbackProf;
-        matchedTable = 'profiles';
+      const matchingUsers: Array<{ id: string; pin: string; table: 'profiles' | 'volunteers' }> = [
+        ...(profs || []).map(p => ({ id: p.id, pin: p.pin, table: 'profiles' as const })),
+        ...(vols || []).map(v => ({ id: v.id, pin: v.pin, table: 'volunteers' as const })),
+      ];
+
+      if (matchingUsers.length === 0) {
+        return { success: false, error: "No se encontró ningún usuario con ese número de teléfono." };
       }
+
+      if (matchingUsers.length > 1) {
+        return {
+          success: false,
+          error: "Existen múltiples perfiles asociados a este número. Debes iniciar sesión con tu perfil para actualizar tu PIN de forma segura.",
+        };
+      }
+
+      user = matchingUsers[0];
+      matchedTable = matchingUsers[0].table;
     }
 
     if (!user) {

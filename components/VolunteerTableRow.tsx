@@ -81,7 +81,7 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
       className="flex items-center w-full px-5 py-3.5 hover:bg-white/[0.02] border-b border-white/5 transition-colors group cursor-pointer text-sm"
       onClick={() => onEditClick(vol)}
     >
-      <div className="flex-1 min-w-0 pr-4">
+      <div className="flex-[2.5] min-w-[200px] pr-4">
         <p className={cn(USER_TABLE_STYLES.name, "flex items-center gap-2 flex-wrap")}>
           <HighlightText text={vol.name} term={appliedSearch} />
           {vol.age != null && vol.age > 0 && vol.age < 18 && (
@@ -91,14 +91,14 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
           )}
         </p>
       </div>
-      <div className="w-32 text-center font-inter font-bold text-[13px] text-text-dim shrink-0">
+      <div className="flex-[1.5] min-w-[140px] text-center font-inter font-bold text-[13px] text-text-dim shrink-0 truncate px-2">
         {vol.ward}
       </div>
-      <div className="w-32 text-center font-inter font-bold text-[13px] text-text-dim opacity-70 shrink-0">
+      <div className="flex-[1.5] min-w-[140px] text-center font-inter font-bold text-[13px] text-text-dim opacity-70 shrink-0 truncate px-2">
         {vol.stake}
       </div>
-      <div className="w-40 text-center shrink-0">
-        <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, committeeColor)}>
+      <div className="flex-[1.8] min-w-[150px] text-center shrink-0 px-2 flex justify-center">
+        <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, committeeColor, "truncate max-w-full inline-block")}>
           {vol.committee}
         </Badge>
       </div>
@@ -117,7 +117,7 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
           </div>
         )}
       </div>
-      <div className="w-32 flex items-center justify-center gap-1 shrink-0">
+      <div className="w-28 flex items-center justify-center gap-1 shrink-0">
         <button
           type="button"
           className="h-8 w-8 rounded-lg flex items-center justify-center text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90 cursor-pointer"

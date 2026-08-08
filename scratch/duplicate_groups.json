@@ -1,0 +1,2079 @@
+[
+  {
+    "groupIndex": 1,
+    "phone_normalized": "+50557062212",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "05c4d83c-e1b4-48cd-8105-6932f82cb547",
+        "first_name": "Danny",
+        "last_name": "Andrés Lay Torrez",
+        "raw_phone": "+50557062212",
+        "status": "active",
+        "age": 33,
+        "stake": "Bello  Horizonte",
+        "neighborhood": "Máximo Jérez",
+        "committee": "Tecnología",
+        "committee_id": "5f652313-9751-4b58-901e-acc9e4b391b8",
+        "created_at": "2026-08-01T02:53:06.855368+00:00"
+      },
+      {
+        "id": "387c4a70-3257-42eb-9bf7-1a2caeab1d7c",
+        "first_name": "Danny",
+        "last_name": "Lay De Marín",
+        "raw_phone": "+50557062212",
+        "status": "archived",
+        "age": 33,
+        "stake": "Bello Amanecer",
+        "neighborhood": "Máximo Jérez",
+        "committee": "Tecnología",
+        "committee_id": "5f652313-9751-4b58-901e-acc9e4b391b8",
+        "created_at": "2026-08-05T15:30:30.655293+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 2,
+    "phone_normalized": "+50557081704",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "b0fe328e-0a07-4e2c-ab43-53295a3ac514",
+        "first_name": "Mariela",
+        "last_name": "Elizabeth Gonzalez Benavides",
+        "raw_phone": "+50557081704",
+        "status": "active",
+        "age": null,
+        "stake": "Distrito Esteli",
+        "neighborhood": "Rama Esteli",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:31:23.168044+00:00"
+      },
+      {
+        "id": "b9f187a9-7410-49d7-b538-23aa9eea2900",
+        "first_name": "Mariela",
+        "last_name": "Elizabeth Gonzalez Benavides",
+        "raw_phone": "+50557081704",
+        "status": "active",
+        "age": null,
+        "stake": "Distrito Esteli",
+        "neighborhood": "Rama Esteli",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:26.771812+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 3,
+    "phone_normalized": "+50557820614",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "3fa90547-c104-4517-b58a-2dc2c7ed6b97",
+        "first_name": "Gabriel",
+        "last_name": "Antonio Toledo Velasquez",
+        "raw_phone": "+50557820614",
+        "status": "active",
+        "age": 43,
+        "stake": "Distrito Juigalpa",
+        "neighborhood": "Rama Pueblo Nuevo",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:44.820102+00:00"
+      },
+      {
+        "id": "db8f08c4-5ad8-42d5-9d95-208c674ffb07",
+        "first_name": "Harold",
+        "last_name": "Alcides Pinell Hernandez",
+        "raw_phone": "+50557820614",
+        "status": "active",
+        "age": null,
+        "stake": "Estaca Leon",
+        "neighborhood": "El coyolar",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:21.947572+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 4,
+    "phone_normalized": "+50557855141",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "7ce12d26-8363-4aa2-a48b-84ec73565981",
+        "first_name": "Rebeca",
+        "last_name": "Judith Galan",
+        "raw_phone": "+50557855141",
+        "status": "active",
+        "age": 37,
+        "stake": "Masaya",
+        "neighborhood": "Cuatro Esquinas",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:07.226929+00:00"
+      },
+      {
+        "id": "1fe51eb2-c9e8-418f-94c0-079a0594ca6e",
+        "first_name": "Jose",
+        "last_name": "Antonio Osejo Ibarra",
+        "raw_phone": "+50557855141",
+        "status": "active",
+        "age": 41,
+        "stake": "Masaya",
+        "neighborhood": "Cuatro Esquinas",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:49.201129+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 5,
+    "phone_normalized": "+50558325158",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "247c0a87-368a-43ae-bbac-10e50f9aad0b",
+        "first_name": "Kenia",
+        "last_name": "Victoria Paramo Torrez",
+        "raw_phone": "+50558325158",
+        "status": "active",
+        "age": 32,
+        "stake": "Masaya",
+        "neighborhood": "Las Flores",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:10.124542+00:00"
+      },
+      {
+        "id": "2a70d212-cd79-4ac1-8b10-1007414472e3",
+        "first_name": "Jordan",
+        "last_name": "Alexander Vanegas Rayo",
+        "raw_phone": "+50558325158",
+        "status": "active",
+        "age": 33,
+        "stake": "Masaya",
+        "neighborhood": "Las Flores",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:48.89709+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 6,
+    "phone_normalized": "+50576096922",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "5b56a494-6bb8-43e6-b6ad-1f9e363f86d6",
+        "first_name": "Alvin",
+        "last_name": "Jafet Cruz Barea",
+        "raw_phone": "+50576096922",
+        "status": "active",
+        "age": 21,
+        "stake": "Managua",
+        "neighborhood": "Mateare",
+        "committee": "Facilidades Físicas",
+        "committee_id": "d7c93d59-8290-414e-94c5-5985fa21e385",
+        "created_at": "2026-07-31T22:32:28.697245+00:00"
+      },
+      {
+        "id": "f0fd7b91-8e40-41ca-9dbf-3d705ed0beeb",
+        "first_name": "Maudiel",
+        "last_name": "Antonio Cruz",
+        "raw_phone": "+50576096922",
+        "status": "active",
+        "age": 48,
+        "stake": "Managua",
+        "neighborhood": "Mateare",
+        "committee": "Facilidades Físicas",
+        "committee_id": "d7c93d59-8290-414e-94c5-5985fa21e385",
+        "created_at": "2026-07-31T22:32:39.941887+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 7,
+    "phone_normalized": "+50576109012",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "bc551420-f069-4e72-a8d2-ba0b9bfa124e",
+        "first_name": "Jose",
+        "last_name": "Angel Arevalo Campos",
+        "raw_phone": "+50576109012",
+        "status": "active",
+        "age": 50,
+        "stake": "Estaca Masaya",
+        "neighborhood": "Barrio Las Sabogales",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:01.399308+00:00"
+      },
+      {
+        "id": "50c2f998-9f26-48c6-92ae-6db6173ffea8",
+        "first_name": "Marcia",
+        "last_name": "Marlene López",
+        "raw_phone": "+50576109012",
+        "status": "active",
+        "age": 49,
+        "stake": "Masaya",
+        "neighborhood": "Las Sabogales",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:02.356267+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 8,
+    "phone_normalized": "+50576739821",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "0979be59-0e86-4fdc-bbc9-ea234b6257f3",
+        "first_name": "Jorge",
+        "last_name": "Luis Gutiérrez Campos",
+        "raw_phone": "+50576739821",
+        "status": "active",
+        "age": null,
+        "stake": "Managua Norte",
+        "neighborhood": "Waspán",
+        "committee": "Sin Comité",
+        "committee_id": null,
+        "created_at": "2026-08-02T21:57:04.606137+00:00"
+      },
+      {
+        "id": "3c382e9c-b90e-4bc9-a4fd-4774483df306",
+        "first_name": "Jorge",
+        "last_name": "Luis Gutiérrez Campos",
+        "raw_phone": "+50576739821",
+        "status": "active",
+        "age": 58,
+        "stake": "Bello Horizonte",
+        "neighborhood": "Waspán",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-04T18:04:25.777897+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 9,
+    "phone_normalized": "+50576890870",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "8e94f8d6-db48-49f8-8544-378ad67c5a15",
+        "first_name": "Emma",
+        "last_name": "Gabrela Cruz Barea",
+        "raw_phone": "+50576890870",
+        "status": "active",
+        "age": 15,
+        "stake": "Managua",
+        "neighborhood": "Mateare",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:57.309212+00:00"
+      },
+      {
+        "id": "d329db3e-7ba7-4eb7-aca8-e7cbf36633cd",
+        "first_name": "William",
+        "last_name": "Gabriel Cruz Barea",
+        "raw_phone": "+50576890870",
+        "status": "active",
+        "age": 15,
+        "stake": "Managua",
+        "neighborhood": "Mateare",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:57.563229+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 10,
+    "phone_normalized": "+50577407948",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "f61a8920-45c0-4e48-ae4d-1f26c0855edf",
+        "first_name": "Linda",
+        "last_name": "Regina Obando Ponce",
+        "raw_phone": "+50577407948",
+        "status": "active",
+        "age": 30,
+        "stake": "Managua",
+        "neighborhood": "Linda Vista",
+        "committee": "Facilidades Físicas",
+        "committee_id": "d7c93d59-8290-414e-94c5-5985fa21e385",
+        "created_at": "2026-07-31T22:32:37.82768+00:00"
+      },
+      {
+        "id": "57ba9ddd-4495-401e-abad-bb7290b3ed1d",
+        "first_name": "Angel",
+        "last_name": "Mosiah Sequeira Obando",
+        "raw_phone": "+50577407948",
+        "status": "active",
+        "age": 13,
+        "stake": "Managua",
+        "neighborhood": "Linda Vista",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:56.230843+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 11,
+    "phone_normalized": "+50577977321",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "f6d53f0f-f08a-4757-8f5d-b0b667bad3d6",
+        "first_name": "Ericka",
+        "last_name": "Maria Lopez de Jimenez",
+        "raw_phone": "+50577977321",
+        "status": "active",
+        "age": 44,
+        "stake": "Managua",
+        "neighborhood": "Prizapolka",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:00.615095+00:00"
+      },
+      {
+        "id": "b75ba851-e048-4e8a-a5e0-1a08a135f690",
+        "first_name": "Freddy",
+        "last_name": "Alfonso Cruz Flores",
+        "raw_phone": "+50577977321",
+        "status": "active",
+        "age": 66,
+        "stake": "Managua",
+        "neighborhood": "Ciudad Sandino",
+        "committee": "Sin Comité",
+        "committee_id": null,
+        "created_at": "2026-08-01T11:53:00.818486+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 12,
+    "phone_normalized": "+50578003003",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "80e38f21-5b1f-46c5-a6df-e4950c8e82c6",
+        "first_name": "Oscar",
+        "last_name": "Bradley Ochoa Jimenez",
+        "raw_phone": "+50578003003",
+        "status": "active",
+        "age": 12,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Bello Amanecer",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:36.715245+00:00"
+      },
+      {
+        "id": "627b93f9-d491-4438-9d19-0936654097fd",
+        "first_name": "Oscar",
+        "last_name": "Danilo ochoa",
+        "raw_phone": "+50578003003",
+        "status": "active",
+        "age": 46,
+        "stake": "Managua",
+        "neighborhood": "Bello Amanecer ",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-04T18:00:46.967225+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 13,
+    "phone_normalized": "+50578256837",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "3bc27660-5f8c-4af5-9ce0-ac1f69fea39b",
+        "first_name": "Mario",
+        "last_name": "José López",
+        "raw_phone": "+50578256837",
+        "status": "active",
+        "age": 66,
+        "stake": "Masaya",
+        "neighborhood": "Las Sabogales",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:02.817854+00:00"
+      },
+      {
+        "id": "dd37180e-5091-4be6-a8d8-a95f8bc9b52e",
+        "first_name": "Argentina",
+        "last_name": "del Socorro Contreras",
+        "raw_phone": "+50578256837",
+        "status": "active",
+        "age": 62,
+        "stake": "Masaya",
+        "neighborhood": "Las Sabogales",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:03.066071+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 14,
+    "phone_normalized": "+50578403793",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "909a4eb7-3995-45d7-8751-e4aa2d5ab5d5",
+        "first_name": "Alisson",
+        "last_name": "Nicole Maradiaga Acosta",
+        "raw_phone": "+50578403793",
+        "status": "active",
+        "age": 20,
+        "stake": "León",
+        "neighborhood": "La Posada",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:24.846891+00:00"
+      },
+      {
+        "id": "ca31e077-c06f-4836-b119-87c2447e3ed8",
+        "first_name": "Tifany",
+        "last_name": "Esther Maradiaga Acosta",
+        "raw_phone": "+50578403793",
+        "status": "active",
+        "age": 21,
+        "stake": "Estaca Leon",
+        "neighborhood": "La Posada",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:25.148993+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 15,
+    "phone_normalized": "+50578433856",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "7fc77173-2cc4-45b1-9a1e-fe84381c16ff",
+        "first_name": "Alida",
+        "last_name": "Rosa Gutiérrez Espinoza de Roa",
+        "raw_phone": "+50578433856",
+        "status": "active",
+        "age": 67,
+        "stake": "Universitaria",
+        "neighborhood": "Batahola",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:55.419708+00:00"
+      },
+      {
+        "id": "afe433ec-f85d-4993-8743-756ec5e7d4aa",
+        "first_name": "José",
+        "last_name": "Cristóbal Roa Lampi",
+        "raw_phone": "+50578433856",
+        "status": "active",
+        "age": 70,
+        "stake": "Universitaria",
+        "neighborhood": "Batahola",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:15.257842+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 16,
+    "phone_normalized": "+50578976493",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "814b1d80-cda4-48ba-b564-9980ee87cb02",
+        "first_name": "Marian",
+        "last_name": "Elizabeth Caceres Picado",
+        "raw_phone": "+50578976493",
+        "status": "active",
+        "age": 16,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Ciudad Sandino",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:40.832846+00:00"
+      },
+      {
+        "id": "119a7436-96ff-4453-8917-63420c9dd9f5",
+        "first_name": "Camila",
+        "last_name": "Mercedes Caceres Picado",
+        "raw_phone": "+50578976493",
+        "status": "active",
+        "age": 11,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Ciudad Sandino",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:41.13031+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 17,
+    "phone_normalized": "+50581211377",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "ff6be90f-1a1c-45fa-afc4-32dee9780a4d",
+        "first_name": "Jorge",
+        "last_name": "Alberto Pilarte Gutierrez",
+        "raw_phone": "+50581211377",
+        "status": "active",
+        "age": 42,
+        "stake": "Managua",
+        "neighborhood": "Prinzapolka",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:02.017894+00:00"
+      },
+      {
+        "id": "4ed1cf64-97fe-42b3-a98a-07aa73910838",
+        "first_name": "Kenneth",
+        "last_name": "Danilo Centeno Ruiz",
+        "raw_phone": "+50581211377",
+        "status": "active",
+        "age": 26,
+        "stake": "Universitaria",
+        "neighborhood": "Monte Fresco",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:02.437326+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 18,
+    "phone_normalized": "+50581233738",
+    "count": 3,
+    "volunteers": [
+      {
+        "id": "16744c32-ccae-486f-85f7-a49696d383cc",
+        "first_name": "Silma",
+        "last_name": "Herenia De Coronado Chavarria",
+        "raw_phone": "+50581233738",
+        "status": "active",
+        "age": 36,
+        "stake": "Villa Flor",
+        "neighborhood": "René Polanco",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:04.238609+00:00"
+      },
+      {
+        "id": "a258fc80-ab9a-4043-a57e-08c2c301af99",
+        "first_name": "Ericka",
+        "last_name": "Camila Coronado Chavarria",
+        "raw_phone": "+50581233738",
+        "status": "active",
+        "age": 14,
+        "stake": "Villa Flor",
+        "neighborhood": "René Polanco",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:04.520028+00:00"
+      },
+      {
+        "id": "0cdea6a8-4182-4fa3-9037-2a0f3d2ed57b",
+        "first_name": "Sarah",
+        "last_name": "Anali Chavarria Salinas",
+        "raw_phone": "+50581233738",
+        "status": "active",
+        "age": 12,
+        "stake": "Villa Flor",
+        "neighborhood": "René Polanco",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:05.408117+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 19,
+    "phone_normalized": "+50581406969",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "02efbe35-8b87-4780-bade-1b77ae3bad2a",
+        "first_name": "Arlen",
+        "last_name": "Karina Estrada Perez",
+        "raw_phone": "+50581406969",
+        "status": "active",
+        "age": 45,
+        "stake": "Managua",
+        "neighborhood": "Mateare",
+        "committee": "Facilidades Físicas",
+        "committee_id": "d7c93d59-8290-414e-94c5-5985fa21e385",
+        "created_at": "2026-07-31T22:32:29.380973+00:00"
+      },
+      {
+        "id": "d10bd0a6-1db9-481f-b984-45e46f73e4af",
+        "first_name": "Coralia",
+        "last_name": "Lopez",
+        "raw_phone": "+50581406969",
+        "status": "active",
+        "age": 15,
+        "stake": "Managua",
+        "neighborhood": "Mateare",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:57.883114+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 20,
+    "phone_normalized": "+50581417825",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "713225e7-9f74-4b19-b4af-be8f03ae916c",
+        "first_name": "Cristian",
+        "last_name": "Antonio Ruiz Fuentes",
+        "raw_phone": "+50581417825",
+        "status": "active",
+        "age": 15,
+        "stake": "Masaya",
+        "neighborhood": "Nindirí",
+        "committee": "Facilidades Físicas",
+        "committee_id": "d7c93d59-8290-414e-94c5-5985fa21e385",
+        "created_at": "2026-07-31T22:32:30.889449+00:00"
+      },
+      {
+        "id": "43c720f5-91db-425b-901f-35c2ad0b9d3f",
+        "first_name": "Briana",
+        "last_name": "Isamara Ortega Gonzales",
+        "raw_phone": "+50581417825",
+        "status": "active",
+        "age": 17,
+        "stake": "Masatepe",
+        "neighborhood": "Diriomo",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:58.908729+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 21,
+    "phone_normalized": "+50581548563",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "3cb35b78-16b8-47fa-858d-f357c5a7adb5",
+        "first_name": "Mercedes",
+        "last_name": "Yamilett Diaz Umaña",
+        "raw_phone": "+50581548563",
+        "status": "active",
+        "age": 60,
+        "stake": "Managua Norte",
+        "neighborhood": "Rama Waspán",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T21:54:15.257212+00:00"
+      },
+      {
+        "id": "ce7149a5-896b-4556-9f61-5081093b01a2",
+        "first_name": "Yamileth",
+        "last_name": "Diaz",
+        "raw_phone": "+50581548563",
+        "status": "archived",
+        "age": 26,
+        "stake": "Universitaria ",
+        "neighborhood": "San juan ",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-04T17:54:51.084307+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 22,
+    "phone_normalized": "+50581646206",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "a85fba9c-e2ee-4f1c-ade9-8fd6ae9fcaaa",
+        "first_name": "Paola",
+        "last_name": "Martinez Cruz",
+        "raw_phone": "+50581646206",
+        "status": "active",
+        "age": 26,
+        "stake": "Universitaria",
+        "neighborhood": "San Judas",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:04.865509+00:00"
+      },
+      {
+        "id": "0aca930b-991e-493a-a22f-70ab7344ae57",
+        "first_name": "Paola",
+        "last_name": "Lillieth Martinez Cruz",
+        "raw_phone": "+50581646206",
+        "status": "active",
+        "age": 27,
+        "stake": "Universitaria ",
+        "neighborhood": "San juan ",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-04T17:48:17.836903+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 23,
+    "phone_normalized": "+50581921394",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "a8e5a7a3-2b3e-4461-8a97-f540594e0e95",
+        "first_name": "Lenin",
+        "last_name": "Ramírez Madriz",
+        "raw_phone": "+50581921394",
+        "status": "active",
+        "age": 47,
+        "stake": "Villa Flor",
+        "neighborhood": "Villa Flor",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:40.888216+00:00"
+      },
+      {
+        "id": "cd7a40e0-f9ad-49c6-b396-a2112b8477c3",
+        "first_name": "Martha",
+        "last_name": "Leonor López de Ramírez",
+        "raw_phone": "+50581921394",
+        "status": "active",
+        "age": 46,
+        "stake": "Villa Flor",
+        "neighborhood": "",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:41.178543+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 24,
+    "phone_normalized": "+50581984536",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "8edf6a50-3437-4511-bdf6-aac9618bbf0c",
+        "first_name": "Arnaldo",
+        "last_name": "Rodriguez López",
+        "raw_phone": "+50581984536",
+        "status": "active",
+        "age": 27,
+        "stake": "Masaya",
+        "neighborhood": "Las Flores",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:59.594819+00:00"
+      },
+      {
+        "id": "325014c0-363f-4bb4-8d80-4b0c7b3475b9",
+        "first_name": "Bengi",
+        "last_name": "Alexander Hernanez Roy",
+        "raw_phone": "+50581984536",
+        "status": "active",
+        "age": 20,
+        "stake": "Masaya",
+        "neighborhood": "Las Flores",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:00.621246+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 25,
+    "phone_normalized": "+50582384685",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "d824f199-a81b-437c-80ae-ff4ff4d98695",
+        "first_name": "Sandy",
+        "last_name": "Elizabeth Espinoza Ruiz",
+        "raw_phone": "+50582384685",
+        "status": "active",
+        "age": 43,
+        "stake": "Villa Flor",
+        "neighborhood": "René Polanco",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:34.569202+00:00"
+      },
+      {
+        "id": "239ab488-55f0-43e1-acef-ddb325ec18e3",
+        "first_name": "Sandy",
+        "last_name": "Elizabeth Espinoza Ruiz",
+        "raw_phone": "+50582384685",
+        "status": "active",
+        "age": 43,
+        "stake": "Villa Flor",
+        "neighborhood": "René Polanco",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:36.276386+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 26,
+    "phone_normalized": "+50582556314",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "09909812-e6ff-49b9-97f1-22dc7c9fa2e7",
+        "first_name": "Franklin",
+        "last_name": "Antonio Henriquez Urbina",
+        "raw_phone": "+50582556314",
+        "status": "active",
+        "age": 37,
+        "stake": "Distrito Granada",
+        "neighborhood": "",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:35.672781+00:00"
+      },
+      {
+        "id": "f7d898d4-9ef6-452d-aac4-41064bb9fe84",
+        "first_name": "Maritza",
+        "last_name": "Lorena Grarcia de Herinquez",
+        "raw_phone": "+50582556314",
+        "status": "active",
+        "age": 30,
+        "stake": "Distrito Granada",
+        "neighborhood": "",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:35.976457+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 27,
+    "phone_normalized": "+50582866007",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "bab08f7f-26b0-4c68-9fe0-55bd9d6b357b",
+        "first_name": "Hosman",
+        "last_name": "Jose Garcia Barrios",
+        "raw_phone": "+50582866007",
+        "status": "active",
+        "age": 30,
+        "stake": "Distrito Granada",
+        "neighborhood": "",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:38.65473+00:00"
+      },
+      {
+        "id": "79a42643-413d-474e-a23a-d6725d87d474",
+        "first_name": "Carlos",
+        "last_name": "Alexander Garcia Barrios",
+        "raw_phone": "+50582866007",
+        "status": "active",
+        "age": 22,
+        "stake": "Distrito Granada",
+        "neighborhood": "",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:38.901881+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 28,
+    "phone_normalized": "+50583279246",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "40c7b9c8-85fa-4d3e-9656-1a55bdd3bc08",
+        "first_name": "Alejandro",
+        "last_name": "José Silva Vargas",
+        "raw_phone": "+50583279246",
+        "status": "active",
+        "age": 38,
+        "stake": "Bello Horizonte",
+        "neighborhood": "Ducuali",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T22:20:22.085256+00:00"
+      },
+      {
+        "id": "69c29a83-e5e8-466f-aff8-08ade2d3549d",
+        "first_name": "Alejandro",
+        "last_name": "José Silva Vargas",
+        "raw_phone": "+50583279246",
+        "status": "archived",
+        "age": null,
+        "stake": "Bello Horizonte ",
+        "neighborhood": "Ducuali",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T22:27:34.013467+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 29,
+    "phone_normalized": "+50583391395",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "dff8f4c2-2add-4350-b5b9-69e334d03629",
+        "first_name": "Camila",
+        "last_name": "Arana",
+        "raw_phone": "+50583391395",
+        "status": "active",
+        "age": 15,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Ciudad Sandino",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:43.327575+00:00"
+      },
+      {
+        "id": "f280e045-941d-45ad-a2bf-7faaaec18932",
+        "first_name": "Jessica",
+        "last_name": "Soza",
+        "raw_phone": "+50583391395",
+        "status": "active",
+        "age": 15,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Ciudad Sandino",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:43.590982+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 30,
+    "phone_normalized": "+50583760752",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "0627885d-711d-4a29-b516-8afd7c622a82",
+        "first_name": "Jennyfer",
+        "last_name": "del Carmen López Briceño",
+        "raw_phone": "+50583760752",
+        "status": "active",
+        "age": 21,
+        "stake": "Universitaria",
+        "neighborhood": "Batahola",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:01.817391+00:00"
+      },
+      {
+        "id": "54964c35-04f0-4ed7-bdb3-370cc0aa4206",
+        "first_name": "José",
+        "last_name": "Luis Gaitán",
+        "raw_phone": "+50583760752",
+        "status": "active",
+        "age": 26,
+        "stake": "Universitaria",
+        "neighborhood": "Loma Linda",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:02.230909+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 31,
+    "phone_normalized": "+50583783108",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "3cf27d4d-3537-438f-9cfe-5b8d2fb3c4c3",
+        "first_name": "Fiorella",
+        "last_name": "Estefania Solorzano de Peña",
+        "raw_phone": "+50583783108",
+        "status": "active",
+        "age": 36,
+        "stake": "Managua",
+        "neighborhood": "Mateare",
+        "committee": "Facilidades Físicas",
+        "committee_id": "d7c93d59-8290-414e-94c5-5985fa21e385",
+        "created_at": "2026-07-31T22:32:32.892514+00:00"
+      },
+      {
+        "id": "498ba88d-6c8d-4c37-af3a-b2c37a16ac96",
+        "first_name": "German",
+        "last_name": "de Jesus Peña Soza",
+        "raw_phone": "+50583783108",
+        "status": "active",
+        "age": 47,
+        "stake": "Managua",
+        "neighborhood": "Mateare",
+        "committee": "Facilidades Físicas",
+        "committee_id": "d7c93d59-8290-414e-94c5-5985fa21e385",
+        "created_at": "2026-07-31T22:32:34.405909+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 32,
+    "phone_normalized": "+50584051979",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "c81ccdb1-7edc-4526-a73b-2d7ed07832e8",
+        "first_name": "Francisco",
+        "last_name": "López",
+        "raw_phone": "+50584051979",
+        "status": "active",
+        "age": 64,
+        "stake": "Distrito Puerto Cabezas",
+        "neighborhood": "Rama Bilwi",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:46.23539+00:00"
+      },
+      {
+        "id": "365cb353-3613-4f49-bc62-d934204030e5",
+        "first_name": "Francisca",
+        "last_name": "Labonte de López",
+        "raw_phone": "+50584051979",
+        "status": "active",
+        "age": 67,
+        "stake": "Distrito Puerto Cabezas",
+        "neighborhood": "Rama Bilwi",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:46.558994+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 33,
+    "phone_normalized": "+50584205496",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "5c195df6-c389-4263-aaec-7468dfca942b",
+        "first_name": "Noel",
+        "last_name": "Gómez López",
+        "raw_phone": "+50584205496",
+        "status": "active",
+        "age": 67,
+        "stake": "Estaca Villa Flor",
+        "neighborhood": "Barrio Villa Flor",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:07.715448+00:00"
+      },
+      {
+        "id": "7fb1d085-896b-4666-b045-2a4275df090e",
+        "first_name": "Yolanda",
+        "last_name": "Gómez",
+        "raw_phone": "+50584205496",
+        "status": "active",
+        "age": 77,
+        "stake": "Villa Flor",
+        "neighborhood": "Villa Flor",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:08.456128+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 34,
+    "phone_normalized": "+50584363933",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "60909675-1e19-4f5a-aaef-03434b9d1f9b",
+        "first_name": "Camila",
+        "last_name": "Salazar",
+        "raw_phone": "+50584363933",
+        "status": "active",
+        "age": 28,
+        "stake": "Jinotepe",
+        "neighborhood": "El Rosario",
+        "committee": "Parqueo y Transporte",
+        "committee_id": "0c36396b-c267-462c-9d4b-09213ee4079c",
+        "created_at": "2026-08-03T23:03:42.250251+00:00"
+      },
+      {
+        "id": "f2c5361d-2611-4e79-8e5d-c951ed5aca91",
+        "first_name": "Victor",
+        "last_name": "Salazar",
+        "raw_phone": "+50584363933",
+        "status": "active",
+        "age": 25,
+        "stake": "Jinotepe",
+        "neighborhood": "El Rosario",
+        "committee": "Parqueo y Transporte",
+        "committee_id": "0c36396b-c267-462c-9d4b-09213ee4079c",
+        "created_at": "2026-08-03T23:03:42.765145+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 35,
+    "phone_normalized": "+50584572080",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "db27d157-65ae-43df-9c62-d27ba9a55227",
+        "first_name": "Walter",
+        "last_name": "Cerda Cruz",
+        "raw_phone": "+50584572080",
+        "status": "active",
+        "age": 64,
+        "stake": "Managua",
+        "neighborhood": "Las Palmas",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:46.812577+00:00"
+      },
+      {
+        "id": "a6670c49-4520-44b2-bd7d-3b953ccf1d55",
+        "first_name": "Migdonia",
+        "last_name": "de Jesus Centeno de Cerda",
+        "raw_phone": "+50584572080",
+        "status": "active",
+        "age": 63,
+        "stake": "Managua",
+        "neighborhood": "Las Palmas",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:47.066796+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 36,
+    "phone_normalized": "+50585293438",
+    "count": 3,
+    "volunteers": [
+      {
+        "id": "db4b1551-f908-41b0-aee6-8313182479e5",
+        "first_name": "Raissa",
+        "last_name": "Mercado",
+        "raw_phone": "+50585293438",
+        "status": "active",
+        "age": 15,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Ciudad Sandino",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:41.831154+00:00"
+      },
+      {
+        "id": "89cf05da-9daa-429d-b0f5-145588bf4dc5",
+        "first_name": "Monserrat",
+        "last_name": "Mercado",
+        "raw_phone": "+50585293438",
+        "status": "active",
+        "age": 15,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Ciudad Sandino",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:42.193828+00:00"
+      },
+      {
+        "id": "a1cd977c-fca9-43a4-af4c-dc590755c76e",
+        "first_name": "Mercedes",
+        "last_name": "del Pilar Ordoñez",
+        "raw_phone": "+50585293438",
+        "status": "active",
+        "age": 37,
+        "stake": "Managua ",
+        "neighborhood": "Ciudad Sandino",
+        "committee": "Parqueo y Transporte",
+        "committee_id": "0c36396b-c267-462c-9d4b-09213ee4079c",
+        "created_at": "2026-08-07T02:59:09.348939+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 37,
+    "phone_normalized": "+50585651630",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "02655091-2de9-4439-9df8-832596314048",
+        "first_name": "Juan",
+        "last_name": "Carlos Ruiz Sandino",
+        "raw_phone": "+50585651630",
+        "status": "active",
+        "age": 51,
+        "stake": "Las Americas",
+        "neighborhood": "Rubén Darío",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:21.488714+00:00"
+      },
+      {
+        "id": "b5bd6096-cc88-4546-8088-c3c7d773a4fb",
+        "first_name": "Carla",
+        "last_name": "Patricia Silva",
+        "raw_phone": "+50585651630",
+        "status": "active",
+        "age": 50,
+        "stake": "Las Américas",
+        "neighborhood": "Rubén Darío",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:21.723147+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 38,
+    "phone_normalized": "+50585857058",
+    "count": 3,
+    "volunteers": [
+      {
+        "id": "6b9d4bc4-b917-4887-abe4-73385e06d23c",
+        "first_name": "Mauricio",
+        "last_name": "Celestino Cuarezma Mendez",
+        "raw_phone": "+50585857058",
+        "status": "active",
+        "age": 27,
+        "stake": "Managua",
+        "neighborhood": "La Trinidad",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T22:01:19.266993+00:00"
+      },
+      {
+        "id": "31fc9b9e-f840-4d63-b488-9944376bedc7",
+        "first_name": "Mauricio",
+        "last_name": "Celestino Cuarezma Méndez",
+        "raw_phone": "+50585857058",
+        "status": "active",
+        "age": null,
+        "stake": "Managua",
+        "neighborhood": "La Trinidad",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T22:05:19.179326+00:00"
+      },
+      {
+        "id": "3558ca55-d035-4eb6-a9d1-1353e10f84f6",
+        "first_name": "Celestino",
+        "last_name": "cuaresma Mendez",
+        "raw_phone": "+50585857058",
+        "status": "active",
+        "age": 27,
+        "stake": "Managua ",
+        "neighborhood": "Trinidad ",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-04T18:02:10.504154+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 39,
+    "phone_normalized": "+50586157332",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "81daf57a-b865-4e55-bbdc-8a4e82a553e2",
+        "first_name": "Howard",
+        "last_name": "Thomas",
+        "raw_phone": "+50586157332",
+        "status": "active",
+        "age": 64,
+        "stake": "Distrito Puerto Cabezas",
+        "neighborhood": "Rama Loma verde",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:47.868837+00:00"
+      },
+      {
+        "id": "eb90124c-7f43-47da-b93b-af5dea7f7d14",
+        "first_name": "Julia",
+        "last_name": "Gamboa Jonathan",
+        "raw_phone": "+50586157332",
+        "status": "active",
+        "age": 74,
+        "stake": "Distrito Puerto Cabezas",
+        "neighborhood": "Rama Loma verde",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:48.106464+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 40,
+    "phone_normalized": "+50586191864",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "582734e1-90b2-48c7-a60f-2d1effff40ba",
+        "first_name": "Geoconda de los Angeles",
+        "last_name": "Olivares Silva",
+        "raw_phone": "+50586191864",
+        "status": "active",
+        "age": 46,
+        "stake": "Managua",
+        "neighborhood": "Bello Amanecer",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:01.018203+00:00"
+      },
+      {
+        "id": "8e9cf31d-f769-416c-aed5-b6f2e2a83b53",
+        "first_name": "Haronyd",
+        "last_name": "Daniela Hernández Dávila",
+        "raw_phone": "+50586191864",
+        "status": "active",
+        "age": 21,
+        "stake": "Jinotepe",
+        "neighborhood": "Rama San Rafael del sur",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T22:05:12.32188+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 41,
+    "phone_normalized": "+50586263843",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "c8cc7156-db63-4a55-82ba-07b7da092383",
+        "first_name": "Jorge",
+        "last_name": "Jesus Hernández",
+        "raw_phone": "+50586263843",
+        "status": "active",
+        "age": 52,
+        "stake": "Distrito Juigalpa",
+        "neighborhood": "Rama Boaco",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:39.148399+00:00"
+      },
+      {
+        "id": "73af9bb3-756a-4784-aa51-94d9a01e0c8e",
+        "first_name": "Janixia",
+        "last_name": "Benita Juárez",
+        "raw_phone": "+50586263843",
+        "status": "active",
+        "age": null,
+        "stake": "León",
+        "neighborhood": "La Posada",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:25.41687+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 42,
+    "phone_normalized": "+50586499496",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "87472c91-7db5-4125-845e-35cd2c76abcb",
+        "first_name": "Silvano",
+        "last_name": "Roberto García cruz",
+        "raw_phone": "+50586499496",
+        "status": "active",
+        "age": 65,
+        "stake": "Managua Norte",
+        "neighborhood": "Rama Waspán",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T21:55:58.047662+00:00"
+      },
+      {
+        "id": "3f9c5b27-53d9-413c-b57b-7f9a5aa53bc3",
+        "first_name": "Roberto",
+        "last_name": "García Cruz",
+        "raw_phone": "+50586499496",
+        "status": "active",
+        "age": 65,
+        "stake": "Bello Horizonte",
+        "neighborhood": "Waspán",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T22:19:50.313214+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 43,
+    "phone_normalized": "+50586704253",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "58b4824a-5a7f-448b-b121-ba1d3375a1d2",
+        "first_name": "Fanny",
+        "last_name": "Auxiliadora Fonseca Romero",
+        "raw_phone": "+50586704253",
+        "status": "active",
+        "age": 14,
+        "stake": "Distrito Granada",
+        "neighborhood": "Rama La Estación",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:30.248355+00:00"
+      },
+      {
+        "id": "d477963b-b525-44a3-a633-5d3e8f7cdee4",
+        "first_name": "Maria",
+        "last_name": "Auxiliadora Romero Roque",
+        "raw_phone": "+50586704253",
+        "status": "active",
+        "age": 40,
+        "stake": "Distrito Granada",
+        "neighborhood": "Rama La Estación",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:30.514088+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 44,
+    "phone_normalized": "+50586965155",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "f608dccc-a38d-43ca-b61a-8c9552189293",
+        "first_name": "Mirna",
+        "last_name": "Mireya Mendoza de Bravo",
+        "raw_phone": "+50586965155",
+        "status": "active",
+        "age": 46,
+        "stake": "Managua",
+        "neighborhood": "Bello Amanecer",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:04.075135+00:00"
+      },
+      {
+        "id": "61bede17-b1c7-41fa-b4d7-20f14e7db235",
+        "first_name": "Nadia",
+        "last_name": "Camila Davila de Mejia",
+        "raw_phone": "86965155",
+        "status": "active",
+        "age": 26,
+        "stake": "Managua",
+        "neighborhood": "Bello Amanecer",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:04.272823+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 45,
+    "phone_normalized": "+50587090011",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "8ab4a637-c5ac-4085-8f8c-4d5ccf052d22",
+        "first_name": "Eduardo",
+        "last_name": "José torres romero",
+        "raw_phone": "+50587090011",
+        "status": "active",
+        "age": 63,
+        "stake": "Distrito Juigalpa",
+        "neighborhood": "Rama Juigalpa",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:43.779412+00:00"
+      },
+      {
+        "id": "88e6f349-af5e-449d-b1cd-729b0ff2cf3f",
+        "first_name": "Olga",
+        "last_name": "Marina Elvir",
+        "raw_phone": "+50587090011",
+        "status": "active",
+        "age": null,
+        "stake": "Estaca Leon",
+        "neighborhood": "El coyolar",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:22.455973+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 46,
+    "phone_normalized": "+50587671717",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "c6d19704-c4a8-44b5-949d-8f4d8106807a",
+        "first_name": "Francisco",
+        "last_name": "José Largaespada Sobalvarro",
+        "raw_phone": "+50587671717",
+        "status": "active",
+        "age": 75,
+        "stake": "Universitaria",
+        "neighborhood": "La Borgoña",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:30.148895+00:00"
+      },
+      {
+        "id": "a2697df6-fb05-4b86-95e5-dac7a286c6f8",
+        "first_name": "Elisa",
+        "last_name": "Amanda Hernández Pérez",
+        "raw_phone": "+50587671717",
+        "status": "active",
+        "age": 64,
+        "stake": "Estaca Universitaria",
+        "neighborhood": "Rama La Borgoña",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:30.529195+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 47,
+    "phone_normalized": "+50587713398",
+    "count": 3,
+    "volunteers": [
+      {
+        "id": "09170620-5952-4fa2-a1f5-4132c08df860",
+        "first_name": "Mario",
+        "last_name": "Alberto Jimenez Lopez",
+        "raw_phone": "+50587713398",
+        "status": "active",
+        "age": 43,
+        "stake": "Managua",
+        "neighborhood": "Prinzapolka",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:03.480021+00:00"
+      },
+      {
+        "id": "2c88bc6d-773b-4e08-b745-c17f5873bb7e",
+        "first_name": "Martha",
+        "last_name": "Carolina González Lacayo",
+        "raw_phone": "+50587713398",
+        "status": "active",
+        "age": 50,
+        "stake": "Managua",
+        "neighborhood": "Bello amanecer",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T22:00:17.149321+00:00"
+      },
+      {
+        "id": "ed02a044-5bb6-4351-ae62-148e00d1cc30",
+        "first_name": "Carolina",
+        "last_name": "Gonzalez",
+        "raw_phone": "+50587713398",
+        "status": "active",
+        "age": 51,
+        "stake": "Villa flor ",
+        "neighborhood": "Rene polanco",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-03T22:56:20.298794+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 48,
+    "phone_normalized": "+50587727490",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "3b65e88d-d9e2-42b9-b156-27f712a289bc",
+        "first_name": "Nohemy",
+        "last_name": "de los Angeles Salmeron Chevez",
+        "raw_phone": "+50587727490",
+        "status": "active",
+        "age": 15,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Boer",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:38.912974+00:00"
+      },
+      {
+        "id": "19771251-6730-4602-80bd-a2c58a82eaaa",
+        "first_name": "Celsa",
+        "last_name": "Amparo Chevez Torrez de Salmeron",
+        "raw_phone": "+50587727490",
+        "status": "active",
+        "age": 43,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Boer",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:39.374294+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 49,
+    "phone_normalized": "+50587823513",
+    "count": 6,
+    "volunteers": [
+      {
+        "id": "f032c7d1-8321-4442-b612-2a3950425b34",
+        "first_name": "Nahomi",
+        "last_name": "Paola Ampie Somarriba",
+        "raw_phone": "+50587823513",
+        "status": "active",
+        "age": 15,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Bello Amanecer",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:34.905978+00:00"
+      },
+      {
+        "id": "0a3529eb-b8c2-43f5-8f80-8fb235561448",
+        "first_name": "Nataly",
+        "last_name": "del Pilar Ampie Somarriba",
+        "raw_phone": "+50587823513",
+        "status": "active",
+        "age": 17,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Bello Amanecer",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:35.604865+00:00"
+      },
+      {
+        "id": "4d7fd9f8-c969-4ab8-bd89-ad375c31528e",
+        "first_name": "Winston",
+        "last_name": "Ivan Morales Blandon",
+        "raw_phone": "+50587823513",
+        "status": "active",
+        "age": 13,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Bello Amanecer",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:36.490054+00:00"
+      },
+      {
+        "id": "6bf0be0f-6387-4d50-b9f2-3985066a30be",
+        "first_name": "Matias",
+        "last_name": "Spencer Vanegas Blandon",
+        "raw_phone": "+50587823513",
+        "status": "active",
+        "age": 12,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Bello Amanecer",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:37.35001+00:00"
+      },
+      {
+        "id": "c5827f37-5125-420a-a85a-2d435aa48c61",
+        "first_name": "Zoe",
+        "last_name": "de los Angeles Ampie Somarriiba",
+        "raw_phone": "+50587823513",
+        "status": "active",
+        "age": 12,
+        "stake": "Estaca Managua",
+        "neighborhood": "Barrio Bello Amanecer",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:37.577489+00:00"
+      },
+      {
+        "id": "64aa3181-8b3b-4eea-899d-ab8b01ba23b8",
+        "first_name": "Sheyla",
+        "last_name": "Patricia Blandón Somarriba",
+        "raw_phone": "+50587823513",
+        "status": "active",
+        "age": 41,
+        "stake": "Managua",
+        "neighborhood": "Bello Amanecer",
+        "committee": "Recepción",
+        "committee_id": "f24a8ade-fe7e-4b91-b399-a3e6269f7a18",
+        "created_at": "2026-08-07T17:26:56.922677+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 50,
+    "phone_normalized": "+50587961377",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "fafe085d-b53b-444d-b46b-b5e791ab916c",
+        "first_name": "Ian",
+        "last_name": "Guzmán",
+        "raw_phone": "+50587961377",
+        "status": "active",
+        "age": 20,
+        "stake": "Managua",
+        "neighborhood": "Bello amanecer",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-03T22:06:24.397773+00:00"
+      },
+      {
+        "id": "833620e5-8651-446e-9730-96ca2dc2ba8d",
+        "first_name": "Ian",
+        "last_name": "Guzmán",
+        "raw_phone": "+50587961377",
+        "status": "active",
+        "age": 20,
+        "stake": "Managua",
+        "neighborhood": "Bello amanecer",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-04T18:07:24.364239+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 51,
+    "phone_normalized": "+50588328115",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "4b9b2d21-06db-40f0-ac75-1d7ed1876da6",
+        "first_name": "Nathaly",
+        "last_name": "Marcela Ferrufino Escobar",
+        "raw_phone": "+50588328115",
+        "status": "active",
+        "age": 19,
+        "stake": "Villa Flor",
+        "neighborhood": "René Polanco",
+        "committee": "Facilidades Físicas",
+        "committee_id": "d7c93d59-8290-414e-94c5-5985fa21e385",
+        "created_at": "2026-07-31T22:32:40.813631+00:00"
+      },
+      {
+        "id": "5cb4eb4e-7558-4fe1-ae9f-c1143c0dd1a2",
+        "first_name": "Nathaly",
+        "last_name": "Marcela Ferrufino Escobar",
+        "raw_phone": "+50588328115",
+        "status": "active",
+        "age": null,
+        "stake": "Villa Flor",
+        "neighborhood": "René Polanco",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:36:37.397612+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 52,
+    "phone_normalized": "+50588541704",
+    "count": 3,
+    "volunteers": [
+      {
+        "id": "283f445d-fdf3-4094-85ef-274ad45de1a5",
+        "first_name": "Ian",
+        "last_name": "Andre Guzman Gonzalez",
+        "raw_phone": "+50588541704",
+        "status": "active",
+        "age": 20,
+        "stake": "Managua",
+        "neighborhood": "Bello Amanecer",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:01.219449+00:00"
+      },
+      {
+        "id": "a9643fcd-57e9-4078-a280-74ed7248d0f2",
+        "first_name": "Ivania",
+        "last_name": "Ulloa Baca",
+        "raw_phone": "+50588541704",
+        "status": "active",
+        "age": 47,
+        "stake": "Bello horizonte",
+        "neighborhood": "Ducualí",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T21:59:07.401662+00:00"
+      },
+      {
+        "id": "10b12e8b-2de3-47e4-b686-97acd67470f4",
+        "first_name": "Ivania",
+        "last_name": "Aristhomene",
+        "raw_phone": "+50588541704",
+        "status": "active",
+        "age": 47,
+        "stake": "Bello Horizonte ",
+        "neighborhood": "Ducuali",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-03T23:00:11.772215+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 53,
+    "phone_normalized": "+50588546327",
+    "count": 3,
+    "volunteers": [
+      {
+        "id": "92710b21-47aa-4b81-b782-bb2caa137e76",
+        "first_name": "Jaquline",
+        "last_name": "del Carmen Calderon",
+        "raw_phone": "+50588546327",
+        "status": "active",
+        "age": 40,
+        "stake": "Managua",
+        "neighborhood": "Bello Amanecer",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-01T11:53:01.41665+00:00"
+      },
+      {
+        "id": "3675328e-1707-46e3-b011-66cc6335ea9a",
+        "first_name": "Drevel",
+        "last_name": "Jha Canel Aristhomene Forbes",
+        "raw_phone": "+50588546327",
+        "status": "active",
+        "age": 46,
+        "stake": "Bello Horizonte",
+        "neighborhood": "Ducuali",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T22:10:18.48046+00:00"
+      },
+      {
+        "id": "105ee4b4-7ead-4c86-8448-4c9006327d8f",
+        "first_name": "Drevel",
+        "last_name": "jha canel aristhomene forbes",
+        "raw_phone": "+50588546327",
+        "status": "archived",
+        "age": null,
+        "stake": "Bello horizonte ",
+        "neighborhood": "Ducuali ",
+        "committee": "Seguridad",
+        "committee_id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+        "created_at": "2026-08-02T22:10:36.305838+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 54,
+    "phone_normalized": "+50588688069",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "516b0553-aed9-4eb5-b5ed-e88f156d931b",
+        "first_name": "Elianing",
+        "last_name": "Magedla Contreras de Garache",
+        "raw_phone": "+50588688069",
+        "status": "active",
+        "age": 34,
+        "stake": "Managua",
+        "neighborhood": "Linda Vista",
+        "committee": "Facilidades Físicas",
+        "committee_id": "d7c93d59-8290-414e-94c5-5985fa21e385",
+        "created_at": "2026-07-31T22:32:31.764663+00:00"
+      },
+      {
+        "id": "8bb8975e-1da3-44dc-b85b-cad6e2967ee8",
+        "first_name": "Ryder",
+        "last_name": "Jose Garache Miranda",
+        "raw_phone": "+50588688069",
+        "status": "active",
+        "age": 32,
+        "stake": "Managua",
+        "neighborhood": "Linda Vista",
+        "committee": "Facilidades Físicas",
+        "committee_id": "d7c93d59-8290-414e-94c5-5985fa21e385",
+        "created_at": "2026-07-31T22:32:42.585771+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 55,
+    "phone_normalized": "+50588714650",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "54b5b3d6-3751-40f3-a11f-cf1f2a146676",
+        "first_name": "Sayda",
+        "last_name": "Raquel Rubio de Gonzalez",
+        "raw_phone": "+50588714650",
+        "status": "active",
+        "age": 47,
+        "stake": "Managua",
+        "neighborhood": "Bello Amanecer",
+        "committee": "Parqueo y Transporte",
+        "committee_id": "0c36396b-c267-462c-9d4b-09213ee4079c",
+        "created_at": "2026-08-03T23:03:49.704752+00:00"
+      },
+      {
+        "id": "f3f4508d-4674-4988-8544-88816a4c77af",
+        "first_name": "Yara",
+        "last_name": "Francel Rocha Velásquez",
+        "raw_phone": "+50588714650",
+        "status": "active",
+        "age": 29,
+        "stake": "Managua",
+        "neighborhood": "Bello Amanecer",
+        "committee": "Parqueo y Transporte",
+        "committee_id": "0c36396b-c267-462c-9d4b-09213ee4079c",
+        "created_at": "2026-08-03T23:03:51.49184+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 56,
+    "phone_normalized": "+50588787586",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "77a7978e-ba3b-4816-8992-ea9778c0c72f",
+        "first_name": "Maria",
+        "last_name": "de la Cruz Solis solis",
+        "raw_phone": "+50588787586",
+        "status": "active",
+        "age": 73,
+        "stake": "Estaca Las Americas",
+        "neighborhood": "Barrio Rubén Darío",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:20.127789+00:00"
+      },
+      {
+        "id": "9739e006-be3b-4130-8264-6a723f85cf24",
+        "first_name": "Dominga",
+        "last_name": "Maritza Velásquez Rivas",
+        "raw_phone": "+50588787586",
+        "status": "active",
+        "age": 69,
+        "stake": "Las Américas",
+        "neighborhood": "Rubén Darío",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:20.522423+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 57,
+    "phone_normalized": "+50589005590",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "e23ded61-23d0-4a42-a668-b1553983ed45",
+        "first_name": "José",
+        "last_name": "María Mercado",
+        "raw_phone": "+50589005590",
+        "status": "active",
+        "age": 40,
+        "stake": "Managua",
+        "neighborhood": "Ciudad Sandino",
+        "committee": "Parqueo y Transporte",
+        "committee_id": "0c36396b-c267-462c-9d4b-09213ee4079c",
+        "created_at": "2026-08-03T23:03:44.941558+00:00"
+      },
+      {
+        "id": "e816e427-2933-432d-bd88-22a9c7f3bf08",
+        "first_name": "Juan",
+        "last_name": "Rivera Benavides",
+        "raw_phone": "+50589005590",
+        "status": "active",
+        "age": 50,
+        "stake": "Managua",
+        "neighborhood": "Ciudad Sandino",
+        "committee": "Parqueo y Transporte",
+        "committee_id": "0c36396b-c267-462c-9d4b-09213ee4079c",
+        "created_at": "2026-08-03T23:03:45.166551+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 58,
+    "phone_normalized": "+50589308607",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "3b9be7d9-53f3-4e58-961c-c5305e9e2748",
+        "first_name": "Silvia",
+        "last_name": "Elena Meneses Perez",
+        "raw_phone": "+50589308607",
+        "status": "active",
+        "age": null,
+        "stake": "Estaca Leon",
+        "neighborhood": "EL coyolar",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:23.608837+00:00"
+      },
+      {
+        "id": "3730b0d9-6f79-4b15-8b42-6f11acfeb8e1",
+        "first_name": "Benjamín",
+        "last_name": "Ruiz Meneses",
+        "raw_phone": "+50589308607",
+        "status": "active",
+        "age": null,
+        "stake": "León",
+        "neighborhood": "EL coyolar",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:35:23.888578+00:00"
+      }
+    ]
+  },
+  {
+    "groupIndex": 59,
+    "phone_normalized": "+50589510000",
+    "count": 2,
+    "volunteers": [
+      {
+        "id": "38de64f0-89d6-4f95-acf4-35b3367d9798",
+        "first_name": "Armado",
+        "last_name": "Jose Raudez Rivas",
+        "raw_phone": "+50589510000",
+        "status": "active",
+        "age": 30,
+        "stake": "Distrito Granada",
+        "neighborhood": "",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:32.989839+00:00"
+      },
+      {
+        "id": "ce6e77c7-419c-4e86-8680-fdeb9e70ba83",
+        "first_name": "Olga",
+        "last_name": "Maria Gutierrez de Raudez",
+        "raw_phone": "+50589510000",
+        "status": "active",
+        "age": 31,
+        "stake": "Distrito Granada",
+        "neighborhood": "",
+        "committee": "Guía",
+        "committee_id": "f8614b6c-25ea-47cc-a28e-624e20a28079",
+        "created_at": "2026-07-31T22:34:33.507594+00:00"
+      }
+    ]
+  }
+]

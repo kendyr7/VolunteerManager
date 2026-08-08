@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { VolunteerProfileView } from './VolunteerProfileView';
 import { useCoordinatorData } from '@/lib/coordinator-data-context';
@@ -8,6 +8,7 @@ import { canEditShifts } from '@/lib/permissions';
 import { createClient } from '@/lib/supabase/client';
 import { Toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from '@/lib/utils';
 import { getActiveEventDays, formatDateShort } from '@/lib/dates';
 
@@ -21,6 +22,7 @@ export interface VolunteerProfileDrawerProps {
   volunteer?: any | null;
   volunteerId?: string | null;
   mode?: 'coordinator' | 'volunteer';
+  initialMode?: 'view' | 'edit_profile';
 }
 
 export function VolunteerProfileDrawer({
@@ -29,9 +31,10 @@ export function VolunteerProfileDrawer({
   volunteer: propVolunteer,
   volunteerId: propVolunteerId,
   mode = 'coordinator',
+  initialMode = 'view',
 }: VolunteerProfileDrawerProps) {
   const [isMobile, setIsMobile] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<'view' | 'edit_profile'>('view');
+  const [drawerMode, setDrawerMode] = useState<'view' | 'edit_profile'>(initialMode);
   const [isEditingShifts, setIsEditingShifts] = useState(false);
 
   // Edit Profile Form States
@@ -140,7 +143,7 @@ export function VolunteerProfileDrawer({
   // Reset drawer state when volunteer changes
   useEffect(() => {
     if (isOpen && activeVolunteer) {
-      setDrawerMode('view');
+      setDrawerMode(initialMode);
       setIsEditingShifts(false);
 
       const parts = (activeVolunteer.name || `${activeVolunteer.first_name || ''} ${activeVolunteer.last_name || ''}`).trim().split(/\s+/);
@@ -154,10 +157,10 @@ export function VolunteerProfileDrawer({
       setEditWard(activeVolunteer.ward || '');
       setEditAge(activeVolunteer.age ? String(activeVolunteer.age) : '');
 
-      const comm = committeesList.find((c: any) => c.name === activeVolunteer.committee);
-      setEditCommitteeId(comm ? comm.id : '');
+      const comm = committeesList.find((c: any) => c.id === activeVolunteer.committee_id || c.name === activeVolunteer.committee);
+      setEditCommitteeId(comm ? comm.id : (activeVolunteer.committee_id || ''));
     }
-  }, [isOpen, activeVolunteer, committeesList]);
+  }, [isOpen, activeVolunteer, committeesList, initialMode]);
 
   if (!isOpen || !activeVolunteer) return null;
 
@@ -283,15 +286,7 @@ export function VolunteerProfileDrawer({
             <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
           )}
 
-          {/* Floating Close Button */}
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-dark3/80 hover:bg-dark border border-border text-text-dim hover:text-text flex items-center justify-center transition-colors cursor-pointer backdrop-blur-md"
-            title="Cerrar"
-          >
-            ✕
-          </button>
+
 
           <div
             className={cn(
@@ -375,18 +370,20 @@ export function VolunteerProfileDrawer({
                       <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block mb-1">
                         Comité:
                       </label>
-                      <select
-                        value={editCommitteeId}
-                        onChange={e => setEditCommitteeId(e.target.value)}
-                        className="w-full bg-dark3 border border-border text-text text-xs p-3 rounded-xl focus:outline-none focus:border-[#4d7cfe]"
-                      >
-                        <option value="">Selecciona un comité</option>
-                        {committeesList.map((c: any) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                      <Select value={editCommitteeId} onValueChange={(v) => v && setEditCommitteeId(v)}>
+                        <SelectTrigger className="w-full h-11 border border-border bg-dark3 text-text font-inter font-bold flex items-center justify-between px-3.5 rounded-xl text-xs focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]">
+                          <SelectValue placeholder="Selecciona un comité">
+                            {committeesList.find((c: any) => c.id === editCommitteeId || c.name === editCommitteeId)?.name}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="bg-dark2 border border-border text-text shadow-2xl z-[250]">
+                          {committeesList.map((c: any) => (
+                            <SelectItem key={c.id} value={c.id} className="font-inter font-bold text-xs text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2.5 px-3">
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -419,10 +416,17 @@ export function VolunteerProfileDrawer({
                         Edad:
                       </label>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
                         value={editAge}
-                        onChange={e => setEditAge(e.target.value)}
-                        className="w-full bg-dark3 border border-border text-text text-xs p-3 rounded-xl focus:outline-none focus:border-[#4d7cfe]"
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === '' || /^\d{0,3}$/.test(val)) {
+                            setEditAge(val);
+                          }
+                        }}
+                        className="w-full bg-dark3 border border-border text-text text-xs p-3 rounded-xl focus:outline-none focus:border-[#4d7cfe] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        placeholder="Ej. 25"
                       />
                     </div>
 

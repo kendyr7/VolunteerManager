@@ -1,0 +1,1419 @@
+{
+  "parents": {
+    "+50557081704": {
+      "phoneNormalized": "+50557081704",
+      "decisionAction": "ARCHIVE_DUPLICATE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Se detectaron perfiles duplicados de la misma persona (mismo nombre completo o correo)."
+    },
+    "+50576096922": {
+      "phoneNormalized": "+50576096922",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50581406969": {
+      "phoneNormalized": "+50581406969",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar.",
+      "sharedPhoneReason": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar."
+    },
+    "+50581417825": {
+      "phoneNormalized": "+50581417825",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50588688069": {
+      "phoneNormalized": "+50588688069",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50583783108": {
+      "phoneNormalized": "+50583783108",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50577407948": {
+      "phoneNormalized": "+50577407948",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar.",
+      "sharedPhoneReason": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar."
+    },
+    "+50588328115": {
+      "phoneNormalized": "+50588328115",
+      "decisionAction": "ARCHIVE_DUPLICATE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Se detectaron perfiles duplicados de la misma persona (mismo nombre completo o correo)."
+    },
+    "+50586704253": {
+      "phoneNormalized": "+50586704253",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar.",
+      "sharedPhoneReason": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar."
+    },
+    "+50589510000": {
+      "phoneNormalized": "+50589510000",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50582556314": {
+      "phoneNormalized": "+50582556314",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50582866007": {
+      "phoneNormalized": "+50582866007",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50586263843": {
+      "phoneNormalized": "+50586263843",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50587090011": {
+      "phoneNormalized": "+50587090011",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50557820614": {
+      "phoneNormalized": "+50557820614",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50584051979": {
+      "phoneNormalized": "+50584051979",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50586157332": {
+      "phoneNormalized": "+50586157332",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50578433856": {
+      "phoneNormalized": "+50578433856",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50588787586": {
+      "phoneNormalized": "+50588787586",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50585651630": {
+      "phoneNormalized": "+50585651630",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50589308607": {
+      "phoneNormalized": "+50589308607",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50578403793": {
+      "phoneNormalized": "+50578403793",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50587823513": {
+      "phoneNormalized": "+50587823513",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar.",
+      "sharedPhoneReason": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar."
+    },
+    "+50578003003": {
+      "phoneNormalized": "+50578003003",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar.",
+      "sharedPhoneReason": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar."
+    },
+    "+50587727490": {
+      "phoneNormalized": "+50587727490",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar.",
+      "sharedPhoneReason": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar."
+    },
+    "+50578976493": {
+      "phoneNormalized": "+50578976493",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar.",
+      "sharedPhoneReason": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar."
+    },
+    "+50585293438": {
+      "phoneNormalized": "+50585293438",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar.",
+      "sharedPhoneReason": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar."
+    },
+    "+50583391395": {
+      "phoneNormalized": "+50583391395",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50576890870": {
+      "phoneNormalized": "+50576890870",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar.",
+      "sharedPhoneReason": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar."
+    },
+    "+50581984536": {
+      "phoneNormalized": "+50581984536",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50576109012": {
+      "phoneNormalized": "+50576109012",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50578256837": {
+      "phoneNormalized": "+50578256837",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50581233738": {
+      "phoneNormalized": "+50581233738",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.386Z",
+      "reviewerComment": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar.",
+      "sharedPhoneReason": "Padre/Tutor adulto y menor de edad que comparten legítimamente el teléfono familiar."
+    },
+    "+50557855141": {
+      "phoneNormalized": "+50557855141",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50584205496": {
+      "phoneNormalized": "+50584205496",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50558325158": {
+      "phoneNormalized": "+50558325158",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50587671717": {
+      "phoneNormalized": "+50587671717",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50582384685": {
+      "phoneNormalized": "+50582384685",
+      "decisionAction": "ARCHIVE_DUPLICATE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Se detectaron perfiles duplicados de la misma persona (mismo nombre completo o correo)."
+    },
+    "+50581921394": {
+      "phoneNormalized": "+50581921394",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50584572080": {
+      "phoneNormalized": "+50584572080",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50557062212": {
+      "phoneNormalized": "+50557062212",
+      "decisionAction": "NORMALIZE_ONLY",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Existe 1 voluntario activo y perfiles archivados. Se propone normalizar formato."
+    },
+    "+50577977321": {
+      "phoneNormalized": "+50577977321",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50586191864": {
+      "phoneNormalized": "+50586191864",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50588541704": {
+      "phoneNormalized": "+50588541704",
+      "decisionAction": "PER_VOLUNTEER",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Información ambigua o conflicto múltiple. Requiere decisión humana explícita."
+    },
+    "+50588546327": {
+      "phoneNormalized": "+50588546327",
+      "decisionAction": "PER_VOLUNTEER",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "AdminDrevelTester",
+      "reviewedAt": "2026-08-08T01:05:33.812Z",
+      "reviewerComment": "Aprobado saneamiento de grupo Drevel / Jaqueline",
+      "primaryVolunteerId": "3675328e-1707-46e3-b011-66cc6335ea9a",
+      "archivedVolunteerIds": [
+        "105ee4b4-7ead-4c86-8448-4c9006327d8f"
+      ],
+      "sharedPhoneOwnerId": "3675328e-1707-46e3-b011-66cc6335ea9a",
+      "sharedPhoneReason": "Jaqueline y Drevel comparten o corrigen teléfono"
+    },
+    "+50583760752": {
+      "phoneNormalized": "+50583760752",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50581211377": {
+      "phoneNormalized": "+50581211377",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50587713398": {
+      "phoneNormalized": "+50587713398",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50586965155": {
+      "phoneNormalized": "+50586965155",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50581646206": {
+      "phoneNormalized": "+50581646206",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50581548563": {
+      "phoneNormalized": "+50581548563",
+      "decisionAction": "NORMALIZE_ONLY",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Existe 1 voluntario activo y perfiles archivados. Se propone normalizar formato."
+    },
+    "+50586499496": {
+      "phoneNormalized": "+50586499496",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50576739821": {
+      "phoneNormalized": "+50576739821",
+      "decisionAction": "ARCHIVE_DUPLICATE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Se detectaron perfiles duplicados de la misma persona (mismo nombre completo o correo)."
+    },
+    "+50585857058": {
+      "phoneNormalized": "+50585857058",
+      "decisionAction": "ARCHIVE_DUPLICATE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Se detectaron perfiles duplicados de la misma persona (mismo nombre completo o correo)."
+    },
+    "+50583279246": {
+      "phoneNormalized": "+50583279246",
+      "decisionAction": "NORMALIZE_ONLY",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Existe 1 voluntario activo y perfiles archivados. Se propone normalizar formato."
+    },
+    "+50587961377": {
+      "phoneNormalized": "+50587961377",
+      "decisionAction": "ARCHIVE_DUPLICATE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Se detectaron perfiles duplicados de la misma persona (mismo nombre completo o correo)."
+    },
+    "+50584363933": {
+      "phoneNormalized": "+50584363933",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos.",
+      "sharedPhoneReason": "Integrantes de la misma familia con apellidos coincidentes y nombres distintos."
+    },
+    "+50589005590": {
+      "phoneNormalized": "+50589005590",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    },
+    "+50588714650": {
+      "phoneNormalized": "+50588714650",
+      "decisionAction": "SHARED_PHONE",
+      "reviewStatus": "APPROVED",
+      "reviewedBy": "Coordinador General",
+      "reviewedAt": "2026-08-08T00:32:57.387Z",
+      "reviewerComment": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido.",
+      "sharedPhoneReason": "Voluntarios activos con nombres diferentes. Requiere confirmación administrativa para autorizar teléfono compartido."
+    }
+  },
+  "items": {
+    "+50557081704": {
+      "b9f187a9-7410-49d7-b538-23aa9eea2900": {
+        "volunteerId": "b9f187a9-7410-49d7-b538-23aa9eea2900",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Perfil principal a conservar como activo."
+      },
+      "b0fe328e-0a07-4e2c-ab43-53295a3ac514": {
+        "volunteerId": "b0fe328e-0a07-4e2c-ab43-53295a3ac514",
+        "approvedAction": "ARCHIVE_DUPLICATE",
+        "processingStatus": "APPROVED",
+        "reviewerComment": "Archivar registro duplicado en favor de perfil principal (b9f187a9)."
+      }
+    },
+    "+50576096922": {
+      "5b56a494-6bb8-43e6-b6ad-1f9e363f86d6": {
+        "volunteerId": "5b56a494-6bb8-43e6-b6ad-1f9e363f86d6",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "f0fd7b91-8e40-41ca-9dbf-3d705ed0beeb": {
+        "volunteerId": "f0fd7b91-8e40-41ca-9dbf-3d705ed0beeb",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Alvin Jafet Cruz Barea."
+      }
+    },
+    "+50581406969": {
+      "02efbe35-8b87-4780-bade-1b77ae3bad2a": {
+        "volunteerId": "02efbe35-8b87-4780-bade-1b77ae3bad2a",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "d10bd0a6-1db9-481f-b984-45e46f73e4af": {
+        "volunteerId": "d10bd0a6-1db9-481f-b984-45e46f73e4af",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Arlen Karina Estrada Perez."
+      }
+    },
+    "+50581417825": {
+      "713225e7-9f74-4b19-b4af-be8f03ae916c": {
+        "volunteerId": "713225e7-9f74-4b19-b4af-be8f03ae916c",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "43c720f5-91db-425b-901f-35c2ad0b9d3f": {
+        "volunteerId": "43c720f5-91db-425b-901f-35c2ad0b9d3f",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50588688069": {
+      "516b0553-aed9-4eb5-b5ed-e88f156d931b": {
+        "volunteerId": "516b0553-aed9-4eb5-b5ed-e88f156d931b",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "8bb8975e-1da3-44dc-b85b-cad6e2967ee8": {
+        "volunteerId": "8bb8975e-1da3-44dc-b85b-cad6e2967ee8",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Elianing Magedla Contreras de Garache."
+      }
+    },
+    "+50583783108": {
+      "3cf27d4d-3537-438f-9cfe-5b8d2fb3c4c3": {
+        "volunteerId": "3cf27d4d-3537-438f-9cfe-5b8d2fb3c4c3",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "498ba88d-6c8d-4c37-af3a-b2c37a16ac96": {
+        "volunteerId": "498ba88d-6c8d-4c37-af3a-b2c37a16ac96",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Fiorella Estefania Solorzano de Peña."
+      }
+    },
+    "+50577407948": {
+      "f61a8920-45c0-4e48-ae4d-1f26c0855edf": {
+        "volunteerId": "f61a8920-45c0-4e48-ae4d-1f26c0855edf",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "57ba9ddd-4495-401e-abad-bb7290b3ed1d": {
+        "volunteerId": "57ba9ddd-4495-401e-abad-bb7290b3ed1d",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Linda Regina Obando Ponce."
+      }
+    },
+    "+50588328115": {
+      "5cb4eb4e-7558-4fe1-ae9f-c1143c0dd1a2": {
+        "volunteerId": "5cb4eb4e-7558-4fe1-ae9f-c1143c0dd1a2",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Perfil principal a conservar como activo."
+      },
+      "4b9b2d21-06db-40f0-ac75-1d7ed1876da6": {
+        "volunteerId": "4b9b2d21-06db-40f0-ac75-1d7ed1876da6",
+        "approvedAction": "ARCHIVE_DUPLICATE",
+        "processingStatus": "APPROVED",
+        "reviewerComment": "Archivar registro duplicado en favor de perfil principal (5cb4eb4e)."
+      }
+    },
+    "+50586704253": {
+      "d477963b-b525-44a3-a633-5d3e8f7cdee4": {
+        "volunteerId": "d477963b-b525-44a3-a633-5d3e8f7cdee4",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "58b4824a-5a7f-448b-b121-ba1d3375a1d2": {
+        "volunteerId": "58b4824a-5a7f-448b-b121-ba1d3375a1d2",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Maria Auxiliadora Romero Roque."
+      }
+    },
+    "+50589510000": {
+      "38de64f0-89d6-4f95-acf4-35b3367d9798": {
+        "volunteerId": "38de64f0-89d6-4f95-acf4-35b3367d9798",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "ce6e77c7-419c-4e86-8680-fdeb9e70ba83": {
+        "volunteerId": "ce6e77c7-419c-4e86-8680-fdeb9e70ba83",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Armado Jose Raudez Rivas."
+      }
+    },
+    "+50582556314": {
+      "09909812-e6ff-49b9-97f1-22dc7c9fa2e7": {
+        "volunteerId": "09909812-e6ff-49b9-97f1-22dc7c9fa2e7",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "f7d898d4-9ef6-452d-aac4-41064bb9fe84": {
+        "volunteerId": "f7d898d4-9ef6-452d-aac4-41064bb9fe84",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50582866007": {
+      "bab08f7f-26b0-4c68-9fe0-55bd9d6b357b": {
+        "volunteerId": "bab08f7f-26b0-4c68-9fe0-55bd9d6b357b",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "79a42643-413d-474e-a23a-d6725d87d474": {
+        "volunteerId": "79a42643-413d-474e-a23a-d6725d87d474",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Hosman Jose Garcia Barrios."
+      }
+    },
+    "+50586263843": {
+      "c8cc7156-db63-4a55-82ba-07b7da092383": {
+        "volunteerId": "c8cc7156-db63-4a55-82ba-07b7da092383",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "73af9bb3-756a-4784-aa51-94d9a01e0c8e": {
+        "volunteerId": "73af9bb3-756a-4784-aa51-94d9a01e0c8e",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50587090011": {
+      "8ab4a637-c5ac-4085-8f8c-4d5ccf052d22": {
+        "volunteerId": "8ab4a637-c5ac-4085-8f8c-4d5ccf052d22",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "88e6f349-af5e-449d-b1cd-729b0ff2cf3f": {
+        "volunteerId": "88e6f349-af5e-449d-b1cd-729b0ff2cf3f",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50557820614": {
+      "3fa90547-c104-4517-b58a-2dc2c7ed6b97": {
+        "volunteerId": "3fa90547-c104-4517-b58a-2dc2c7ed6b97",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "db8f08c4-5ad8-42d5-9d95-208c674ffb07": {
+        "volunteerId": "db8f08c4-5ad8-42d5-9d95-208c674ffb07",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50584051979": {
+      "c81ccdb1-7edc-4526-a73b-2d7ed07832e8": {
+        "volunteerId": "c81ccdb1-7edc-4526-a73b-2d7ed07832e8",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "365cb353-3613-4f49-bc62-d934204030e5": {
+        "volunteerId": "365cb353-3613-4f49-bc62-d934204030e5",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Francisco López."
+      }
+    },
+    "+50586157332": {
+      "81daf57a-b865-4e55-bbdc-8a4e82a553e2": {
+        "volunteerId": "81daf57a-b865-4e55-bbdc-8a4e82a553e2",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "eb90124c-7f43-47da-b93b-af5dea7f7d14": {
+        "volunteerId": "eb90124c-7f43-47da-b93b-af5dea7f7d14",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50578433856": {
+      "7fc77173-2cc4-45b1-9a1e-fe84381c16ff": {
+        "volunteerId": "7fc77173-2cc4-45b1-9a1e-fe84381c16ff",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "afe433ec-f85d-4993-8743-756ec5e7d4aa": {
+        "volunteerId": "afe433ec-f85d-4993-8743-756ec5e7d4aa",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Alida Rosa Gutiérrez Espinoza de Roa."
+      }
+    },
+    "+50588787586": {
+      "77a7978e-ba3b-4816-8992-ea9778c0c72f": {
+        "volunteerId": "77a7978e-ba3b-4816-8992-ea9778c0c72f",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "9739e006-be3b-4130-8264-6a723f85cf24": {
+        "volunteerId": "9739e006-be3b-4130-8264-6a723f85cf24",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50585651630": {
+      "02655091-2de9-4439-9df8-832596314048": {
+        "volunteerId": "02655091-2de9-4439-9df8-832596314048",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "b5bd6096-cc88-4546-8088-c3c7d773a4fb": {
+        "volunteerId": "b5bd6096-cc88-4546-8088-c3c7d773a4fb",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50589308607": {
+      "3b9be7d9-53f3-4e58-961c-c5305e9e2748": {
+        "volunteerId": "3b9be7d9-53f3-4e58-961c-c5305e9e2748",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "3730b0d9-6f79-4b15-8b42-6f11acfeb8e1": {
+        "volunteerId": "3730b0d9-6f79-4b15-8b42-6f11acfeb8e1",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Silvia Elena Meneses Perez."
+      }
+    },
+    "+50578403793": {
+      "909a4eb7-3995-45d7-8751-e4aa2d5ab5d5": {
+        "volunteerId": "909a4eb7-3995-45d7-8751-e4aa2d5ab5d5",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "ca31e077-c06f-4836-b119-87c2447e3ed8": {
+        "volunteerId": "ca31e077-c06f-4836-b119-87c2447e3ed8",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Alisson Nicole Maradiaga Acosta."
+      }
+    },
+    "+50587823513": {
+      "64aa3181-8b3b-4eea-899d-ab8b01ba23b8": {
+        "volunteerId": "64aa3181-8b3b-4eea-899d-ab8b01ba23b8",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "f032c7d1-8321-4442-b612-2a3950425b34": {
+        "volunteerId": "f032c7d1-8321-4442-b612-2a3950425b34",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Sheyla Patricia Blandón Somarriba."
+      },
+      "0a3529eb-b8c2-43f5-8f80-8fb235561448": {
+        "volunteerId": "0a3529eb-b8c2-43f5-8f80-8fb235561448",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Sheyla Patricia Blandón Somarriba."
+      },
+      "4d7fd9f8-c969-4ab8-bd89-ad375c31528e": {
+        "volunteerId": "4d7fd9f8-c969-4ab8-bd89-ad375c31528e",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Sheyla Patricia Blandón Somarriba."
+      },
+      "6bf0be0f-6387-4d50-b9f2-3985066a30be": {
+        "volunteerId": "6bf0be0f-6387-4d50-b9f2-3985066a30be",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Sheyla Patricia Blandón Somarriba."
+      },
+      "c5827f37-5125-420a-a85a-2d435aa48c61": {
+        "volunteerId": "c5827f37-5125-420a-a85a-2d435aa48c61",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Sheyla Patricia Blandón Somarriba."
+      }
+    },
+    "+50578003003": {
+      "627b93f9-d491-4438-9d19-0936654097fd": {
+        "volunteerId": "627b93f9-d491-4438-9d19-0936654097fd",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "80e38f21-5b1f-46c5-a6df-e4950c8e82c6": {
+        "volunteerId": "80e38f21-5b1f-46c5-a6df-e4950c8e82c6",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Oscar Danilo ochoa."
+      }
+    },
+    "+50587727490": {
+      "19771251-6730-4602-80bd-a2c58a82eaaa": {
+        "volunteerId": "19771251-6730-4602-80bd-a2c58a82eaaa",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "3b65e88d-d9e2-42b9-b156-27f712a289bc": {
+        "volunteerId": "3b65e88d-d9e2-42b9-b156-27f712a289bc",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Celsa Amparo Chevez Torrez de Salmeron."
+      }
+    },
+    "+50578976493": {
+      "814b1d80-cda4-48ba-b564-9980ee87cb02": {
+        "volunteerId": "814b1d80-cda4-48ba-b564-9980ee87cb02",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "119a7436-96ff-4453-8917-63420c9dd9f5": {
+        "volunteerId": "119a7436-96ff-4453-8917-63420c9dd9f5",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Marian Elizabeth Caceres Picado."
+      }
+    },
+    "+50585293438": {
+      "a1cd977c-fca9-43a4-af4c-dc590755c76e": {
+        "volunteerId": "a1cd977c-fca9-43a4-af4c-dc590755c76e",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "db4b1551-f908-41b0-aee6-8313182479e5": {
+        "volunteerId": "db4b1551-f908-41b0-aee6-8313182479e5",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Mercedes del Pilar Ordoñez."
+      },
+      "89cf05da-9daa-429d-b0f5-145588bf4dc5": {
+        "volunteerId": "89cf05da-9daa-429d-b0f5-145588bf4dc5",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Mercedes del Pilar Ordoñez."
+      }
+    },
+    "+50583391395": {
+      "dff8f4c2-2add-4350-b5b9-69e334d03629": {
+        "volunteerId": "dff8f4c2-2add-4350-b5b9-69e334d03629",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "f280e045-941d-45ad-a2bf-7faaaec18932": {
+        "volunteerId": "f280e045-941d-45ad-a2bf-7faaaec18932",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50576890870": {
+      "8e94f8d6-db48-49f8-8544-378ad67c5a15": {
+        "volunteerId": "8e94f8d6-db48-49f8-8544-378ad67c5a15",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "d329db3e-7ba7-4eb7-aca8-e7cbf36633cd": {
+        "volunteerId": "d329db3e-7ba7-4eb7-aca8-e7cbf36633cd",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Emma Gabrela Cruz Barea."
+      }
+    },
+    "+50581984536": {
+      "8edf6a50-3437-4511-bdf6-aac9618bbf0c": {
+        "volunteerId": "8edf6a50-3437-4511-bdf6-aac9618bbf0c",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "325014c0-363f-4bb4-8d80-4b0c7b3475b9": {
+        "volunteerId": "325014c0-363f-4bb4-8d80-4b0c7b3475b9",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50576109012": {
+      "bc551420-f069-4e72-a8d2-ba0b9bfa124e": {
+        "volunteerId": "bc551420-f069-4e72-a8d2-ba0b9bfa124e",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "50c2f998-9f26-48c6-92ae-6db6173ffea8": {
+        "volunteerId": "50c2f998-9f26-48c6-92ae-6db6173ffea8",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50578256837": {
+      "3bc27660-5f8c-4af5-9ce0-ac1f69fea39b": {
+        "volunteerId": "3bc27660-5f8c-4af5-9ce0-ac1f69fea39b",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "dd37180e-5091-4be6-a8d8-a95f8bc9b52e": {
+        "volunteerId": "dd37180e-5091-4be6-a8d8-a95f8bc9b52e",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50581233738": {
+      "16744c32-ccae-486f-85f7-a49696d383cc": {
+        "volunteerId": "16744c32-ccae-486f-85f7-a49696d383cc",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "a258fc80-ab9a-4043-a57e-08c2c301af99": {
+        "volunteerId": "a258fc80-ab9a-4043-a57e-08c2c301af99",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Silma Herenia De Coronado Chavarria."
+      },
+      "0cdea6a8-4182-4fa3-9037-2a0f3d2ed57b": {
+        "volunteerId": "0cdea6a8-4182-4fa3-9037-2a0f3d2ed57b",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Silma Herenia De Coronado Chavarria."
+      }
+    },
+    "+50557855141": {
+      "7ce12d26-8363-4aa2-a48b-84ec73565981": {
+        "volunteerId": "7ce12d26-8363-4aa2-a48b-84ec73565981",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "1fe51eb2-c9e8-418f-94c0-079a0594ca6e": {
+        "volunteerId": "1fe51eb2-c9e8-418f-94c0-079a0594ca6e",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50584205496": {
+      "5c195df6-c389-4263-aaec-7468dfca942b": {
+        "volunteerId": "5c195df6-c389-4263-aaec-7468dfca942b",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "7fb1d085-896b-4666-b045-2a4275df090e": {
+        "volunteerId": "7fb1d085-896b-4666-b045-2a4275df090e",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Noel Gómez López."
+      }
+    },
+    "+50558325158": {
+      "247c0a87-368a-43ae-bbac-10e50f9aad0b": {
+        "volunteerId": "247c0a87-368a-43ae-bbac-10e50f9aad0b",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "2a70d212-cd79-4ac1-8b10-1007414472e3": {
+        "volunteerId": "2a70d212-cd79-4ac1-8b10-1007414472e3",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50587671717": {
+      "c6d19704-c4a8-44b5-949d-8f4d8106807a": {
+        "volunteerId": "c6d19704-c4a8-44b5-949d-8f4d8106807a",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "a2697df6-fb05-4b86-95e5-dac7a286c6f8": {
+        "volunteerId": "a2697df6-fb05-4b86-95e5-dac7a286c6f8",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50582384685": {
+      "239ab488-55f0-43e1-acef-ddb325ec18e3": {
+        "volunteerId": "239ab488-55f0-43e1-acef-ddb325ec18e3",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Perfil principal a conservar como activo."
+      },
+      "d824f199-a81b-437c-80ae-ff4ff4d98695": {
+        "volunteerId": "d824f199-a81b-437c-80ae-ff4ff4d98695",
+        "approvedAction": "ARCHIVE_DUPLICATE",
+        "processingStatus": "APPROVED",
+        "reviewerComment": "Archivar registro duplicado en favor de perfil principal (239ab488)."
+      }
+    },
+    "+50581921394": {
+      "a8e5a7a3-2b3e-4461-8a97-f540594e0e95": {
+        "volunteerId": "a8e5a7a3-2b3e-4461-8a97-f540594e0e95",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "cd7a40e0-f9ad-49c6-b396-a2112b8477c3": {
+        "volunteerId": "cd7a40e0-f9ad-49c6-b396-a2112b8477c3",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Lenin Ramírez Madriz."
+      }
+    },
+    "+50584572080": {
+      "db27d157-65ae-43df-9c62-d27ba9a55227": {
+        "volunteerId": "db27d157-65ae-43df-9c62-d27ba9a55227",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "a6670c49-4520-44b2-bd7d-3b953ccf1d55": {
+        "volunteerId": "a6670c49-4520-44b2-bd7d-3b953ccf1d55",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Walter Cerda Cruz."
+      }
+    },
+    "+50557062212": {
+      "05c4d83c-e1b4-48cd-8105-6932f82cb547": {
+        "volunteerId": "05c4d83c-e1b4-48cd-8105-6932f82cb547",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Normalizar teléfono a +50557062212 (active)."
+      },
+      "387c4a70-3257-42eb-9bf7-1a2caeab1d7c": {
+        "volunteerId": "387c4a70-3257-42eb-9bf7-1a2caeab1d7c",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Normalizar teléfono a +50557062212 (archived)."
+      }
+    },
+    "+50577977321": {
+      "f6d53f0f-f08a-4757-8f5d-b0b667bad3d6": {
+        "volunteerId": "f6d53f0f-f08a-4757-8f5d-b0b667bad3d6",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "b75ba851-e048-4e8a-a5e0-1a08a135f690": {
+        "volunteerId": "b75ba851-e048-4e8a-a5e0-1a08a135f690",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50586191864": {
+      "582734e1-90b2-48c7-a60f-2d1effff40ba": {
+        "volunteerId": "582734e1-90b2-48c7-a60f-2d1effff40ba",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "8e9cf31d-f769-416c-aed5-b6f2e2a83b53": {
+        "volunteerId": "8e9cf31d-f769-416c-aed5-b6f2e2a83b53",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50588541704": {
+      "283f445d-fdf3-4094-85ef-274ad45de1a5": {
+        "volunteerId": "283f445d-fdf3-4094-85ef-274ad45de1a5",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Requiere decisión manual del administrador."
+      },
+      "a9643fcd-57e9-4078-a280-74ed7248d0f2": {
+        "volunteerId": "a9643fcd-57e9-4078-a280-74ed7248d0f2",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Requiere decisión manual del administrador."
+      },
+      "10b12e8b-2de3-47e4-b686-97acd67470f4": {
+        "volunteerId": "10b12e8b-2de3-47e4-b686-97acd67470f4",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Requiere decisión manual del administrador."
+      }
+    },
+    "+50588546327": {
+      "3675328e-1707-46e3-b011-66cc6335ea9a": {
+        "volunteerId": "3675328e-1707-46e3-b011-66cc6335ea9a",
+        "approvedAction": "PHONE_OWNER",
+        "processingStatus": "APPROVED",
+        "correctedPhone": null
+      },
+      "92710b21-47aa-4b81-b782-bb2caa137e76": {
+        "volunteerId": "92710b21-47aa-4b81-b782-bb2caa137e76",
+        "approvedAction": "SHARED_PHONE",
+        "sharedPhoneOwnerId": "3675328e-1707-46e3-b011-66cc6335ea9a",
+        "processingStatus": "APPROVED",
+        "correctedPhone": null
+      },
+      "105ee4b4-7ead-4c86-8448-4c9006327d8f": {
+        "volunteerId": "105ee4b4-7ead-4c86-8448-4c9006327d8f",
+        "approvedAction": "ARCHIVE_DUPLICATE",
+        "processingStatus": "APPROVED",
+        "correctedPhone": null
+      }
+    },
+    "+50583760752": {
+      "0627885d-711d-4a29-b516-8afd7c622a82": {
+        "volunteerId": "0627885d-711d-4a29-b516-8afd7c622a82",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "54964c35-04f0-4ed7-bdb3-370cc0aa4206": {
+        "volunteerId": "54964c35-04f0-4ed7-bdb3-370cc0aa4206",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50581211377": {
+      "ff6be90f-1a1c-45fa-afc4-32dee9780a4d": {
+        "volunteerId": "ff6be90f-1a1c-45fa-afc4-32dee9780a4d",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "4ed1cf64-97fe-42b3-a98a-07aa73910838": {
+        "volunteerId": "4ed1cf64-97fe-42b3-a98a-07aa73910838",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50587713398": {
+      "09170620-5952-4fa2-a1f5-4132c08df860": {
+        "volunteerId": "09170620-5952-4fa2-a1f5-4132c08df860",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "2c88bc6d-773b-4e08-b745-c17f5873bb7e": {
+        "volunteerId": "2c88bc6d-773b-4e08-b745-c17f5873bb7e",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Mario Alberto Jimenez Lopez."
+      },
+      "ed02a044-5bb6-4351-ae62-148e00d1cc30": {
+        "volunteerId": "ed02a044-5bb6-4351-ae62-148e00d1cc30",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Mario Alberto Jimenez Lopez."
+      }
+    },
+    "+50586965155": {
+      "f608dccc-a38d-43ca-b61a-8c9552189293": {
+        "volunteerId": "f608dccc-a38d-43ca-b61a-8c9552189293",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "61bede17-b1c7-41fa-b4d7-20f14e7db235": {
+        "volunteerId": "61bede17-b1c7-41fa-b4d7-20f14e7db235",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50581646206": {
+      "a85fba9c-e2ee-4f1c-ade9-8fd6ae9fcaaa": {
+        "volunteerId": "a85fba9c-e2ee-4f1c-ade9-8fd6ae9fcaaa",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "0aca930b-991e-493a-a22f-70ab7344ae57": {
+        "volunteerId": "0aca930b-991e-493a-a22f-70ab7344ae57",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Paola Martinez Cruz."
+      }
+    },
+    "+50581548563": {
+      "3cb35b78-16b8-47fa-858d-f357c5a7adb5": {
+        "volunteerId": "3cb35b78-16b8-47fa-858d-f357c5a7adb5",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Normalizar teléfono a +50581548563 (active)."
+      },
+      "ce7149a5-896b-4556-9f61-5081093b01a2": {
+        "volunteerId": "ce7149a5-896b-4556-9f61-5081093b01a2",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Normalizar teléfono a +50581548563 (archived)."
+      }
+    },
+    "+50586499496": {
+      "87472c91-7db5-4125-845e-35cd2c76abcb": {
+        "volunteerId": "87472c91-7db5-4125-845e-35cd2c76abcb",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "3f9c5b27-53d9-413c-b57b-7f9a5aa53bc3": {
+        "volunteerId": "3f9c5b27-53d9-413c-b57b-7f9a5aa53bc3",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Silvano Roberto García cruz."
+      }
+    },
+    "+50576739821": {
+      "3c382e9c-b90e-4bc9-a4fd-4774483df306": {
+        "volunteerId": "3c382e9c-b90e-4bc9-a4fd-4774483df306",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Perfil principal a conservar como activo."
+      },
+      "0979be59-0e86-4fdc-bbc9-ea234b6257f3": {
+        "volunteerId": "0979be59-0e86-4fdc-bbc9-ea234b6257f3",
+        "approvedAction": "ARCHIVE_DUPLICATE",
+        "processingStatus": "APPROVED",
+        "reviewerComment": "Archivar registro duplicado en favor de perfil principal (3c382e9c)."
+      }
+    },
+    "+50585857058": {
+      "3558ca55-d035-4eb6-a9d1-1353e10f84f6": {
+        "volunteerId": "3558ca55-d035-4eb6-a9d1-1353e10f84f6",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Perfil principal a conservar como activo."
+      },
+      "31fc9b9e-f840-4d63-b488-9944376bedc7": {
+        "volunteerId": "31fc9b9e-f840-4d63-b488-9944376bedc7",
+        "approvedAction": "ARCHIVE_DUPLICATE",
+        "processingStatus": "APPROVED",
+        "reviewerComment": "Archivar registro duplicado en favor de perfil principal (3558ca55)."
+      },
+      "6b9d4bc4-b917-4887-abe4-73385e06d23c": {
+        "volunteerId": "6b9d4bc4-b917-4887-abe4-73385e06d23c",
+        "approvedAction": "ARCHIVE_DUPLICATE",
+        "processingStatus": "APPROVED",
+        "reviewerComment": "Archivar registro duplicado en favor de perfil principal (3558ca55)."
+      }
+    },
+    "+50583279246": {
+      "40c7b9c8-85fa-4d3e-9656-1a55bdd3bc08": {
+        "volunteerId": "40c7b9c8-85fa-4d3e-9656-1a55bdd3bc08",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Normalizar teléfono a +50583279246 (active)."
+      },
+      "69c29a83-e5e8-466f-aff8-08ade2d3549d": {
+        "volunteerId": "69c29a83-e5e8-466f-aff8-08ade2d3549d",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Normalizar teléfono a +50583279246 (archived)."
+      }
+    },
+    "+50587961377": {
+      "833620e5-8651-446e-9730-96ca2dc2ba8d": {
+        "volunteerId": "833620e5-8651-446e-9730-96ca2dc2ba8d",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Perfil principal a conservar como activo."
+      },
+      "fafe085d-b53b-444d-b46b-b5e791ab916c": {
+        "volunteerId": "fafe085d-b53b-444d-b46b-b5e791ab916c",
+        "approvedAction": "ARCHIVE_DUPLICATE",
+        "processingStatus": "APPROVED",
+        "reviewerComment": "Archivar registro duplicado en favor de perfil principal (833620e5)."
+      }
+    },
+    "+50584363933": {
+      "60909675-1e19-4f5a-aaef-03434b9d1f9b": {
+        "volunteerId": "60909675-1e19-4f5a-aaef-03434b9d1f9b",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Propietario principal del teléfono familiar."
+      },
+      "f2c5361d-2611-4e79-8e5d-c951ed5aca91": {
+        "volunteerId": "f2c5361d-2611-4e79-8e5d-c951ed5aca91",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Teléfono compartido autorizado vinculado al propietario Camila Salazar."
+      }
+    },
+    "+50589005590": {
+      "e23ded61-23d0-4a42-a668-b1553983ed45": {
+        "volunteerId": "e23ded61-23d0-4a42-a668-b1553983ed45",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "e816e427-2933-432d-bd88-22a9c7f3bf08": {
+        "volunteerId": "e816e427-2933-432d-bd88-22a9c7f3bf08",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    },
+    "+50588714650": {
+      "54b5b3d6-3751-40f3-a11f-cf1f2a146676": {
+        "volunteerId": "54b5b3d6-3751-40f3-a11f-cf1f2a146676",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      },
+      "f3f4508d-4674-4988-8544-88816a4c77af": {
+        "volunteerId": "f3f4508d-4674-4988-8544-88816a4c77af",
+        "approvedAction": "MANUAL_REVIEW",
+        "processingStatus": "PENDING",
+        "reviewerComment": "Revisar con coordinador antes de marcar como shared_phone."
+      }
+    }
+  }
+}

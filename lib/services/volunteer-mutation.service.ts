@@ -24,6 +24,7 @@
 import { getAdminSupabase } from '@/lib/supabase/admin';
 import { VolunteerDiffBuilder, VolunteerRow } from './volunteer-diff-builder';
 import { VolunteerAuditWriter, AuditActor, WriteEditAuditPayload } from './volunteer-audit-writer';
+import { getLocal8Digits, normalizePhoneE164 } from '@/lib/whatsapp';
 
 export interface UpdateProfilePayload {
   firstName: string;
@@ -122,6 +123,51 @@ export class VolunteerMutationService {
     return data?.name ?? null;
   }
 
+  private static async findActivePhoneConflict(
+    supabase: Awaited<ReturnType<typeof getAdminSupabase>>,
+    phoneInput: string,
+    excludeVolunteerId?: string
+  ): Promise<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    phone: string;
+    stake: string;
+    neighborhood: string;
+    committee_id: string | null;
+  } | null> {
+    if (!phoneInput) return null;
+    const local8 = getLocal8Digits(phoneInput);
+    if (!local8 || local8.length !== 8) return null;
+
+    const targetVariants = Array.from(new Set([
+      phoneInput.trim(),
+      `+505${local8}`,
+      `505${local8}`,
+      local8
+    ])).filter(Boolean);
+
+    let query = supabase
+      .from('volunteers')
+      .select('id, first_name, last_name, phone, stake, neighborhood, committee_id')
+      .in('phone', targetVariants)
+      .neq('status', 'archived');
+
+    if (excludeVolunteerId) {
+      query = query.neq('id', excludeVolunteerId);
+    }
+
+    const { data: matches } = await query;
+    if (!matches || matches.length === 0) return null;
+
+    const conflict = matches.find(v => {
+      if (excludeVolunteerId && v.id === excludeVolunteerId) return false;
+      return getLocal8Digits(v.phone) === local8;
+    });
+
+    return conflict || null;
+  }
+
   private static async persistVolunteer(
     supabase: Awaited<ReturnType<typeof getAdminSupabase>>,
     payload: CreateVolunteerPayload
@@ -175,7 +221,23 @@ export class VolunteerMutationService {
         return { success: false, error: 'No se encontró el voluntario.' };
       }
 
-      // 2. Build the incoming row in the same shape as the DB record
+      // 2. Validate phone format & canonical conflict if phone changed
+      const normPhone = normalizePhoneE164(payload.phone);
+      if (!normPhone) {
+        return { success: false, error: 'El número de teléfono debe tener exactamente 8 dígitos.' };
+      }
+
+      if (getLocal8Digits(previous.phone) !== getLocal8Digits(payload.phone)) {
+        const conflict = await this.findActivePhoneConflict(supabase, payload.phone, volunteerId);
+        if (conflict) {
+          return {
+            success: false,
+            error: `Este número de teléfono ya está asociado a otro voluntario activo ("${conflict.first_name} ${conflict.last_name || ''}".trim()).`,
+          };
+        }
+      }
+
+      // 3. Build the incoming row in the same shape as the DB record
       const incoming: VolunteerRow = {
         first_name:   payload.firstName,
         last_name:    payload.lastName,
@@ -186,18 +248,18 @@ export class VolunteerMutationService {
         age:          payload.age ?? null,
       };
 
-      // 3. Resolve committee names for human-readable diffs
+      // 4. Resolve committee names for human-readable diffs
       const committeeNameResolver = async (id: string | null) =>
         this.resolveCommitteeName(supabase, id);
 
       const changes = await VolunteerDiffBuilder.compute(previous, incoming, committeeNameResolver);
 
-      // 4. Early exit: nothing changed — do NOT write to DB or audit log
+      // 5. Early exit: nothing changed — do NOT write to DB or audit log
       if (changes.length === 0) {
         return { success: true, skipped: true };
       }
 
-      // 5. Apply the DB mutation
+      // 6. Apply the DB mutation
       const { error: updateError } = await supabase
         .from('volunteers')
         .update({
@@ -216,7 +278,7 @@ export class VolunteerMutationService {
         return { success: false, error: updateError.message };
       }
 
-      // 6. Write audit log (non-blocking — never reverts the mutation on failure)
+      // 7. Write audit log (non-blocking — never reverts the mutation on failure)
       await VolunteerAuditWriter.write({
         actionType:  'Edición',
         volunteerId,
@@ -246,18 +308,22 @@ export class VolunteerMutationService {
     try {
       const supabase = await getAdminSupabase();
 
-      // Check if an active volunteer with the same phone number exists
-      const { data: existing } = await supabase
-        .from('volunteers')
-        .select('id, first_name, last_name')
-        .eq('phone', payload.phone)
-        .neq('status', 'archived')
-        .maybeSingle();
+      // 1. Validate phone format
+      const normPhone = normalizePhoneE164(payload.phone);
+      if (!normPhone) {
+        return {
+          success: false,
+          error: 'El número de teléfono debe tener exactamente 8 dígitos.',
+        };
+      }
+
+      // 2. Canonical conflict check against active volunteers
+      const existing = await this.findActivePhoneConflict(supabase, payload.phone);
 
       if (existing) {
         return {
           success: false,
-          error: `Ya existe un voluntario activo ("${existing.first_name} ${existing.last_name}") con el teléfono ${payload.phone}.`,
+          error: `Este número de teléfono ya está asociado a otro voluntario activo ("${existing.first_name} ${existing.last_name || ''}".trim()).`,
         };
       }
 
@@ -313,8 +379,35 @@ export class VolunteerMutationService {
       const importedVolunteers: BulkImportResult['importedVolunteers'] = [];
       const auditPayloads: any[] = [];
       let skippedCount = 0;
+      const seenLocalPhonesInBatch = new Set<string>();
 
       for (const item of items) {
+        const norm = normalizePhoneE164(item.phone);
+        const local8 = getLocal8Digits(item.phone);
+
+        if (!norm || !local8 || local8.length !== 8) {
+          console.error(`[VolunteerMutationService.bulkImportVolunteers] Invalid phone format for ${item.firstName}: ${item.phone}`);
+          skippedCount++;
+          continue;
+        }
+
+        // 1. Check intra-batch canonical duplicate
+        if (seenLocalPhonesInBatch.has(local8)) {
+          console.error(`[VolunteerMutationService.bulkImportVolunteers] Intra-batch duplicate phone for ${item.firstName}: ${item.phone}`);
+          skippedCount++;
+          continue;
+        }
+
+        // 2. Check DB active volunteer conflict
+        const dbConflict = await this.findActivePhoneConflict(supabase, item.phone);
+        if (dbConflict) {
+          console.error(`[VolunteerMutationService.bulkImportVolunteers] DB active phone conflict for ${item.firstName}: ${item.phone}`);
+          skippedCount++;
+          continue;
+        }
+
+        seenLocalPhonesInBatch.add(local8);
+
         const { data: inserted, error } = await this.persistVolunteer(supabase, item);
 
         if (error || !inserted) {
@@ -402,16 +495,16 @@ export class VolunteerMutationService {
 
       // 2. Validate phone conflict when activating/unarchiving
       if (request.toStatus === 'active' && targetPhone) {
-        const { data: activeVols } = await supabase
-          .from('volunteers')
-          .select('id, first_name, last_name, phone, stake, neighborhood, committee_id')
-          .neq('status', 'archived')
-          .neq('id', request.volunteerId);
+        const normTarget = normalizePhoneE164(targetPhone);
+        if (!normTarget) {
+          return {
+            success: false,
+            reason: 'error',
+            error: 'El número de teléfono debe tener exactamente 8 dígitos.',
+          };
+        }
 
-        const existingActive = activeVols?.find((v) => {
-          if (!v.phone) return false;
-          return v.phone === targetPhone || v.phone.endsWith(targetPhone.slice(-8));
-        });
+        const existingActive = await this.findActivePhoneConflict(supabase, targetPhone, request.volunteerId);
 
         if (existingActive) {
           const commName = await this.resolveCommitteeName(supabase, existingActive.committee_id);
@@ -795,6 +888,127 @@ export class VolunteerMutationService {
     } catch (err) {
       console.error('[VolunteerMutationService.unlinkVolunteersFromCommittee] Unexpected exception:', err);
       return { success: false, error: 'Error inesperado al desvincular voluntarios del comité.' };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Step 6: Apply Phone Cleanup Decision (Phase 3 Execution)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Applies an approved phone cleanup decision for a single volunteer.id.
+   * Performs validation, phone conflict checks, DB update, and audit logging.
+   */
+  static async applyPhoneCleanupDecision(
+    payload: {
+      volunteerId: string;
+      approvedAction: 'PHONE_OWNER' | 'SHARED_PHONE' | 'ARCHIVE_DUPLICATE' | 'KEEP' | 'MANUAL_REVIEW';
+      phoneInput?: string | null;
+      sharedPhoneOwnerId?: string | null;
+      sharedPhoneReason?: string | null;
+      authorizedBy: string;
+    },
+    actor: AuditActor
+  ): Promise<{ success: boolean; skipped?: boolean; reason?: string; error?: string }> {
+    try {
+      const supabase = await getAdminSupabase();
+
+      // 1. Fetch previous state from DB
+      const { data: previous, error: fetchErr } = await supabase
+        .from('volunteers')
+        .select('id, first_name, last_name, phone, status, phone_normalized, is_shared_phone, shared_phone_owner_id')
+        .eq('id', payload.volunteerId)
+        .maybeSingle();
+
+      if (fetchErr || !previous) {
+        return { success: false, reason: 'not_found', error: 'No se encontró el voluntario.' };
+      }
+
+      // 2. MANUAL_REVIEW -> Skipped
+      if (payload.approvedAction === 'MANUAL_REVIEW') {
+        return { success: true, skipped: true };
+      }
+
+      // 3. ARCHIVE_DUPLICATE -> Use safe updateStatus
+      if (payload.approvedAction === 'ARCHIVE_DUPLICATE') {
+        if (previous.status === 'archived') {
+          return { success: true, skipped: true };
+        }
+        const statusRes = await this.updateStatus(
+          { volunteerId: payload.volunteerId, toStatus: 'archived' },
+          actor
+        );
+        return statusRes;
+      }
+
+      // 4. PHONE_OWNER, SHARED_PHONE, KEEP -> Phone normalization & DB update
+      const phoneToUse = (payload.phoneInput && payload.phoneInput.trim()) ? payload.phoneInput.trim() : previous.phone;
+      const normPhone = normalizePhoneE164(phoneToUse);
+
+      if (!normPhone) {
+        return { success: false, reason: 'invalid_phone', error: `El número de teléfono "${phoneToUse}" no es válido (debe tener 8 dígitos de Nicaragua).` };
+      }
+
+      const isShared = payload.approvedAction === 'SHARED_PHONE';
+
+      // Conflict check if not shared phone
+      if (!isShared) {
+        const conflict = await this.findActivePhoneConflict(supabase, phoneToUse, payload.volunteerId);
+        if (conflict) {
+          // If conflict is within the same local 8-digit phone group (the group being remediated into PHONE_OWNER + SHARED_PHONE), allow it.
+          const isSamePhoneGroup = getLocal8Digits(conflict.phone) === getLocal8Digits(phoneToUse);
+          if (!isSamePhoneGroup) {
+            return {
+              success: false,
+              reason: 'phone_conflict',
+              error: `El teléfono ${normPhone} ya pertenece a otro voluntario activo ("${conflict.first_name} ${conflict.last_name || ''}".trim()).`,
+            };
+          }
+        }
+      }
+
+      const updateData: any = {
+        phone_normalized: normPhone,
+        is_shared_phone: isShared,
+        shared_phone_owner_id: isShared ? payload.sharedPhoneOwnerId ?? null : null,
+        shared_phone_reason: isShared ? payload.sharedPhoneReason ?? null : null,
+        shared_phone_authorized_by: isShared ? payload.authorizedBy : null,
+        shared_phone_authorized_at: isShared ? new Date().toISOString() : null,
+      };
+
+      if (payload.phoneInput && payload.phoneInput.trim() && getLocal8Digits(payload.phoneInput) !== getLocal8Digits(previous.phone)) {
+        updateData.phone = payload.phoneInput.trim();
+      }
+
+      const { error: updateErr } = await supabase
+        .from('volunteers')
+        .update(updateData)
+        .eq('id', payload.volunteerId);
+
+      if (updateErr) {
+        console.error('[VolunteerMutationService.applyPhoneCleanupDecision] DB update failed:', updateErr);
+        return { success: false, reason: 'error', error: updateErr.message };
+      }
+
+      // Write audit log
+      await VolunteerAuditWriter.write({
+        actionType: 'Seguridad',
+        volunteerId: payload.volunteerId,
+        description: `Aplicó saneamiento telefónico (${payload.approvedAction})`,
+        actor,
+        context: {
+          operation: 'phone_cleanup_remediation',
+          approvedAction: payload.approvedAction,
+          phoneNormalized: normPhone,
+          isSharedPhone: isShared,
+          sharedPhoneOwnerId: payload.sharedPhoneOwnerId ?? null,
+        },
+      });
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('[VolunteerMutationService.applyPhoneCleanupDecision] Unexpected exception:', err);
+      return { success: false, reason: 'error', error: err.message || 'Error inesperado al aplicar saneamiento telefónico.' };
     }
   }
 }

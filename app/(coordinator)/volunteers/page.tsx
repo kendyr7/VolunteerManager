@@ -837,7 +837,7 @@ export default function VolunteersPage() {
                     <button
                       type="button"
                       onClick={() => handleSort('name')}
-                      className="flex-1 min-w-0 pr-4 flex items-center gap-1.5 hover:text-text transition-colors text-left cursor-pointer group"
+                      className="flex-[2.5] min-w-[200px] pr-4 flex items-center gap-1.5 hover:text-text transition-colors text-left cursor-pointer group"
                       title="Ordenar por Nombre y Apellido"
                     >
                       <span className={cn(sortField === 'name' && "text-[#4d7cfe] font-extrabold")}>Nombre y Apellido</span>
@@ -852,7 +852,7 @@ export default function VolunteersPage() {
                     <button
                       type="button"
                       onClick={() => handleSort('ward')}
-                      className="w-32 flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group"
+                      className="flex-[1.5] min-w-[140px] flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group px-2"
                       title="Ordenar por Barrio / Rama"
                     >
                       <span className={cn(sortField === 'ward' && "text-[#4d7cfe] font-extrabold")}>Barrio / Rama</span>
@@ -867,7 +867,7 @@ export default function VolunteersPage() {
                     <button
                       type="button"
                       onClick={() => handleSort('stake')}
-                      className="w-32 flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group"
+                      className="flex-[1.5] min-w-[140px] flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group px-2"
                       title="Ordenar por Estaca"
                     >
                       <span className={cn(sortField === 'stake' && "text-[#4d7cfe] font-extrabold")}>Estaca</span>
@@ -882,7 +882,7 @@ export default function VolunteersPage() {
                     <button
                       type="button"
                       onClick={() => handleSort('committee')}
-                      className="w-40 flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group"
+                      className="flex-[1.8] min-w-[150px] flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group px-2"
                       title="Ordenar por Comité"
                     >
                       <span className={cn(sortField === 'committee' && "text-[#4d7cfe] font-extrabold")}>Comité</span>
@@ -924,7 +924,7 @@ export default function VolunteersPage() {
                       </span>
                     </button>
 
-                    <div className="w-32 text-center shrink-0">Acciones</div>
+                    <div className="w-28 text-center shrink-0">Acciones</div>
                   </div>
 
                   {/* Cuerpo de la Tabla */}
@@ -1041,6 +1041,7 @@ export default function VolunteersPage() {
         onClose={() => setIsSheetOpen(false)}
         volunteer={editingVolunteer}
         mode="coordinator"
+        initialMode={drawerMode}
       />
 
       {/* Editor Lateral (Añadir) - Custom Fixed Drawer */}

@@ -15,11 +15,21 @@ export type AuthState = {
   force_pin_change?: boolean;
   user_id?: string;
   user_type?: 'profile' | 'volunteer';
+  require_profile_selection?: boolean;
+  profiles?: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    committee: string;
+    userType: 'profile' | 'volunteer';
+  }>;
 }
 
 export async function loginWithPin(prevState: AuthState, formData: FormData): Promise<AuthState> {
   const rawPhoneInput = (formData.get('phone') as string || '').trim();
   const pin = formData.get('pin') as string;
+  const selectedUserId = formData.get('selectedUserId') as string | null;
+  const selectedUserType = formData.get('selectedUserType') as 'profile' | 'volunteer' | null;
 
   const formattedPhone = formatE164(rawPhoneInput);
   const rawDigits = rawPhoneInput.replace(/\D/g, '');
@@ -31,14 +41,12 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     rawDigits.length === 8 ? `505${rawDigits}` : rawDigits
   ])).filter(Boolean);
 
-  console.log("AUTH_LOG: Received login request", { rawPhoneInput, formattedPhone, pin_length: pin?.length });
+  console.log("AUTH_LOG: Received login request", { rawPhoneInput, formattedPhone, pin_length: pin?.length, selectedUserId });
 
   if (!rawPhoneInput || !pin) {
     return { error: 'Por favor, ingresa tu teléfono y PIN.' };
   }
 
-  // Para el login necesitamos bypassear RLS porque el usuario aún no tiene token.
-  // Usamos el SERVICE_ROLE_KEY (si está disponible) o el cliente normal (si la política lo permite).
   let supabase;
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
@@ -65,110 +73,195 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     }
   }
 
-  // 1. Intentar buscar en Profiles (Coordinadores)
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*, committees(name)')
-    .in('phone', targetPhones)
-    .eq('pin', pin)
-    .maybeSingle();
+  // Helper para finalizar login autenticando un ID específico
+  const authenticateSpecificUser = async (userId: string, userType: 'profile' | 'volunteer') => {
+    if (userType === 'profile') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*, committees(name)')
+        .eq('id', userId)
+        .eq('pin', pin)
+        .maybeSingle();
 
-  if (profile) {
-    // Resetear Rate Limiting tras login exitoso
-    await supabase.from('login_attempts').delete().in('phone', targetPhones);
+      if (!profile) return null;
 
-    // Check if it's first login (assigned PIN 1234)
-    if (pin === '1234') {
+      await supabase.from('login_attempts').delete().in('phone', targetPhones);
+
+      if (pin === '1234') {
+        return { 
+          success: true, 
+          force_pin_change: true, 
+          user_id: profile.id, 
+          user_type: 'profile' as const 
+        };
+      }
+
+      const role = profile.role;
+      const committeeName = profile.committees?.name || '';
+      const sessionToken = signSession({
+        userId: profile.id,
+        userType: 'profile',
+        role,
+        committee: committeeName
+      });
+
+      const cookieStore = await cookies();
+      cookieStore.set('session', sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 24 * 7,
+        path: '/',
+      });
+
+      let redirectTo = '/dashboard';
+      if (role === 'Editor') redirectTo = '/dashboard';
+      if (role === 'Lector') redirectTo = '/shifts';
+
       return { 
         success: true, 
-        force_pin_change: true, 
-        user_id: profile.id, 
-        user_type: 'profile' 
+        redirectTo,
+        role,
+        committee: committeeName,
+        name: profile.full_name
+      };
+    } else {
+      const { data: volunteer } = await supabase
+        .from('volunteers')
+        .select('*, committees(name)')
+        .eq('id', userId)
+        .eq('pin', pin)
+        .neq('status', 'archived')
+        .maybeSingle();
+
+      if (!volunteer) return null;
+
+      await supabase.from('login_attempts').delete().in('phone', targetPhones);
+
+      if (pin === '1234') {
+        return { 
+          success: true, 
+          force_pin_change: true, 
+          user_id: volunteer.id, 
+          user_type: 'volunteer' as const 
+        };
+      }
+
+      const committeeName = volunteer.committees?.name || '';
+      const sessionToken = signSession({
+        userId: volunteer.id,
+        userType: 'volunteer',
+        role: 'Lector',
+        committee: committeeName
+      });
+
+      const cookieStore = await cookies();
+      cookieStore.set('session', sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 24 * 7,
+        path: '/',
+      });
+
+      return { 
+        success: true, 
+        redirectTo: '/calendar',
+        role: 'Lector',
+        committee: committeeName,
+        name: `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim()
+      };
+    }
+  };
+
+  // CASO 1: Se proporcionó un ID de usuario específico previamente desambiguado
+  if (selectedUserId && selectedUserType) {
+    const authResult = await authenticateSpecificUser(selectedUserId, selectedUserType);
+    if (authResult) return authResult;
+  } else {
+    // CASO 2: Buscar todos los perfiles y voluntarios activos asociados al teléfono
+    const { data: matchedProfiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, pin, role, committees(name)')
+      .in('phone', targetPhones);
+
+    const { data: matchedVolunteers } = await supabase
+      .from('volunteers')
+      .select('id, first_name, last_name, pin, status, committees(name)')
+      .in('phone', targetPhones)
+      .neq('status', 'archived');
+
+    const candidateProfiles = (matchedProfiles || []).map((p: any) => {
+      const comm = Array.isArray(p.committees) ? p.committees[0]?.name : p.committees?.name;
+      return {
+        id: p.id,
+        firstName: p.full_name || 'Coordinador',
+        lastName: '',
+        committee: comm || 'Administración',
+        userType: 'profile' as const,
+        pin: p.pin,
+      };
+    });
+
+    const candidateVolunteers = (matchedVolunteers || []).map((v: any) => {
+      const comm = Array.isArray(v.committees) ? v.committees[0]?.name : v.committees?.name;
+      return {
+        id: v.id,
+        firstName: v.first_name || 'Voluntario',
+        lastName: v.last_name || '',
+        committee: comm || 'Sin comité',
+        userType: 'volunteer' as const,
+        pin: v.pin,
+      };
+    });
+
+    const allCandidates = [...candidateProfiles, ...candidateVolunteers];
+
+    if (allCandidates.length === 0) {
+      // Registrar intento fallido
+      if (attempt) {
+        const newCount = attempt.attempts_count + 1;
+        const lockedUntil = newCount >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
+        await supabase
+          .from('login_attempts')
+          .update({
+            attempts_count: newCount,
+            locked_until: lockedUntil,
+            last_attempt: new Date().toISOString()
+          })
+          .eq('id', attempt.id);
+      } else {
+        await supabase
+          .from('login_attempts')
+          .insert({
+            phone: formattedPhone || rawPhoneInput,
+            attempts_count: 1,
+            last_attempt: new Date().toISOString()
+          });
+      }
+      return { error: 'El teléfono o PIN es incorrecto.' };
+    }
+
+    // Si existen MÚLTIPLES perfiles asociados a este teléfono y NO se ha seleccionado uno aún
+    if (allCandidates.length > 1) {
+      return {
+        success: false,
+        require_profile_selection: true,
+        profiles: allCandidates.map(c => ({
+          id: c.id,
+          firstName: c.firstName,
+          lastName: c.lastName,
+          committee: c.committee,
+          userType: c.userType,
+        })),
       };
     }
 
-    const role = profile.role;
-    const committeeName = profile.committees?.name || '';
-    
-    // Generar Token de Sesión Criptográfico
-    const sessionToken = signSession({
-      userId: profile.id,
-      userType: 'profile',
-      role,
-      committee: committeeName
-    });
-
-    const cookieStore = await cookies();
-    cookieStore.set('session', sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7, // 7 días
-      path: '/',
-    });
-
-    let redirectTo = '/dashboard';
-    if (role === 'Editor') redirectTo = '/dashboard';
-    if (role === 'Lector') redirectTo = '/shifts';
-
-    return { 
-      success: true, 
-      redirectTo,
-      role,
-      committee: committeeName,
-      name: profile.full_name
-    };
+    // Si existe EXACTAMENTE 1 perfil asociado a este teléfono
+    const singleUser = allCandidates[0];
+    const authResult = await authenticateSpecificUser(singleUser.id, singleUser.userType);
+    if (authResult) return authResult;
   }
 
-  // 2. Si no es coordinador, buscar en Volunteers (Voluntarios normales)
-  const { data: volunteer } = await supabase
-    .from('volunteers')
-    .select('*, committees(name)')
-    .in('phone', targetPhones)
-    .eq('pin', pin)
-    .maybeSingle();
-
-  if (volunteer) {
-    // Resetear Rate Limiting tras login exitoso
-    await supabase.from('login_attempts').delete().in('phone', targetPhones);
-
-    // Check if it's first login (assigned PIN 1234)
-    if (pin === '1234') {
-       return { 
-         success: true, 
-         force_pin_change: true, 
-         user_id: volunteer.id, 
-         user_type: 'volunteer' 
-       };
-    }
-
-    const committeeName = volunteer.committees?.name || '';
-
-    // Generar Token de Sesión Criptográfico
-    const sessionToken = signSession({
-      userId: volunteer.id,
-      userType: 'volunteer',
-      role: 'Lector',
-      committee: committeeName
-    });
-
-    const cookieStore = await cookies();
-    cookieStore.set('session', sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7, // 7 días
-      path: '/',
-    });
-
-    return { 
-      success: true, 
-      redirectTo: '/calendar',
-      role: 'Lector',
-      committee: committeeName,
-      name: `${volunteer.first_name} ${volunteer.last_name}`.trim()
-    };
-  }
-
-  // 3. Registrar Intento Fallido para Rate Limiting
+  // Registrar Intento Fallido para Rate Limiting
   if (attempt) {
     const newCount = attempt.attempts_count + 1;
     const lockedUntil = newCount >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
