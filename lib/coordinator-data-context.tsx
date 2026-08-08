@@ -90,8 +90,23 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   const fetchPromiseRef = useRef<Promise<void> | null>(null);
   const eventQueueRef = useRef<RealtimeEventQueue | null>(null);
 
+  const clientIdRef = useRef<string>('');
+  if (!clientIdRef.current && typeof window !== 'undefined') {
+    let existing = sessionStorage.getItem('realtime_client_id');
+    if (!existing) {
+      existing = `CLIENT_${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      sessionStorage.setItem('realtime_client_id', existing);
+    }
+    clientIdRef.current = existing;
+  }
+  const clientId = clientIdRef.current || 'CLIENT_UNKNOWN';
+
   if (!eventQueueRef.current) {
     eventQueueRef.current = new RealtimeEventQueue((processed) => {
+      console.log(`[COORDINATOR PROVIDER][${clientId}] onBatchProcessed`, {
+        eventsCount: processed.length,
+        events: processed.map(e => ({ type: e.eventType, table: e.table, id: e.payload?.id, name: e.payload?.first_name })),
+      });
       processed.forEach((evt) => {
         if (evt.table === 'shifts') {
           setShiftsData((prev) => {
@@ -112,12 +127,21 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
               return prev.filter((v) => v.id !== evt.payload.id);
             }
             const idx = prev.findIndex((v) => v.id === evt.payload.id);
+            let nextState: any[];
             if (idx !== -1) {
               const copy = [...prev];
               copy[idx] = mergeRealtimeRecord(copy[idx], evt.payload);
-              return copy;
+              nextState = copy;
+            } else {
+              nextState = [evt.payload, ...prev];
             }
-            return [evt.payload, ...prev];
+            const updatedVol = nextState.find((v: any) => v.id === evt.payload.id);
+            console.log(`[COORDINATOR PROVIDER][${clientId}] rawVolunteers AFTER onBatchProcessed:`, {
+              volunteerId: evt.payload.id,
+              neighborhood: updatedVol?.neighborhood || updatedVol?.ward,
+              updated_at: updatedVol?.updated_at,
+            });
+            return nextState;
           });
         }
       });
@@ -238,6 +262,15 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'shifts' },
         (payload) => {
+          const newRec = payload.new as any;
+          const oldRec = payload.old as any;
+          console.log(`[REALTIME EVENT RECEIVED][${clientId}]`, {
+            eventType: payload.eventType,
+            table: 'shifts',
+            id: newRec?.id || oldRec?.id,
+            record: payload.new,
+            oldRecord: payload.old,
+          });
           if (payload.eventType === 'DELETE' && payload.old) {
             eventQueueRef.current?.enqueue('DELETE', payload.old, 'shifts');
           } else if (payload.eventType && payload.new) {
@@ -249,6 +282,18 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'volunteers' },
         (payload) => {
+          const newRec = payload.new as any;
+          const oldRec = payload.old as any;
+          console.log(`[REALTIME EVENT RECEIVED][${clientId}]`, {
+            eventType: payload.eventType,
+            table: 'volunteers',
+            id: newRec?.id || oldRec?.id,
+            first_name: newRec?.first_name,
+            committee_id: newRec?.committee_id,
+            updated_at: newRec?.updated_at,
+            record: payload.new,
+            oldRecord: payload.old,
+          });
           if (payload.eventType === 'DELETE' && payload.old) {
             eventQueueRef.current?.enqueue('DELETE', payload.old, 'volunteers');
           } else if (payload.eventType && payload.new) {
@@ -257,6 +302,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         }
       )
       .subscribe((status) => {
+        console.log(`[REALTIME DEBUG][${clientId}] channel = global_coordinator_realtime, status = ${status}`);
         if (status === 'SUBSCRIBED') {
           useRealtimeStore.getState().recordHeartbeat();
           void SupabaseReconnectManager.getInstance().recoverMissedEvents();
@@ -269,7 +315,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, fetchData]);
+  }, [supabase, fetchData, clientId]);
 
   const refresh = useCallback(
     async (force = true) => {

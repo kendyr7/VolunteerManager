@@ -259,8 +259,15 @@ export class VolunteerMutationService {
         return { success: true, skipped: true };
       }
 
+      console.log('[MUTATION SERVICE][updateProfile] Payload:', {
+        volunteerId,
+        firstName: payload.firstName,
+        neighborhood: payload.neighborhood,
+        committeeId: payload.committeeId,
+      });
+
       // 6. Apply the DB mutation
-      const { error: updateError } = await supabase
+      const { data: updatedRecord, error: updateError } = await supabase
         .from('volunteers')
         .update({
           first_name:   payload.firstName,
@@ -271,7 +278,15 @@ export class VolunteerMutationService {
           committee_id: payload.committeeId ?? null,
           age:          payload.age ?? null,
         })
-        .eq('id', volunteerId);
+        .eq('id', volunteerId)
+        .select('*')
+        .single();
+
+      console.log('[MUTATION SERVICE][updateProfile] DB Result:', {
+        error: updateError,
+        returnedNeighborhood: updatedRecord?.neighborhood,
+        updated_at: updatedRecord?.updated_at,
+      });
 
       if (updateError) {
         console.error('[VolunteerMutationService.updateProfile] DB update failed:', updateError);

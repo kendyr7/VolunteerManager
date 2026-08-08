@@ -106,7 +106,10 @@ export function VolunteerProfileView({
 
   // Combined real-time shift records from O(1) store index + coordinator context + fetched records
   const dbShiftRecords = useMemo(() => {
-    if (storeShifts.length > 0) return storeShifts;
+    const hasStoreEntry = useVolunteerStore.getState().shiftsByVolunteerMap.has(volunteer.id);
+    if (hasStoreEntry) {
+      return storeShifts;
+    }
     const fromCoordinator = (coordinatorData?.shiftsData || []).filter((s: any) => s.volunteer_id === volunteer.id);
     if (fromCoordinator.length > 0) return fromCoordinator;
     return fetchedDbRecords;

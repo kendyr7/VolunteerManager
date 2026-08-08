@@ -173,11 +173,22 @@ export default function VolunteersPage() {
     return () => clearTimeout(timer);
   }, [inputValue]);
 
+  const committeesMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of committeesList || []) {
+      map.set(c.id, c.name);
+    }
+    return map;
+  }, [committeesList]);
+
   const volunteers = useMemo<VolunteerType[]>(
     () =>
       rawVolunteers.map((v: any) => {
         const name = `${v.first_name || ''} ${v.last_name || ''}`.trim();
-        const committee = v.committees?.name || 'Sin comité';
+        const committee =
+          (v.committee_id ? committeesMap.get(v.committee_id) : undefined)
+          ?? v.committees?.name
+          ?? 'Sin comité';
         const stake = v.stake || '';
         const ward = v.neighborhood || '';
         const phone = v.phone || '';
@@ -200,8 +211,14 @@ export default function VolunteersPage() {
           normalizedSearchText,
         };
       }),
-    [rawVolunteers, shiftCounts]
+    [rawVolunteers, shiftCounts, committeesMap]
   );
+
+  useEffect(() => {
+    if (volunteers && volunteers.length > 0) {
+      console.log(`[VOLUNTEERS PAGE MAP] total=${volunteers.length}, sampleId=${volunteers[0]?.id}, name=${volunteers[0]?.name}, ward=${volunteers[0]?.ward}`);
+    }
+  }, [volunteers]);
   const [showArchived, setShowArchived] = useState(false);
 
   // Toast State

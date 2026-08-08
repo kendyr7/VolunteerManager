@@ -43,6 +43,14 @@ export class RealtimeEventQueue {
       mergedData = mergeRealtimeRecord(existing.payload, data);
     }
 
+    console.log('[REALTIME QUEUE] received & queued:', {
+      eventType,
+      table,
+      id,
+      neighborhood: data.neighborhood || data.ward,
+      updated_at: data.updated_at,
+    });
+
     this.queue.set(id, {
       eventType,
       table,
@@ -68,31 +76,34 @@ export class RealtimeEventQueue {
     if (this.queue.size === 0) return;
 
     const eventsToProcess = Array.from(this.queue.values());
+    console.log('[REALTIME QUEUE] flush started, batch size:', eventsToProcess.length);
     this.queue.clear();
 
     const processed: PendingRealtimeEvent[] = [];
 
     eventsToProcess.forEach(evt => {
+      let applied = false;
       if (evt.table === 'shifts') {
         if (evt.eventType === 'DELETE') {
-          const applied = useVolunteerStore.getState().deleteShift(evt.payload.id);
-          if (applied) processed.push(evt);
+          applied = useVolunteerStore.getState().deleteShift(evt.payload.id);
         } else {
-          const applied = useVolunteerStore.getState().upsertShift(evt.payload);
-          if (applied) processed.push(evt);
+          applied = useVolunteerStore.getState().upsertShift(evt.payload);
         }
       } else {
         if (evt.eventType === 'DELETE') {
-          const applied = useVolunteerStore.getState().deleteVolunteer(evt.payload.id);
-          if (applied) processed.push(evt);
+          applied = useVolunteerStore.getState().deleteVolunteer(evt.payload.id);
         } else {
-          const applied = useVolunteerStore.getState().upsertVolunteer(evt.payload);
-          if (applied) processed.push(evt);
+          applied = useVolunteerStore.getState().upsertVolunteer(evt.payload);
         }
+      }
+
+      // Always pass non-stale processed events to batch listener for UI reconciliation
+      if (applied || evt.eventType === 'UPDATE' || evt.eventType === 'INSERT') {
+        processed.push(evt);
       }
     });
 
-    this.totalProcessed += processed.length;
+    this.totalProcessed += eventsToProcess.length;
     const duration = performance.now() - startTime;
 
     useRealtimeStore.getState().updateMetrics({

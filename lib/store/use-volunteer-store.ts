@@ -64,11 +64,22 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     const existingTsVal = (existing as any)?.updated_at || (existing as any)?.created_at;
     const incomingTsVal = (incoming as any)?.updated_at || (incoming as any)?.created_at;
 
+    const existingNeigh = (existing as any)?.neighborhood || (existing as any)?.ward;
+    const incomingNeigh = (incoming as any)?.neighborhood || (incoming as any)?.ward;
+
+    let decision = 'APPLY_NEW';
     if (existingTsVal && incomingTsVal) {
       const existingTs = new Date(existingTsVal).getTime();
       const incomingTs = new Date(incomingTsVal).getTime();
-      if (incomingTs < existingTs) return false;
+      if (incomingTs < existingTs) {
+        decision = 'REJECT_STALE';
+        console.log(`[ZUSTAND REALTIME] id=${incoming.id}, existingNeigh=${existingNeigh}, incomingNeigh=${incomingNeigh}, existingTs=${existingTsVal}, incomingTs=${incomingTsVal}, decision=${decision}`);
+        return false;
+      }
+      decision = incomingTs > existingTs ? 'APPLY_NEWER' : 'APPLY_EQUAL';
     }
+
+    console.log(`[ZUSTAND REALTIME] id=${incoming.id}, existingNeigh=${existingNeigh}, incomingNeigh=${incomingNeigh}, existingTs=${existingTsVal}, incomingTs=${incomingTsVal}, decision=${decision}`);
 
     const merged = mergeRealtimeRecord(existing, incoming);
     const newMap = new Map(currentMap);

@@ -95,9 +95,11 @@ export function VolunteerProfileDrawer({
 
   const targetId = propVolunteerId || propVolunteer?.id || propVolunteer?.volunteer_id || propVolunteer?.volunteerId;
   const storeVolunteer = useVolunteerStore(s => targetId ? s.volunteersMap.get(targetId) : undefined);
+  const storeShifts = useVolunteerStore(s => targetId ? s.shiftsByVolunteerMap.get(targetId) : undefined);
 
   // Sync volunteer object with latest data from context or store
   const activeVolunteer = useMemo(() => {
+    const source = storeVolunteer ? 'storeVolunteer' : (targetId ? (rawVolunteers.find((v: any) => v.id === targetId) ? 'rawVolunteers' : 'propVolunteer') : 'propVolunteer');
     const target = storeVolunteer || (targetId ? rawVolunteers.find((v: any) => v.id === targetId) : null) || propVolunteer;
     if (!target) return null;
 
@@ -107,6 +109,9 @@ export function VolunteerProfileDrawer({
       if (foundComm) commName = foundComm.name;
     }
 
+    // Canonical precedence: Prefer Database field 'neighborhood' over pre-mapped string 'ward'
+    const resolvedWard = target.neighborhood ?? target.ward ?? target.barrio ?? '';
+
     return {
       ...target,
       id: target.id || targetId,
@@ -114,7 +119,7 @@ export function VolunteerProfileDrawer({
       first_name: target.first_name || (target.name || target.volunteerName || '').split(' ')[0] || '',
       last_name: target.last_name || (target.name || target.volunteerName || '').split(' ').slice(1).join(' ') || '',
       committee: commName,
-      ward: target.ward || target.neighborhood || target.barrio || '',
+      ward: resolvedWard,
       stake: target.stake || '',
       phone: target.phone || '',
       reliability: target.reliability ?? target.computedReliability ?? 100,
@@ -122,13 +127,25 @@ export function VolunteerProfileDrawer({
     };
   }, [propVolunteer, propVolunteerId, storeVolunteer, rawVolunteers, committeesList, targetId]);
 
-  // Compute shifts by day for active volunteer
+  // Compute shifts by day for active volunteer with 3-layer fallback: Zustand store -> globalShifts -> shiftsData
   const shiftsByDay = useMemo(() => {
     if (!activeVolunteer) return {};
+    const result: Record<string, string[]> = {};
+
+    if (storeShifts && storeShifts.length > 0) {
+      storeShifts.forEach((s: any) => {
+        if (!result[s.day_key]) result[s.day_key] = [];
+        if (!result[s.day_key].includes(s.shift_key)) {
+          result[s.day_key].push(s.shift_key);
+        }
+      });
+      return result;
+    }
+
     if (globalShifts[activeVolunteer.id]) {
       return globalShifts[activeVolunteer.id];
     }
-    const result: Record<string, string[]> = {};
+
     shiftsData.forEach((s: any) => {
       if (s.volunteer_id === activeVolunteer.id) {
         if (!result[s.day_key]) result[s.day_key] = [];
@@ -138,7 +155,7 @@ export function VolunteerProfileDrawer({
       }
     });
     return result;
-  }, [activeVolunteer, globalShifts, shiftsData]);
+  }, [activeVolunteer, storeShifts, globalShifts, shiftsData]);
 
   // Reset drawer state when volunteer changes
   useEffect(() => {
@@ -170,20 +187,27 @@ export function VolunteerProfileDrawer({
 
     try {
       if (isCurrentlyAssigned) {
-        await supabase
+        const { error } = await supabase
           .from('shifts')
           .delete()
           .eq('volunteer_id', activeVolunteer.id)
           .eq('day_key', dayKey)
           .eq('shift_key', shiftKey);
+        if (error) console.error('[DRAWER handleToggleShift] DELETE error:', error);
       } else {
-        await supabase
+        const { error } = await supabase
           .from('shifts')
-          .upsert({
-            volunteer_id: activeVolunteer.id,
-            day_key: dayKey,
-            shift_key: shiftKey,
-          });
+          .upsert(
+            {
+              volunteer_id: activeVolunteer.id,
+              day_key: dayKey,
+              shift_key: shiftKey,
+            },
+            { onConflict: 'volunteer_id,day_key,shift_key' }
+          );
+        if (error) {
+          console.error('[DRAWER handleToggleShift] UPSERT error:', error);
+        }
       }
       await refresh(true);
     } catch (e: any) {

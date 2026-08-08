@@ -73,6 +73,7 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
   onResetPin,
   onArchive,
 }: VolunteerTableRowProps) {
+  console.log(`[VOLUNTEER TABLE ROW RENDER] id=${vol.id}, name=${vol.name}, ward=${vol.ward}, committee=${vol.committee}`);
   const committeeColor = useMemo(() => getCommitteeColor(vol.committee), [vol.committee]);
 
   return (
