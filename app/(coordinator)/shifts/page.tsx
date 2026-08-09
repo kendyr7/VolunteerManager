@@ -25,7 +25,7 @@ import { canEditShifts } from "@/lib/permissions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
-import { updateVolunteerAction } from "@/app/actions/volunteer-actions";
+import { updateVolunteerAction, saveShiftsAction } from "@/app/actions/volunteer-actions";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -666,39 +666,10 @@ export default function ShiftsPage() {
     setIsEditingShifts(false);
     if (!editingVolunteer) return;
 
-    // Delete existing shifts for this volunteer
-    const { error: delErr } = await supabase
-      .from('shifts')
-      .delete()
-      .eq('volunteer_id', editingVolunteer.id);
-
-    if (delErr) {
-      console.error("Error deleting shifts:", delErr);
+    const result = await saveShiftsAction(editingVolunteer.id, shiftsByDay);
+    if (!result.success) {
+      showToast(result.error || "Error al guardar turnos", "error");
       return;
-    }
-
-    // Insert new shift rows
-    const insertRows = [];
-    for (const [dayKey, shiftKeys] of Object.entries(shiftsByDay)) {
-      for (const shiftKey of shiftKeys) {
-        insertRows.push({
-          volunteer_id: editingVolunteer.id,
-          day_key: dayKey,
-          shift_key: shiftKey
-        });
-      }
-    }
-
-    if (insertRows.length > 0) {
-      const { error: insErr } = await supabase
-        .from('shifts')
-        .insert(insertRows);
-
-      if (insErr) {
-        console.error("Error inserting shifts:", insErr);
-        showToast("Error al guardar turnos", "error");
-        return;
-      }
     }
 
     setSaved(true);

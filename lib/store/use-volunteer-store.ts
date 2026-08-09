@@ -3,6 +3,7 @@ import type { VolunteerType } from '@/components/VolunteerTableRow';
 import { useRealtimeStore } from '@/lib/store/use-realtime-store';
 import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
 import { assertShiftConsistency } from '@/lib/utils/shift-invariants';
+import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 
 interface VolunteerStoreState {
   // Single Source of Truth for Volunteers and Shifts
@@ -12,13 +13,13 @@ interface VolunteerStoreState {
 
   // Volunteers Actions
   setInitialVolunteers: (volunteers: VolunteerType[]) => void;
-  upsertVolunteer: (volunteer: VolunteerType) => boolean;
-  deleteVolunteer: (id: string) => boolean;
+  upsertVolunteer: (volunteer: VolunteerType, traceId?: string) => boolean;
+  deleteVolunteer: (id: string, traceId?: string) => boolean;
 
   // Shifts Actions
   setInitialShifts: (shifts: any[]) => void;
-  upsertShift: (shift: any) => boolean;
-  deleteShift: (id: string) => boolean;
+  upsertShift: (shift: any, traceId?: string) => boolean;
+  deleteShift: (id: string, traceId?: string) => boolean;
   
   // Selectors
   getVolunteersList: () => VolunteerType[];
@@ -56,7 +57,7 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     useRealtimeStore.getState().setInitialSyncCompleted(true);
   },
 
-  upsertVolunteer: (incoming: VolunteerType) => {
+  upsertVolunteer: (incoming: VolunteerType, traceId?: string) => {
     if (!incoming.id) return false;
     const currentMap = get().volunteersMap;
     const existing = currentMap.get(incoming.id);
@@ -86,10 +87,36 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     newMap.set(incoming.id, merged);
     set({ volunteersMap: newMap });
     useRealtimeStore.getState().recordSync();
+
+    console.log('[RT-TRACE][ZUSTAND_STATE_CHANGE]', {
+      clientId: realtimeDebugLogger.getClientSessionId(),
+      traceId: traceId || 'RT-UNKNOWN',
+      recordId: incoming.id,
+      previousUpdatedAt: existingTsVal,
+      newUpdatedAt: incomingTsVal,
+      previousNeighborhood: (existing as any)?.neighborhood || (existing as any)?.ward,
+      newNeighborhood: (merged as any).neighborhood || (merged as any).ward,
+      previousStake: (existing as any)?.stake,
+      newStake: (merged as any).stake,
+      timestamp: new Date().toISOString()
+    });
+
+    const volName = `${(merged as any).first_name || ''} ${(merged as any).last_name || ''}`.trim() || merged.name;
+    realtimeDebugLogger.addLog({
+      stage: 'ZUSTAND_UPDATE',
+      table: 'volunteers',
+      eventType: 'UPDATE',
+      volunteerId: merged.id,
+      volunteerName: volName,
+      details: `Zustand store updated volunteer: ${volName} (ward/neighborhood: ${(merged as any).neighborhood || (merged as any).ward || ''})`,
+      payload: merged,
+    });
+    realtimeDebugLogger.triggerHighlight(merged.id, 'volunteers');
+
     return true;
   },
 
-  deleteVolunteer: (id: string) => {
+  deleteVolunteer: (id: string, traceId?: string) => {
     const currentMap = get().volunteersMap;
     if (!currentMap.has(id)) return false;
 
@@ -97,6 +124,15 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     newMap.delete(id);
     set({ volunteersMap: newMap });
     useRealtimeStore.getState().recordSync();
+
+    realtimeDebugLogger.addLog({
+      stage: 'ZUSTAND_UPDATE',
+      table: 'volunteers',
+      eventType: 'DELETE',
+      volunteerId: id,
+      details: `Zustand store deleted volunteer id: ${id}`,
+    });
+
     return true;
   },
 
@@ -112,7 +148,7 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     useRealtimeStore.getState().setInitialSyncCompleted(true);
   },
 
-  upsertShift: (incoming: any) => {
+  upsertShift: (incoming: any, traceId?: string) => {
     if (!incoming.id) return false;
     const currentMap = get().shiftsMap;
     const existing = currentMap.get(incoming.id);
@@ -133,21 +169,82 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     newMap.set(incoming.id, sanitized);
 
     const byVolMap = rebuildShiftsByVolunteerMap(newMap);
+    const volId = (sanitized as any).volunteer_id || (sanitized as any).volunteerId;
+    const prevShifts = volId ? (get().shiftsByVolunteerMap.get(volId) || []) : [];
+
     set({ shiftsMap: newMap, shiftsByVolunteerMap: byVolMap });
     useRealtimeStore.getState().recordSync();
+
+    console.log('[RT-TRACE][ZUSTAND_STATE_CHANGE]', {
+      clientId: realtimeDebugLogger.getClientSessionId(),
+      traceId: traceId || 'RT-UNKNOWN',
+      recordId: incoming.id,
+      volunteer_id: volId,
+      day_key: (sanitized as any).day_key,
+      shift_key: (sanitized as any).shift_key,
+      previousCount: prevShifts.length,
+      newCount: byVolMap.get(volId)?.length || 0,
+      timestamp: new Date().toISOString()
+    });
+
+    realtimeDebugLogger.addLog({
+      stage: 'ZUSTAND_UPDATE',
+      table: 'shifts',
+      eventType: 'INSERT',
+      volunteerId: volId,
+      details: `Zustand store inserted/updated shift: ${(sanitized as any).day_key} / ${(sanitized as any).shift_key}`,
+      payload: sanitized,
+    });
+    if (volId) realtimeDebugLogger.triggerHighlight(volId, 'shifts');
+
     return true;
   },
 
-  deleteShift: (id: string) => {
+  deleteShift: (id: string, traceId?: string) => {
     const currentMap = get().shiftsMap;
-    if (!currentMap.has(id)) return false;
+    const currentByVolMap = get().shiftsByVolunteerMap;
 
+    let targetVolId: string | null = null;
+    if (currentMap.has(id)) {
+      const targetShift = currentMap.get(id);
+      targetVolId = (targetShift as any)?.volunteer_id || (targetShift as any)?.volunteerId || null;
+    }
+
+    const prevShifts = targetVolId ? (currentByVolMap.get(targetVolId) || []) : [];
     const newMap = new Map(currentMap);
     newMap.delete(id);
 
     const byVolMap = rebuildShiftsByVolunteerMap(newMap);
+
+    currentByVolMap.forEach((shiftsList, volId) => {
+      const filtered = shiftsList.filter(s => s.id !== id);
+      if (filtered.length !== shiftsList.length || volId === targetVolId) {
+        byVolMap.set(volId, filtered);
+      }
+    });
+
     set({ shiftsMap: newMap, shiftsByVolunteerMap: byVolMap });
     useRealtimeStore.getState().recordSync();
+
+    console.log('[RT-TRACE][ZUSTAND_STATE_CHANGE]', {
+      clientId: realtimeDebugLogger.getClientSessionId(),
+      traceId: traceId || 'RT-UNKNOWN',
+      recordId: id,
+      volunteer_id: targetVolId,
+      previousCount: prevShifts.length,
+      newCount: targetVolId ? (byVolMap.get(targetVolId)?.length || 0) : 0,
+      timestamp: new Date().toISOString()
+    });
+
+    realtimeDebugLogger.addLog({
+      stage: 'ZUSTAND_UPDATE',
+      table: 'shifts',
+      eventType: 'DELETE',
+      volunteerId: targetVolId || undefined,
+      details: `Zustand store deleted shift id: ${id}`,
+    });
+    if (targetVolId) realtimeDebugLogger.triggerHighlight(targetVolId, 'shifts');
+
     return true;
   },
 

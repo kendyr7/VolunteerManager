@@ -178,5 +178,34 @@ export async function resetVolunteerPinAction(volunteerId: string): Promise<Muta
   return VolunteerMutationService.resetPin(volunteerId, actor);
 }
 
+/**
+ * Toggles a shift assignment for a volunteer using Service Role key.
+ */
+export async function toggleShiftAction(
+  volunteerId: string,
+  dayKey: string,
+  shiftKey: string,
+  assign: boolean
+): Promise<MutationResult> {
+  if (!volunteerId || !dayKey || !shiftKey) {
+    return { success: false, error: 'Parametros incompletos para turno.' };
+  }
+  return VolunteerMutationService.toggleShift(volunteerId, dayKey, shiftKey, assign);
+}
+
+/**
+ * Saves all shift assignments for a volunteer using Service Role key.
+ */
+export async function saveShiftsAction(
+  volunteerId: string,
+  shiftsByDay: Record<string, string[]>
+): Promise<MutationResult> {
+  if (!volunteerId) {
+    return { success: false, error: 'volunteerId requerido.' };
+  }
+  return VolunteerMutationService.saveShifts(volunteerId, shiftsByDay);
+}
+
+
 
 

@@ -1,6 +1,7 @@
 import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
 import { useRealtimeStore } from '@/lib/store/use-realtime-store';
 import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
+import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 
 export type RealtimeEventType = 'INSERT' | 'UPDATE' | 'DELETE';
 
@@ -9,6 +10,7 @@ export interface PendingRealtimeEvent {
   table?: 'volunteers' | 'shifts';
   payload: any;
   timestamp: number;
+  traceId?: string;
 }
 
 export class RealtimeEventQueue {
@@ -23,7 +25,7 @@ export class RealtimeEventQueue {
     this.onBatchProcessed = onBatchProcessed;
   }
 
-  public enqueue(eventType: RealtimeEventType, payload: any, table: 'volunteers' | 'shifts' = 'volunteers') {
+  public enqueue(eventType: RealtimeEventType, payload: any, table: 'volunteers' | 'shifts' = 'volunteers', traceId?: string) {
     const id = payload.id || (payload.new && payload.new.id) || (payload.old && payload.old.id);
     if (!id) return;
 
@@ -43,12 +45,14 @@ export class RealtimeEventQueue {
       mergedData = mergeRealtimeRecord(existing.payload, data);
     }
 
-    console.log('[REALTIME QUEUE] received & queued:', {
-      eventType,
+    console.log('[RT-TRACE][QUEUE_ENQUEUE]', {
+      clientId: realtimeDebugLogger.getClientSessionId(),
+      traceId: traceId || 'RT-UNKNOWN',
+      queueSize: this.queue.size + 1,
       table,
-      id,
-      neighborhood: data.neighborhood || data.ward,
-      updated_at: data.updated_at,
+      eventType,
+      recordId: id,
+      timestamp: new Date().toISOString()
     });
 
     this.queue.set(id, {
@@ -56,6 +60,7 @@ export class RealtimeEventQueue {
       table,
       payload: mergedData,
       timestamp: incomingTs,
+      traceId,
     });
 
     this.updateTelemetry();
@@ -76,26 +81,73 @@ export class RealtimeEventQueue {
     if (this.queue.size === 0) return;
 
     const eventsToProcess = Array.from(this.queue.values());
-    console.log('[REALTIME QUEUE] flush started, batch size:', eventsToProcess.length);
+    const traceIds = eventsToProcess.map(e => e.traceId).filter(Boolean);
+
+    console.log('[RT-TRACE][QUEUE_FLUSH_START]', {
+      clientId: realtimeDebugLogger.getClientSessionId(),
+      batchSize: eventsToProcess.length,
+      traceIds,
+      timestamp: new Date().toISOString()
+    });
+
+    realtimeDebugLogger.addLog({
+      stage: 'QUEUE_FLUSH',
+      details: `Flushed batch of ${eventsToProcess.length} event(s)`,
+    });
     this.queue.clear();
 
     const processed: PendingRealtimeEvent[] = [];
 
     eventsToProcess.forEach(evt => {
+      console.log('[RT-TRACE][QUEUE_PROCESS]', {
+        clientId: realtimeDebugLogger.getClientSessionId(),
+        traceId: evt.traceId || 'RT-UNKNOWN',
+        table: evt.table,
+        eventType: evt.eventType,
+        recordId: evt.payload?.id,
+        timestamp: new Date().toISOString()
+      });
+
+      console.log('[RT-TRACE][ZUSTAND_BEFORE]', {
+        clientId: realtimeDebugLogger.getClientSessionId(),
+        traceId: evt.traceId || 'RT-UNKNOWN',
+        table: evt.table,
+        eventType: evt.eventType,
+        recordId: evt.payload?.id,
+        timestamp: new Date().toISOString()
+      });
+
       let applied = false;
       if (evt.table === 'shifts') {
         if (evt.eventType === 'DELETE') {
-          applied = useVolunteerStore.getState().deleteShift(evt.payload.id);
+          applied = useVolunteerStore.getState().deleteShift(evt.payload.id, evt.traceId);
         } else {
-          applied = useVolunteerStore.getState().upsertShift(evt.payload);
+          applied = useVolunteerStore.getState().upsertShift(evt.payload, evt.traceId);
         }
       } else {
         if (evt.eventType === 'DELETE') {
-          applied = useVolunteerStore.getState().deleteVolunteer(evt.payload.id);
+          applied = useVolunteerStore.getState().deleteVolunteer(evt.payload.id, evt.traceId);
         } else {
-          applied = useVolunteerStore.getState().upsertVolunteer(evt.payload);
+          applied = useVolunteerStore.getState().upsertVolunteer(evt.payload, evt.traceId);
         }
       }
+
+      const volFound = evt.table === 'volunteers' ? !!useVolunteerStore.getState().volunteersMap.get(evt.payload?.id) : undefined;
+      const shiftFound = evt.table === 'shifts' ? !!useVolunteerStore.getState().shiftsMap.get(evt.payload?.id) : undefined;
+
+      console.log('[RT-TRACE][ZUSTAND_AFTER]', {
+        clientId: realtimeDebugLogger.getClientSessionId(),
+        traceId: evt.traceId || 'RT-UNKNOWN',
+        table: evt.table,
+        eventType: evt.eventType,
+        recordId: evt.payload?.id,
+        applied,
+        volunteerFound: volFound,
+        shiftFound,
+        volunteersMapSize: useVolunteerStore.getState().volunteersMap.size,
+        shiftsMapSize: useVolunteerStore.getState().shiftsMap.size,
+        timestamp: new Date().toISOString()
+      });
 
       // Always pass non-stale processed events to batch listener for UI reconciliation
       if (applied || evt.eventType === 'UPDATE' || evt.eventType === 'INSERT') {

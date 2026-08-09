@@ -249,8 +249,13 @@ export default function VolunteersPage() {
     setToast({ message, type, isVisible: true });
   };
 
-  // Form states
-  const [editingVolunteer, setEditingVolunteer] = useState<VolunteerType | null>(null);
+  // Reactive selected volunteer ID state (eliminates static object snapshot)
+  const [selectedVolunteerId, setSelectedVolunteerId] = useState<string | null>(null);
+  const selectedVolunteer = useMemo(() => {
+    if (!selectedVolunteerId) return null;
+    return rawVolunteers.find((v: any) => v.id === selectedVolunteerId) ?? null;
+  }, [selectedVolunteerId, rawVolunteers]);
+
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
@@ -466,7 +471,7 @@ export default function VolunteersPage() {
   }, [committeesList]);
 
   const handleEditClick = useCallback((vol: VolunteerType, startInEditMode = false) => {
-    setEditingVolunteer(vol);
+    setSelectedVolunteerId(vol.id);
     setIsSheetOpen(true);
     setIsEditingShifts(false);
     setSaved(false);
@@ -488,7 +493,7 @@ export default function VolunteersPage() {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingVolunteer) return;
+    if (!selectedVolunteer) return;
 
     const trimmedFirstName = editFirstName.trim();
     const trimmedLastName = editLastName.trim();
@@ -527,11 +532,11 @@ export default function VolunteersPage() {
 
     const fullName = `${trimmedFirstName} ${trimmedLastName}`.trim();
     const commObj = committeesList.find(c => c.id === editCommitteeId || c.name === editCommitteeId);
-    const commName = commObj ? commObj.name : editingVolunteer.committee;
+    const commName = commObj ? commObj.name : selectedVolunteer.committee;
 
     setIsSavingProfile(true);
 
-    const result = await updateVolunteerAction(editingVolunteer.id, {
+    const result = await updateVolunteerAction(selectedVolunteer.id, {
       firstName:   trimmedFirstName,
       lastName:    trimmedLastName,
       phone:       sanitizedPhone,
@@ -548,7 +553,7 @@ export default function VolunteersPage() {
       showToast("Perfil de voluntario actualizado correctamente");
 
       const updatedVol: VolunteerType = {
-        ...editingVolunteer,
+        ...selectedVolunteer,
         name: fullName,
         phone: sanitizedPhone,
         stake: trimmedStake,
@@ -558,7 +563,6 @@ export default function VolunteersPage() {
       };
 
       useVolunteerStore.getState().upsertVolunteer(updatedVol);
-      setEditingVolunteer(updatedVol);
       setDrawerMode('view');
     }
     setIsSavingProfile(false);
@@ -566,13 +570,13 @@ export default function VolunteersPage() {
 
   const handleSaveShifts = async () => {
     setIsEditingShifts(false);
-    if (!editingVolunteer) return;
+    if (!selectedVolunteer) return;
 
     // Delete existing shifts for this volunteer
     const { error: delErr } = await supabase
       .from('shifts')
       .delete()
-      .eq('volunteer_id', editingVolunteer.id);
+      .eq('volunteer_id', selectedVolunteer.id);
 
     if (delErr) {
       console.error("Error deleting shifts:", delErr);
@@ -584,7 +588,7 @@ export default function VolunteersPage() {
     for (const [dayKey, shiftKeys] of Object.entries(shiftsByDay)) {
       for (const shiftKey of shiftKeys) {
         insertRows.push({
-          volunteer_id: editingVolunteer.id,
+          volunteer_id: selectedVolunteer.id,
           day_key: dayKey,
           shift_key: shiftKey
         });
@@ -1054,9 +1058,13 @@ export default function VolunteersPage() {
 
       {/* Unified Volunteer Profile Drawer */}
       <VolunteerProfileDrawer
-        isOpen={isSheetOpen}
-        onClose={() => setIsSheetOpen(false)}
-        volunteer={editingVolunteer}
+        isOpen={isSheetOpen && !!selectedVolunteerId}
+        onClose={() => {
+          setIsSheetOpen(false);
+          setSelectedVolunteerId(null);
+        }}
+        volunteer={selectedVolunteer}
+        volunteerId={selectedVolunteerId}
         mode="coordinator"
         initialMode={drawerMode}
       />

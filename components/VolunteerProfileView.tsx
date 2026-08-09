@@ -103,17 +103,25 @@ export function VolunteerProfileView({
   const [loadingAuditLogs, setLoadingAuditLogs] = useState<boolean>(false);
 
   const storeShifts = useVolunteerStore((s) => s.shiftsByVolunteerMap.get(volunteer.id)) || [];
+  // Reactive: true even when the volunteer has 0 shifts (empty array vs undefined).
+  // Must be a selector, NOT getState(), so React re-renders when the map entry changes.
+  const hasStoreEntry = useVolunteerStore((s) => s.shiftsByVolunteerMap.has(volunteer.id));
 
   // Combined real-time shift records from O(1) store index + coordinator context + fetched records
   const dbShiftRecords = useMemo(() => {
-    const hasStoreEntry = useVolunteerStore.getState().shiftsByVolunteerMap.has(volunteer.id);
+    console.log('[RT-TRACE][VIEW_SHIFTS_MEMO]', {
+      volunteerId: volunteer.id,
+      hasStoreEntry,
+      storeShiftsCount: storeShifts?.length ?? 0,
+      timestamp: new Date().toISOString()
+    });
     if (hasStoreEntry) {
       return storeShifts;
     }
     const fromCoordinator = (coordinatorData?.shiftsData || []).filter((s: any) => s.volunteer_id === volunteer.id);
     if (fromCoordinator.length > 0) return fromCoordinator;
     return fetchedDbRecords;
-  }, [storeShifts, coordinatorData?.shiftsData, fetchedDbRecords, volunteer.id]);
+  }, [hasStoreEntry, storeShifts, coordinatorData?.shiftsData, fetchedDbRecords, volunteer.id]);
 
   // Permisos y Usuario
   const userRole = typeof window !== 'undefined' ? localStorage.getItem('mock_role') || 'Admin' : 'Admin';

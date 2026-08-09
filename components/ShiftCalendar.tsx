@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { recalculateReliability } from "@/app/actions/attendance";
+import { toggleShiftAction } from "@/app/actions/volunteer-actions";
 import { VolunteerProfileView, VolunteerProfileData } from "@/components/VolunteerProfileView";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 
@@ -138,21 +139,14 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
 
     startTransition(async () => {
       const active = (shiftsByDay[dayKey] || []).includes(shiftKey);
+      const result = await toggleShiftAction(volunteerId, dayKey, shiftKey, !active);
+
+      if (!result.success) {
+        console.error("Error updating shift:", result.error);
+        return;
+      }
 
       if (active) {
-        // Delete shift reservation
-        const { error } = await supabase
-          .from('shifts')
-          .delete()
-          .eq('volunteer_id', volunteerId)
-          .eq('day_key', dayKey)
-          .eq('shift_key', shiftKey);
-
-        if (error) {
-          console.error("Error deleting shift:", error);
-          return;
-        }
-
         setShiftsByDay(prev => {
           const current = prev[dayKey] || [];
           return {
@@ -161,20 +155,6 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
           };
         });
       } else {
-        // Insert shift reservation
-        const { error } = await supabase
-          .from('shifts')
-          .insert({
-            volunteer_id: volunteerId,
-            day_key: dayKey,
-            shift_key: shiftKey
-          });
-
-        if (error) {
-          console.error("Error inserting shift:", error);
-          return;
-        }
-
         setShiftsByDay(prev => {
           const current = prev[dayKey] || [];
           return {
@@ -183,7 +163,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
           };
         });
       }
-
+      
       // Recalculate reliability score
       await recalculateReliability(volunteerId);
     });

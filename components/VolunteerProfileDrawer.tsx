@@ -13,7 +13,8 @@ import { cn } from '@/lib/utils';
 import { getActiveEventDays, formatDateShort } from '@/lib/dates';
 
 import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
-import { updateVolunteerAction } from '@/app/actions/volunteer-actions';
+import { updateVolunteerAction, toggleShiftAction } from '@/app/actions/volunteer-actions';
+import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 
 
 export interface VolunteerProfileDrawerProps {
@@ -95,7 +96,12 @@ export function VolunteerProfileDrawer({
 
   const targetId = propVolunteerId || propVolunteer?.id || propVolunteer?.volunteer_id || propVolunteer?.volunteerId;
   const storeVolunteer = useVolunteerStore(s => targetId ? s.volunteersMap.get(targetId) : undefined);
+  // storeShifts is undefined when the volunteer has NO entry in the map yet.
+  // storeShifts is an array (possibly empty []) when the store IS the source of truth.
+  // This selector is reactive: any change to shiftsByVolunteerMap triggers a re-render.
   const storeShifts = useVolunteerStore(s => targetId ? s.shiftsByVolunteerMap.get(targetId) : undefined);
+  // Reactive: true when the volunteer has an entry in the store (even with 0 shifts).
+  const hasStoreEntry = useVolunteerStore(s => targetId ? s.shiftsByVolunteerMap.has(targetId) : false);
 
   // Sync volunteer object with latest data from context or store
   const activeVolunteer = useMemo(() => {
@@ -112,6 +118,16 @@ export function VolunteerProfileDrawer({
     // Canonical precedence: Prefer Database field 'neighborhood' over pre-mapped string 'ward'
     const resolvedWard = target.neighborhood ?? target.ward ?? target.barrio ?? '';
 
+    console.log('[RT-TRACE][REACT_SOURCE_STATE]', {
+      clientId: realtimeDebugLogger.getClientSessionId(),
+      recordId: target.id || targetId,
+      source,
+      rawVolunteerNeighborhood: target.neighborhood,
+      rawVolunteerStake: target.stake,
+      resolvedWard,
+      timestamp: new Date().toISOString()
+    });
+
     return {
       ...target,
       id: target.id || targetId,
@@ -127,13 +143,27 @@ export function VolunteerProfileDrawer({
     };
   }, [propVolunteer, propVolunteerId, storeVolunteer, rawVolunteers, committeesList, targetId]);
 
-  // Compute shifts by day for active volunteer with 3-layer fallback: Zustand store -> globalShifts -> shiftsData
+  // Compute shifts by day for active volunteer.
+  // Layer 1 (reactive): Zustand store via `storeShifts` and `hasStoreEntry` selectors.
+  // Layer 2 (fallback): globalShifts from CoordinatorData.
+  // Layer 3 (fallback): flat shiftsData array.
+  // NOTE: hasStoreEntry must be the reactive selector (above), NOT useVolunteerStore.getState(),
+  // otherwise React will not re-render when shifts are added/removed.
   const shiftsByDay = useMemo(() => {
     if (!activeVolunteer) return {};
     const result: Record<string, string[]> = {};
 
-    if (storeShifts && storeShifts.length > 0) {
-      storeShifts.forEach((s: any) => {
+    console.log('[RT-TRACE][DRAWER_SHIFTS_MEMO]', {
+      volunteerId: activeVolunteer.id,
+      hasStoreEntry,
+      storeShiftsCount: storeShifts?.length ?? 'undefined',
+      timestamp: new Date().toISOString()
+    });
+
+    // If the store has an entry for this volunteer (even an empty array after all shifts deleted),
+    // use Zustand as the single source of truth. This prevents stale fallback data.
+    if (hasStoreEntry) {
+      (storeShifts || []).forEach((s: any) => {
         if (!result[s.day_key]) result[s.day_key] = [];
         if (!result[s.day_key].includes(s.shift_key)) {
           result[s.day_key].push(s.shift_key);
@@ -155,7 +185,7 @@ export function VolunteerProfileDrawer({
       }
     });
     return result;
-  }, [activeVolunteer, storeShifts, globalShifts, shiftsData]);
+  }, [activeVolunteer, hasStoreEntry, storeShifts, globalShifts, shiftsData]);
 
   // Reset drawer state when volunteer changes
   useEffect(() => {
@@ -183,31 +213,17 @@ export function VolunteerProfileDrawer({
 
   const handleToggleShift = async (dayKey: string, shiftKey: string) => {
     const isCurrentlyAssigned = shiftsByDay[dayKey]?.includes(shiftKey);
-    const supabase = createClient();
 
     try {
-      if (isCurrentlyAssigned) {
-        const { error } = await supabase
-          .from('shifts')
-          .delete()
-          .eq('volunteer_id', activeVolunteer.id)
-          .eq('day_key', dayKey)
-          .eq('shift_key', shiftKey);
-        if (error) console.error('[DRAWER handleToggleShift] DELETE error:', error);
-      } else {
-        const { error } = await supabase
-          .from('shifts')
-          .upsert(
-            {
-              volunteer_id: activeVolunteer.id,
-              day_key: dayKey,
-              shift_key: shiftKey,
-            },
-            { onConflict: 'volunteer_id,day_key,shift_key' }
-          );
-        if (error) {
-          console.error('[DRAWER handleToggleShift] UPSERT error:', error);
-        }
+      const result = await toggleShiftAction(
+        activeVolunteer.id,
+        dayKey,
+        shiftKey,
+        !isCurrentlyAssigned
+      );
+      if (!result.success) {
+        showToast(result.error || 'Error al actualizar turno', 'error');
+        return;
       }
       await refresh(true);
     } catch (e: any) {

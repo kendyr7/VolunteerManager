@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { HighlightText } from '@/components/HighlightText';
+import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 
 export const USER_TABLE_STYLES = {
   name: "font-inter font-bold text-sm text-text leading-snug group-hover:text-text-bright transition-colors",
@@ -73,18 +74,34 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
   onResetPin,
   onArchive,
 }: VolunteerTableRowProps) {
-  console.log(`[VOLUNTEER TABLE ROW RENDER] id=${vol.id}, name=${vol.name}, ward=${vol.ward}, committee=${vol.committee}`);
+  const [isHighlighted, setIsHighlighted] = useState(false);
+
+  useEffect(() => {
+    const unsub = realtimeDebugLogger.subscribeHighlight((entityId) => {
+      if (entityId === vol.id) {
+        setIsHighlighted(true);
+        const timer = setTimeout(() => setIsHighlighted(false), 1500);
+        return () => clearTimeout(timer);
+      }
+    });
+    return unsub;
+  }, [vol.id]);
+
   const committeeColor = useMemo(() => getCommitteeColor(vol.committee), [vol.committee]);
 
   return (
     <div
       id={id}
-      className="flex items-center w-full px-5 py-3.5 hover:bg-white/[0.02] border-b border-white/5 transition-colors group cursor-pointer text-sm"
+      className={cn(
+        "flex items-center w-full px-5 py-3.5 hover:bg-white/[0.02] border-b border-white/5 transition-all duration-300 group cursor-pointer text-sm",
+        isHighlighted && "bg-amber-500/10 border-amber-500/30"
+      )}
       onClick={() => onEditClick(vol)}
     >
       <div className="flex-[2.5] min-w-[200px] pr-4">
         <p className={cn(USER_TABLE_STYLES.name, "flex items-center gap-2 flex-wrap")}>
           <HighlightText text={vol.name} term={appliedSearch} />
+          {isHighlighted && <span className="text-amber-400 text-xs font-mono font-bold animate-pulse">✨ REALTIME</span>}
           {vol.age != null && vol.age > 0 && vol.age < 18 && (
             <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-[10px] font-extrabold px-1.5 py-0">
               Menor ({vol.age}a)
@@ -92,8 +109,9 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
           )}
         </p>
       </div>
-      <div className="flex-[1.5] min-w-[140px] text-center font-inter font-bold text-[13px] text-text-dim shrink-0 truncate px-2">
-        {vol.ward}
+      <div className={cn("flex-[1.5] min-w-[140px] text-center font-inter font-bold text-[13px] text-text-dim shrink-0 truncate px-2 transition-all flex items-center justify-center gap-1", isHighlighted && "text-amber-300 font-extrabold")}>
+        <span>{vol.ward}</span>
+        {isHighlighted && <span className="text-[12px]">✨</span>}
       </div>
       <div className="flex-[1.5] min-w-[140px] text-center font-inter font-bold text-[13px] text-text-dim opacity-70 shrink-0 truncate px-2">
         {vol.stake}

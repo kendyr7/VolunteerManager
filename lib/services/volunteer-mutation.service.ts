@@ -25,6 +25,7 @@ import { getAdminSupabase } from '@/lib/supabase/admin';
 import { VolunteerDiffBuilder, VolunteerRow } from './volunteer-diff-builder';
 import { VolunteerAuditWriter, AuditActor, WriteEditAuditPayload } from './volunteer-audit-writer';
 import { getLocal8Digits, normalizePhoneE164 } from '@/lib/whatsapp';
+import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 
 export interface UpdateProfilePayload {
   firstName: string;
@@ -259,6 +260,22 @@ export class VolunteerMutationService {
         return { success: true, skipped: true };
       }
 
+      const traceId = realtimeDebugLogger.generateTraceId();
+      const startTime = performance.now();
+
+      realtimeDebugLogger.addLog({
+        traceId,
+        stage: 'MUTATION_START',
+        table: 'volunteers',
+        eventType: 'UPDATE',
+        volunteerId,
+        volunteerName: `${payload.firstName} ${payload.lastName}`.trim(),
+        details: `MUTATION START: updating neighborhood -> "${payload.neighborhood || ''}"`,
+        payload: { firstName: payload.firstName, neighborhood: payload.neighborhood },
+        oldValue: previous?.neighborhood,
+        newValue: payload.neighborhood,
+      });
+
       console.log('[MUTATION SERVICE][updateProfile] Payload:', {
         volunteerId,
         firstName: payload.firstName,
@@ -282,6 +299,8 @@ export class VolunteerMutationService {
         .select('*')
         .single();
 
+      const latencyMs = Math.round(performance.now() - startTime);
+
       console.log('[MUTATION SERVICE][updateProfile] DB Result:', {
         error: updateError,
         returnedNeighborhood: updatedRecord?.neighborhood,
@@ -290,8 +309,25 @@ export class VolunteerMutationService {
 
       if (updateError) {
         console.error('[VolunteerMutationService.updateProfile] DB update failed:', updateError);
+        realtimeDebugLogger.addLog({
+          traceId,
+          stage: 'DB_ERROR',
+          table: 'volunteers',
+          volunteerId,
+          details: `DATABASE UPDATE FAILED: ${updateError.message}`,
+        });
         return { success: false, error: updateError.message };
       }
+
+      realtimeDebugLogger.addLog({
+        traceId,
+        stage: 'DB_SUCCESS',
+        table: 'volunteers',
+        volunteerId,
+        volunteerName: `${payload.firstName} ${payload.lastName}`.trim(),
+        details: `DATABASE UPDATE SUCCESS in ${latencyMs}ms (updated_at: ${updatedRecord?.updated_at})`,
+        latencyMs: { db: latencyMs, total: latencyMs },
+      });
 
       // 7. Write audit log (non-blocking — never reverts the mutation on failure)
       await VolunteerAuditWriter.write({
@@ -1024,6 +1060,104 @@ export class VolunteerMutationService {
     } catch (err: any) {
       console.error('[VolunteerMutationService.applyPhoneCleanupDecision] Unexpected exception:', err);
       return { success: false, reason: 'error', error: err.message || 'Error inesperado al aplicar saneamiento telefónico.' };
+    }
+  }
+
+  /**
+   * Toggles (inserts or deletes) a single shift assignment for a volunteer using Service Role key.
+   */
+  static async toggleShift(
+    volunteerId: string,
+    dayKey: string,
+    shiftKey: string,
+    assign: boolean
+  ): Promise<MutationResult> {
+    try {
+      const supabase = await getAdminSupabase();
+
+      if (assign) {
+        const { error } = await supabase
+          .from('shifts')
+          .upsert(
+            {
+              volunteer_id: volunteerId,
+              day_key: dayKey,
+              shift_key: shiftKey,
+            },
+            { onConflict: 'volunteer_id,day_key,shift_key' }
+          );
+        if (error) {
+          console.error('[VolunteerMutationService.toggleShift] UPSERT error:', error);
+          return { success: false, error: error.message };
+        }
+      } else {
+        const { error } = await supabase
+          .from('shifts')
+          .delete()
+          .eq('volunteer_id', volunteerId)
+          .eq('day_key', dayKey)
+          .eq('shift_key', shiftKey);
+        if (error) {
+          console.error('[VolunteerMutationService.toggleShift] DELETE error:', error);
+          return { success: false, error: error.message };
+        }
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('[VolunteerMutationService.toggleShift] Exception:', err);
+      return { success: false, error: err.message || 'Error al actualizar turno' };
+    }
+  }
+
+  /**
+   * Replaces all shifts for a volunteer with new assignments using Service Role key.
+   */
+  static async saveShifts(
+    volunteerId: string,
+    shiftsByDay: Record<string, string[]>
+  ): Promise<MutationResult> {
+    try {
+      const supabase = await getAdminSupabase();
+
+      // Delete existing shifts
+      const { error: delErr } = await supabase
+        .from('shifts')
+        .delete()
+        .eq('volunteer_id', volunteerId);
+
+      if (delErr) {
+        console.error('[VolunteerMutationService.saveShifts] DELETE error:', delErr);
+        return { success: false, error: delErr.message };
+      }
+
+      // Build insert rows
+      const insertRows: any[] = [];
+      for (const [dayKey, shiftKeys] of Object.entries(shiftsByDay)) {
+        for (const shiftKey of shiftKeys) {
+          insertRows.push({
+            volunteer_id: volunteerId,
+            day_key: dayKey,
+            shift_key: shiftKey,
+          });
+        }
+      }
+
+      if (insertRows.length > 0) {
+        const { error: insErr } = await supabase
+          .from('shifts')
+          .insert(insertRows);
+
+        if (insErr) {
+          console.error('[VolunteerMutationService.saveShifts] INSERT error:', insErr);
+          return { success: false, error: insErr.message };
+        }
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('[VolunteerMutationService.saveShifts] Exception:', err);
+      return { success: false, error: err.message || 'Error al guardar turnos' };
     }
   }
 }

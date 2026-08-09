@@ -23,6 +23,7 @@ import { useRealtimeStore } from '@/lib/store/use-realtime-store';
 import { RealtimeEventQueue } from '@/lib/services/realtime-event-queue';
 import { SupabaseReconnectManager } from '@/lib/services/supabase-reconnect-manager';
 import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
+import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 
 const STALE_TIME_MS = 60_000;
 
@@ -110,16 +111,21 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
       processed.forEach((evt) => {
         if (evt.table === 'shifts') {
           setShiftsData((prev) => {
+            let nextShifts: any[];
             if (evt.eventType === 'DELETE') {
-              return prev.filter((s) => s.id !== evt.payload.id);
+              nextShifts = prev.filter((s) => s.id !== evt.payload.id);
+            } else {
+              const idx = prev.findIndex((s) => s.id === evt.payload.id);
+              if (idx !== -1) {
+                const copy = [...prev];
+                copy[idx] = mergeRealtimeRecord(copy[idx], evt.payload);
+                nextShifts = copy;
+              } else {
+                nextShifts = [evt.payload, ...prev];
+              }
             }
-            const idx = prev.findIndex((s) => s.id === evt.payload.id);
-            if (idx !== -1) {
-              const copy = [...prev];
-              copy[idx] = mergeRealtimeRecord(copy[idx], evt.payload);
-              return copy;
-            }
-            return [evt.payload, ...prev];
+            console.log(`[COORDINATOR PROVIDER][${clientId}] shiftsData updated for shiftId=${evt.payload.id}, totalShifts=${nextShifts.length}`);
+            return nextShifts;
           });
         } else {
           setRawVolunteers((prev) => {
@@ -256,25 +262,47 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
   // Set up Supabase Realtime for instant synchronization across all active coordinators
   useEffect(() => {
+    console.log('[REALTIME CHANNEL DIAGNOSTIC]', {
+      channelName: 'global_coordinator_realtime',
+      clientId,
+      timestamp: new Date().toISOString()
+    });
+
     const channel = supabase
       .channel('global_coordinator_realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'shifts' },
         (payload) => {
+          const traceId = realtimeDebugLogger.generateTraceId();
+          const recordId = (payload.new as any)?.id || (payload.old as any)?.id;
+
+          console.log('[RT-TRACE][CALLBACK]', {
+            clientId,
+            traceId,
+            table: 'shifts',
+            eventType: payload.eventType,
+            recordId,
+            timestamp: new Date().toISOString()
+          });
+
           const newRec = payload.new as any;
           const oldRec = payload.old as any;
-          console.log(`[REALTIME EVENT RECEIVED][${clientId}]`, {
-            eventType: payload.eventType,
+
+          realtimeDebugLogger.addLog({
+            traceId,
+            stage: 'REALTIME_RECEIVED',
             table: 'shifts',
-            id: newRec?.id || oldRec?.id,
-            record: payload.new,
-            oldRecord: payload.old,
+            eventType: payload.eventType as any,
+            volunteerId: newRec?.volunteer_id,
+            details: `Shift event ${payload.eventType} for shift ${newRec?.day_key || ''} ${newRec?.shift_key || ''}`,
+            payload: payload.eventType === 'DELETE' ? payload.old : payload.new,
           });
+
           if (payload.eventType === 'DELETE' && payload.old) {
-            eventQueueRef.current?.enqueue('DELETE', payload.old, 'shifts');
+            eventQueueRef.current?.enqueue('DELETE', payload.old, 'shifts', traceId);
           } else if (payload.eventType && payload.new) {
-            eventQueueRef.current?.enqueue(payload.eventType as any, payload.new, 'shifts');
+            eventQueueRef.current?.enqueue(payload.eventType as any, payload.new, 'shifts', traceId);
           }
         }
       )
@@ -282,28 +310,67 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'volunteers' },
         (payload) => {
+          const traceId = realtimeDebugLogger.generateTraceId();
+          const recordId = (payload.new as any)?.id || (payload.old as any)?.id;
+
+          console.log('[RT-TRACE][CALLBACK]', {
+            clientId,
+            traceId,
+            table: 'volunteers',
+            eventType: payload.eventType,
+            recordId,
+            timestamp: new Date().toISOString()
+          });
+
           const newRec = payload.new as any;
           const oldRec = payload.old as any;
-          console.log(`[REALTIME EVENT RECEIVED][${clientId}]`, {
-            eventType: payload.eventType,
+          const volName = newRec ? `${newRec.first_name || ''} ${newRec.last_name || ''}`.trim() : undefined;
+
+          realtimeDebugLogger.addLog({
+            traceId,
+            stage: 'REALTIME_RECEIVED',
             table: 'volunteers',
-            id: newRec?.id || oldRec?.id,
-            first_name: newRec?.first_name,
-            committee_id: newRec?.committee_id,
-            updated_at: newRec?.updated_at,
-            record: payload.new,
-            oldRecord: payload.old,
+            eventType: payload.eventType as any,
+            volunteerId: newRec?.id || oldRec?.id,
+            volunteerName: volName,
+            details: `Volunteer ${payload.eventType}: ${volName || ''} (${newRec?.neighborhood || ''})`,
+            payload: payload.eventType === 'DELETE' ? payload.old : payload.new,
           });
+
           if (payload.eventType === 'DELETE' && payload.old) {
-            eventQueueRef.current?.enqueue('DELETE', payload.old, 'volunteers');
+            eventQueueRef.current?.enqueue('DELETE', payload.old, 'volunteers', traceId);
           } else if (payload.eventType && payload.new) {
-            eventQueueRef.current?.enqueue(payload.eventType as any, payload.new, 'volunteers');
+            eventQueueRef.current?.enqueue(payload.eventType as any, payload.new, 'volunteers', traceId);
           }
         }
       )
       .subscribe((status) => {
-        console.log(`[REALTIME DEBUG][${clientId}] channel = global_coordinator_realtime, status = ${status}`);
+        console.log('[REALTIME CHANNEL STATUS]', {
+          channel: 'global_coordinator_realtime',
+          status,
+          clientId,
+          timestamp: new Date().toISOString()
+        });
+
+        realtimeDebugLogger.setConnectionStatus(status);
         if (status === 'SUBSCRIBED') {
+          console.log(`
+================================================
+REALTIME SUBSCRIPTION ACTIVE
+================================================
+client: ${clientId}
+channel: global_coordinator_realtime
+status: SUBSCRIBED
+
+postgres_changes:
+volunteers: UPDATE
+volunteers: INSERT
+volunteers: DELETE
+shifts: UPDATE
+shifts: INSERT
+shifts: DELETE
+================================================
+          `);
           useRealtimeStore.getState().recordHeartbeat();
           void SupabaseReconnectManager.getInstance().recoverMissedEvents();
           fetchData(false);
