@@ -58,9 +58,12 @@ export function processShiftsData(shiftsData: any[], volunteers: any[] = []) {
     const key = `${s.volunteer_id}-${s.day_key}-${s.shift_key}`;
     if (s.checked_in || s.checked_in_at || s.checked_out || s.checked_out_at) {
       checkedInMap[key] = true;
+      if (s.id) checkedInMap[s.id] = true;
     }
     if (s.checked_out || s.checked_out_at) {
       checkedOutMap[key] = true;
+      if (s.id) checkedOutMap[s.id] = true;
+      if (s.volunteer_id) checkedOutMap[s.volunteer_id] = true;
     }
 
     // Assignments index (The core optimization)

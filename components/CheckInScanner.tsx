@@ -193,11 +193,20 @@ export function CheckInScanner({
     fetchDbHistory();
   }, [fetchDbHistory]);
 
-  // Realtime subscription for Scanner history (listens to postgres updates on shifts table)
+  // Realtime subscription for Scanner history (listens to Broadcast shift_sync and postgres updates on shifts table)
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel('checkin_scanner_realtime')
+      .channel('global_coordinator_realtime')
+      .on(
+        'broadcast',
+        { event: 'shift_sync' },
+        (payload) => {
+          console.log('⚡ [CHECKIN SCANNER REALTIME BROADCAST RECEIVED]', payload);
+          fetchDbHistory();
+          if (refresh) refresh();
+        }
+      )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'shifts' },
@@ -234,9 +243,13 @@ export function CheckInScanner({
          dbItem.shiftKey?.toLowerCase() === itemShiftKey?.toLowerCase())
       );
 
+      const volId = (item as any).volunteerId || (item as any).volunteer_id || (dbMatch as any)?.volunteer_id;
+
       const isOutInContext = item.isCompleted || (dbMatch && dbMatch.isCompleted) || !!(checkedOutMap && (
         checkedOutMap[item.id] ||
-        (itemDayKey && itemShiftKey && checkedOutMap[`${item.id}-${itemDayKey}-${itemShiftKey}`])
+        (volId && checkedOutMap[volId]) ||
+        (volId && itemDayKey && itemShiftKey && checkedOutMap[`${volId}-${itemDayKey}-${itemShiftKey}`]) ||
+        (item.id && itemDayKey && itemShiftKey && checkedOutMap[`${item.id}-${itemDayKey}-${itemShiftKey}`])
       ));
 
       if (isOutInContext) {
