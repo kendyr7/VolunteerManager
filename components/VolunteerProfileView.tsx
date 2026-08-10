@@ -909,6 +909,7 @@ export function VolunteerProfileView({
                   <Button
                     size="sm"
                     onClick={() => {
+                      console.log('[SHIFT SAVE] Guardar button clicked in VolunteerProfileView');
                       if (onSaveShifts) onSaveShifts();
                       setLocalEditingShifts(false);
                     }}

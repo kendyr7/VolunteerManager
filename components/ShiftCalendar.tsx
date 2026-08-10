@@ -123,6 +123,16 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
           loadShifts();
         }
       )
+      .on(
+        'broadcast',
+        { event: 'shift_sync' },
+        (eventPayload) => {
+          const payload = eventPayload?.payload;
+          if (payload?.table === 'shifts' && payload?.record?.volunteer_id === volunteerId) {
+            loadShifts();
+          }
+        }
+      )
       .subscribe();
 
     return () => {

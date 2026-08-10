@@ -307,6 +307,46 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         }
       )
       .on(
+        'broadcast',
+        { event: 'shift_sync' },
+        (eventPayload) => {
+          const payload = eventPayload?.payload;
+          if (!payload || payload.table !== 'shifts' || !payload.record) return;
+
+          const traceId = realtimeDebugLogger.generateTraceId();
+          const eventType = payload.eventType;
+          const record = payload.record;
+
+          console.log('[RT-TRACE][BROADCAST_CALLBACK]', {
+            clientId,
+            traceId,
+            table: 'shifts',
+            eventType,
+            recordId: record.id,
+            volunteerId: record.volunteer_id,
+            dayKey: record.day_key,
+            shiftKey: record.shift_key,
+            timestamp: new Date().toISOString()
+          });
+
+          realtimeDebugLogger.addLog({
+            traceId,
+            stage: 'REALTIME_RECEIVED',
+            table: 'shifts',
+            eventType: eventType as any,
+            volunteerId: record.volunteer_id,
+            details: `Broadcast shift ${eventType}: ${record.day_key || ''} / ${record.shift_key || ''}`,
+            payload: record,
+          });
+
+          if (eventType === 'DELETE') {
+            eventQueueRef.current?.enqueue('DELETE', record, 'shifts', traceId);
+          } else if (eventType) {
+            eventQueueRef.current?.enqueue(eventType as any, record, 'shifts', traceId);
+          }
+        }
+      )
+      .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'volunteers' },
         (payload) => {

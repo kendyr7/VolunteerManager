@@ -26,6 +26,7 @@ import { VolunteerDiffBuilder, VolunteerRow } from './volunteer-diff-builder';
 import { VolunteerAuditWriter, AuditActor, WriteEditAuditPayload } from './volunteer-audit-writer';
 import { getLocal8Digits, normalizePhoneE164 } from '@/lib/whatsapp';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
+import { broadcastShiftSync } from './shift-broadcast.service';
 
 export interface UpdateProfilePayload {
   firstName: string;
@@ -1072,40 +1073,73 @@ export class VolunteerMutationService {
     shiftKey: string,
     assign: boolean
   ): Promise<MutationResult> {
+    console.log('[SHIFT ACTION] started:', { volunteerId, dayKey, shiftKey, assign });
     try {
       const supabase = await getAdminSupabase();
 
       if (assign) {
-        const { error } = await supabase
+        const { data: insertedShift, error } = await supabase
           .from('shifts')
           .upsert(
             {
               volunteer_id: volunteerId,
               day_key: dayKey,
               shift_key: shiftKey,
+              updated_at: new Date().toISOString(),
             },
             { onConflict: 'volunteer_id,day_key,shift_key' }
-          );
+          )
+          .select('id, volunteer_id, day_key, shift_key, updated_at')
+          .single();
+
         if (error) {
-          console.error('[VolunteerMutationService.toggleShift] UPSERT error:', error);
+          console.error('[SHIFT ACTION] DB UPSERT error:', error);
           return { success: false, error: error.message };
         }
+
+        console.log('[SHIFT ACTION] DB UPSERT completed:', insertedShift?.id);
+        if (insertedShift) {
+          broadcastShiftSync({
+            eventType: 'INSERT',
+            table: 'shifts',
+            record: insertedShift,
+          });
+        }
       } else {
+        const { data: existingShift } = await supabase
+          .from('shifts')
+          .select('id, volunteer_id, day_key, shift_key')
+          .eq('volunteer_id', volunteerId)
+          .eq('day_key', dayKey)
+          .eq('shift_key', shiftKey)
+          .maybeSingle();
+
         const { error } = await supabase
           .from('shifts')
           .delete()
           .eq('volunteer_id', volunteerId)
           .eq('day_key', dayKey)
           .eq('shift_key', shiftKey);
+
         if (error) {
-          console.error('[VolunteerMutationService.toggleShift] DELETE error:', error);
+          console.error('[SHIFT ACTION] DB DELETE error:', error);
           return { success: false, error: error.message };
+        }
+
+        console.log('[SHIFT ACTION] DB DELETE completed:', existingShift?.id);
+        if (existingShift) {
+          broadcastShiftSync({
+            eventType: 'DELETE',
+            table: 'shifts',
+            record: existingShift,
+          });
         }
       }
 
+      console.log('[SHIFT ACTION] returning response success: true');
       return { success: true };
     } catch (err: any) {
-      console.error('[VolunteerMutationService.toggleShift] Exception:', err);
+      console.error('[SHIFT ACTION] Exception:', err);
       return { success: false, error: err.message || 'Error al actualizar turno' };
     }
   }
@@ -1120,6 +1154,12 @@ export class VolunteerMutationService {
     try {
       const supabase = await getAdminSupabase();
 
+      // Fetch existing shifts before deleting
+      const { data: oldShifts } = await supabase
+        .from('shifts')
+        .select('id, volunteer_id, day_key, shift_key')
+        .eq('volunteer_id', volunteerId);
+
       // Delete existing shifts
       const { error: delErr } = await supabase
         .from('shifts')
@@ -1131,26 +1171,49 @@ export class VolunteerMutationService {
         return { success: false, error: delErr.message };
       }
 
+      if (oldShifts && oldShifts.length > 0) {
+        for (const oldS of oldShifts) {
+          broadcastShiftSync({
+            eventType: 'DELETE',
+            table: 'shifts',
+            record: oldS,
+          });
+        }
+      }
+
       // Build insert rows
       const insertRows: any[] = [];
+      const nowIso = new Date().toISOString();
       for (const [dayKey, shiftKeys] of Object.entries(shiftsByDay)) {
         for (const shiftKey of shiftKeys) {
           insertRows.push({
             volunteer_id: volunteerId,
             day_key: dayKey,
             shift_key: shiftKey,
+            updated_at: nowIso,
           });
         }
       }
 
       if (insertRows.length > 0) {
-        const { error: insErr } = await supabase
+        const { data: newShifts, error: insErr } = await supabase
           .from('shifts')
-          .insert(insertRows);
+          .insert(insertRows)
+          .select('id, volunteer_id, day_key, shift_key, updated_at');
 
         if (insErr) {
           console.error('[VolunteerMutationService.saveShifts] INSERT error:', insErr);
           return { success: false, error: insErr.message };
+        }
+
+        if (newShifts && newShifts.length > 0) {
+          for (const ns of newShifts) {
+            broadcastShiftSync({
+              eventType: 'INSERT',
+              table: 'shifts',
+              record: ns,
+            });
+          }
         }
       }
 

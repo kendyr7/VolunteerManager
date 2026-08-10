@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { getActiveEventDays, formatDateShort } from '@/lib/dates';
 import { createClient } from '@/lib/supabase/client';
 import { useCoordinatorData } from '@/lib/coordinator-data-context';
+import { toggleShiftAction } from '@/app/actions/volunteer-actions';
 
 export interface ReassignShiftModalProps {
   isOpen: boolean;
@@ -200,48 +201,22 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
     try {
       if (mode === 'coordinator') {
         if (sourceDayKey && sourceShiftId) {
-          await supabase
-            .from('shifts')
-            .delete()
-            .eq('volunteer_id', volunteer.id)
-            .eq('day_key', sourceDayKey)
-            .eq('shift_key', sourceShiftId);
+          await toggleShiftAction(volunteer.id, sourceDayKey, sourceShiftId, false);
         }
 
-        const { error } = await supabase
-          .from('shifts')
-          .upsert(
-            {
-              volunteer_id: volunteer.id,
-              day_key: targetDayKey,
-              shift_key: targetShiftId,
-            },
-            { onConflict: 'volunteer_id,day_key,shift_key', ignoreDuplicates: true }
-          );
+        const res = await toggleShiftAction(volunteer.id, targetDayKey, targetShiftId, true);
 
-        if (error) {
-          if (onError) onError(`Error al reasignar: ${error.message}`);
+        if (!res.success) {
+          if (onError) onError(`Error al reasignar: ${res.error}`);
         } else {
           await refresh(true);
 
           const undoAction = async () => {
-            const client = createClient();
             if (targetDayKey && targetShiftId) {
-              await client
-                .from('shifts')
-                .delete()
-                .eq('volunteer_id', volunteer.id)
-                .eq('day_key', targetDayKey)
-                .eq('shift_key', targetShiftId);
+              await toggleShiftAction(volunteer.id, targetDayKey, targetShiftId, false);
             }
             if (sourceDayKey && sourceShiftId) {
-              await client
-                .from('shifts')
-                .upsert({
-                  volunteer_id: volunteer.id,
-                  day_key: sourceDayKey,
-                  shift_key: sourceShiftId,
-                });
+              await toggleShiftAction(volunteer.id, sourceDayKey, sourceShiftId, true);
             }
             await refresh(true);
           };

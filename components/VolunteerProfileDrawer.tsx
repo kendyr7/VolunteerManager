@@ -187,27 +187,38 @@ export function VolunteerProfileDrawer({
     return result;
   }, [activeVolunteer, hasStoreEntry, storeShifts, globalShifts, shiftsData]);
 
+  const prevVolunteerIdRef = useRef<string | null>(null);
+
   // Reset drawer state when volunteer changes
   useEffect(() => {
-    if (isOpen && activeVolunteer) {
-      setDrawerMode(initialMode);
-      setIsEditingShifts(false);
-
-      const parts = (activeVolunteer.name || `${activeVolunteer.first_name || ''} ${activeVolunteer.last_name || ''}`).trim().split(/\s+/);
-      const fn = activeVolunteer.first_name || (parts.length >= 2 ? parts.slice(0, Math.ceil(parts.length / 2)).join(' ') : parts[0] || '');
-      const ln = activeVolunteer.last_name || (parts.length >= 2 ? parts.slice(Math.ceil(parts.length / 2)).join(' ') : '');
-
-      setEditFirstName(fn);
-      setEditLastName(ln);
-      setEditPhone(activeVolunteer.phone || '');
-      setEditStake(activeVolunteer.stake || '');
-      setEditWard(activeVolunteer.ward || '');
-      setEditAge(activeVolunteer.age ? String(activeVolunteer.age) : '');
-
-      const comm = committeesList.find((c: any) => c.id === activeVolunteer.committee_id || c.name === activeVolunteer.committee);
-      setEditCommitteeId(comm ? comm.id : (activeVolunteer.committee_id || ''));
+    if (!isOpen) {
+      prevVolunteerIdRef.current = null;
+      return;
     }
-  }, [isOpen, activeVolunteer, committeesList, initialMode]);
+
+    if (isOpen && activeVolunteer) {
+      const isNewVolunteer = prevVolunteerIdRef.current !== activeVolunteer.id;
+      if (isNewVolunteer) {
+        prevVolunteerIdRef.current = activeVolunteer.id;
+        setDrawerMode(initialMode);
+        setIsEditingShifts(false);
+
+        const parts = (activeVolunteer.name || `${activeVolunteer.first_name || ''} ${activeVolunteer.last_name || ''}`).trim().split(/\s+/);
+        const fn = activeVolunteer.first_name || (parts.length >= 2 ? parts.slice(0, Math.ceil(parts.length / 2)).join(' ') : parts[0] || '');
+        const ln = activeVolunteer.last_name || (parts.length >= 2 ? parts.slice(Math.ceil(parts.length / 2)).join(' ') : '');
+
+        setEditFirstName(fn);
+        setEditLastName(ln);
+        setEditPhone(activeVolunteer.phone || '');
+        setEditStake(activeVolunteer.stake || '');
+        setEditWard(activeVolunteer.ward || '');
+        setEditAge(activeVolunteer.age ? String(activeVolunteer.age) : '');
+
+        const comm = committeesList.find((c: any) => c.id === activeVolunteer.committee_id || c.name === activeVolunteer.committee);
+        setEditCommitteeId(comm ? comm.id : (activeVolunteer.committee_id || ''));
+      }
+    }
+  }, [isOpen, activeVolunteer?.id, committeesList, initialMode]);
 
   if (!isOpen || !activeVolunteer) return null;
 
@@ -353,6 +364,11 @@ export function VolunteerProfileDrawer({
                     isEditingShifts={isEditingShifts}
                     canEditShifts={canEditShifts()}
                     onStartEditShifts={() => setIsEditingShifts(prev => !prev)}
+                    onSaveShifts={() => {
+                      console.log('[SHIFT SAVE] clicked / onSaveShifts triggered in Drawer');
+                      setIsEditingShifts(false);
+                      showToast('Turnos actualizados correctamente');
+                    }}
                     onStartEditProfile={() => setDrawerMode('edit_profile')}
                   />
                 </motion.div>
