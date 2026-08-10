@@ -2,6 +2,7 @@
 
 import { getAdminSupabase } from "@/lib/supabase/admin";
 import { createActivityLog } from "./activity-actions";
+import { broadcastShiftSync } from "@/lib/services/shift-broadcast.service";
 
 /**
  * Formatea una fecha según la zona horaria oficial de Nicaragua (America/Managua, UTC-6)
@@ -48,7 +49,7 @@ export async function undoVolunteerCheckInAction({
     const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : 'Voluntario';
 
     // 2. Limpiar marcas de entrada en la tabla shifts
-    const { error } = await supabase
+    const { data: updatedShift, error } = await supabase
       .from('shifts')
       .update({
         checked_in: false,
@@ -56,10 +57,20 @@ export async function undoVolunteerCheckInAction({
       })
       .eq('volunteer_id', volunteerId)
       .eq('day_key', dayKey)
-      .eq('shift_key', shiftKey);
+      .eq('shift_key', shiftKey)
+      .select('*')
+      .maybeSingle();
 
     if (error) {
       return { success: false, error: error.message };
+    }
+
+    if (updatedShift) {
+      broadcastShiftSync({
+        eventType: 'UPDATE',
+        table: 'shifts',
+        record: updatedShift,
+      });
     }
 
     // 3. Registrar auditoría inmutable
@@ -107,7 +118,7 @@ export async function reopenCompletedShiftAction({
     const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : 'Voluntario';
 
     // Limpiar marcas de salida y mantener checked_in activo
-    const { error } = await supabase
+    const { data: updatedShift, error } = await supabase
       .from('shifts')
       .update({
         checked_out: false,
@@ -116,10 +127,20 @@ export async function reopenCompletedShiftAction({
       })
       .eq('volunteer_id', volunteerId)
       .eq('day_key', dayKey)
-      .eq('shift_key', shiftKey);
+      .eq('shift_key', shiftKey)
+      .select('*')
+      .maybeSingle();
 
     if (error) {
       return { success: false, error: error.message };
+    }
+
+    if (updatedShift) {
+      broadcastShiftSync({
+        eventType: 'UPDATE',
+        table: 'shifts',
+        record: updatedShift,
+      });
     }
 
     const timeStr = formatNicaraguaTime();
@@ -170,7 +191,7 @@ export async function rollbackReassignmentAction({
     const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : 'Voluntario';
 
     // 1. Actualización atómica del turno sin flicker por DELETE + UPSERT
-    const { error: insErr } = await supabase
+    const { data: updatedShift, error: insErr } = await supabase
       .from('shifts')
       .update({
         day_key: previousDayKey,
@@ -182,11 +203,13 @@ export async function rollbackReassignmentAction({
       })
       .eq('volunteer_id', volunteerId)
       .eq('day_key', currentDayKey)
-      .eq('shift_key', currentShiftKey);
+      .eq('shift_key', currentShiftKey)
+      .select('*')
+      .maybeSingle();
 
-    if (insErr) {
+    if (insErr || !updatedShift) {
       // Fallback a upsert directo sin eliminar la fila si no existía previamente
-      await supabase
+      const { data: upsertedShift } = await supabase
         .from('shifts')
         .upsert(
           {
@@ -197,7 +220,23 @@ export async function rollbackReassignmentAction({
             checked_out: false
           },
           { onConflict: 'volunteer_id,day_key,shift_key' }
-        );
+        )
+        .select('*')
+        .maybeSingle();
+
+      if (upsertedShift) {
+        broadcastShiftSync({
+          eventType: 'UPDATE',
+          table: 'shifts',
+          record: upsertedShift,
+        });
+      }
+    } else {
+      broadcastShiftSync({
+        eventType: 'UPDATE',
+        table: 'shifts',
+        record: updatedShift,
+      });
     }
 
     if (insErr) {

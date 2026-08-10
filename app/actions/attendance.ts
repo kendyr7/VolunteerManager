@@ -6,6 +6,7 @@ import { createClient, getAdminClient } from "@/lib/supabase/server";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { revalidatePath } from "next/cache";
+import { broadcastShiftSync } from "@/lib/services/shift-broadcast.service";
 
 function getSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -40,19 +41,40 @@ async function safeUpdateShiftCheckIn(
     }
   }
 
-  const { error } = await supabase
+  const { data: updatedShift, error } = await supabase
     .from('shifts')
     .update(updatePayload)
-    .eq('id', shiftId);
+    .eq('id', shiftId)
+    .select('*')
+    .single();
+
+  if (!error && updatedShift) {
+    broadcastShiftSync({
+      eventType: 'UPDATE',
+      table: 'shifts',
+      record: updatedShift,
+    });
+    return null;
+  }
 
   // Fallback: if update with checked_in_by failed due to any constraint, retry without checked_in_by
   if (error && updatePayload.checked_in_by) {
     console.warn("Retrying check-in update without checked_in_by:", error.message);
     delete updatePayload.checked_in_by;
-    const { error: fallbackErr } = await supabase
+    const { data: fallbackShift, error: fallbackErr } = await supabase
       .from('shifts')
       .update(updatePayload)
-      .eq('id', shiftId);
+      .eq('id', shiftId)
+      .select('*')
+      .single();
+
+    if (!fallbackErr && fallbackShift) {
+      broadcastShiftSync({
+        eventType: 'UPDATE',
+        table: 'shifts',
+        record: fallbackShift,
+      });
+    }
     return fallbackErr;
   }
 
@@ -405,18 +427,28 @@ export async function checkOutVolunteer(shiftId: string) {
   try {
     const supabase = getAdminClient();
 
-    const { error } = await supabase
+    const { data: updatedShift, error } = await supabase
       .from('shifts')
       .update({
         checked_in: true,
         checked_out: true,
         checked_out_at: new Date().toISOString(),
       })
-      .eq('id', shiftId);
+      .eq('id', shiftId)
+      .select('*')
+      .maybeSingle();
 
     if (error) {
       console.error("Error in checkOutVolunteer:", error);
       return { error: error.message };
+    }
+
+    if (updatedShift) {
+      broadcastShiftSync({
+        eventType: 'UPDATE',
+        table: 'shifts',
+        record: updatedShift,
+      });
     }
 
     try {
@@ -449,7 +481,7 @@ export async function adjustCheckoutTimeAction({
 
     const { data: shift, error: fetchErr } = await supabase
       .from('shifts')
-      .select('*, volunteers(first_name, last_name, phone)')
+      .select('*')
       .eq('id', shiftId)
       .maybeSingle();
 
@@ -457,21 +489,37 @@ export async function adjustCheckoutTimeAction({
       return { error: "No se encontró el registro del turno para ajustar." };
     }
 
-    const { error: updateErr } = await supabase
+    const { data: updatedShift, error: updateErr } = await supabase
       .from('shifts')
       .update({
         checked_in: true,
         checked_out: true,
         checked_out_at: newCheckOutIso
       })
-      .eq('id', shiftId);
+      .eq('id', shiftId)
+      .select('*')
+      .maybeSingle();
 
     if (updateErr) {
       return { error: updateErr.message };
     }
 
-    const volName = shift.volunteers
-      ? `${shift.volunteers.first_name || ''} ${shift.volunteers.last_name || ''}`.trim()
+    if (updatedShift) {
+      broadcastShiftSync({
+        eventType: 'UPDATE',
+        table: 'shifts',
+        record: updatedShift,
+      });
+    }
+
+    const { data: vol } = await supabase
+      .from('volunteers')
+      .select('first_name, last_name')
+      .eq('id', shift.volunteer_id)
+      .maybeSingle();
+
+    const volName = vol
+      ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim()
       : 'Voluntario';
 
     const oldDateStr = shift.checked_out_at
@@ -512,12 +560,20 @@ export async function reassignVolunteerShift(shiftId: string, newDayKey: string,
         shift_key: newShiftKey,
       })
       .eq('id', shiftId)
-      .select()
-      .single();
+      .select('*')
+      .maybeSingle();
 
     if (error) {
       console.error("Error in reassignVolunteerShift:", error);
       return { error: error.message };
+    }
+
+    if (data) {
+      broadcastShiftSync({
+        eventType: 'UPDATE',
+        table: 'shifts',
+        record: data,
+      });
     }
 
     try {

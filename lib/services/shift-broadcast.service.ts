@@ -9,8 +9,14 @@ export interface ShiftSyncBroadcastPayload {
     day_key: string;
     shift_key: string;
     checked_in?: boolean;
+    checked_in_at?: string | null;
+    checked_in_by?: string | null;
     checked_out?: boolean;
+    checked_out_at?: string | null;
+    status?: string | null;
     updated_at?: string;
+    created_at?: string;
+    [key: string]: any;
   };
   traceId?: string;
 }

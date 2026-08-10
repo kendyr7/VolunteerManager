@@ -6,6 +6,7 @@ import { sendWhatsAppText, sendShiftChangeResultTemplate } from '@/lib/whatsapp-
 import { formatE164 } from '@/lib/whatsapp';
 import { verifySessionToken } from '@/lib/auth';
 import { createActivityLog } from '@/app/actions/activity-actions';
+import { broadcastShiftSync } from '@/lib/services/shift-broadcast.service';
 
 function getAdminClient() {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -49,8 +50,11 @@ export async function approveShiftChangeRequestAction(requestId: string) {
     const supabase = getAdminClient();
 
     // 0. Identify reviewer profile from session token
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session')?.value || '';
+    let sessionCookie = '';
+    try {
+      const cookieStore = await cookies();
+      sessionCookie = cookieStore.get('session')?.value || '';
+    } catch (_) {}
     const session = verifySessionToken(sessionCookie);
 
     let reviewerId: string | null = null;
@@ -87,7 +91,15 @@ export async function approveShiftChangeRequestAction(requestId: string) {
       return { success: false, error: "Voluntario desvinculado" };
     }
 
-    // 2. Remove old shift
+    // 2. Fetch and remove old shift
+    const { data: oldShift } = await supabase
+      .from('shifts')
+      .select('id, volunteer_id, day_key, shift_key')
+      .eq('volunteer_id', request.volunteer_id)
+      .eq('day_key', request.current_day_key)
+      .eq('shift_key', request.current_shift_key)
+      .maybeSingle();
+
     await supabase
       .from('shifts')
       .delete()
@@ -95,18 +107,36 @@ export async function approveShiftChangeRequestAction(requestId: string) {
       .eq('day_key', request.current_day_key)
       .eq('shift_key', request.current_shift_key);
 
+    if (oldShift) {
+      broadcastShiftSync({
+        eventType: 'DELETE',
+        table: 'shifts',
+        record: oldShift,
+      });
+    }
+
     // 3. Insert new shift
-    const { error: insErr } = await supabase
+    const { data: newShift, error: insErr } = await supabase
       .from('shifts')
       .upsert({
         volunteer_id: request.volunteer_id,
         day_key: request.requested_day_key,
         shift_key: request.requested_shift_key
-      }, { onConflict: 'volunteer_id,day_key,shift_key' });
+      }, { onConflict: 'volunteer_id,day_key,shift_key' })
+      .select('*')
+      .single();
 
     if (insErr) {
       console.error("Error updating shift for approval:", insErr);
       return { success: false, error: insErr.message };
+    }
+
+    if (newShift) {
+      broadcastShiftSync({
+        eventType: 'INSERT',
+        table: 'shifts',
+        record: newShift,
+      });
     }
 
     // 4. Update request status with reviewer UUID
