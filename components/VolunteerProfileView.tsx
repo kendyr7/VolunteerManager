@@ -33,6 +33,7 @@ import {
   formatUnifiedDuration
 } from "@/lib/shift-calculations";
 import { getVolunteerProfileMetrics } from "@/lib/services/volunteer-profile.service";
+import { AdminSessionCorrectionModal } from "./AdminSessionCorrectionModal";
 
 export interface VolunteerProfileData {
   id: string;
@@ -105,6 +106,7 @@ export function VolunteerProfileView({
   const [fetchedDbRecords, setFetchedDbRecords] = useState<any[]>([]);
   const [fetchedSessions, setFetchedSessions] = useState<any[]>([]);
   const [loadingAuditLogs, setLoadingAuditLogs] = useState<boolean>(false);
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState<boolean>(false);
 
   const storeShifts = useVolunteerStore((s) => s.shiftsByVolunteerMap.get(volunteer.id)) || [];
   const hasStoreEntry = useVolunteerStore((s) => s.shiftsByVolunteerMap.has(volunteer.id));
@@ -678,22 +680,47 @@ export function VolunteerProfileView({
 
       {/* Stale Open Session Alert Banner (Día Anterior) */}
       {staleOpenSession && (
-        <div className="mb-4 p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-medium flex items-center justify-between gap-3 animate-in fade-in shadow-lg">
+        <div className="mb-4 p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-medium flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in shadow-lg">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
               <span className="material-symbols-outlined text-[18px] text-amber-400">warning</span>
             </div>
             <div>
-              <span className="font-bold text-amber-300 block text-xs">⚠ Pendiente de corrección / Sesión del día anterior</span>
+              <span className="font-bold text-amber-300 block text-xs">⚠ Salida pendiente (Día anterior o turno finalizado)</span>
               <span className="text-text-dim text-[11px] block mt-0.5">
                 Entrada: {format(new Date(staleOpenSession.started_at), 'hh:mm a')} ({staleOpenSession.day_key}) · Salida: No registrada
               </span>
             </div>
           </div>
-          <Badge className="bg-amber-500/25 text-amber-300 border border-amber-500/50 text-[10px] shrink-0 font-extrabold uppercase">
-            Pendiente
-          </Badge>
+          {isAdmin ? (
+            <button
+              onClick={() => setIsCorrectionModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-[11px] shrink-0 shadow transition-transform active:scale-95"
+            >
+              Corregir salida
+            </button>
+          ) : (
+            <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] shrink-0 font-bold uppercase">
+              Pendiente (Solo Admin)
+            </Badge>
+          )}
         </div>
+      )}
+
+      {/* Admin Session Correction Modal */}
+      {isCorrectionModalOpen && staleOpenSession && (
+        <AdminSessionCorrectionModal
+          isOpen={isCorrectionModalOpen}
+          onClose={() => setIsCorrectionModalOpen(false)}
+          session={staleOpenSession}
+          volunteerName={`${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim()}
+          assignedShiftKeys={dbShiftRecords.filter(r => r.day_key === staleOpenSession.day_key).map(r => r.shift_key)}
+          onSuccess={async () => {
+            const res = await fetchVolunteerAttendanceSessionsAction(volunteer.id);
+            if (res?.success && res.sessions) setFetchedSessions(res.sessions);
+            await refresh?.(true);
+          }}
+        />
       )}
 
       {/* Pending Shift Change Banner */}

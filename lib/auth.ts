@@ -85,3 +85,13 @@ export function verifySessionToken(token: string): SessionData | null {
     return null;
   }
 }
+
+export function getNormalizedRole(): string {
+  if (typeof window === 'undefined') return 'Admin';
+  const role = localStorage.getItem('mock_role') || 'Admin';
+  const normalized = role.toLowerCase().trim();
+  if (normalized === 'coordinador') return 'Editor';
+  if (normalized === 'voluntario') return 'Lector';
+  if (normalized === 'admin' || normalized === 'administrador') return 'Admin';
+  return role;
+}

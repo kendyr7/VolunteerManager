@@ -21,6 +21,9 @@ import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 
+import { getNormalizedRole } from "@/lib/auth";
+import { AdminSessionCorrectionModal } from "@/components/AdminSessionCorrectionModal";
+
 interface CheckInScannerProps {
   coordinatorId: string;
   coordinatorName: string;

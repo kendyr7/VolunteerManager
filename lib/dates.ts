@@ -194,3 +194,23 @@ export function formatDateShort(date: Date) {
 export function formatMonthName(date: Date) {
   return format(date, "MMMM", { locale: es });
 }
+
+/**
+ * Converts short day_key (e.g. "vie 11", "sáb 12") or ISO date string to "YYYY-MM-DD"
+ */
+export function parseDayKeyToDateStr(dayKey?: string | Date | null): string {
+  if (!dayKey) return '2026-09-11';
+  if (dayKey instanceof Date) {
+    return format(dayKey, "yyyy-MM-dd");
+  }
+  const raw = String(dayKey).trim().toLowerCase();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+  const numMatch = raw.match(/\d+/);
+  if (numMatch) {
+    const dayNum = String(parseInt(numMatch[0], 10)).padStart(2, '0');
+    return `2026-09-${dayNum}`;
+  }
+  return '2026-09-11';
+}

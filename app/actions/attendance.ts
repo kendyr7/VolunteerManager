@@ -15,6 +15,7 @@ import {
   saveAttendanceSession,
   getOpenSessionForVolunteer,
   fetchAllAttendanceSessionsFromDb,
+  completeOpenAttendanceSessionInDb,
 } from "@/lib/services/session-store";
 
 function getSecret(): string {
@@ -404,15 +405,17 @@ export async function closeAttendanceSessionAction({
   // ENFORCE SERVER TIMESTAMP FOR NORMAL CHECKOUT (Rejects client-supplied endedAt)
   const newEndedAt = new Date().toISOString();
 
-  const updatedRecord: AttendanceSession = {
-    ...sessionToClose,
-    ended_at: newEndedAt,
-    status: 'completed',
-    auto_closed: false,
-    updated_at: new Date().toISOString()
-  };
+  const atomicRes = await completeOpenAttendanceSessionInDb(sessionToClose.id, newEndedAt, false);
+  if (atomicRes.alreadyClosed || !atomicRes.success) {
+    return {
+      success: true,
+      alreadyClosed: true,
+      session: atomicRes.session || sessionToClose,
+      message: "La sesión ya fue finalizada previamente."
+    };
+  }
 
-  const saved = await saveAttendanceSession(updatedRecord);
+  const saved = atomicRes.session!;
 
   // Broadcast realtime event
   broadcastSessionSync({
@@ -483,12 +486,14 @@ export async function adjustSessionTimesAdminAction({
   sessionId,
   startedAt,
   endedAt,
-  reason
+  reason: rawReason,
+  correctionType = 'manual_adjustment'
 }: {
   sessionId: string;
   startedAt?: string;
   endedAt?: string;
-  reason: string;
+  reason?: string;
+  correctionType?: 'official_shift_end' | 'custom_time' | 'manual_adjustment';
 }) {
   let session = null;
   try {
@@ -507,8 +512,13 @@ export async function adjustSessionTimesAdminAction({
     throw new Error("Solo Administradores pueden realizar ajustes manuales de horario.");
   }
 
-  if (!reason || !reason.trim()) {
-    throw new Error("Se requiere especificar un motivo explícito para realizar una corrección administrativa.");
+  let finalReason = (rawReason || '').trim();
+  if (correctionType === 'official_shift_end') {
+    finalReason = "Salida olvidada - se utilizó el fin oficial del bloque programado";
+  } else {
+    if (!finalReason || finalReason.length < 5) {
+      throw new Error("Se requiere especificar un motivo de al menos 5 caracteres para realizar la corrección.");
+    }
   }
 
   const all = await fetchAllAttendanceSessionsFromDb();
@@ -516,6 +526,16 @@ export async function adjustSessionTimesAdminAction({
 
   if (!targetSession) {
     return { success: false, error: "Sesión de asistencia no encontrada." };
+  }
+
+  // Concurrency & Idempotency Protection (Caso I)
+  if (targetSession.status === 'completed' && targetSession.ended_at) {
+    return {
+      success: true,
+      alreadyClosed: true,
+      session: targetSession,
+      message: "La sesión ya fue finalizada por otro usuario o escáner QR."
+    };
   }
 
   const previousStartedAt = targetSession.started_at;
@@ -531,15 +551,53 @@ export async function adjustSessionTimesAdminAction({
     throw new Error(constraintCheck.error || "Ajuste de horario inválido.");
   }
 
-  const updatedRecord: AttendanceSession = {
-    ...targetSession,
-    started_at: newStartedAt,
-    ended_at: newEndedAt,
-    status: newStatus,
-    updated_at: new Date().toISOString()
-  };
+  // Validation: ended_at cannot be in the future (Caso G)
+  if (newEndedAt) {
+    const endMs = new Date(newEndedAt).getTime();
+    if (!isNaN(endMs) && endMs > Date.now() + 60000) { // 1 min buffer for clock skew
+      throw new Error("No se puede registrar una hora de salida en el futuro.");
+    }
 
-  const saved = await saveAttendanceSession(updatedRecord);
+    // Validation: ended_at must belong to the exact calendar date of session.day_key (Caso H)
+    const { parseDayKeyToDateStr } = require('@/lib/dates');
+    const dayKeyDateStr = parseDayKeyToDateStr(targetSession.day_key); // "2026-09-11"
+    
+    const endNicaStr = new Date(newEndedAt).toLocaleString("en-US", { timeZone: "America/Managua" });
+    const endNicaDate = new Date(endNicaStr);
+    const endYyyy = endNicaDate.getFullYear();
+    const endMm = String(endNicaDate.getMonth() + 1).padStart(2, '0');
+    const endDd = String(endNicaDate.getDate()).padStart(2, '0');
+    const endNicaDateIso = `${endYyyy}-${endMm}-${endDd}`;
+
+    if (dayKeyDateStr && endNicaDateIso !== dayKeyDateStr) {
+      throw new Error(`La fecha de salida (${endNicaDateIso}) debe pertenecer a la misma fecha del día asignado (${dayKeyDateStr}).`);
+    }
+  }
+
+  let saved: AttendanceSession;
+
+  if (targetSession.status === 'open' && newEndedAt) {
+    const atomicRes = await completeOpenAttendanceSessionInDb(sessionId, newEndedAt, false);
+    if (atomicRes.alreadyClosed || !atomicRes.success) {
+      return {
+        success: true,
+        alreadyClosed: true,
+        session: atomicRes.session || targetSession,
+        message: atomicRes.error || "La sesión ya fue finalizada por otro usuario."
+      };
+    }
+    saved = atomicRes.session!;
+  } else {
+    const updatedRecord: AttendanceSession = {
+      ...targetSession,
+      started_at: newStartedAt,
+      ended_at: newEndedAt,
+      status: newStatus,
+      auto_closed: false,
+      updated_at: new Date().toISOString()
+    };
+    saved = await saveAttendanceSession(updatedRecord);
+  }
 
   broadcastSessionSync({
     eventType: 'UPDATE',
@@ -548,6 +606,7 @@ export async function adjustSessionTimesAdminAction({
   });
 
   const adminName = session.userName || 'Administrador';
+  const adminId = session.userId || 'admin-server-session';
 
   // Log in activity_logs
   try {
@@ -555,17 +614,18 @@ export async function adjustSessionTimesAdminAction({
     await supabase.from('activity_logs').insert({
       user_name: adminName,
       user_role: 'Admin',
-      action_type: 'Edición Sesión',
-      description: `Ajustó horario de sesión de asistencia de voluntario`,
+      action_type: 'Corrección Salida Olvidada',
+      description: `Corrigió salida olvidada de sesión de asistencia (${correctionType === 'official_shift_end' ? 'Hora oficial' : 'Hora personalizada'})`,
       details: JSON.stringify({
         sessionId: saved.id,
         volunteerId: saved.volunteer_id,
-        field: 'session_times',
         previousStartedAt,
         newStartedAt,
         previousEndedAt,
         newEndedAt,
-        reason: reason.trim(),
+        reason: finalReason,
+        correctionType,
+        adminId,
         adminName
       }),
       target_id: saved.id
