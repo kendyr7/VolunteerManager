@@ -197,7 +197,7 @@ export function CheckInScanner({
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel('global_coordinator_realtime')
+      .channel('checkin_scanner_realtime')
       .on(
         'broadcast',
         { event: 'shift_sync' },
