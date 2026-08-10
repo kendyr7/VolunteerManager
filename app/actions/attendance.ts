@@ -6,7 +6,16 @@ import { createClient, getAdminClient } from "@/lib/supabase/server";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { revalidatePath } from "next/cache";
-import { broadcastShiftSync } from "@/lib/services/shift-broadcast.service";
+import { broadcastShiftSync, broadcastSessionSync } from "@/lib/services/shift-broadcast.service";
+import { cookies } from "next/headers";
+import { verifySessionToken } from "@/lib/auth";
+import { getOfficialShiftTime } from "@/lib/dates";
+import { AttendanceSession, validateSessionConstraints } from "@/lib/session-utils";
+import {
+  saveAttendanceSession,
+  getOpenSessionForVolunteer,
+  fetchAllAttendanceSessionsFromDb,
+} from "@/lib/services/session-store";
 
 function getSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -124,14 +133,12 @@ function parseShiftDateTime(dayKey: string, shiftKey: string): Date {
   const dayNumPart = dayKey.split(' ')[1];
   const dayNum = parseInt(dayNumPart) || 10; // Fallback to 10
   
-  let endHour = 12;
-  if (shiftKey === 'T2') endHour = 15;
-  if (shiftKey === 'T3') endHour = 18;
-  if (shiftKey === 'T4') endHour = 22;
+  const official = getOfficialShiftTime(dayKey, shiftKey);
+  const endHour = official.endHour;
 
   // Nicaragua is UTC-6. So UTC Time = Nicaragua Time + 6 hours.
   // Using Date.UTC guarantees a timezone-independent absolute epoch timestamp.
-  const utcMillis = Date.UTC(2026, 8, dayNum, endHour + 6, 0, 0);
+  const utcMillis = Date.UTC(2026, 8, dayNum, Math.floor(endHour) + 6, Math.round((endHour % 1) * 60), 0);
   return new Date(utcMillis);
 }
 
@@ -149,26 +156,37 @@ function isCurrentTimeInShiftWindow(dayKey: string, shiftKey: string): boolean {
 
   const currentHour = nicaNow.getHours() + nicaNow.getMinutes() / 60;
 
+  const official = getOfficialShiftTime(dayKey, shiftKey);
   // Window definitions (StartHour - 45 min buffer to EndHour + 45 min buffer)
-  let startWindow = 7.25; // T1 starts at 8:00 AM (7:15 AM)
-  let endWindow = 12.75; // T1 ends at 12:00 PM (12:45 PM)
-
-  if (shiftKey === 'T2') {
-    startWindow = 10.25; // 11:00 AM (10:15 AM)
-    endWindow = 15.75;  // 3:00 PM (3:45 PM)
-  } else if (shiftKey === 'T3') {
-    startWindow = 13.25; // 2:00 PM (1:15 PM)
-    endWindow = 18.75;  // 6:00 PM (6:45 PM)
-  } else if (shiftKey === 'T4') {
-    startWindow = 16.25; // 5:00 PM (4:15 PM)
-    endWindow = 22.75;  // 10:00 PM (10:45 PM)
-  }
+  const startWindow = official.startHour - 0.75; // e.g. T1 starts at 7:00 AM (6:15 AM buffer)
+  const endWindow = official.endHour + 0.75;     // e.g. T1 ends at 12:00 PM (12:45 PM buffer)
 
   return currentHour >= startWindow && currentHour <= endWindow;
 }
 
 // 1. Generate Dynamic Pass Token
 export async function generateEntryPassToken(volunteerId: string) {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get('session')?.value || '';
+  const session = verifySessionToken(sessionCookie);
+
+  // Security Authorization check: User must be authenticated
+  if (!session) {
+    throw new Error("No autenticado. Debes iniciar sesión para generar un pase QR.");
+  }
+
+  const isSelf = session.userId === volunteerId;
+  const normalizedRole = (session.role || '').toLowerCase().trim();
+  const isAdmin = normalizedRole === 'admin' || normalizedRole === 'administrador';
+
+  // Authorization rule:
+  // - Volunteer can generate THEIR OWN pass (isSelf)
+  // - Admin can generate the pass of ANY volunteer (isAdmin)
+  // - Coordinator / Editor cannot generate the pass of another volunteer
+  if (!isSelf && !isAdmin) {
+    throw new Error("No tienes permiso para generar el pase QR de este voluntario. Solo administradores pueden generar pases de otros usuarios.");
+  }
+
   const timestamp = Date.now();
   const hmac = crypto.createHmac("sha256", getSecret());
   hmac.update(`${volunteerId}:${timestamp}`);
@@ -223,7 +241,341 @@ export async function recalculateReliability(volunteerId: string) {
   }
 }
 
-// 3. Process Check-in via QR Scan or manual selection
+// ----------------------------------------------------------------------
+// ATTENDANCE SESSIONS DOMAIN ACTIONS (SINGLE SOURCE OF TRUTH)
+// ----------------------------------------------------------------------
+
+// ----------------------------------------------------------------------
+// ATTENDANCE SESSIONS DOMAIN ACTIONS (SINGLE SOURCE OF TRUTH)
+// ----------------------------------------------------------------------
+
+// 1. Open Attendance Session Action
+export async function openAttendanceSessionAction(
+  volunteerId: string,
+  dayKeyInput?: string,
+  isInternalCall = false
+) {
+  // Authorization check: Must be internal call (from validated QR checkInVolunteer) OR authenticated Admin
+  if (!isInternalCall) {
+    let isAdmin = false;
+    try {
+      const cookieStore = await cookies();
+      const sessionCookie = cookieStore.get('session')?.value || '';
+      const session = verifySessionToken(sessionCookie);
+      const normalizedRole = (session?.role || '').toLowerCase().trim();
+      isAdmin = normalizedRole === 'admin' || normalizedRole === 'administrador';
+    } catch (e) {}
+
+    if (!isAdmin) {
+      throw new Error("No autorizado para abrir sesión directamente sin flujo QR o rol Admin.");
+    }
+  }
+
+  // Server-generated Nicaragua time & day_key (Never trust client timestamp/dayKey for check-in)
+  const nicaString = new Date().toLocaleString("en-US", { timeZone: "America/Managua" });
+  const nicaNow = new Date(nicaString);
+  const serverDayKey = format(nicaNow, "EEE d", { locale: es }).toLowerCase();
+  const dayKey = isInternalCall ? serverDayKey : (dayKeyInput || serverDayKey);
+
+  // Check if open session already exists (Caso 4: Doble check-in)
+  const existingOpen = await getOpenSessionForVolunteer(volunteerId);
+  if (existingOpen) {
+    return {
+      success: true,
+      session: existingOpen,
+      alreadyOpen: true,
+      message: "El voluntario ya posee una sesión activa."
+    };
+  }
+
+  // Server-generated timestamp (Never trust client timestamp)
+  const nowIso = new Date().toISOString();
+  const sessionRecord: AttendanceSession = {
+    id: crypto.randomUUID(),
+    volunteer_id: volunteerId,
+    day_key: dayKey,
+    started_at: nowIso,
+    ended_at: null,
+    status: 'open',
+    auto_closed: false,
+    created_at: nowIso,
+    updated_at: nowIso,
+  };
+
+  const saved = await saveAttendanceSession(sessionRecord);
+
+  // Broadcast realtime event
+  broadcastSessionSync({
+    eventType: 'INSERT',
+    table: 'attendance_sessions',
+    record: saved,
+  });
+
+  // Audit Log in activity_logs with JSON payload
+  try {
+    const supabase = getAdminClient();
+    const { data: vol } = await supabase
+      .from('volunteers')
+      .select('first_name, last_name')
+      .eq('id', volunteerId)
+      .maybeSingle();
+
+    const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : 'Voluntario';
+
+    await supabase.from('activity_logs').insert({
+      user_name: 'Escáner QR',
+      user_role: 'Sistema',
+      action_type: 'Check-in',
+      description: `Inició sesión de asistencia de ${volName}`,
+      details: JSON.stringify({
+        sessionId: saved.id,
+        volunteerId,
+        startedAt: saved.started_at,
+        dayKey: saved.day_key
+      }),
+      target_id: saved.id
+    });
+  } catch (e) {}
+
+  try {
+    revalidatePath('/shifts');
+    revalidatePath('/volunteers');
+    revalidatePath('/check-in');
+    revalidatePath('/dashboard');
+  } catch (e) {}
+
+  return {
+    success: true,
+    action: 'opened',
+    session: saved
+  };
+}
+
+// 2. Close Attendance Session Action (Server timestamp, Idempotent)
+export async function closeAttendanceSessionAction({
+  sessionId,
+  volunteerId,
+  actorNameInput,
+  actorRoleInput
+}: {
+  sessionId?: string;
+  volunteerId?: string;
+  endedAt?: string; // Ignored for normal checkout to enforce server timestamp!
+  actorNameInput?: string;
+  actorRoleInput?: string;
+}) {
+  let sessionToClose: AttendanceSession | null = null;
+
+  if (sessionId) {
+    const all = await fetchAllAttendanceSessionsFromDb();
+    sessionToClose = all.find(s => s.id === sessionId) || null;
+  }
+
+  if (!sessionToClose && volunteerId) {
+    sessionToClose = await getOpenSessionForVolunteer(volunteerId);
+  }
+
+  if (!sessionToClose) {
+    return { success: false, error: "No se encontró una sesión activa para cerrar." };
+  }
+
+  // Idempotencia: Si ya estaba completada (Caso 6: Doble check-out), NO sobrescribir ended_at
+  if (sessionToClose.status === 'completed') {
+    return {
+      success: true,
+      alreadyClosed: true,
+      session: sessionToClose,
+      message: "La sesión ya estaba finalizada."
+    };
+  }
+
+  // Derive actor identity from server cookie session if available
+  let actorName = actorNameInput || 'Coordinador';
+  let actorRole = actorRoleInput || 'Coordinador';
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session')?.value || '';
+    const session = verifySessionToken(sessionCookie);
+    if (session?.userName) actorName = session.userName;
+    if (session?.role) actorRole = session.role;
+  } catch (e) {}
+
+  const previousEndedAt = sessionToClose.ended_at;
+  // ENFORCE SERVER TIMESTAMP FOR NORMAL CHECKOUT (Rejects client-supplied endedAt)
+  const newEndedAt = new Date().toISOString();
+
+  const updatedRecord: AttendanceSession = {
+    ...sessionToClose,
+    ended_at: newEndedAt,
+    status: 'completed',
+    auto_closed: false,
+    updated_at: new Date().toISOString()
+  };
+
+  const saved = await saveAttendanceSession(updatedRecord);
+
+  // Broadcast realtime event
+  broadcastSessionSync({
+    eventType: 'UPDATE',
+    table: 'attendance_sessions',
+    record: saved,
+  });
+
+  // Audit Log in activity_logs with JSON payload
+  try {
+    const supabase = getAdminClient();
+    const { data: vol } = await supabase
+      .from('volunteers')
+      .select('first_name, last_name')
+      .eq('id', saved.volunteer_id)
+      .maybeSingle();
+
+    const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : 'Voluntario';
+
+    await supabase.from('activity_logs').insert({
+      user_name: actorName,
+      user_role: actorRole,
+      action_type: 'Check-out',
+      description: `Finalizó sesión de asistencia de ${volName}`,
+      details: JSON.stringify({
+        sessionId: saved.id,
+        volunteerId: saved.volunteer_id,
+        previousEndedAt,
+        newEndedAt: saved.ended_at
+      }),
+      target_id: saved.id
+    });
+  } catch (e) {}
+
+  try {
+    revalidatePath('/shifts');
+    revalidatePath('/volunteers');
+    revalidatePath('/check-in');
+    revalidatePath('/dashboard');
+  } catch (e) {}
+
+  return {
+    success: true,
+    action: 'closed',
+    session: saved
+  };
+}
+
+// 3. Get Open Attendance Session Action
+export async function getOpenAttendanceSessionAction(volunteerId: string) {
+  const session = await getOpenSessionForVolunteer(volunteerId);
+  return { success: true, session };
+}
+
+// 3.5. Fetch Volunteer Attendance Sessions Action (Safe for Client Components)
+export async function fetchVolunteerAttendanceSessionsAction(volunteerId: string) {
+  try {
+    const all = await fetchAllAttendanceSessionsFromDb();
+    const volunteerSessions = all.filter(s => s.volunteer_id === volunteerId);
+    return { success: true, sessions: volunteerSessions };
+  } catch (e: any) {
+    return { success: false, error: e?.message || "Error al cargar sesiones", sessions: [] };
+  }
+}
+
+// 4. Admin Adjustment of Session Times Action (Requires Admin role, reason, and validates chronology)
+export async function adjustSessionTimesAdminAction({
+  sessionId,
+  startedAt,
+  endedAt,
+  reason
+}: {
+  sessionId: string;
+  startedAt?: string;
+  endedAt?: string;
+  reason: string;
+}) {
+  let session = null;
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session')?.value || '';
+    session = verifySessionToken(sessionCookie);
+  } catch (e) {}
+
+  if (!session) {
+    throw new Error("No autenticado. Debes iniciar sesión como Administrador.");
+  }
+
+  const normalizedRole = (session.role || '').toLowerCase().trim();
+  const isAdmin = normalizedRole === 'admin' || normalizedRole === 'administrador';
+  if (!isAdmin) {
+    throw new Error("Solo Administradores pueden realizar ajustes manuales de horario.");
+  }
+
+  if (!reason || !reason.trim()) {
+    throw new Error("Se requiere especificar un motivo explícito para realizar una corrección administrativa.");
+  }
+
+  const all = await fetchAllAttendanceSessionsFromDb();
+  const targetSession = all.find(s => s.id === sessionId);
+
+  if (!targetSession) {
+    return { success: false, error: "Sesión de asistencia no encontrada." };
+  }
+
+  const previousStartedAt = targetSession.started_at;
+  const previousEndedAt = targetSession.ended_at;
+
+  const newStartedAt = startedAt || targetSession.started_at;
+  const newEndedAt = endedAt !== undefined ? endedAt : targetSession.ended_at;
+  const newStatus = newEndedAt ? 'completed' : 'open';
+
+  // Chronology & constraint validation (ended_at >= started_at)
+  const constraintCheck = validateSessionConstraints(newStartedAt, newEndedAt, newStatus);
+  if (!constraintCheck.valid) {
+    throw new Error(constraintCheck.error || "Ajuste de horario inválido.");
+  }
+
+  const updatedRecord: AttendanceSession = {
+    ...targetSession,
+    started_at: newStartedAt,
+    ended_at: newEndedAt,
+    status: newStatus,
+    updated_at: new Date().toISOString()
+  };
+
+  const saved = await saveAttendanceSession(updatedRecord);
+
+  broadcastSessionSync({
+    eventType: 'UPDATE',
+    table: 'attendance_sessions',
+    record: saved,
+  });
+
+  const adminName = session.userName || 'Administrador';
+
+  // Log in activity_logs
+  try {
+    const supabase = getAdminClient();
+    await supabase.from('activity_logs').insert({
+      user_name: adminName,
+      user_role: 'Admin',
+      action_type: 'Edición Sesión',
+      description: `Ajustó horario de sesión de asistencia de voluntario`,
+      details: JSON.stringify({
+        sessionId: saved.id,
+        volunteerId: saved.volunteer_id,
+        field: 'session_times',
+        previousStartedAt,
+        newStartedAt,
+        previousEndedAt,
+        newEndedAt,
+        reason: reason.trim(),
+        adminName
+      }),
+      target_id: saved.id
+    });
+  } catch (e) {}
+
+  return { success: true, session: saved };
+}
+
+// 5. Process Check-in via QR Scan or manual selection
 export async function checkInVolunteer(qrValueString: string, coordinatorId: string, manualShiftId?: string) {
   const supabase = getAdminClient();
 
@@ -231,7 +583,6 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
   
   if (manualShiftId) {
     try {
-      // Manual override check-in for a specific shift ID
       const { data: shift, error: shiftErr } = await supabase
         .from('shifts')
         .select('volunteer_id, day_key, shift_key')
@@ -250,12 +601,10 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         return { error: "Error al registrar la asistencia en la base de datos." };
       }
 
-      // Recalculamos la fiabilidad en segundo plano sin bloquear el flujo principal del Check-In
       recalculateReliability(volunteerId).catch(err => 
         console.error("Error en segundo plano al recalcular fiabilidad (manual):", err)
       );
 
-      // Fetch volunteer details to return
       const { data: vol } = await supabase
         .from('volunteers')
         .select('*, committees(name)')
@@ -265,10 +614,8 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       const volunteerName = vol ? `${vol.first_name} ${vol.last_name}` : "Voluntario";
       const shiftDetail = `${shift.day_key} - ${shift.shift_key}`;
 
-      // Log activity to audit logs
       await logCheckInActivity(supabase, coordinatorId, volunteerName, shiftDetail, manualShiftId);
 
-      // Revalidate app routes so shifts and attendance status reflect immediately
       try {
         revalidatePath('/shifts');
         revalidatePath('/volunteers');
@@ -298,7 +645,6 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       return { error: "Código QR inválido. Formato no compatible." };
     }
 
-    // Verify signature
     const hmac = crypto.createHmac("sha256", getSecret());
     hmac.update(`${id}:${ts}`);
     const expectedSig = hmac.digest("hex");
@@ -307,9 +653,8 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       return { error: "Código QR no válido o alterado." };
     }
 
-    // Verify expiration (30 minutes)
     const elapsed = Date.now() - ts;
-    if (elapsed > 30 * 60 * 1000 || elapsed < -5 * 60 * 1000) { // 30 min expiration, with 5 min grace for clock skew
+    if (elapsed > 30 * 60 * 1000 || elapsed < -5 * 60 * 1000) {
       return { error: "El código QR ha expirado. Por favor, solicite al voluntario actualizar su pantalla." };
     }
 
@@ -329,86 +674,71 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
     return { error: "Voluntario no encontrado en el sistema." };
   }
 
-  // Fetch all scheduled shifts for the volunteer
-  const { data: shifts, error: shiftsError } = await supabase
+  const volunteerName = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim();
+
+  // 1. Check if volunteer already has an open session
+  const nicaString = new Date().toLocaleString("en-US", { timeZone: "America/Managua" });
+  const nicaNow = new Date(nicaString);
+  const currentDayKey = format(nicaNow, "EEE d", { locale: es }).toLowerCase();
+
+  const openSession = await getOpenSessionForVolunteer(volunteerId);
+  if (openSession) {
+    const isSameDay = (openSession.day_key || '').toLowerCase().trim() === currentDayKey;
+
+    if (!isSameDay) {
+      // Requirement 6: Sesión abierta de día anterior -> return action 'stale_open_session'
+      return {
+        success: true,
+        action: 'stale_open_session',
+        isStaleOpen: true,
+        session: openSession,
+        previousDayKey: openSession.day_key,
+        startedAt: openSession.started_at,
+        volunteer: volunteerName,
+        committee: volunteer.committees?.name || "Sin comité",
+        message: `El voluntario ${volunteerName} posee una sesión pendiente del día anterior (${openSession.day_key}).`
+      };
+    }
+
+    // Same day open session (Caso 5: Segundo QR)
+    return {
+      success: true,
+      action: 'confirm_checkout',
+      alreadyOpen: true,
+      session: openSession,
+      volunteer: volunteerName,
+      committee: volunteer.committees?.name || "Sin comité",
+      message: `El voluntario ${volunteerName} ya posee una sesión activa iniciada a las ${new Date(openSession.started_at).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit', hour12: true })}.`
+    };
+  }
+
+  // 2. Open new attendance session (Caso 1-3)
+  const openRes = await openAttendanceSessionAction(volunteerId, currentDayKey, true);
+  if (openRes.success && openRes.session) {
+    return {
+      success: true,
+      action: 'opened',
+      session: openRes.session,
+      volunteer: volunteerName,
+      committee: volunteer.committees?.name || "Sin comité",
+      shiftDetail: `${openRes.session.day_key} - Sesión Continua`
+    };
+  }
+
+  // Fetch all scheduled shifts for manual selection fallback if needed
+  const { data: shifts } = await supabase
     .from('shifts')
     .select('*')
     .eq('volunteer_id', volunteerId);
 
-  if (shiftsError || !shifts || shifts.length === 0) {
-    return {
-      error: `El voluntario ${volunteer.first_name} ${volunteer.last_name} no tiene turnos programados en el sistema.`
-    };
-  }
-
-  // Filter shifts for today (based on America/Managua time)
-  const nicaString = new Date().toLocaleString("en-US", { timeZone: "America/Managua" });
-  const nicaNow = new Date(nicaString);
-  const todayKey = format(nicaNow, "EEE d", { locale: es }).toLowerCase();
-  
-  const todayShifts = shifts.filter((s: any) => s.day_key.toLowerCase() === todayKey);
-
-  // Try to find a shift that is currently in its time window
-  const activeShift = todayShifts.find((s: any) => isCurrentTimeInShiftWindow(s.day_key, s.shift_key));
-
-  if (activeShift) {
-    const shiftDetail = `${activeShift.day_key} - ${activeShift.shift_key}`;
-    const volunteerName = `${volunteer.first_name} ${volunteer.last_name}`;
-
-    // Check if already checked in
-    if (activeShift.checked_in) {
-      return {
-        alreadyCheckedIn: true,
-        message: "Este turno ya tiene asistencia registrada.",
-        volunteer: volunteerName,
-        committee: volunteer.committees?.name || "Sin comité",
-        shiftDetail
-      };
-    }
-
-    const checkinErr = await safeUpdateShiftCheckIn(supabase, activeShift.id, coordinatorId);
-
-    if (checkinErr) {
-      return { error: "Error al registrar la asistencia en base de datos." };
-    }
-
-    // Recalculamos la fiabilidad en segundo plano sin bloquear el flujo principal del Check-In
-    recalculateReliability(volunteerId).catch(err => 
-      console.error("Error en segundo plano al recalcular fiabilidad (QR):", err)
-    );
-
-    // Log activity
-    await logCheckInActivity(supabase, coordinatorId, volunteerName, shiftDetail, activeShift.id);
-
-    // Revalidate app routes
-    try {
-      revalidatePath('/shifts');
-      revalidatePath('/volunteers');
-      revalidatePath('/check-in');
-      revalidatePath('/dashboard');
-    } catch (rErr) {}
-
-    return {
-      success: true,
-      volunteer: volunteerName,
-      committee: volunteer.committees?.name || "Sin comité",
-      shiftDetail
-    };
-  }
-
-  // If no shift is active right now, return the list of their shifts so the coordinator can select manually
-  // Map shifts to show details
-  const formattedShifts = shifts.map((s: any) => {
-    let timeLabel = "8-12 AM";
-    if (s.shift_key === 'T2') timeLabel = "11 AM-3 PM";
-    if (s.shift_key === 'T3') timeLabel = "2-6 PM";
-    if (s.shift_key === 'T4') timeLabel = "5-10 PM";
+  const formattedShifts = (shifts || []).map((s: any) => {
+    const official = getOfficialShiftTime(s.day_key, s.shift_key);
 
     return {
       id: s.id,
       dayKey: s.day_key,
       shiftKey: s.shift_key,
-      timeLabel,
+      timeLabel: official.shortTimeLabel,
       checkedIn: s.checked_in,
       checkedInAt: s.checked_in_at
     };

@@ -7,6 +7,7 @@ import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EntryPassButton } from "@/components/EntryPassButton";
+import { canQrCheckin, getNormalizedRole } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import {
   createShiftChangeRequestAction,
@@ -23,6 +24,7 @@ import {
   reopenCompletedShiftAction
 } from "@/app/actions/audit-actions";
 import { fetchVolunteerAuditLogsAction, fetchVolunteerShiftRecordsAction } from "@/app/actions/activity-actions";
+import { fetchVolunteerAttendanceSessionsAction } from "@/app/actions/attendance";
 import { useOptionalCoordinatorData } from "@/lib/coordinator-data-context";
 import { useVolunteerStore } from "@/lib/store/use-volunteer-store";
 import {
@@ -93,6 +95,7 @@ export function VolunteerProfileView({
 }: VolunteerProfileViewProps) {
   const coordinatorData = useOptionalCoordinatorData();
   const { refresh } = coordinatorData ?? {};
+  const isAdmin = getNormalizedRole() === 'Admin';
 
   const [showLegend, setShowLegend] = useState(false);
   const [activeTab, setActiveTab] = useState<'schedule' | 'requests' | 'audit'>('schedule');
@@ -100,14 +103,12 @@ export function VolunteerProfileView({
 
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [fetchedDbRecords, setFetchedDbRecords] = useState<any[]>([]);
+  const [fetchedSessions, setFetchedSessions] = useState<any[]>([]);
   const [loadingAuditLogs, setLoadingAuditLogs] = useState<boolean>(false);
 
   const storeShifts = useVolunteerStore((s) => s.shiftsByVolunteerMap.get(volunteer.id)) || [];
-  // Reactive: true even when the volunteer has 0 shifts (empty array vs undefined).
-  // Must be a selector, NOT getState(), so React re-renders when the map entry changes.
   const hasStoreEntry = useVolunteerStore((s) => s.shiftsByVolunteerMap.has(volunteer.id));
 
-  // Combined real-time shift records from O(1) store index + coordinator context + fetched records
   const dbShiftRecords = useMemo(() => {
     console.log('[RT-TRACE][VIEW_SHIFTS_MEMO]', {
       volunteerId: volunteer.id,
@@ -126,7 +127,6 @@ export function VolunteerProfileView({
   // Permisos y Usuario
   const userRole = typeof window !== 'undefined' ? localStorage.getItem('mock_role') || 'Admin' : 'Admin';
   const userName = typeof window !== 'undefined' ? localStorage.getItem('mock_user_name') || 'Administrador' : 'Administrador';
-  const isAdmin = userRole === 'Admin';
 
   // Auditoría State
   const [auditMessage, setAuditMessage] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
@@ -329,6 +329,19 @@ export function VolunteerProfileView({
     ? getVolunteerShiftCapacity(rescheduleCtx, targetDayKey, targetShiftKey)
     : { committeeName: '', count: 0, maxReq: 0, isFull: false };
 
+  const staleOpenSession = useMemo(() => {
+    const openSess = fetchedSessions.find((s: any) => s.status === 'open');
+    if (!openSess) return null;
+    const nicaString = new Date().toLocaleString("en-US", { timeZone: "America/Managua" });
+    const nicaNow = new Date(nicaString);
+    const currentDayKey = format(nicaNow, "EEE d", { locale: es }).toLowerCase();
+    const sessDayKey = (openSess.day_key || openSess.dayKey || '').toLowerCase();
+    if (sessDayKey && sessDayKey !== currentDayKey) {
+      return openSess;
+    }
+    return null;
+  }, [fetchedSessions]);
+
   const isSourceDayFullyCompleted = (dayKey: string) => {
     const shifts = shiftsByDay[dayKey] || [];
     return shifts.length > 0 && shifts.every(t => isVolunteerShiftCompleted(rescheduleCtx, dayKey, t));
@@ -350,14 +363,15 @@ export function VolunteerProfileView({
     const fullName = volunteer.first_name
       ? `${volunteer.first_name} ${volunteer.last_name || ''}`.trim()
       : volunteer.name;
-    const [auditRes, shiftRecordsRes] = await Promise.all([
+    const [auditRes, shiftRecordsRes, sessionsRes] = await Promise.all([
       fetchVolunteerAuditLogsAction(
         volunteer.id,
         fullName,
         volunteer.phone,
         (volunteer as any).created_at
       ),
-      fetchVolunteerShiftRecordsAction(volunteer.id)
+      fetchVolunteerShiftRecordsAction(volunteer.id),
+      fetchVolunteerAttendanceSessionsAction(volunteer.id)
     ]);
 
     if (auditRes.success && auditRes.logs) {
@@ -365,6 +379,9 @@ export function VolunteerProfileView({
     }
     if (shiftRecordsRes.success && shiftRecordsRes.shiftRecords) {
       setFetchedDbRecords(shiftRecordsRes.shiftRecords);
+    }
+    if (sessionsRes.success && sessionsRes.sessions) {
+      setFetchedSessions(sessionsRes.sessions);
     }
     setLoadingAuditLogs(false);
   };
@@ -629,8 +646,8 @@ export function VolunteerProfileView({
   const nameParts = (volunteer.name || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`).trim().split(/\s+/).filter(Boolean);
 
   const profileMetrics = useMemo(() => {
-    return getVolunteerProfileMetrics(volunteer.id, dbShiftRecords, auditLogs);
-  }, [volunteer.id, dbShiftRecords, auditLogs]);
+    return getVolunteerProfileMetrics(volunteer.id, dbShiftRecords, auditLogs, fetchedSessions);
+  }, [volunteer.id, dbShiftRecords, auditLogs, fetchedSessions]);
 
   const kpiHoursDisplay = useMemo(() => {
     return {
@@ -656,6 +673,26 @@ export function VolunteerProfileView({
             <span>{auditMessage.msg}</span>
           </div>
           <button onClick={() => setAuditMessage(null)} className="text-text-dim hover:text-text">✕</button>
+        </div>
+      )}
+
+      {/* Stale Open Session Alert Banner (Día Anterior) */}
+      {staleOpenSession && (
+        <div className="mb-4 p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-medium flex items-center justify-between gap-3 animate-in fade-in shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-[18px] text-amber-400">warning</span>
+            </div>
+            <div>
+              <span className="font-bold text-amber-300 block text-xs">⚠ Pendiente de corrección / Sesión del día anterior</span>
+              <span className="text-text-dim text-[11px] block mt-0.5">
+                Entrada: {format(new Date(staleOpenSession.started_at), 'hh:mm a')} ({staleOpenSession.day_key}) · Salida: No registrada
+              </span>
+            </div>
+          </div>
+          <Badge className="bg-amber-500/25 text-amber-300 border border-amber-500/50 text-[10px] shrink-0 font-extrabold uppercase">
+            Pendiente
+          </Badge>
         </div>
       )}
 
@@ -764,31 +801,41 @@ export function VolunteerProfileView({
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-2">
-            <Button
-              variant="outline"
-              className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate cursor-pointer"
-              onClick={() => window.open(`https://wa.me/${(volunteer.phone || '').replace(/\s+/g, '')}`, '_blank')}
-            >
-              <span className="material-symbols-outlined text-[17px] shrink-0 text-[#25D366]">message</span>
-              <span>WHATSAPP</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate cursor-pointer"
-              onClick={() => window.location.href = `tel:${(volunteer.phone || '').replace(/\s+/g, '')}`}
-            >
-              <span className="material-symbols-outlined text-[17px] shrink-0 text-blue-500">call</span>
-              <span>LLAMAR</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate cursor-pointer"
-              onClick={onStartEditProfile}
-            >
-              <span className="material-symbols-outlined text-[17px] shrink-0 text-[#4d7cfe]">edit_square</span>
-              <span>EDITAR</span>
-            </Button>
+          <div className="flex flex-col gap-2">
+            {isAdmin && (
+              <EntryPassButton
+                volunteerId={volunteer.id}
+                volunteerName={volunteer.name}
+                committeeName={volunteer.committee || ''}
+                className="w-full mb-1"
+              />
+            )}
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                variant="outline"
+                className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate cursor-pointer"
+                onClick={() => window.open(`https://wa.me/${(volunteer.phone || '').replace(/\s+/g, '')}`, '_blank')}
+              >
+                <span className="material-symbols-outlined text-[17px] shrink-0 text-[#25D366]">message</span>
+                <span>WHATSAPP</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate cursor-pointer"
+                onClick={() => window.location.href = `tel:${(volunteer.phone || '').replace(/\s+/g, '')}`}
+              >
+                <span className="material-symbols-outlined text-[17px] shrink-0 text-blue-500">call</span>
+                <span>LLAMAR</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate cursor-pointer"
+                onClick={onStartEditProfile}
+              >
+                <span className="material-symbols-outlined text-[17px] shrink-0 text-[#4d7cfe]">edit_square</span>
+                <span>EDITAR</span>
+              </Button>
+            </div>
           </div>
         )}
       </div>

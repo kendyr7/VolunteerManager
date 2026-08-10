@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getOfficialShiftTime } from '@/lib/dates';
 import {
   sendWhatsAppText,
   sendWhatsAppInteractiveButton,
@@ -386,10 +387,10 @@ export async function POST(req: NextRequest) {
         const [currDay, currShift] = interactiveId.replace('reschedule_from_', '').split('_');
 
         const targetRows = [
-          { id: `reschedule_to_${currDay}_${currShift}__2026-08-30_T1`, title: '30 Aug - Turno 1', description: '7:00 AM - 12:00 PM' },
-          { id: `reschedule_to_${currDay}_${currShift}__2026-08-30_T2`, title: '30 Aug - Turno 2', description: '12:00 PM - 5:00 PM' },
-          { id: `reschedule_to_${currDay}_${currShift}__2026-08-31_T1`, title: '31 Aug - Turno 1', description: '7:00 AM - 12:00 PM' },
-          { id: `reschedule_to_${currDay}_${currShift}__2026-08-31_T2`, title: '31 Aug - Turno 2', description: '12:00 PM - 5:00 PM' },
+          { id: `reschedule_to_${currDay}_${currShift}__2026-08-30_T1`, title: '30 Aug - Turno 1', description: getOfficialShiftTime('2026-08-30', 'T1').timeLabel },
+          { id: `reschedule_to_${currDay}_${currShift}__2026-08-30_T2`, title: '30 Aug - Turno 2', description: getOfficialShiftTime('2026-08-30', 'T2').timeLabel },
+          { id: `reschedule_to_${currDay}_${currShift}__2026-08-31_T1`, title: '31 Aug - Turno 1', description: getOfficialShiftTime('2026-08-31', 'T1').timeLabel },
+          { id: `reschedule_to_${currDay}_${currShift}__2026-08-31_T2`, title: '31 Aug - Turno 2', description: getOfficialShiftTime('2026-08-31', 'T2').timeLabel },
         ];
 
         const listRes = await sendWhatsAppInteractiveList({

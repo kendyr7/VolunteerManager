@@ -4,12 +4,165 @@ import { es } from "date-fns/locale";
 const EVENT_START_DATE = new Date(2026, 8, 10); // Sept 10, 2026 (Month is 0-indexed in JS Dates)
 const EVENT_END_DATE = new Date(2026, 8, 26);   // Sept 26, 2026
 
-export const SHIFT_TIMES = [
-  { id: 1, name: "Turno 1", time: "8:00 AM - 12:00 PM", hours: 4 },
-  { id: 2, name: "Turno 2", time: "11:00 AM - 3:00 PM", hours: 4 },
-  { id: 3, name: "Turno 3", time: "2:00 PM - 6:00 PM", hours: 4 },
-  { id: 4, name: "Turno 4", time: "5:00 PM - 10:00 PM", hours: 5 },
-];
+export interface OfficialShiftTime {
+  shiftKey: string;
+  id: number;
+  name: string;
+  startTime: string;
+  endTime: string;
+  startHour: number;
+  endHour: number;
+  hours: number;
+  durationMinutes: number;
+  timeLabel: string;
+  shortTimeLabel: string;
+  time: string; // Alias for timeLabel for backward compatibility with SHIFT_TIMES objects
+}
+
+/**
+ * Determines if a given day is an extended shift day (Friday, Saturday, or Special Dates Sep 14 & 15).
+ * Extended days have T4 ending at 10:00 PM (5 hours), whereas Mon-Thu end at 9:00 PM (4 hours).
+ */
+export function isExtendedShiftDay(dayKey?: string | Date | null): boolean {
+  if (!dayKey) return true; // Default fallback to extended schedule if unspecified
+
+  if (dayKey instanceof Date) {
+    const day = dayKey.getDay();
+    const dateNum = dayKey.getDate();
+    const month = dayKey.getMonth(); // 8 = September in 0-indexed JS Date
+    if (day === 5 || day === 6) return true; // Friday, Saturday
+    if (month === 8 && (dateNum === 14 || dateNum === 15)) return true; // Sep 14, 15
+    return false;
+  }
+
+  const raw = String(dayKey).trim().toLowerCase();
+
+  // Check ISO format YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, m, d] = raw.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    return isExtendedShiftDay(dateObj);
+  }
+
+  // Check short day_key format like "vie 11", "sáb 12", "lun 14", "mar 15"
+  if (raw.includes('vie') || raw.includes('sáb') || raw.includes('sab')) {
+    return true;
+  }
+  if (raw.includes('14') || raw.includes('15')) {
+    return true;
+  }
+
+  return false; // Lun, Mar, Mié, Jue (except 14/15)
+}
+
+/**
+ * Single Authoritative Source of Truth for Official Shift Schedule Times
+ * - Lunes a Jueves: T1 (7-12), T2 (11-15), T3 (14-18), T4 (17-21, 4h)
+ * - Viernes, Sábado, 14 y 15 Sep: T1 (7-12), T2 (11-15), T3 (14-18), T4 (17-22, 5h)
+ */
+export function getOfficialShiftTime(
+  dayKey?: string | Date | null,
+  shiftKey?: string | null
+): OfficialShiftTime {
+  const normKey = (shiftKey || 'T1').toUpperCase().trim();
+  const idNum = parseInt(normKey.replace('T', ''), 10) || 1;
+  const isExtended = isExtendedShiftDay(dayKey);
+
+  if (normKey === 'T2') {
+    return {
+      shiftKey: 'T2',
+      id: 2,
+      name: 'Turno 2',
+      startTime: '11:00 AM',
+      endTime: '3:00 PM',
+      startHour: 11.0,
+      endHour: 15.0,
+      hours: 4,
+      durationMinutes: 240,
+      timeLabel: '11:00 AM - 3:00 PM',
+      shortTimeLabel: '11 AM-3 PM',
+      time: '11:00 AM - 3:00 PM',
+    };
+  }
+
+  if (normKey === 'T3') {
+    return {
+      shiftKey: 'T3',
+      id: 3,
+      name: 'Turno 3',
+      startTime: '2:00 PM',
+      endTime: '6:00 PM',
+      startHour: 14.0,
+      endHour: 18.0,
+      hours: 4,
+      durationMinutes: 240,
+      timeLabel: '2:00 PM - 6:00 PM',
+      shortTimeLabel: '2-6 PM',
+      time: '2:00 PM - 6:00 PM',
+    };
+  }
+
+  if (normKey === 'T4') {
+    if (isExtended) {
+      return {
+        shiftKey: 'T4',
+        id: 4,
+        name: 'Turno 4',
+        startTime: '5:00 PM',
+        endTime: '10:00 PM',
+        startHour: 17.0,
+        endHour: 22.0,
+        hours: 5,
+        durationMinutes: 300,
+        timeLabel: '5:00 PM - 10:00 PM',
+        shortTimeLabel: '5-10 PM',
+        time: '5:00 PM - 10:00 PM',
+      };
+    }
+    return {
+      shiftKey: 'T4',
+      id: 4,
+      name: 'Turno 4',
+      startTime: '5:00 PM',
+      endTime: '9:00 PM',
+      startHour: 17.0,
+      endHour: 21.0,
+      hours: 4,
+      durationMinutes: 240,
+      timeLabel: '5:00 PM - 9:00 PM',
+      shortTimeLabel: '5-9 PM',
+      time: '5:00 PM - 9:00 PM',
+    };
+  }
+
+  // Default: T1 (Turno 1)
+  return {
+    shiftKey: 'T1',
+    id: 1,
+    name: 'Turno 1',
+    startTime: '7:00 AM',
+    endTime: '12:00 PM',
+    startHour: 7.0,
+    endHour: 12.0,
+    hours: 5,
+    durationMinutes: 300,
+    timeLabel: '7:00 AM - 12:00 PM',
+    shortTimeLabel: '7-12 AM',
+    time: '7:00 AM - 12:00 PM',
+  };
+}
+
+export function getOfficialShiftTimesList(dayKey?: string | Date | null): OfficialShiftTime[] {
+  return [
+    getOfficialShiftTime(dayKey, 'T1'),
+    getOfficialShiftTime(dayKey, 'T2'),
+    getOfficialShiftTime(dayKey, 'T3'),
+    getOfficialShiftTime(dayKey, 'T4'),
+  ];
+}
+
+// Backward compatibility export (uses default list)
+export const SHIFT_TIMES = getOfficialShiftTimesList();
 
 export function getActiveEventDays() {
   const days: Date[] = [];

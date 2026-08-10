@@ -1,17 +1,11 @@
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { getOfficialShiftTime } from "@/lib/dates";
 
 export interface ShiftTimeResult {
   startTime: string;
   endTime: string;
 }
-
-export const SHIFT_DEFAULT_TIMES: Record<string, { start: string; end: string; hours: number }> = {
-  T1: { start: '08:00 a. m.', end: '12:00 p. m.', hours: 4 },
-  T2: { start: '12:00 p. m.', end: '04:00 p. m.', hours: 4 },
-  T3: { start: '04:00 p. m.', end: '08:00 p. m.', hours: 4 },
-  T4: { start: '06:00 p. m.', end: '11:00 p. m.', hours: 5 },
-};
 
 /**
  * Single Unified Source of Truth for Shift Start & End Times
@@ -22,9 +16,9 @@ export function getUnifiedShiftTimes(
   dbShiftRecords: any[] = [],
   auditLogs: any[] = []
 ): ShiftTimeResult {
-  const defaults = SHIFT_DEFAULT_TIMES[shiftKey] || { start: '08:00 a. m.', end: '12:00 p. m.', hours: 4 };
-  let startTime = defaults.start;
-  let endTime = defaults.end;
+  const official = getOfficialShiftTime(dayKey, shiftKey);
+  let startTime = official.startTime;
+  let endTime = official.endTime;
 
   // 1. Precise override for known test shift records
   if (dayKey.includes('11') && shiftKey === 'T4') {
@@ -78,7 +72,7 @@ export function getUnifiedShiftWorkedMinutes(
   if (dayKey.includes('11') && shiftKey === 'T4') return 34;
   if (dayKey.includes('12') && shiftKey === 'T3') return 23;
 
-  const maxMins = shiftKey === 'T4' ? 300 : 240;
+  const maxMins = (shiftKey === 'T1' || shiftKey === 'T4') ? 300 : 240;
   const times = getUnifiedShiftTimes(dayKey, shiftKey, dbShiftRecords, auditLogs);
 
   const parseTimeStr = (tStr: string) => {

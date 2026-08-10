@@ -4,10 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase-helpers";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/auth";
-import { getActiveEventDays, SHIFT_TIMES } from "@/lib/dates";
+import { getActiveEventDays, SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { getUnifiedShiftWorkedMinutes } from "@/lib/shift-calculations";
+import { fetchAllAttendanceSessionsFromDb } from "@/lib/services/session-store";
+import { inferShiftsForSession, calculateSessionMinutes } from "@/lib/session-utils";
 
 export interface ReportItem {
   registrationId: string;
@@ -133,35 +135,18 @@ function parseDayKeyToDateStr(dayKey: string): string {
   return raw;
 }
 
+
 function parseNicaraguaShiftEnd(dayKey: string, shiftKey: string): Date {
   const isoDate = parseDayKeyToDateStr(dayKey);
   if (!isoDate || isoDate === dayKey) return new Date(); // unknown date, treat as past
 
-  // Shift end hours (Nicaragua UTC-6; shift times match SHIFT_TIMES from dates.ts)
-  const endHours: Record<string, number> = { T1: 12, T2: 15, T3: 18, T4: 22 };
-  const endHour = endHours[shiftKey] ?? 12;
+  const official = getOfficialShiftTime(dayKey, shiftKey);
+  const endHour = official.endHour;
 
   // Build a UTC timestamp for the Nicaragua local end time (UTC-6 = endHour + 6 UTC)
   const [year, month, day] = isoDate.split('-').map(Number);
-  const utcMillis = Date.UTC(year, month - 1, day, endHour + 6, 0, 0);
+  const utcMillis = Date.UTC(year, month - 1, day, Math.floor(endHour) + 6, Math.round((endHour % 1) * 60), 0);
   return new Date(utcMillis);
-}
-
-// Derive shift details from the canonical SHIFT_TIMES in dates.ts (no hardcoded data)
-// SHIFT_TIMES has ids 1..4; shift_key in DB is 'T1'..'T4'
-const SHIFT_DETAILS: Record<string, { start: string; end: string; hours: number }> = {};
-for (const s of SHIFT_TIMES) {
-  const key = `T${s.id}`;
-  // Parse times from the "8:00 AM - 12:00 PM" format in SHIFT_TIMES.time
-  const [startRaw, endRaw] = s.time.split(' - ');
-  const parseTime = (t: string) => {
-    const [hhmm, ampm] = t.split(' ');
-    let [hh] = hhmm.split(':').map(Number);
-    if (ampm === 'PM' && hh !== 12) hh += 12;
-    if (ampm === 'AM' && hh === 12) hh = 0;
-    return `${hh.toString().padStart(2,'0')}:00`;
-  };
-  SHIFT_DETAILS[key] = { start: parseTime(startRaw), end: parseTime(endRaw), hours: s.hours };
 }
 
 export async function getReportsData(): Promise<{ error?: string; data?: ReportsData }> {
@@ -192,11 +177,21 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
     // 2. Fetch all committees from database (guarantees new/empty committees appear in reports filters)
     const commsData = await fetchAllRows(supabase, 'committees', 'id, name');
 
-    // 3. Fetch shifts & audit logs (bypassing 1000 row limit)
-    const [shiftsData, auditLogsData] = await Promise.all([
+    // 3. Fetch shifts, audit logs, and attendance_sessions (bypassing 1000 row limit)
+    const [shiftsData, auditLogsData, sessionsData] = await Promise.all([
       fetchAllRows(supabase, 'shifts', '*'),
-      fetchAllRows(supabase, 'activity_logs', '*')
+      fetchAllRows(supabase, 'activity_logs', '*'),
+      fetchAllAttendanceSessionsFromDb()
     ]);
+
+    // Group attendance_sessions by volunteer_id for instant O(1) lookup
+    const sessionsByVolunteerMap = new Map<string, any[]>();
+    (sessionsData || []).forEach((sess: any) => {
+      const vId = sess.volunteer_id || sess.volunteerId;
+      if (!vId) return;
+      if (!sessionsByVolunteerMap.has(vId)) sessionsByVolunteerMap.set(vId, []);
+      sessionsByVolunteerMap.get(vId)!.push(sess);
+    });
 
     // 4. Fetch committee_shift_requirements (server-side authoritative source)
     const reqsData = await fetchAllRows(supabase, 'committee_shift_requirements', 'committee_id, shift_key, required');
@@ -250,46 +245,82 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
       if (vol.stake) stakesSet.add(vol.stake);
       committeesMap.set(committeeId, committeeName);
 
-      const shiftMeta = SHIFT_DETAILS[s.shift_key] || { start: '08:00', end: '12:00', hours: 4 };
+      const officialShift = getOfficialShiftTime(s.day_key, s.shift_key);
+      const shiftMeta = { start: officialShift.startTime, end: officialShift.endTime, hours: officialShift.hours };
       const dateStr = parseDayKeyToDateStr(s.day_key);
       const shiftNum = parseInt(s.shift_key.substring(1)) || 1;
 
-      // Check relevant audit logs for this volunteer & shift
-      const volNameLower = `${vol.first_name || ''} ${vol.last_name || ''}`.trim().toLowerCase();
-      const relevantAuditLogs = (auditLogsData || []).filter((l: any) => {
-        const desc = (l.description || '').toLowerCase();
-        const det = (l.details || '').toLowerCase();
-        const matchName = volNameLower && (desc.includes(volNameLower) || det.includes(volNameLower));
-        const matchDay = desc.includes(s.day_key.toLowerCase()) || det.includes(s.day_key.toLowerCase());
-        const matchShift = desc.includes(s.shift_key.toLowerCase()) || det.includes(s.shift_key.toLowerCase());
-        return matchName && matchDay && matchShift;
-      });
-
-      const latestAuditLog = relevantAuditLogs.length > 0 ? relevantAuditLogs[relevantAuditLogs.length - 1] : null;
-      const latestDesc = (latestAuditLog?.description || '').toLowerCase();
-
-      const isAuditConfirmed = relevantAuditLogs.some((l: any) => {
-        const d = (l.description || '').toLowerCase();
-        return d.includes('check-in') || d.includes('escaneó') || d.includes('salida') || d.includes('ajustó hora de salida') || d.includes('completó');
-      });
-
-      // Determine attendance status
       let status: 'registered' | 'confirmed' | 'absent' | 'replaced' = 'registered';
       let durationMinutes = 0;
 
-      const isConfirmed = Boolean(s.checked_in || s.checked_out || s.checked_in_at || s.checked_out_at || s.status === 'completed' || s.status === 'confirmed') || isAuditConfirmed;
+      const userSessions = sessionsByVolunteerMap.get(s.volunteer_id) || [];
+      const hasSessionsForThisDay = userSessions.some((sess: any) => (sess.day_key || sess.dayKey || '').toLowerCase().trim() === s.day_key.toLowerCase().trim());
 
-      if (isConfirmed) {
-        status = 'confirmed';
-        durationMinutes = getUnifiedShiftWorkedMinutes(s.day_key, s.shift_key, shiftsData, auditLogsData);
-        if (durationMinutes <= 0) {
-          durationMinutes = shiftMeta.hours * 60;
+      if (hasSessionsForThisDay) {
+        // PRIMARY PATH: Evaluate exclusively from attendance_sessions for this specific day_key
+        const matchingSessions = userSessions.filter((sess: any) => {
+          const sessDay = sess.day_key || sess.dayKey || '';
+          if (sessDay.toLowerCase().trim() !== s.day_key.toLowerCase().trim()) return false;
+          
+          const relatedShifts = inferShiftsForSession(sessDay, sess.started_at, sess.ended_at, ['T1', 'T2', 'T3', 'T4']);
+          return relatedShifts.some(r => r.shiftKey === s.shift_key);
+        });
+
+        if (matchingSessions.length > 0) {
+          const hasCompleted = matchingSessions.some(m => m.status === 'completed');
+          const hasOpen = matchingSessions.some(m => m.status === 'open');
+
+          if (hasCompleted) {
+            status = 'confirmed';
+            // Sum worked minutes across all completed sessions matching this day & shift slot
+            durationMinutes = matchingSessions.reduce((sum, sess) => {
+              if (sess.status === 'completed') {
+                const calc = calculateSessionMinutes(sess.started_at, sess.ended_at);
+                return sum + (calc.isClosed ? calc.totalWorkedMinutes : 0);
+              }
+              return sum;
+            }, 0);
+          } else if (hasOpen) {
+            // OPEN session: status remains registered / in_service (0 final worked minutes counted until completed)
+            status = 'registered';
+            durationMinutes = 0;
+          }
+        } else {
+          const shiftEndTime = parseNicaraguaShiftEnd(s.day_key, s.shift_key);
+          if (now > shiftEndTime) {
+            status = 'absent';
+          }
         }
       } else {
-        const shiftEndTime = parseNicaraguaShiftEnd(s.day_key, s.shift_key);
-        if (now > shiftEndTime) {
-          // If shift has passed and checked_in is false, it's marked as absent
-          status = 'absent';
+        // FALLBACK PATH: Legacy evaluation for historical records without attendance_sessions
+        const volNameLower = `${vol.first_name || ''} ${vol.last_name || ''}`.trim().toLowerCase();
+        const relevantAuditLogs = (auditLogsData || []).filter((l: any) => {
+          const desc = (l.description || '').toLowerCase();
+          const det = (l.details || '').toLowerCase();
+          const matchName = volNameLower && (desc.includes(volNameLower) || det.includes(volNameLower));
+          const matchDay = desc.includes(s.day_key.toLowerCase()) || det.includes(s.day_key.toLowerCase());
+          const matchShift = desc.includes(s.shift_key.toLowerCase()) || det.includes(s.shift_key.toLowerCase());
+          return matchName && matchDay && matchShift;
+        });
+
+        const isAuditConfirmed = relevantAuditLogs.some((l: any) => {
+          const d = (l.description || '').toLowerCase();
+          return d.includes('check-in') || d.includes('escaneó') || d.includes('salida') || d.includes('ajustó hora de salida') || d.includes('completó');
+        });
+
+        const isConfirmed = Boolean(s.checked_in || s.checked_out || s.checked_in_at || s.checked_out_at || s.status === 'completed' || s.status === 'confirmed') || isAuditConfirmed;
+
+        if (isConfirmed) {
+          status = 'confirmed';
+          durationMinutes = getUnifiedShiftWorkedMinutes(s.day_key, s.shift_key, shiftsData, auditLogsData);
+          if (durationMinutes <= 0) {
+            durationMinutes = shiftMeta.hours * 60;
+          }
+        } else {
+          const shiftEndTime = parseNicaraguaShiftEnd(s.day_key, s.shift_key);
+          if (now > shiftEndTime) {
+            status = 'absent';
+          }
         }
       }
 
@@ -334,7 +365,8 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
                 createdKeys.add(itemKey);
                 const committeeName = vol.committees?.name || 'Sin comité';
                 const committeeId = vol.committees?.id || 'sin-comite';
-                const shiftMeta = SHIFT_DETAILS[shiftKey] || { start: '08:00', end: '12:00', hours: 4 };
+                const officialShift = getOfficialShiftTime(dayKey, shiftKey);
+                const shiftMeta = { start: officialShift.startTime, end: officialShift.endTime, hours: officialShift.hours };
 
                 let durationMinutes = 34;
                 if (dayKey.includes('11') && shiftKey === 'T4') durationMinutes = 34;

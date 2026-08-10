@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/client';
 import { sendWhatsAppTemplate, sendWhatsAppText, formatE164Phone } from '@/lib/whatsapp-api';
 import { fetchAllRows } from '@/lib/supabase-helpers';
+import { getOfficialShiftTime } from '@/lib/dates';
 
 /**
  * Automated Reminders Trigger Route
@@ -123,7 +124,7 @@ async function handleReminders(req: NextRequest) {
         const fullName = `${vol.first_name || ''} ${vol.last_name || ''}`.trim() || 'Hermano(a)';
         const commName = (vol?.committees as any)?.name || (Array.isArray(vol?.committees) ? (vol?.committees as any)[0]?.name : 'Servicio');
         const shiftLabel = `Turno ${shift.shift_key.replace('T', '')}`;
-        const shiftTime = shift.shift_key === 'T1' ? '7:00 AM - 12:00 PM' : shift.shift_key === 'T2' ? '12:00 PM - 5:00 PM' : shift.shift_key === 'T3' ? '5:00 PM - 8:00 PM' : '8:00 PM - 10:00 PM';
+        const shiftTime = getOfficialShiftTime(shift.day_key, shift.shift_key).timeLabel;
 
         const apiResult = await sendWhatsAppTemplate({
           to: recipientPhone,

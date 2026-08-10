@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Toast } from "@/components/ui/toast";
 
 import { Badge } from "@/components/ui/badge";
-import { SHIFT_TIMES } from "@/lib/dates";
+import { SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
 
 interface VolunteerProfileClientProps {
   volunteer: any;
@@ -294,16 +294,13 @@ export function VolunteerProfileClient({
                   .map((s) => {
                     // Check if shift has passed
                     const now = new Date();
-                    const dayNum = parseInt(s.day_key.split(' ')[1]) || 10;
-                    let endHour = 12;
-                    if (s.shift_key === 'T2') endHour = 15;
-                    if (s.shift_key === 'T3') endHour = 18;
-                    if (s.shift_key === 'T4') endHour = 22;
-                    const shiftEndTime = new Date(2026, 8, dayNum, endHour, 0, 0); // Sept 2026
+                    const dayNumPart = s.day_key.split(' ')[1];
+                    const dayNum = parseInt(dayNumPart) || 10;
+                    const official = getOfficialShiftTime(s.day_key, s.shift_key);
+                    const shiftEndTime = new Date(2026, 8, dayNum, Math.floor(official.endHour), Math.round((official.endHour % 1) * 60), 0); // Sept 2026
                     const passed = now > shiftEndTime;
 
-                    const shiftIdx = parseInt(s.shift_key[1]) - 1;
-                    const timeLabel = SHIFT_TIMES[shiftIdx]?.time || "";
+                    const timeLabel = official.timeLabel;
 
                     return (
                       <div key={s.id} className="flex items-center justify-between py-3.5 first:pt-0 last:pb-0">

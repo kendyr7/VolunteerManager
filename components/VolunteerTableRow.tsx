@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { getNormalizedRole } from '@/lib/permissions';
 import { HighlightText } from '@/components/HighlightText';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 
@@ -64,6 +65,7 @@ interface VolunteerTableRowProps {
   onEditClick: (vol: VolunteerType, startInEditMode?: boolean) => void;
   onResetPin: (vol: VolunteerType) => void;
   onArchive: (vol: VolunteerType) => void;
+  onShowPass?: (vol: VolunteerType) => void;
 }
 
 export const VolunteerTableRow = React.memo(function VolunteerTableRow({
@@ -73,6 +75,7 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
   onEditClick,
   onResetPin,
   onArchive,
+  onShowPass,
 }: VolunteerTableRowProps) {
   const [isHighlighted, setIsHighlighted] = useState(false);
 
@@ -88,6 +91,7 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
   }, [vol.id]);
 
   const committeeColor = useMemo(() => getCommitteeColor(vol.committee), [vol.committee]);
+  const isAdmin = getNormalizedRole() === 'Admin';
 
   return (
     <div
@@ -136,7 +140,17 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
           </div>
         )}
       </div>
-      <div className="w-28 flex items-center justify-center gap-1 shrink-0">
+      <div className="w-32 flex items-center justify-center gap-1 shrink-0">
+        {onShowPass && isAdmin && (
+          <button
+            type="button"
+            className="h-8 w-8 rounded-lg flex items-center justify-center text-[#4d7cfe] hover:bg-[#4d7cfe]/15 transition-all active:scale-90 cursor-pointer"
+            title="Mostrar Pase QR"
+            onClick={(e) => { e.stopPropagation(); onShowPass(vol); }}
+          >
+            <span className="material-symbols-outlined text-[18px]">qr_code_2</span>
+          </button>
+        )}
         <button
           type="button"
           className="h-8 w-8 rounded-lg flex items-center justify-center text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90 cursor-pointer"

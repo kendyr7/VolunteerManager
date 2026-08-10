@@ -16,6 +16,7 @@ import {
   getActiveEventDays,
   formatDateShort,
   SHIFT_TIMES,
+  getOfficialShiftTime,
   isHoliday
 } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
@@ -458,7 +459,7 @@ export default function RemindersPage() {
   }, [activeVolunteers]);
   const sortedLetters = Object.keys(groupedVolunteers).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
   // Detalles del turno seleccionado
-  const selectedShiftDetails = SHIFT_TIMES.find(s => `T${s.id}` === selectedShiftId);
+  const selectedShiftDetails = getOfficialShiftTime(selectedDayKey, selectedShiftId);
   const selectedDayObj = EVENT_DAYS.find(d => d.key === selectedDayKey);
   const isSelectedHoliday = selectedDayObj ? isHoliday(selectedDayObj.date) : false;
 
@@ -1219,7 +1220,7 @@ export default function RemindersPage() {
                       countTextClass = "text-text-dim";
                     }
 
-                    const shiftTimeLabel = SHIFT_TIMES.find(s => `T${s.id}` === t)?.name || "";
+                    const shiftTimeLabel = getOfficialShiftTime(selectedDayKey, t).timeLabel;
 
                     return (
                       <button

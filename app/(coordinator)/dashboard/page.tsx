@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatE164 } from "@/lib/whatsapp";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { canViewDashboard } from "@/lib/permissions";
-import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
+import { getActiveEventDays, formatDateShort, SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { 
@@ -365,11 +365,11 @@ export default function CoordinatorDashboard() {
           }).length;
 
           if (count < req) {
-            const shiftInfo = SHIFT_TIMES.find(s => `T${s.id}` === shiftId);
+            const shiftInfo = getOfficialShiftTime(formatDateShort(day.date), shiftId);
             const dayLabel = format(day.date, "EEEE d 'de' MMMM", { locale: es });
             list.push({
               day: dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1),
-              shift: `${shiftId} (${shiftInfo?.time || ''})`,
+              shift: `${shiftId} (${shiftInfo.timeLabel})`,
               committee: comm,
               enrolled: count,
               required: req,

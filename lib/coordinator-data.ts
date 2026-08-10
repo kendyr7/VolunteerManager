@@ -19,7 +19,7 @@ export function computeReliabilityMap(
   return reliabilityMap;
 }
 
-export function processShiftsData(shiftsData: any[], volunteers: any[] = []) {
+export function processShiftsData(shiftsData: any[], volunteers: any[] = [], sessionsData: any[] = []) {
   const dayKeys = buildEventDayKeys();
   const emptyShifts = () =>
     Object.fromEntries(dayKeys.map((k) => [k, [] as string[]]));
@@ -38,6 +38,52 @@ export function processShiftsData(shiftsData: any[], volunteers: any[] = []) {
   // New: day -> shift -> committee -> volunteerIds[]
   const indexedAssignments: Record<string, Record<string, Record<string, string[]>>> = {};
 
+  // Session-aware maps
+  const activeSessionsByVolunteer: Record<string, any> = {};
+  const completedSessionsByVolunteer: Record<string, any[]> = {};
+  const sessionOpenShiftKeys: Record<string, boolean> = {};
+  const sessionCompletedShiftKeys: Record<string, boolean> = {};
+
+  // 1. Process attendance_sessions (Primary Source of Truth)
+  (sessionsData || []).forEach((sess: any) => {
+    const vId = sess.volunteer_id || sess.volunteerId;
+    const dayKey = sess.day_key || sess.dayKey || '';
+    if (!vId || !dayKey) return;
+
+    const startedAt = sess.started_at || sess.startedAt || '';
+    const endedAt = sess.ended_at || sess.endedAt || null;
+    const status = sess.status || (endedAt ? 'completed' : 'open');
+
+    // Infer related shifts via temporal intersection
+    const assignedForVolAndDay = shiftsData
+      .filter((s: any) => (s.volunteer_id || s.volunteerId) === vId && (s.day_key || s.dayKey) === dayKey)
+      .map((s: any) => s.shift_key || s.shiftKey);
+
+    const targetShiftKeys = assignedForVolAndDay.length > 0 ? assignedForVolAndDay : ['T1', 'T2', 'T3', 'T4'];
+    const { inferShiftsForSession } = require('@/lib/session-utils');
+    const relatedShifts = inferShiftsForSession(dayKey, startedAt, endedAt, targetShiftKeys);
+
+    if (status === 'open') {
+      activeSessionsByVolunteer[vId] = sess;
+      relatedShifts.forEach((rs: any) => {
+        const k = `${vId}-${dayKey}-${rs.shiftKey}`;
+        sessionOpenShiftKeys[k] = true;
+        checkedInMap[k] = true;
+      });
+    } else if (status === 'completed') {
+      if (!completedSessionsByVolunteer[vId]) completedSessionsByVolunteer[vId] = [];
+      completedSessionsByVolunteer[vId].push(sess);
+
+      relatedShifts.forEach((rs: any) => {
+        const k = `${vId}-${dayKey}-${rs.shiftKey}`;
+        sessionCompletedShiftKeys[k] = true;
+        checkedInMap[k] = true;
+        checkedOutMap[k] = true;
+      });
+    }
+  });
+
+  // 2. Process assigned shifts
   for (const s of shiftsData) {
     if (!s.volunteer_id) continue;
 
@@ -54,7 +100,7 @@ export function processShiftsData(shiftsData: any[], volunteers: any[] = []) {
       }
     }
 
-    // Attendance maps
+    // Attendance maps (Legacy fallback if shift has legacy flags)
     const key = `${s.volunteer_id}-${s.day_key}-${s.shift_key}`;
     if (s.checked_in || s.checked_in_at || s.checked_out || s.checked_out_at) {
       checkedInMap[key] = true;
@@ -77,7 +123,17 @@ export function processShiftsData(shiftsData: any[], volunteers: any[] = []) {
     indexedAssignments[s.day_key][s.shift_key][committeeName].push(s.volunteer_id);
   }
 
-  return { globalShifts, checkedInMap, checkedOutMap, shiftCounts, indexedAssignments };
+  return {
+    globalShifts,
+    checkedInMap,
+    checkedOutMap,
+    shiftCounts,
+    indexedAssignments,
+    activeSessionsByVolunteer,
+    completedSessionsByVolunteer,
+    sessionOpenShiftKeys,
+    sessionCompletedShiftKeys,
+  };
 }
 
 export function parseRequirementsData(

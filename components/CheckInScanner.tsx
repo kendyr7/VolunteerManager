@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { checkInVolunteer, getHistoricalAttendanceLogs, checkOutVolunteer, reassignVolunteerShift } from "@/app/actions/attendance";
+import { checkInVolunteer, getHistoricalAttendanceLogs, checkOutVolunteer, reassignVolunteerShift, closeAttendanceSessionAction } from "@/app/actions/attendance";
 import { canQrCheckin } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { getActiveEventDays, formatDateShort } from "@/lib/dates";
+import { getActiveEventDays, formatDateShort, getOfficialShiftTime } from "@/lib/dates";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -92,6 +92,7 @@ export function CheckInScanner({
     shiftDetail?: string;
     shifts?: any[];
     qrValue?: string;
+    session?: any;
   } | null>(null);
   const [history, setHistory] = useState<ScanEntry[]>([]);
 
@@ -542,7 +543,12 @@ export function CheckInScanner({
     }
 
     setCheckoutModal({ isOpen: false, item: null });
-    await checkOutVolunteer(shiftId);
+
+    if (scanResult?.session?.id) {
+      await closeAttendanceSessionAction({ sessionId: scanResult.session.id });
+    } else {
+      await checkOutVolunteer(shiftId);
+    }
   };
 
   const handleMarkCompleted = async (shiftId: string) => {
@@ -778,7 +784,7 @@ export function CheckInScanner({
           errorMsg: res.error,
         }, ...prev]);
         setState('error');
-      } else if (res.alreadyCheckedIn) {
+      } else if ('alreadyCheckedIn' in res && res.alreadyCheckedIn) {
         playWarningBeep();
         triggerVibration(100);
         const entry: ScanEntry = {
@@ -794,6 +800,48 @@ export function CheckInScanner({
           volunteer: entry.volunteer,
           committee: entry.committee,
           shiftDetail: entry.shiftDetail,
+        });
+      } else if (res.action === 'stale_open_session' || res.isStaleOpen) {
+        playWarningBeep();
+        triggerVibration(200);
+        const startTimeStr = res.session?.started_at
+          ? new Date(res.session.started_at).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit', hour12: true })
+          : '—';
+        const dayLabel = res.session?.day_key || res.previousDayKey || 'día anterior';
+        setScanResult({
+          volunteer: res.volunteer || "Voluntario",
+          committee: res.committee || "Sin comité",
+          shiftDetail: `⚠ Sesión pendiente de ${dayLabel} (${startTimeStr})`,
+          session: res.session
+        });
+        setCheckoutModal({
+          isOpen: true,
+          item: {
+            shiftId: res.session?.id || 'stale-session',
+            volunteerName: res.volunteer || "Voluntario",
+            checkedInAt: `${dayLabel} ${startTimeStr}`
+          }
+        });
+        setState('already_checked_in');
+      } else if (res.action === 'confirm_checkout' || res.alreadyOpen) {
+        playWarningBeep();
+        triggerVibration(100);
+        const startTimeStr = res.session?.started_at
+          ? new Date(res.session.started_at).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit', hour12: true })
+          : '6:58 AM';
+        setScanResult({
+          volunteer: res.volunteer || "Voluntario",
+          committee: res.committee || "Sin comité",
+          shiftDetail: `Sesión Activa desde ${startTimeStr}`,
+          session: res.session
+        });
+        setCheckoutModal({
+          isOpen: true,
+          item: {
+            shiftId: res.session?.id || 'active-session',
+            volunteerName: res.volunteer || "Voluntario",
+            checkedInAt: startTimeStr
+          }
         });
         setState('already_checked_in');
       } else if (res.requiresManualSelection) {
@@ -1501,7 +1549,7 @@ export function CheckInScanner({
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {(['T1', 'T2', 'T3', 'T4'] as const).map((t) => {
                                           const items = dayGroup.shifts[t];
-                                          const timeInfo = t === 'T1' ? '8:00 AM - 12:00 PM' : t === 'T2' ? '11:00 AM - 3:00 PM' : t === 'T3' ? '2:00 PM - 6:00 PM' : '5:00 PM - 10:00 PM';
+                                          const timeInfo = getOfficialShiftTime(dayGroup.dayKey, t).timeLabel;
 
                                           return (
                                             <div key={t} className="rounded-sm border border-border/60 p-3.5 bg-dark2 space-y-2">
@@ -1727,7 +1775,7 @@ export function CheckInScanner({
               <div className="space-y-3 pt-1">
                 {(['T1', 'T2', 'T3', 'T4'] as const).map((t) => {
                   const items = mobileDrawerDayGroup.shifts[t];
-                  const timeInfo = t === 'T1' ? '8:00 AM - 12:00 PM' : t === 'T2' ? '11:00 AM - 3:00 PM' : t === 'T3' ? '2:00 PM - 6:00 PM' : '5:00 PM - 10:00 PM';
+                  const timeInfo = getOfficialShiftTime(mobileDrawerDayGroup.dayKey, t).timeLabel;
 
                   return (
                     <div key={t} className="bg-black/30 border border-white/15 backdrop-blur-md rounded-[24px] p-4 shadow-lg flex flex-col h-fit space-y-3">

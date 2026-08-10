@@ -3,7 +3,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
+import { getActiveEventDays, formatDateShort, SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -101,11 +101,11 @@ export default async function AdminDashboard() {
           const deficit = req - count;
           if (deficit > worstShiftDeficit) {
             worstShiftDeficit = deficit;
-            const shiftInfo = SHIFT_TIMES.find(s => `T${s.id}` === shiftId);
+            const shiftInfo = getOfficialShiftTime(formatDateShort(day.date), shiftId);
             const dayLabel = format(day.date, "EEEE d 'de' MMMM", { locale: es });
             worstShiftInfo = {
               day: dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1),
-              shift: `${shiftId} (${shiftInfo?.time || ''})`,
+              shift: `${shiftId} (${shiftInfo.timeLabel})`,
               committee: comm,
               missing: deficit
             };

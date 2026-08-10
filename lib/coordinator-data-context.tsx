@@ -31,11 +31,15 @@ interface CoordinatorDataContextValue {
   rawVolunteers: any[];
   committeesList: { id: string; name: string }[];
   shiftsData: any[];
+  sessionsData: any[];
   requirementsByCommittee: Record<string, Record<string, number>>;
   globalShifts: Record<string, Record<string, string[]>>;
   indexedAssignments: Record<string, Record<string, Record<string, string[]>>>;
   checkedInMap: Record<string, boolean>;
   checkedOutMap: Record<string, boolean>;
+  activeSessionsByVolunteer: Record<string, any>;
+  sessionOpenShiftKeys: Record<string, boolean>;
+  sessionCompletedShiftKeys: Record<string, boolean>;
   shiftCounts: Record<string, number>;
   reliabilityMap: Record<string, number | '-'>;
   loading: boolean;
@@ -64,6 +68,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
     { id: string; name: string }[]
   >([]);
   const [shiftsData, setShiftsData] = useState<any[]>([]);
+  const [sessionsData, setSessionsData] = useState<any[]>([]);
   const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
   const [requirementsByCommittee, setRequirementsByCommittee] = useState<
     Record<string, Record<string, number>>
@@ -104,10 +109,6 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
   if (!eventQueueRef.current) {
     eventQueueRef.current = new RealtimeEventQueue((processed) => {
-      console.log(`[COORDINATOR PROVIDER][${clientId}] onBatchProcessed`, {
-        eventsCount: processed.length,
-        events: processed.map(e => ({ type: e.eventType, table: e.table, id: e.payload?.id, name: e.payload?.first_name })),
-      });
       processed.forEach((evt) => {
         if (evt.table === 'shifts') {
           setShiftsData((prev) => {
@@ -124,7 +125,6 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
                 nextShifts = [evt.payload, ...prev];
               }
             }
-            console.log(`[COORDINATOR PROVIDER][${clientId}] shiftsData updated for shiftId=${evt.payload.id}, totalShifts=${nextShifts.length}`);
             return nextShifts;
           });
         } else {
@@ -141,12 +141,6 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             } else {
               nextState = [evt.payload, ...prev];
             }
-            const updatedVol = nextState.find((v: any) => v.id === evt.payload.id);
-            console.log(`[COORDINATOR PROVIDER][${clientId}] rawVolunteers AFTER onBatchProcessed:`, {
-              volunteerId: evt.payload.id,
-              neighborhood: updatedVol?.neighborhood || updatedVol?.ward,
-              updated_at: updatedVol?.updated_at,
-            });
             return nextState;
           });
         }
@@ -155,8 +149,8 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   }
 
   const derived = useMemo(
-    () => processShiftsData(shiftsData, rawVolunteers),
-    [shiftsData, rawVolunteers]
+    () => processShiftsData(shiftsData, rawVolunteers, sessionsData),
+    [shiftsData, rawVolunteers, sessionsData]
   );
   
   const reliabilityMap = useMemo(
@@ -199,7 +193,9 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             if (commObj) commIdFilter = commObj.id;
           }
 
-          const [volsData, commsRes, shiftsResult, reqsData] =
+          const { fetchAllAttendanceSessionsFromDb } = await import('@/lib/services/session-store');
+
+          const [volsData, commsRes, shiftsResult, reqsData, loadedSessions] =
             await Promise.all([
               fetchAllRows(
                 supabase,
@@ -214,6 +210,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
                 'committee_shift_requirements',
                 '*, committees(name)'
               ),
+              fetchAllAttendanceSessionsFromDb()
             ]);
 
           const commsData = commsRes.data ?? [];
@@ -223,6 +220,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           useVolunteerStore.getState().setInitialVolunteers(volsData ?? []);
           setCommitteesList(activeComms);
           setShiftsData(shiftsResult ?? []);
+          setSessionsData(loadedSessions ?? []);
           useVolunteerStore.getState().setInitialShifts(shiftsResult ?? []);
 
           const parsedReqs = parseRequirementsData(reqsData ?? [], commsData);
@@ -436,11 +434,15 @@ shifts: DELETE
       rawVolunteers,
       committeesList,
       shiftsData,
+      sessionsData,
       requirementsByCommittee,
       globalShifts: derived.globalShifts,
       indexedAssignments: derived.indexedAssignments,
       checkedInMap: derived.checkedInMap,
       checkedOutMap: derived.checkedOutMap,
+      activeSessionsByVolunteer: derived.activeSessionsByVolunteer,
+      sessionOpenShiftKeys: derived.sessionOpenShiftKeys,
+      sessionCompletedShiftKeys: derived.sessionCompletedShiftKeys,
       shiftCounts: derived.shiftCounts,
       reliabilityMap,
       loading,
@@ -451,6 +453,7 @@ shifts: DELETE
       rawVolunteers,
       committeesList,
       shiftsData,
+      sessionsData,
       requirementsByCommittee,
       derived,
       reliabilityMap,

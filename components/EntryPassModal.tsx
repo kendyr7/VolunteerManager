@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { SHIFT_TIMES } from "@/lib/dates";
+import { SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
 
 interface EntryPassModalProps {
   isOpen: boolean;
@@ -34,11 +34,9 @@ function isCurrentTimeInShiftWindow(dayKey: string, shiftKey: string): boolean {
   if (cleanDayKey !== cleanCurrentDayKey) return false;
 
   const currentHour = now.getHours() + now.getMinutes() / 60;
-  let startWindow = 7.25;
-  let endWindow = 12.75;
-  if (shiftKey === 'T2') { startWindow = 10.25; endWindow = 15.75; }
-  else if (shiftKey === 'T3') { startWindow = 13.25; endWindow = 18.75; }
-  else if (shiftKey === 'T4') { startWindow = 16.25; endWindow = 22.75; }
+  const official = getOfficialShiftTime(dayKey, shiftKey);
+  const startWindow = official.startHour - 0.75;
+  const endWindow = official.endHour + 0.75;
   return currentHour >= startWindow && currentHour <= endWindow;
 }
 
@@ -274,8 +272,8 @@ export function EntryPassModal({
                             <div className="space-y-2">
                               {dayShifts.map(s => {
                                 const isActive = isCurrentTimeInShiftWindow(s.day_key, s.shift_key);
-                                const shiftIdx = parseInt(s.shift_key[1]) - 1;
-                                const timeLabel = SHIFT_TIMES[shiftIdx]?.time || "";
+                                const official = getOfficialShiftTime(s.day_key, s.shift_key);
+                                const timeLabel = official.timeLabel;
                                 return (
                                   <div
                                     key={s.id}

@@ -5,6 +5,7 @@ export interface SessionData {
   userType: 'profile' | 'volunteer';
   role: string;
   committee: string;
+  userName?: string;
 }
 
 function getSecret(): string {
