@@ -18,6 +18,17 @@ import {
   completeOpenAttendanceSessionInDb,
 } from "@/lib/services/session-store";
 
+export async function getAttendanceSessionsAction(): Promise<AttendanceSession[]> {
+  const sessionToken = (await cookies()).get('session')?.value;
+  const session = sessionToken ? verifySessionToken(sessionToken) : null;
+
+  if (!session?.userId) {
+    return [];
+  }
+
+  return fetchAllAttendanceSessionsFromDb();
+}
+
 function getSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -1144,4 +1155,3 @@ export async function getHistoricalAttendanceLogs(limit = 150) {
     return [];
   }
 }
-

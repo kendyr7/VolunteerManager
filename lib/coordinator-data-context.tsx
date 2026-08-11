@@ -189,11 +189,12 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
               .from('committees')
               .select('id')
               .eq('name', committee)
+              .or('status.is.null,status.neq.archived')
               .maybeSingle();
             if (commObj) commIdFilter = commObj.id;
           }
 
-          const { fetchAllAttendanceSessionsFromDb } = await import('@/lib/services/session-store');
+          const { getAttendanceSessionsAction } = await import('@/app/actions/attendance');
 
           const [volsData, commsRes, shiftsResult, reqsData, loadedSessions] =
             await Promise.all([
@@ -203,14 +204,17 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
                 '*, committees(name)',
                 (q) => (commIdFilter ? q.eq('committee_id', commIdFilter) : q)
               ),
-              supabase.from('committees').select('*'),
+              supabase
+                .from('committees')
+                .select('*')
+                .or('status.is.null,status.neq.archived'),
               fetchAllRows(supabase, 'shifts', '*'),
               fetchAllRows(
                 supabase,
                 'committee_shift_requirements',
                 '*, committees(name)'
               ),
-              fetchAllAttendanceSessionsFromDb()
+              getAttendanceSessionsAction()
             ]);
 
           const commsData = commsRes.data ?? [];
@@ -223,19 +227,18 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           setSessionsData(loadedSessions ?? []);
           useVolunteerStore.getState().setInitialShifts(shiftsResult ?? []);
 
-          const parsedReqs = parseRequirementsData(reqsData ?? [], commsData);
-          if (Object.keys(parsedReqs).length > 0) {
-            const stored = localStorage.getItem('committee_requirements');
-            let allReqs: Record<string, Record<string, number>> = stored
-              ? JSON.parse(stored)
-              : {};
-            allReqs = { ...allReqs, ...parsedReqs };
-            localStorage.setItem(
-              'committee_requirements',
-              JSON.stringify(allReqs)
-            );
-            setRequirementsByCommittee(allReqs);
-          }
+          const parsedReqs = parseRequirementsData(reqsData ?? [], activeComms);
+          const stored = localStorage.getItem('committee_requirements');
+          const storedReqs: Record<string, Record<string, number>> = stored
+            ? JSON.parse(stored)
+            : {};
+          const activeNames = new Set(activeComms.map((c: any) => c.name));
+          const activeStoredReqs = Object.fromEntries(
+            Object.entries(storedReqs).filter(([committeeName]) => activeNames.has(committeeName))
+          );
+          const allReqs = { ...activeStoredReqs, ...parsedReqs };
+          localStorage.setItem('committee_requirements', JSON.stringify(allReqs));
+          setRequirementsByCommittee(allReqs);
 
           lastFetchedAtRef.current = Date.now();
           lastCacheKeyRef.current = cacheKey;

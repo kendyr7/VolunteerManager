@@ -21,7 +21,8 @@ export default async function AdminDashboard() {
 
   const { data: committeesData } = await supabase
     .from('committees')
-    .select('id, name');
+    .select('id, name')
+    .or('status.is.null,status.neq.archived');
 
   const { data: shiftsData } = await supabase
     .from('shifts')

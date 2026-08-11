@@ -281,7 +281,8 @@ export class CommitteeMutationService {
       const { data: comms, error: commErr } = await supabase
         .from('committees')
         .select('id, name')
-        .in('name', selectedCommitteeNames);
+        .in('name', selectedCommitteeNames)
+        .or('status.is.null,status.neq.archived');
 
       if (commErr || !comms || comms.length === 0) {
         return { success: false, error: 'No se encontraron los comités seleccionados.' };

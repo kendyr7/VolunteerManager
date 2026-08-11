@@ -156,7 +156,10 @@ export default function ImportPage() {
 
     const fetchCommittees = async () => {
       const supabase = createClient();
-      const { data } = await supabase.from('committees').select('id, name');
+      const { data } = await supabase
+        .from('committees')
+        .select('id, name')
+        .or('status.is.null,status.neq.archived');
       if (data) setCommittees(data.map(c => ({ id: c.id || '', name: c.name || '' })));
     };
     fetchCommittees();

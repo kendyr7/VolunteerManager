@@ -222,7 +222,8 @@ export default function UsersPage() {
     // Fetch committees
     const { data: commsData, error: commsError } = await supabase
       .from('committees')
-      .select('id, name');
+      .select('id, name')
+      .or('status.is.null,status.neq.archived');
 
     if (profilesError) console.error("Error loading users:", profilesError);
     if (commsError) console.error("Error loading committees:", commsError);

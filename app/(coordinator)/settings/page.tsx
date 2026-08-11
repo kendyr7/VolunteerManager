@@ -11,19 +11,19 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { startRegistration } from "@simplewebauthn/browser";
+import Fuse from "fuse.js";
 
 import {
   getSystemPermission,
   setSystemPermission,
   fetchSystemPermission,
-  setMockRole,
   resetAllPermissionsToDefault
 } from "@/lib/permissions";
 import { changeUserPin } from "@/app/actions/update-pin";
-import { formatE164 } from "@/lib/whatsapp";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { createCommitteeAction, archiveCommitteeAction, unarchiveCommitteeAction, updateCommitteeRequirementsAction } from "@/app/actions/committee-actions";
 import { getActivityLogs, ActivityLog } from "@/app/actions/activity-actions";
+import { getCurrentSettingsProfileAction } from "@/app/actions/user-actions";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -104,9 +104,8 @@ export default function SettingsPage() {
   const { refresh } = useCoordinatorData();
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [userProfile, setUserProfile] = useState<any>(null);
-  const [committees, setCommittees] = useState<{ id: string, name: string }[]>([]);
+  const [committees, setCommittees] = useState<{ id: string, name: string, status?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isUpdating, setIsUpdating] = useState(false);
   const [isRegisteringPasskey, setIsRegisteringPasskey] = useState(false);
   const [hasPasskey, setHasPasskey] = useState(false);
 
@@ -122,8 +121,8 @@ export default function SettingsPage() {
   const [archiveDeleteText, setArchiveDeleteText] = useState('');
   const [isArchivingCommittee, setIsArchivingCommittee] = useState(false);
 
-  const activeCommittees = useMemo(() => committees.filter((c: any) => c.status !== 'archived'), [committees]);
-  const archivedCommittees = useMemo(() => committees.filter((c: any) => c.status === 'archived'), [committees]);
+  const activeCommittees = useMemo(() => committees.filter(c => c.status !== 'archived'), [committees]);
+  const archivedCommittees = useMemo(() => committees.filter(c => c.status === 'archived'), [committees]);
 
   // Passkeys list for multi-device management
   type PasskeyEntry = {
@@ -155,6 +154,11 @@ export default function SettingsPage() {
   const [isSyncEnabled, setIsSyncEnabled] = useState(false);
   const [capacities, setCapacities] = useState({ T1: 0, T2: 0, T3: 0, T4: 0 });
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  useEffect(() => {
+    const activeNames = new Set(activeCommittees.map(c => c.name));
+    setSelectedConfigCommittees(prev => prev.filter(name => activeNames.has(name)));
+  }, [activeCommittees]);
 
   type PermissionMatrixRow = {
     id: string;
@@ -365,25 +369,90 @@ export default function SettingsPage() {
     permissions: false,
     requirements: false,
   });
+  const [settingsSearch, setSettingsSearch] = useState('');
+  const [isSettingsSearchFocused, setIsSettingsSearchFocused] = useState(false);
 
-  const [testPhone, setTestPhone] = useState('');
-  const [isSendingTestMeta, setIsSendingTestMeta] = useState(false);
+  const searchableSettings = useMemo(() => {
+    const sections = [
+      {
+        id: 'personal',
+        title: 'Información personal',
+        description: 'Nombre, teléfono, rol y comité de tu cuenta',
+        keywords: 'perfil cuenta datos usuario whatsapp coordinador administrador',
+        icon: 'account_circle',
+      },
+      {
+        id: 'security',
+        title: 'Seguridad y acceso',
+        description: 'PIN, huella, Face ID, passkeys y dispositivos',
+        keywords: 'contraseña clave biometría windows hello autenticación acceso',
+        icon: 'fingerprint',
+      },
+      {
+        id: 'permissions',
+        title: 'Permisos por rol',
+        description: 'Accesos y capacidades de administradores, coordinadores y voluntarios',
+        keywords: 'roles políticas autorización dashboard turnos reportes whatsapp importar qr usuarios',
+        icon: 'admin_panel_settings',
+      },
+      {
+        id: 'requirements',
+        title: 'Requerimientos por turno',
+        description: 'Capacidad mínima y cantidad de personal por horario',
+        keywords: 'cupos necesidades t1 t2 t3 t4 comités sincronizar voluntarios',
+        icon: 'groups',
+      },
+    ];
 
-  const handleSendMetaTest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!testPhone.trim()) return;
-    setIsSendingTestMeta(true);
-
-    const { sendTestMetaWhatsAppMessageAction } = await import('@/app/actions/whatsapp');
-    const res = await sendTestMetaWhatsAppMessageAction(testPhone, 'hello_world', 'en_US');
-
-    if (res.success) {
-      showToast(`✅ ¡Mensaje "hello_world" enviado con éxito! ID: ${res.messageId}`);
-      setTestPhone('');
-    } else {
-      showToast(`❌ Error de Meta WhatsApp: ${res.error}`, 'error');
+    if (currentRole === 'Admin') {
+      sections.push(
+        {
+          id: 'committeeMgmt',
+          title: 'Gestión de comités',
+          description: 'Crear, archivar y restaurar comités',
+          keywords: 'nuevo agregar eliminar desarchivar activos archivados parqueo',
+          icon: 'groups',
+        },
+        {
+          id: 'activity',
+          title: 'Historial de actividades',
+          description: 'Auditoría de operaciones y cambios del sistema',
+          keywords: 'logs registros eventos ediciones seguridad configuración reasignaciones',
+          icon: 'history',
+        }
+      );
     }
-    setIsSendingTestMeta(false);
+
+    return sections;
+  }, [currentRole]);
+
+  const settingsSearchResults = useMemo(() => {
+    const query = settingsSearch.trim();
+    if (!query) return searchableSettings;
+
+    const fuse = new Fuse(searchableSettings, {
+      keys: [
+        { name: 'title', weight: 0.5 },
+        { name: 'description', weight: 0.3 },
+        { name: 'keywords', weight: 0.2 },
+      ],
+      threshold: 0.42,
+      ignoreLocation: true,
+    });
+
+    return fuse.search(query).map(result => result.item);
+  }, [searchableSettings, settingsSearch]);
+
+  const navigateToSetting = (sectionId: string) => {
+    setOpenSections(prev => ({ ...prev, [sectionId]: true }));
+    setSettingsSearch('');
+    setIsSettingsSearchFocused(false);
+    requestAnimationFrame(() => {
+      document.getElementById(`settings-${sectionId}`)?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      });
+    });
   };
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
@@ -448,46 +517,18 @@ export default function SettingsPage() {
     const { data: comms } = await supabase.from('committees').select('*');
     if (comms) setCommittees(comms);
 
-    // 2. Get session info
-    const role = (localStorage.getItem('mock_role') || 'Admin') as any;
-    const phone = localStorage.getItem('volunteer_phone') || '';
+    // Resolve the current user from the signed server session. Never infer identity
+    // from localStorage or fall back to the first profile in the database.
+    const profileResult = await getCurrentSettingsProfileAction();
+    if (!profileResult.success || !profileResult.user) {
+      showToast(profileResult.error || "No se pudo cargar el perfil actual", "error");
+      setLoading(false);
+      return;
+    }
+
+    const role = profileResult.role as 'Admin' | 'Editor' | 'Lector';
+    const user: any = profileResult.user;
     setCurrentRole(role);
-
-    // 3. Fetch current user details with multi-format phone matching and fallback
-    const table = role === 'Lector' ? 'volunteers' : 'profiles';
-
-    const formattedPhone = formatE164(phone);
-    const rawDigits = phone.replace(/\D/g, '');
-    const targetPhones = Array.from(new Set([
-      phone,
-      formattedPhone,
-      rawDigits,
-      rawDigits.length === 8 ? `+505${rawDigits}` : rawDigits,
-      rawDigits.length === 8 ? `505${rawDigits}` : rawDigits,
-      rawDigits.startsWith('505') && rawDigits.length > 8 ? rawDigits.slice(3) : rawDigits
-    ])).filter(Boolean);
-
-    let user: any = null;
-
-    if (targetPhones.length > 0) {
-      const { data: fetchedUser } = await supabase
-        .from(table)
-        .select('*, committees(name)')
-        .in('phone', targetPhones)
-        .maybeSingle();
-      user = fetchedUser;
-    }
-
-    // Fallback: If not found by phone, fetch the active profile/volunteer
-    if (!user) {
-      const { data: fallbackUser } = await supabase
-        .from(table)
-        .select('*, committees(name)')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      user = fallbackUser;
-    }
 
     if (user) {
       const fullName = role === 'Lector'
@@ -496,7 +537,7 @@ export default function SettingsPage() {
 
       setUserProfile(user);
       setEditName(fullName || 'Coordinador');
-      setEditPhone(user.phone || phone || '');
+      setEditPhone(user.phone || '');
       setEditRole(role);
       const userComm = user.committees?.name || '';
       setEditCommittee(userComm);
@@ -620,42 +661,6 @@ export default function SettingsPage() {
   useEffect(() => {
     loadData();
   }, []);
-
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (currentRole === 'Lector') return;
-
-    setIsUpdating(true);
-    const supabase = createClient();
-
-    let committeeId = userProfile.committee_id;
-    if (currentRole === 'Admin' && editCommittee) {
-      const match = committees.find(c => c.name === editCommittee);
-      if (match) committeeId = match.id;
-    }
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        full_name: editName,
-        phone: editPhone,
-        role: editRole,
-        committee_id: committeeId
-      })
-      .eq('id', userProfile.id);
-
-    if (error) {
-      showToast("Error al actualizar perfil", "error");
-    } else {
-      showToast("Perfil actualizado");
-      localStorage.setItem('volunteer_phone', editPhone);
-      setMockRole(editRole);
-      if (editRole === 'Admin' || editRole === 'Editor') localStorage.setItem('mock_committee', editCommittee);
-      setCurrentRole(editRole);
-      await loadData();
-    }
-    setIsUpdating(false);
-  };
 
   const handleRegisterPasskey = async () => {
     if (!userProfile) return;
@@ -782,6 +787,99 @@ export default function SettingsPage() {
             Ajustes
           </h1>
         </div>
+        <form
+          className="relative flex w-full min-w-0 items-center"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (settingsSearchResults[0]) navigateToSetting(settingsSearchResults[0].id);
+          }}
+          onFocus={() => setIsSettingsSearchFocused(true)}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setIsSettingsSearchFocused(false);
+            }
+          }}
+        >
+          <div className="pointer-events-none absolute inset-y-0 left-4 z-10 flex items-center">
+            <span className="material-symbols-outlined text-[20px] text-black/40 dark:text-white/70">search</span>
+          </div>
+          <input
+            type="text"
+            value={settingsSearch}
+            onChange={(event) => setSettingsSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setSettingsSearch('');
+                setIsSettingsSearchFocused(false);
+                event.currentTarget.blur();
+              }
+            }}
+            placeholder="Buscar ajustes: PIN, permisos, comités..."
+            aria-label="Buscar en ajustes"
+            aria-expanded={isSettingsSearchFocused}
+            aria-controls="settings-search-results"
+            autoComplete="off"
+            className="h-[48px] w-full rounded-full border border-black/10 bg-black/5 py-3.5 pl-12 pr-32 text-[13px] font-bold font-inter text-black outline-none transition-all placeholder:text-black/50 focus:ring-2 focus:ring-black/20 dark:border-white/10 dark:bg-[#fff6] dark:text-white dark:placeholder:text-white/70 dark:focus:ring-white/30"
+          />
+          <div className="absolute inset-y-0 right-1.5 z-10 flex items-center">
+            {settingsSearch ? (
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setSettingsSearch('')}
+                className="flex h-9 cursor-pointer items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/20 px-3.5 text-xs font-bold font-inter text-rose-400 transition-all hover:bg-rose-500/30 active:scale-95"
+              >
+                <span className="material-symbols-outlined text-[16px]">close</span>
+                <span>Limpiar</span>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled
+                className="flex h-9 items-center gap-1 rounded-full bg-[#4d7cfe] px-4 text-xs font-bold font-inter text-white opacity-40"
+              >
+                <span className="material-symbols-outlined text-[16px]">search</span>
+                <span>Buscar</span>
+              </button>
+            )}
+          </div>
+
+          {isSettingsSearchFocused && settingsSearch.trim() && (
+            <div
+              id="settings-search-results"
+              role="listbox"
+              className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-xl border border-border bg-dark2 shadow-lg"
+            >
+              {settingsSearchResults.length > 0 ? (
+                <div className="max-h-80 overflow-y-auto p-1.5">
+                  {settingsSearchResults.map((result) => (
+                    <button
+                      key={result.id}
+                      type="button"
+                      role="option"
+                      aria-selected="false"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => navigateToSetting(result.id)}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-dark3 focus-visible:bg-dark3 focus-visible:outline-none"
+                    >
+                      <span className="material-symbols-outlined text-[19px] text-[#4d7cfe]">{result.icon}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs font-bold text-text">{result.title}</span>
+                        <span className="mt-0.5 block truncate text-[10px] font-inter text-text-dim">{result.description}</span>
+                      </span>
+                      <span className="material-symbols-outlined text-[17px] text-text-dim">arrow_downward</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-4 py-4 text-xs text-text-dim">
+                  <span className="material-symbols-outlined text-[18px]">search_off</span>
+                  No encontramos un ajuste relacionado.
+                </div>
+              )}
+            </div>
+          )}
+        </form>
       </div>
 
       <motion.div
@@ -794,7 +892,7 @@ export default function SettingsPage() {
         <motion.div variants={itemVariants} className="w-full bg-dark2 border-y sm:border border-border rounded-none sm:rounded-2xl overflow-hidden divide-y divide-border shadow-lg">
 
           {/* 1. Información Personal */}
-          <div className="w-full transition-all">
+          <div id="settings-personal" className="w-full scroll-mt-44 transition-all">
             <button
               type="button"
               onClick={() => isMobile && toggleSection('personal')}
@@ -822,30 +920,24 @@ export default function SettingsPage() {
 
             {isSectionOpen('personal') && (
               <div className="p-4 sm:p-6 space-y-5 border-t border-border bg-black/[0.02] dark:bg-black/20">
-                <form onSubmit={handleUpdateProfile} className="space-y-5">
+                <div className="space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-text">Nombre completo</label>
                       <input
-                        readOnly={currentRole === 'Lector'}
+                        readOnly
                         value={editName}
-                        onChange={e => setEditName(e.target.value)}
-                        className={`w-full h-10 px-3 rounded-xl border text-xs font-inter font-bold outline-none transition-all ${currentRole === 'Lector'
-                          ? 'border-border bg-dark text-text-dim cursor-not-allowed'
-                          : 'border-border bg-dark3 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
-                          }`}
+                        aria-readonly="true"
+                        className="w-full h-10 px-3 rounded-xl border border-border bg-dark text-xs font-inter font-bold text-text-dim outline-none cursor-default"
                       />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-text">Teléfono WhatsApp</label>
                       <input
-                        readOnly={currentRole === 'Lector'}
+                        readOnly
                         value={editPhone}
-                        onChange={e => setEditPhone(e.target.value)}
-                        className={`w-full h-10 px-3 rounded-xl border text-xs font-inter font-bold outline-none transition-all ${currentRole === 'Lector'
-                          ? 'border-border bg-dark text-text-dim cursor-not-allowed'
-                          : 'border-border bg-dark3 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]'
-                          }`}
+                        aria-readonly="true"
+                        className="w-full h-10 px-3 rounded-xl border border-border bg-dark text-xs font-inter font-bold text-text-dim outline-none cursor-default"
                       />
                     </div>
 
@@ -868,20 +960,13 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {currentRole !== 'Lector' && (
-                    <div className="pt-2 flex justify-end">
-                      <Button type="submit" disabled={isUpdating} className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-bold px-6 h-9 shadow-lg active:scale-[0.97] transition-all rounded-full text-xs">
-                        {isUpdating ? 'Actualizando...' : 'Guardar Cambios de Perfil'}
-                      </Button>
-                    </div>
-                  )}
-                </form>
+                </div>
               </div>
             )}
           </div>
 
           {/* 2. Huellas Digitales (Biometría / Face ID) */}
-          <div className="w-full transition-all">
+          <div id="settings-security" className="w-full scroll-mt-44 transition-all">
             <button
               type="button"
               onClick={() => isMobile && toggleSection('security')}
@@ -1018,48 +1103,12 @@ export default function SettingsPage() {
                   </form>
                 </div>
 
-                {/* Meta WhatsApp Cloud API Tester */}
-                {currentRole === 'Admin' && (
-                  <div className="pt-4 border-t border-border space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-[#25D366] text-[18px]">chat</span>
-                        <h4 className="font-bold text-text text-xs">Probador de Meta WhatsApp Cloud API</h4>
-                      </div>
-                      <Badge className="bg-[#25D366]/15 text-[#25D366] border-[#25D366]/30 text-[9px] font-extrabold px-2 py-0.5">
-                        Plantilla Aprobada: finalizar_configuracion_cuenta (es)
-                      </Badge>
-                    </div>
-
-                    <p className="text-[11px] font-inter text-text-dim">
-                      Envía un mensaje de bienvenida y verificación de PIN utilizando la plantilla oficial aprobada por Meta (<strong className="text-text">finalizar_configuracion_cuenta</strong>).
-                    </p>
-
-                    <form onSubmit={handleSendMetaTest} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                      <input
-                        type="text"
-                        placeholder="Ej: +50588888888 o 88888888"
-                        value={testPhone}
-                        onChange={(e) => setTestPhone(e.target.value)}
-                        className="flex-1 h-9 px-3.5 rounded-xl border border-border bg-dark3 text-text text-xs font-inter font-bold outline-none focus:border-[#25D366] transition-all"
-                        required
-                      />
-                      <Button
-                        type="submit"
-                        disabled={isSendingTestMeta || !testPhone.trim()}
-                        className="h-9 px-5 bg-[#25D366] hover:bg-[#20bd5a] text-black font-extrabold text-xs rounded-full shadow-md active:scale-95 transition-all shrink-0 cursor-pointer"
-                      >
-                        {isSendingTestMeta ? 'Enviando a Meta...' : 'Enviar WhatsApp de Prueba'}
-                      </Button>
-                    </form>
-                  </div>
-                )}
               </div>
             )}
           </div>
 
           {/* 3. Permisos Por Rol */}
-          <div className="w-full transition-all">
+          <div id="settings-permissions" className="w-full scroll-mt-44 transition-all">
             <button
               type="button"
               onClick={() => isMobile && toggleSection('permissions')}
@@ -1297,7 +1346,7 @@ export default function SettingsPage() {
 
           {/* 4. Requerimientos por Turno (Role-based) */}
           {(currentRole === 'Admin' || currentRole === 'Editor') && (
-            <div className="w-full transition-all">
+            <div id="settings-requirements" className="w-full scroll-mt-44 transition-all">
               <button
                 type="button"
                 onClick={() => isMobile && toggleSection('requirements')}
@@ -1345,7 +1394,7 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Multi-select Committee Chips Bar (Max 2 Rows) */}
-                  {currentRole === 'Admin' && committees.length > 0 ? (
+                  {currentRole === 'Admin' && activeCommittees.length > 0 ? (
                     <div className="space-y-2 pt-1">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider">
@@ -1354,15 +1403,15 @@ export default function SettingsPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            if (selectedConfigCommittees.length === committees.length) {
+                            if (selectedConfigCommittees.length === activeCommittees.length) {
                               setSelectedConfigCommittees([]);
                             } else {
-                              setSelectedConfigCommittees(committees.map(c => c.name));
+                              setSelectedConfigCommittees(activeCommittees.map(c => c.name));
                             }
                           }}
                           className="text-[11px] font-bold text-[#4d7cfe] hover:underline"
                         >
-                          {selectedConfigCommittees.length === committees.length ? 'Deseleccionar Todos' : 'Seleccionar Todos'}
+                          {selectedConfigCommittees.length === activeCommittees.length ? 'Deseleccionar Todos' : 'Seleccionar Todos'}
                         </button>
                       </div>
 
@@ -1370,10 +1419,10 @@ export default function SettingsPage() {
                       <div
                         className="grid gap-2 pt-0.5 w-full"
                         style={{
-                          gridTemplateColumns: `repeat(${Math.max(2, Math.ceil(committees.length / 2))}, minmax(0, 1fr))`
+                          gridTemplateColumns: `repeat(${Math.max(2, Math.ceil(activeCommittees.length / 2))}, minmax(0, 1fr))`
                         }}
                       >
-                        {committees.map((comm) => {
+                        {activeCommittees.map((comm) => {
                           const isSelected = selectedConfigCommittees.includes(comm.name);
                           const style = getCommitteeStyle(comm.name, isSelected);
                           return (
@@ -1512,7 +1561,7 @@ export default function SettingsPage() {
 
           {/* 6. Gestión de Comités (Admin Only) */}
           {currentRole === 'Admin' && (
-            <div className="w-full transition-all">
+            <div id="settings-committeeMgmt" className="w-full scroll-mt-44 transition-all">
               <button
                 type="button"
                 onClick={() => isMobile && toggleSection('committeeMgmt')}
@@ -1657,7 +1706,7 @@ export default function SettingsPage() {
 
           {/* 5. Historial de Actividades (Solo Admins) */}
           {currentRole === 'Admin' && (
-            <div className="w-full transition-all border-t border-border mt-2 pt-2">
+            <div id="settings-activity" className="w-full scroll-mt-44 transition-all border-t border-border mt-2 pt-2">
               <div
                 onClick={() => isMobile && toggleSection('activity')}
                 className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors ${isMobile ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'

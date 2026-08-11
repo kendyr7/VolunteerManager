@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { sendVolunteerWelcomeTemplate } from '@/lib/whatsapp-api';
 import { formatE164 } from '@/lib/whatsapp';
+import { verifySessionToken } from '@/lib/auth';
 
 function getAdminClient() {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -14,6 +15,43 @@ function getAdminClient() {
     );
   }
   return createClient();
+}
+
+export async function getCurrentSettingsProfileAction() {
+  try {
+    const sessionToken = (await cookies()).get('session')?.value;
+    const session = sessionToken ? verifySessionToken(sessionToken) : null;
+
+    if (!session?.userId) {
+      return { success: false, error: 'No hay una sesión válida.' };
+    }
+
+    const supabase = getAdminClient();
+    const isVolunteer = session.userType === 'volunteer';
+    const table = isVolunteer ? 'volunteers' : 'profiles';
+    const fields = isVolunteer
+      ? 'id, first_name, last_name, phone, committee_id, status, created_at, committees(name)'
+      : 'id, full_name, phone, role, committee_id, created_at, committees(name)';
+
+    const { data: user, error } = await supabase
+      .from(table)
+      .select(fields)
+      .eq('id', session.userId)
+      .maybeSingle();
+
+    if (error || !user) {
+      return { success: false, error: 'No se encontró el perfil de la sesión actual.' };
+    }
+
+    return {
+      success: true,
+      user,
+      role: isVolunteer ? 'Lector' : (user.role || session.role || 'Editor'),
+    };
+  } catch (err) {
+    console.error('Error loading current settings profile:', err);
+    return { success: false, error: 'No se pudo cargar el perfil actual.' };
+  }
 }
 
 export async function createUserProfileAction({

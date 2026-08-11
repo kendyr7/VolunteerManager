@@ -380,7 +380,10 @@ export async function fetchVolunteerRescheduleContextAction(
         .select('id, first_name, last_name, committee_id')
         .eq('id', volunteerId)
         .maybeSingle(),
-      supabase.from('committees').select('id, name'),
+      supabase
+        .from('committees')
+        .select('id, name')
+        .or('status.is.null,status.neq.archived'),
       supabase
         .from('committee_shift_requirements')
         .select('committee_id, shift_key, required'),
