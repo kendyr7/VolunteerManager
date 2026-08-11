@@ -493,7 +493,7 @@ export async function adjustSessionTimesAdminAction({
   startedAt?: string;
   endedAt?: string;
   reason?: string;
-  correctionType?: 'official_shift_end' | 'custom_time' | 'manual_adjustment';
+  correctionType?: 'official_shift_end' | 'custom_time' | 'manual_adjustment' | 'forgotten_entry_late_scan';
 }) {
   let session = null;
   try {
@@ -515,6 +515,8 @@ export async function adjustSessionTimesAdminAction({
   let finalReason = (rawReason || '').trim();
   if (correctionType === 'official_shift_end') {
     finalReason = "Salida olvidada - se utilizó el fin oficial del bloque programado";
+  } else if (correctionType === 'forgotten_entry_late_scan') {
+    finalReason = finalReason || "Corrección de entrada olvidada sobre escaneo tardío de salida";
   } else {
     if (!finalReason || finalReason.length < 5) {
       throw new Error("Se requiere especificar un motivo de al menos 5 caracteres para realizar la corrección.");
@@ -529,7 +531,7 @@ export async function adjustSessionTimesAdminAction({
   }
 
   // Concurrency & Idempotency Protection (Caso I)
-  if (targetSession.status === 'completed' && targetSession.ended_at) {
+  if (targetSession.status === 'completed' && targetSession.ended_at && correctionType !== 'forgotten_entry_late_scan') {
     return {
       success: true,
       alreadyClosed: true,
@@ -551,27 +553,13 @@ export async function adjustSessionTimesAdminAction({
     throw new Error(constraintCheck.error || "Ajuste de horario inválido.");
   }
 
-  // Validation: ended_at cannot be in the future (Caso G)
-  if (newEndedAt) {
-    const endMs = new Date(newEndedAt).getTime();
-    if (!isNaN(endMs) && endMs > Date.now() + 60000) { // 1 min buffer for clock skew
-      throw new Error("No se puede registrar una hora de salida en el futuro.");
-    }
-
-    // Validation: ended_at must belong to the exact calendar date of session.day_key (Caso H)
-    const { parseDayKeyToDateStr } = require('@/lib/dates');
-    const dayKeyDateStr = parseDayKeyToDateStr(targetSession.day_key); // "2026-09-11"
-    
-    const endNicaStr = new Date(newEndedAt).toLocaleString("en-US", { timeZone: "America/Managua" });
-    const endNicaDate = new Date(endNicaStr);
-    const endYyyy = endNicaDate.getFullYear();
-    const endMm = String(endNicaDate.getMonth() + 1).padStart(2, '0');
-    const endDd = String(endNicaDate.getDate()).padStart(2, '0');
-    const endNicaDateIso = `${endYyyy}-${endMm}-${endDd}`;
-
-    if (dayKeyDateStr && endNicaDateIso !== dayKeyDateStr) {
-      throw new Error(`La fecha de salida (${endNicaDateIso}) debe pertenecer a la misma fecha del día asignado (${dayKeyDateStr}).`);
-    }
+  // Check no future timestamps
+  const nowMs = Date.now();
+  if (new Date(newStartedAt).getTime() > nowMs) {
+    throw new Error("No se puede registrar una hora de entrada en el futuro.");
+  }
+  if (newEndedAt && new Date(newEndedAt).getTime() > nowMs) {
+    throw new Error("No se puede registrar una hora de salida en el futuro.");
   }
 
   let saved: AttendanceSession;
@@ -586,7 +574,8 @@ export async function adjustSessionTimesAdminAction({
         message: atomicRes.error || "La sesión ya fue finalizada por otro usuario."
       };
     }
-    saved = atomicRes.session!;
+    saved = { ...atomicRes.session!, started_at: newStartedAt };
+    await saveAttendanceSession(saved);
   } else {
     const updatedRecord: AttendanceSession = {
       ...targetSession,
@@ -614,17 +603,142 @@ export async function adjustSessionTimesAdminAction({
     await supabase.from('activity_logs').insert({
       user_name: adminName,
       user_role: 'Admin',
-      action_type: 'Corrección Salida Olvidada',
-      description: `Corrigió salida olvidada de sesión de asistencia (${correctionType === 'official_shift_end' ? 'Hora oficial' : 'Hora personalizada'})`,
+      action_type: correctionType === 'forgotten_entry_late_scan' ? 'Corrección Entrada Olvidada' : 'Corrección Salida Olvidada',
+      description: `Corrigió horario de sesión de asistencia (${correctionType})`,
       details: JSON.stringify({
         sessionId: saved.id,
         volunteerId: saved.volunteer_id,
         previousStartedAt,
-        newStartedAt,
+        newStartedAt: saved.started_at,
         previousEndedAt,
-        newEndedAt,
+        newEndedAt: saved.ended_at,
+        originalLateScanAt: correctionType === 'forgotten_entry_late_scan' ? previousStartedAt : undefined,
         reason: finalReason,
         correctionType,
+        adminId,
+        adminName
+      }),
+      target_id: saved.id
+    });
+  } catch (e) {}
+
+  return {
+    success: true,
+    session: saved
+  };
+}
+
+/**
+ * Admin Server Action to manually create missing attendance sessions (Vía A: Entrada Olvidada sin sesión previa).
+ * Server-side Admin authentication, overlap checks, and activity logging.
+ */
+export async function createAttendanceSessionAdminAction(input: {
+  volunteerId: string;
+  dayKey: string;
+  startedAt: string;
+  endedAt?: string | null;
+  correctionType: 'official_shift_start' | 'custom_start_time' | 'manual_session_creation';
+  reason?: string;
+}) {
+  let session: any = null;
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session')?.value || '';
+    session = verifySessionToken(sessionCookie);
+  } catch (e) {}
+
+  if (!session) {
+    throw new Error("No autenticado. Debes iniciar sesión como Administrador.");
+  }
+
+  const normalizedRole = (session.role || '').toLowerCase().trim();
+  const isAdmin = normalizedRole === 'admin' || normalizedRole === 'administrador';
+  if (!isAdmin) {
+    throw new Error("Solo Administradores pueden crear sesiones manuales de asistencia.");
+  }
+
+  const { volunteerId, dayKey, startedAt, endedAt, correctionType, reason: rawReason } = input;
+
+  let finalReason = (rawReason || '').trim();
+  if (correctionType === 'official_shift_start') {
+    finalReason = "Entrada olvidada - se utilizó el inicio oficial del turno/bloque programado";
+  } else {
+    if (!finalReason || finalReason.length < 5) {
+      throw new Error("Se requiere especificar un motivo de al menos 5 caracteres para realizar la corrección.");
+    }
+  }
+
+  const nowMs = Date.now();
+  const startMs = new Date(startedAt).getTime();
+  if (isNaN(startMs) || startMs > nowMs) {
+    throw new Error("La hora de entrada no puede ser en el futuro.");
+  }
+
+  const newStatus = endedAt ? 'completed' : 'open';
+
+  if (endedAt) {
+    const endMs = new Date(endedAt).getTime();
+    if (isNaN(endMs) || endMs > nowMs) {
+      throw new Error("La hora de salida no puede ser en el futuro.");
+    }
+    if (endMs < startMs) {
+      throw new Error("La hora de salida no puede ser anterior a la hora de entrada.");
+    }
+  }
+
+  if (newStatus === 'open') {
+    const existingOpen = await getOpenSessionForVolunteer(volunteerId);
+    if (existingOpen) {
+      throw new Error("El voluntario ya posee una sesión activa en turno (OPEN).");
+    }
+  }
+
+  const { checkSessionOverlapInDb } = require('@/lib/services/session-store');
+  const overlapCheck = await checkSessionOverlapInDb(volunteerId, startedAt, endedAt);
+  if (overlapCheck.hasOverlap) {
+    throw new Error(`El intervalo solicitado se solapa con una sesión existente de este voluntario.`);
+  }
+
+  const nowIso = new Date().toISOString();
+  const newRecord: AttendanceSession = {
+    id: crypto.randomUUID(),
+    volunteer_id: volunteerId,
+    day_key: dayKey,
+    started_at: startedAt,
+    ended_at: endedAt || null,
+    status: newStatus,
+    auto_closed: false,
+    created_at: nowIso,
+    updated_at: nowIso,
+  };
+
+  const saved = await saveAttendanceSession(newRecord);
+
+  broadcastSessionSync({
+    eventType: 'INSERT',
+    table: 'attendance_sessions',
+    record: saved,
+  });
+
+  const adminName = session.userName || 'Administrador';
+  const adminId = session.userId || 'admin-server-session';
+
+  try {
+    const supabase = getAdminClient();
+    await supabase.from('activity_logs').insert({
+      user_name: adminName,
+      user_role: 'Admin',
+      action_type: 'Corrección Entrada Olvidada',
+      description: `Registró entrada olvidada de sesión para el día ${dayKey}`,
+      details: JSON.stringify({
+        sessionId: saved.id,
+        volunteerId,
+        dayKey,
+        startedAt,
+        endedAt: saved.ended_at,
+        status: saved.status,
+        correctionType,
+        reason: finalReason,
         adminId,
         adminName
       }),

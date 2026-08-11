@@ -34,6 +34,7 @@ import {
 } from "@/lib/shift-calculations";
 import { getVolunteerProfileMetrics } from "@/lib/services/volunteer-profile.service";
 import { AdminSessionCorrectionModal } from "./AdminSessionCorrectionModal";
+import { AdminCreateSessionModal } from "./AdminCreateSessionModal";
 
 export interface VolunteerProfileData {
   id: string;
@@ -107,6 +108,7 @@ export function VolunteerProfileView({
   const [fetchedSessions, setFetchedSessions] = useState<any[]>([]);
   const [loadingAuditLogs, setLoadingAuditLogs] = useState<boolean>(false);
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState<boolean>(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
 
   const storeShifts = useVolunteerStore((s) => s.shiftsByVolunteerMap.get(volunteer.id)) || [];
   const hasStoreEntry = useVolunteerStore((s) => s.shiftsByVolunteerMap.has(volunteer.id));
@@ -715,6 +717,35 @@ export function VolunteerProfileView({
           session={staleOpenSession}
           volunteerName={`${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim()}
           assignedShiftKeys={dbShiftRecords.filter(r => r.day_key === staleOpenSession.day_key).map(r => r.shift_key)}
+          onSuccess={async () => {
+            const res = await fetchVolunteerAttendanceSessionsAction(volunteer.id);
+            if (res?.success && res.sessions) setFetchedSessions(res.sessions);
+            await refresh?.(true);
+          }}
+        />
+      )}
+
+      {/* Admin Create Missing Session Button (If Admin) */}
+      {isAdmin && (
+        <div className="mb-4 flex justify-end">
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-xs shadow-md flex items-center gap-2 transition-transform active:scale-95 w-full sm:w-auto justify-center"
+          >
+            <span className="material-symbols-outlined text-[18px]">more_time</span>
+            Registrar asistencia / entrada faltante
+          </button>
+        </div>
+      )}
+
+      {/* Admin Create Session Modal */}
+      {isCreateModalOpen && (
+        <AdminCreateSessionModal
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          volunteerId={volunteer.id}
+          volunteerName={`${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim()}
+          assignedShiftRecords={dbShiftRecords}
           onSuccess={async () => {
             const res = await fetchVolunteerAttendanceSessionsAction(volunteer.id);
             if (res?.success && res.sessions) setFetchedSessions(res.sessions);

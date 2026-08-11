@@ -71,8 +71,11 @@ export function inferShiftsForSession(
   if (sessionEnd) {
     sessionEndHour = getNicaraguaHourFloat(sessionEnd);
   } else {
-    // For OPEN sessions: evaluate up to CURRENT Nicaragua time
-    sessionEndHour = getNicaraguaHourFloat(new Date());
+    // For OPEN sessions: evaluate up to CURRENT Nicaragua time, constrained by the continuous block
+    const block = getContinuousScheduledBlockForSession(dayKey, sessionStart, assignedShifts);
+    const blockEndHour = block ? getOfficialShiftTime(dayKey, block.endShiftKey).endHour : 24;
+    const currentNowHour = getNicaraguaHourFloat(new Date());
+    sessionEndHour = Math.min(currentNowHour, blockEndHour);
   }
 
   // Handle midnight wrap if session spans across 24h
@@ -139,10 +142,109 @@ export interface ContinuousScheduledBlock {
   durationMinutes: number;
 }
 
+export interface ScheduledBlock {
+  blockLabel: string;
+  shiftKeys: string[];
+  startHour: number;
+  endHour: number;
+  startTimeFormatted: string;
+  endTimeFormatted: string;
+  durationMinutes: number;
+  startTimeIso: string;
+  endTimeIso: string;
+}
+
+/**
+ * Groups assigned shift keys for a given day_key into contiguous blocks
+ * (next.startHour <= currentBlock.endHour). Exact overlap or contact only.
+ */
+export function getContinuousScheduledBlocks(
+  dayKey: string,
+  assignedShiftKeys: string[] = []
+): ScheduledBlock[] {
+  if (!dayKey || !assignedShiftKeys || assignedShiftKeys.length === 0) {
+    return [];
+  }
+
+  const { parseDayKeyToDateStr } = require('@/lib/dates');
+  const dateStr = parseDayKeyToDateStr(dayKey);
+
+  const sortedShifts: OfficialShiftTime[] = assignedShiftKeys
+    .map(key => getOfficialShiftTime(dayKey, key))
+    .sort((a, b) => a.startHour - b.startHour);
+
+  if (sortedShifts.length === 0) return [];
+
+  const blocks: ScheduledBlock[] = [];
+  let currentShifts: OfficialShiftTime[] = [sortedShifts[0]];
+  let currentEndHour = sortedShifts[0].endHour;
+
+  for (let i = 1; i < sortedShifts.length; i++) {
+    const s = sortedShifts[i];
+    if (s.startHour <= currentEndHour) {
+      currentShifts.push(s);
+      currentEndHour = Math.max(currentEndHour, s.endHour);
+    } else {
+      blocks.push(buildScheduledBlock(dayKey, dateStr, currentShifts));
+      currentShifts = [s];
+      currentEndHour = s.endHour;
+    }
+  }
+
+  if (currentShifts.length > 0) {
+    blocks.push(buildScheduledBlock(dayKey, dateStr, currentShifts));
+  }
+
+  return blocks;
+}
+
+function buildScheduledBlock(
+  dayKey: string,
+  dateStr: string,
+  shifts: OfficialShiftTime[]
+): ScheduledBlock {
+  const firstShift = shifts[0];
+  const lastShift = shifts[shifts.length - 1];
+  const shiftKeys = shifts.map(s => s.shiftKey);
+  const shiftKeysJoined = shiftKeys.join(' · ');
+
+  const startHour = firstShift.startHour;
+  const endHour = shifts.reduce((max, s) => Math.max(max, s.endHour), lastShift.endHour);
+
+  const formatH = (h: number) => {
+    const floorH = Math.floor(h);
+    const m = Math.round((h - floorH) * 60);
+    const mStr = String(m).padStart(2, '0');
+    const displayH = floorH % 12 === 0 ? 12 : floorH % 12;
+    const ampm = floorH >= 12 ? 'PM' : 'AM';
+    return { formatted: `${displayH}:${mStr === '00' ? '00' : mStr} ${ampm}`, isoTime: `${String(floorH).padStart(2, '0')}:${mStr}:00` };
+  };
+
+  const startInfo = formatH(startHour);
+  const endInfo = formatH(endHour);
+
+  const blockLabel = shifts.length === 1
+    ? `${firstShift.shiftKey} (${firstShift.startTime} – ${firstShift.endTime})`
+    : `${shiftKeysJoined} (${firstShift.startTime} – ${lastShift.endTime})`;
+
+  const durationMinutes = Math.round((endHour - startHour) * 60);
+
+  return {
+    blockLabel,
+    shiftKeys,
+    startHour,
+    endHour,
+    startTimeFormatted: firstShift.startTime,
+    endTimeFormatted: lastShift.endTime,
+    durationMinutes,
+    startTimeIso: `${dateStr}T${startInfo.isoTime}-06:00`,
+    endTimeIso: `${dateStr}T${endInfo.isoTime}-06:00`,
+  };
+}
+
 /**
  * Calculates continuous scheduled shift block starting from session started_at.
- * Extends ONLY while subsequent shifts overlap or are contiguous (gap <= 30 min).
- * Prevents accrediting non-contiguous evening shifts (e.g. T4) if exit was forgotten on T2.
+ * Reuses getContinuousScheduledBlocks internally.
  */
 export function getContinuousScheduledBlockForSession(
   dayKey: string,
@@ -153,88 +255,32 @@ export function getContinuousScheduledBlockForSession(
     return null;
   }
 
-  const { parseDayKeyToDateStr } = require('@/lib/dates');
-
-  // 1. Build official shift times and sort chronologically by startHour
-  const shifts: OfficialShiftTime[] = assignedShiftKeys
-    .map(key => getOfficialShiftTime(dayKey, key))
-    .sort((a, b) => a.startHour - b.startHour);
-
-  if (shifts.length === 0) return null;
+  const blocks = getContinuousScheduledBlocks(dayKey, assignedShiftKeys);
+  if (blocks.length === 0) return null;
 
   const sessionStartHour = getNicaraguaHourFloat(startedAt);
 
-  // 2. Find the first shift related to startedAt
-  let startIdx = -1;
+  const matchedBlock = blocks.find(b =>
+    (sessionStartHour >= b.startHour - 0.75 && sessionStartHour <= b.endHour) ||
+    Math.abs(sessionStartHour - b.startHour) <= 1.5
+  );
 
-  for (let i = 0; i < shifts.length; i++) {
-    const s = shifts[i];
-    if (sessionStartHour >= s.startHour - 0.75 && sessionStartHour <= s.endHour) {
-      startIdx = i;
-      break;
-    }
-  }
+  if (!matchedBlock) return null;
 
-  if (startIdx === -1) {
-    for (let i = 0; i < shifts.length; i++) {
-      const s = shifts[i];
-      if (Math.abs(sessionStartHour - s.startHour) <= 1.5) {
-        startIdx = i;
-        break;
-      }
-    }
-  }
-
-  if (startIdx === -1) return null;
-
-  // 3. Extend block ONLY while subsequent shifts overlap or are contiguous (gap <= 0.5h / 30m)
-  const blockShifts: OfficialShiftTime[] = [shifts[startIdx]];
-  let currentEndHour = shifts[startIdx].endHour;
-
-  for (let i = startIdx + 1; i < shifts.length; i++) {
-    const nextShift = shifts[i];
-    if (nextShift.startHour <= currentEndHour + 0.5) {
-      blockShifts.push(nextShift);
-      currentEndHour = Math.max(currentEndHour, nextShift.endHour);
-    } else {
-      break;
-    }
-  }
-
-  const dateStr = parseDayKeyToDateStr(dayKey);
-
-  const endH = Math.floor(currentEndHour);
-  const endM = Math.round((currentEndHour - endH) * 60);
-  const endHStr = String(endH).padStart(2, '0');
-  const endMStr = String(endM).padStart(2, '0');
-
-  const suggestedEndTimeIso = `${dateStr}T${endHStr}:${endMStr}:00-06:00`;
-
-  const displayH = endH % 12 === 0 ? 12 : endH % 12;
-  const ampm = endH >= 12 ? 'PM' : 'AM';
-  const suggestedEndTimeFormatted = `${displayH}:${endMStr === '00' ? '00' : endMStr} ${ampm}`;
-
-  const firstShift = blockShifts[0];
-  const lastShift = blockShifts[blockShifts.length - 1];
-  const shiftKeysJoined = blockShifts.map(s => s.shiftKey).join(' · ');
-
-  const blockLabel = blockShifts.length === 1
-    ? `${firstShift.shiftKey} (${firstShift.startTime} – ${firstShift.endTime})`
-    : `${shiftKeysJoined} (${firstShift.startTime} – ${lastShift.endTime})`;
-
+  const matchedShifts = matchedBlock.shiftKeys.map(k => getOfficialShiftTime(dayKey, k));
   const startMs = new Date(startedAt).getTime();
-  const endMs = new Date(suggestedEndTimeIso).getTime();
+  const endMs = new Date(matchedBlock.endTimeIso).getTime();
   const durationMinutes = (!isNaN(startMs) && !isNaN(endMs) && endMs >= startMs)
     ? Math.round((endMs - startMs) / 60000)
     : 0;
 
   return {
-    matchedShifts: blockShifts,
-    startShiftKey: firstShift.shiftKey,
-    endShiftKey: lastShift.shiftKey,
-    suggestedEndTimeIso,
-    suggestedEndTimeFormatted,
-    blockLabel,
+    matchedShifts,
+    startShiftKey: matchedBlock.shiftKeys[0],
+    endShiftKey: matchedBlock.shiftKeys[matchedBlock.shiftKeys.length - 1],
+    suggestedEndTimeIso: matchedBlock.endTimeIso,
+    suggestedEndTimeFormatted: matchedBlock.endTimeFormatted,
+    blockLabel: matchedBlock.blockLabel,
     durationMinutes
   };
 }

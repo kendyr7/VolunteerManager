@@ -174,3 +174,34 @@ export async function completeOpenAttendanceSessionInDb(
 
   return { success: false, error: error?.message || "No se pudo actualizar la sesión de asistencia." };
 }
+
+/**
+ * Checks if a proposed session interval [startedAt, endedAt] overlaps with any existing session for the volunteer.
+ * Overlap formula: max(N_start, E_start) < min(N_end, E_end)
+ */
+export async function checkSessionOverlapInDb(
+  volunteerId: string,
+  startedAtIso: string,
+  endedAtIso?: string | null,
+  excludeSessionId?: string
+): Promise<{ hasOverlap: boolean; overlappingSession?: AttendanceSession }> {
+  const allSessions = await fetchAllAttendanceSessionsFromDb();
+  const volSessions = allSessions.filter(s => s.volunteer_id === volunteerId && s.id !== excludeSessionId);
+
+  const newStartMs = new Date(startedAtIso).getTime();
+  const newEndMs = endedAtIso ? new Date(endedAtIso).getTime() : Date.now();
+
+  for (const exist of volSessions) {
+    const existStartMs = new Date(exist.started_at).getTime();
+    const existEndMs = exist.ended_at ? new Date(exist.ended_at).getTime() : Date.now();
+
+    const overlapStart = Math.max(newStartMs, existStartMs);
+    const overlapEnd = Math.min(newEndMs, existEndMs);
+
+    if (overlapStart < overlapEnd) {
+      return { hasOverlap: true, overlappingSession: exist };
+    }
+  }
+
+  return { hasOverlap: false };
+}
