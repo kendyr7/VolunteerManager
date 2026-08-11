@@ -50,7 +50,8 @@ export class AuditMapper {
     rawLog: any,
     shiftsMap: Map<string, any> = new Map(),
     requestsMap: Map<string, any> = new Map(),
-    volunteersMap: Map<string, any> = new Map()
+    volunteersMap: Map<string, any> = new Map(),
+    sessionsMap: Map<string, any> = new Map()
   ): AuditEntryViewModel {
     const rawTargetId = rawLog.target_id || null;
     let resolvedVolunteerId: string | null = null;
@@ -88,7 +89,20 @@ export class AuditMapper {
       }
     }
 
-    // 4. RESOLUTION LEVEL 4: Fallback Token & Phone Matching for legacy logs
+    // 4. RESOLUTION LEVEL 4: Attendance session ID match
+    if (!resolvedVolunteerId && rawTargetId && sessionsMap.has(rawTargetId)) {
+      const attendanceSession = sessionsMap.get(rawTargetId);
+      const vId = attendanceSession?.volunteer_id;
+      if (vId) {
+        resolvedVolunteerId = vId;
+        const vol = volunteersMap.get(vId);
+        if (vol) {
+          resolvedVolunteerName = `${vol.first_name || ''} ${vol.last_name || ''}`.trim() || vol.name || null;
+        }
+      }
+    }
+
+    // 5. RESOLUTION LEVEL 5: Fallback Token & Phone Matching for legacy logs
     const desc = (rawLog.description || '').toLowerCase();
     const details = (rawLog.details || '').toLowerCase();
     const fullText = `${desc} ${details}`;
@@ -145,18 +159,18 @@ export class AuditMapper {
 
     const descLower = desc;
 
-    if (actionType === 'Check-in' || descLower.includes('check-in') || descLower.includes('asistencia')) {
-      actionCategory = 'checkin';
-      iconName = 'how_to_reg';
-      badgeText = 'Check-in';
-      badgeStyle = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
-      colorClass = 'bg-emerald-500';
-    } else if (actionType === 'Check-out' || descLower.includes('check-out') || descLower.includes('salida')) {
+    if (actionType === 'Check-out' || actionType.includes('Salida') || descLower.includes('check-out') || descLower.includes('salida')) {
       actionCategory = 'checkout';
       iconName = 'logout';
-      badgeText = 'Check-out';
+      badgeText = actionType.includes('Corrección') ? 'Salida corregida' : 'Check-out';
       badgeStyle = 'bg-teal-500/15 text-teal-400 border-teal-500/30';
       colorClass = 'bg-teal-500';
+    } else if (actionType === 'Check-in' || actionType.includes('Entrada') || descLower.includes('check-in') || descLower.includes('asistencia')) {
+      actionCategory = 'checkin';
+      iconName = 'how_to_reg';
+      badgeText = actionType.includes('Corrección') ? 'Entrada registrada' : 'Check-in';
+      badgeStyle = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+      colorClass = 'bg-emerald-500';
     } else if (actionType === 'Reasignación' || descLower.includes('reasignó') || descLower.includes('solicitud')) {
       actionCategory = 'reassignment';
       iconName = 'published_with_changes';
@@ -232,4 +246,3 @@ export class AuditMapper {
     };
   }
 }
-

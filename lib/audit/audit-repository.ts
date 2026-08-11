@@ -6,10 +6,11 @@ export class AuditRepository {
   private static async getLookupMaps() {
     const supabase = await getAdminSupabase();
 
-    const [vols, shifts, reqs] = await Promise.all([
-      fetchAllRows(supabase, 'volunteers', 'id, first_name, last_name, phone, name'),
+    const [vols, shifts, reqs, sessions] = await Promise.all([
+      fetchAllRows(supabase, 'volunteers', 'id, first_name, last_name, phone'),
       fetchAllRows(supabase, 'shifts', 'id, volunteer_id, day_key, shift_key'),
       fetchAllRows(supabase, 'shift_change_requests', 'id, volunteer_id, status'),
+      fetchAllRows(supabase, 'attendance_sessions', 'id, volunteer_id'),
     ]);
 
     const volunteersMap = new Map<string, any>();
@@ -21,7 +22,10 @@ export class AuditRepository {
     const requestsMap = new Map<string, any>();
     (reqs || []).forEach((r) => requestsMap.set(r.id, r));
 
-    return { volunteersMap, shiftsMap, requestsMap };
+    const sessionsMap = new Map<string, any>();
+    (sessions || []).forEach((s) => sessionsMap.set(s.id, s));
+
+    return { volunteersMap, shiftsMap, requestsMap, sessionsMap };
   }
 
   /**
@@ -30,7 +34,7 @@ export class AuditRepository {
   static async getGlobalAuditLogs(limit = 500): Promise<AuditEntryViewModel[]> {
     try {
       const supabase = await getAdminSupabase();
-      const { volunteersMap, shiftsMap, requestsMap } = await this.getLookupMaps();
+      const { volunteersMap, shiftsMap, requestsMap, sessionsMap } = await this.getLookupMaps();
 
       const { data: rawLogs, error } = await supabase
         .from('activity_logs')
@@ -44,7 +48,7 @@ export class AuditRepository {
       }
 
       return rawLogs.map((log) =>
-        AuditMapper.toViewModel(log, shiftsMap, requestsMap, volunteersMap)
+        AuditMapper.toViewModel(log, shiftsMap, requestsMap, volunteersMap, sessionsMap)
       );
     } catch (err) {
       console.error('Exception in AuditRepository.getGlobalAuditLogs:', err);
@@ -59,10 +63,36 @@ export class AuditRepository {
   static async getVolunteerAuditLogs(volunteerId: string, limit = 500): Promise<AuditEntryViewModel[]> {
     try {
       if (!volunteerId) return [];
-      const globalLogs = await this.getGlobalAuditLogs(limit);
       const cleanVolId = volunteerId.trim();
+      const supabase = await getAdminSupabase();
+      const { volunteersMap, shiftsMap, requestsMap, sessionsMap } = await this.getLookupMaps();
+      const relevantTargetIds = new Set<string>([cleanVolId]);
 
-      return globalLogs.filter((log) => log.resolvedVolunteerId === cleanVolId);
+      shiftsMap.forEach((shift, shiftId) => {
+        if (shift.volunteer_id === cleanVolId) relevantTargetIds.add(shiftId);
+      });
+      requestsMap.forEach((request, requestId) => {
+        if (request.volunteer_id === cleanVolId) relevantTargetIds.add(requestId);
+      });
+      sessionsMap.forEach((session, sessionId) => {
+        if (session.volunteer_id === cleanVolId) relevantTargetIds.add(sessionId);
+      });
+
+      const { data: rawLogs, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .in('target_id', Array.from(relevantTargetIds))
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error || !rawLogs) {
+        console.error('Error in AuditRepository.getVolunteerAuditLogs:', error);
+        return [];
+      }
+
+      return rawLogs
+        .map(log => AuditMapper.toViewModel(log, shiftsMap, requestsMap, volunteersMap, sessionsMap))
+        .filter(log => log.resolvedVolunteerId === cleanVolId);
     } catch (err) {
       console.error('Exception in AuditRepository.getVolunteerAuditLogs:', err);
       return [];

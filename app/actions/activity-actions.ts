@@ -6,6 +6,112 @@ import { AuditEntryViewModel } from "@/lib/audit/audit-mapper";
 
 export type ActivityLog = AuditEntryViewModel;
 
+let historicalImportSyncPromise: Promise<void> | null = null;
+
+function normalizeAuditIdentity(value: string): string {
+  return (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+async function syncHistoricalImportsToVolunteerLogs(): Promise<void> {
+  if (historicalImportSyncPromise) return historicalImportSyncPromise;
+
+  historicalImportSyncPromise = (async () => {
+    try {
+      const supabase = await getAdminSupabase();
+      const [{ data: batches }, { data: volunteers }, { data: existingLogs }] = await Promise.all([
+        supabase
+          .from('activity_logs')
+          .select('id, user_name, user_role, details, created_at')
+          .ilike('description', '%Importó masivamente%'),
+        supabase
+          .from('volunteers')
+          .select('id, first_name, last_name, phone'),
+        supabase
+          .from('activity_logs')
+          .select('target_id, details')
+          .eq('action_type', 'Creación')
+          .not('target_id', 'is', null),
+      ]);
+
+      if (!batches?.length || !volunteers?.length) return;
+
+      const volunteersByPhone = new Map<string, typeof volunteers>();
+      volunteers.forEach(volunteer => {
+        const phoneKey = (volunteer.phone || '').replace(/\D/g, '').slice(-8);
+        if (!phoneKey) return;
+        const matches = volunteersByPhone.get(phoneKey) || [];
+        matches.push(volunteer);
+        volunteersByPhone.set(phoneKey, matches);
+      });
+
+      const existingKeys = new Set<string>();
+      (existingLogs || []).forEach(log => {
+        if (!log.details || typeof log.details !== 'string') return;
+        try {
+          const parsed = JSON.parse(log.details);
+          const batchId = parsed?.context?.sourceBatchLogId;
+          if (batchId && log.target_id) existingKeys.add(`${batchId}:${log.target_id}`);
+        } catch {}
+      });
+
+      const rows: Array<Record<string, unknown>> = [];
+
+      batches.forEach(batch => {
+        if (!batch.details || typeof batch.details !== 'string') return;
+        try {
+          const payload = JSON.parse(batch.details);
+          if (payload?.type !== 'import_batch' || !Array.isArray(payload.importedUsers)) return;
+
+          payload.importedUsers.forEach((imported: Record<string, string>) => {
+            const phoneKey = (imported.phone || '').replace(/\D/g, '').slice(-8);
+            const candidates = volunteersByPhone.get(phoneKey) || [];
+            if (!candidates.length) return;
+
+            const importedName = normalizeAuditIdentity(`${imported.firstName || ''} ${imported.lastName || ''}`);
+            const volunteer = candidates.length === 1
+              ? candidates[0]
+              : candidates.find(candidate =>
+                  normalizeAuditIdentity(`${candidate.first_name || ''} ${candidate.last_name || ''}`) === importedName
+                );
+            if (!volunteer) return;
+
+            const dedupeKey = `${batch.id}:${volunteer.id}`;
+            if (existingKeys.has(dedupeKey)) return;
+            existingKeys.add(dedupeKey);
+
+            const fullName = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim();
+            rows.push({
+              user_name: batch.user_name || payload.importedBy || 'Administrador',
+              user_role: batch.user_role || 'Admin',
+              action_type: 'Creación',
+              description: `Importó al voluntario "${fullName}"`,
+              details: JSON.stringify({
+                context: {
+                  source: 'Importación Masiva',
+                  sourceBatchLogId: batch.id,
+                  phone: volunteer.phone,
+                  committee: imported.committee || 'Sin comité',
+                },
+              }),
+              target_id: volunteer.id,
+              created_at: batch.created_at,
+            });
+          });
+        } catch {}
+      });
+
+      for (let index = 0; index < rows.length; index += 500) {
+        const { error } = await supabase.from('activity_logs').insert(rows.slice(index, index + 500));
+        if (error) console.error('Error backfilling historical import audit logs:', error);
+      }
+    } catch (err) {
+      console.error('Error syncing historical import audit logs:', err);
+    }
+  })();
+
+  return historicalImportSyncPromise;
+}
+
 export async function syncPastRequestsToActivityLogs() {
   try {
     const supabase = await getAdminSupabase();
@@ -59,7 +165,7 @@ export async function syncPastRequestsToActivityLogs() {
 
 export async function getActivityLogs(limit = 500): Promise<ActivityLog[]> {
   try {
-    await syncPastRequestsToActivityLogs();
+    await Promise.all([syncPastRequestsToActivityLogs(), syncHistoricalImportsToVolunteerLogs()]);
     return await AuditRepository.getGlobalAuditLogs(limit);
   } catch (err) {
     console.error("Error in getActivityLogs:", err);
@@ -74,6 +180,7 @@ export async function fetchVolunteerAuditLogsAction(
   volunteerCreatedAt?: string
 ): Promise<{ success: boolean; logs: ActivityLog[] }> {
   try {
+    await syncHistoricalImportsToVolunteerLogs();
     const logs = await AuditRepository.getVolunteerAuditLogs(volunteerId);
     return { success: true, logs };
   } catch (err) {

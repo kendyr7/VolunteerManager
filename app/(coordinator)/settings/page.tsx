@@ -463,7 +463,7 @@ export default function SettingsPage() {
   const fetchLogs = useCallback(async () => {
     if (currentRole !== 'Admin') return;
     setIsLoadingLogs(true);
-    const logs = await getActivityLogs(150);
+    const logs = await getActivityLogs(500);
     setActivityLogs(logs);
     setIsLoadingLogs(false);
   }, [currentRole]);

@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
-import { getContinuousScheduledBlocks, ScheduledBlock, calculateSessionMinutes } from '@/lib/session-utils';
-import { formatUnifiedDuration } from '@/lib/shift-calculations';
+import React, { useMemo, useRef, useState } from 'react';
 import { createAttendanceSessionAdminAction } from '@/app/actions/attendance';
-import { parseDayKeyToDateStr } from '@/lib/dates';
-import { getNormalizedRole } from '@/lib/auth';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { CustomTimePicker } from '@/components/CustomTimePicker';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getNormalizedRole } from '@/lib/auth';
+import { parseDayKeyToDateStr } from '@/lib/dates';
+import { formatUnifiedDuration } from '@/lib/shift-calculations';
+import { calculateSessionMinutes, getContinuousScheduledBlocks } from '@/lib/session-utils';
 
 export interface AdminCreateSessionModalProps {
   isOpen: boolean;
@@ -24,117 +25,123 @@ export function AdminCreateSessionModal({
   isOpen,
   onClose,
   volunteerId,
-  volunteerName,
   assignedShiftRecords = [],
   initialDayKey,
   onSuccess,
   isMockMode = false,
 }: AdminCreateSessionModalProps) {
   const isAdmin = getNormalizedRole() === 'Admin';
-  
-  // Available unique day_keys from assigned shifts or defaults
+
   const availableDayKeys = useMemo(() => {
-    const set = new Set<string>();
-    assignedShiftRecords.forEach(r => set.add(r.day_key));
-    if (initialDayKey) set.add(initialDayKey);
-    if (set.size === 0) set.add('vie 11');
-    return Array.from(set);
+    const dayKeys = new Set<string>();
+    assignedShiftRecords.forEach((record) => dayKeys.add(record.day_key));
+    if (initialDayKey) dayKeys.add(initialDayKey);
+    if (dayKeys.size === 0) dayKeys.add('vie 11');
+    return Array.from(dayKeys);
   }, [assignedShiftRecords, initialDayKey]);
 
-  const [selectedDayKey, setSelectedDayKey] = useState<string>(initialDayKey || availableDayKeys[0] || 'vie 11');
-  
-  // Get all continuous blocks for selected day
-  const assignedShiftKeys = useMemo(() => {
-    return assignedShiftRecords.filter(r => r.day_key === selectedDayKey).map(r => r.shift_key);
-  }, [assignedShiftRecords, selectedDayKey]);
-
-  const blocks = useMemo(() => {
-    return getContinuousScheduledBlocks(selectedDayKey, assignedShiftKeys.length > 0 ? assignedShiftKeys : ['T1', 'T2', 'T3', 'T4']);
-  }, [selectedDayKey, assignedShiftKeys]);
-
-  const [selectedBlock, setSelectedBlock] = useState<ScheduledBlock | null>(null);
-
-  // Form State
+  const [selectedDayKey, setSelectedDayKey] = useState(initialDayKey || availableDayKeys[0] || 'vie 11');
+  const [selectedShiftKey, setSelectedShiftKey] = useState<string | null>(null);
   const [sessionState, setSessionState] = useState<'completed' | 'open'>('completed');
   const [entryMode, setEntryMode] = useState<'official' | 'custom'>('official');
   const [exitMode, setExitMode] = useState<'official' | 'custom'>('official');
-  
-  const [customEntryTime, setCustomEntryTime] = useState<string>('11:00');
-  const [customExitTime, setCustomExitTime] = useState<string>('15:00');
-  const [reason, setReason] = useState<string>('');
-  
+  const [customEntryTime, setCustomEntryTime] = useState('11:00');
+  const [customExitTime, setCustomExitTime] = useState('15:00');
+  const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [confirmOutsideWarning, setConfirmOutsideWarning] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const dragDistanceRef = useRef(0);
 
-  // Auto-select first block when day or blocks change
+  const assignedShiftKeys = useMemo(
+    () => assignedShiftRecords.filter((record) => record.day_key === selectedDayKey).map((record) => record.shift_key),
+    [assignedShiftRecords, selectedDayKey],
+  );
+
+  const scheduledShifts = useMemo(
+    () => Array.from(new Set(assignedShiftKeys.map((shiftKey) => shiftKey.toUpperCase().trim())))
+      .filter((shiftKey) => /^T[1-4]$/.test(shiftKey))
+      .flatMap((shiftKey) => getContinuousScheduledBlocks(selectedDayKey, [shiftKey]))
+      .sort((first, second) => first.startHour - second.startHour),
+    [assignedShiftKeys, selectedDayKey],
+  );
+
+  const selectedShift = useMemo(
+    () => scheduledShifts.find((shift) => shift.shiftKeys[0] === selectedShiftKey) || scheduledShifts[0] || null,
+    [scheduledShifts, selectedShiftKey],
+  );
+  const resolvedEntryMode = selectedShift ? entryMode : 'custom';
+  const resolvedExitMode = selectedShift ? exitMode : 'custom';
+
   React.useEffect(() => {
-    if (blocks.length > 0) {
-      setSelectedBlock(blocks[0]);
-    } else {
-      setSelectedBlock(null);
-    }
-  }, [blocks]);
+    if (!isOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isSubmitting) onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, isSubmitting, onClose]);
 
-  // Derived Timestamps
   const entryIso = useMemo(() => {
     if (!selectedDayKey) return null;
-    const dateStr = parseDayKeyToDateStr(selectedDayKey);
-    if (entryMode === 'official' && selectedBlock) {
-      return selectedBlock.startTimeIso;
-    }
-    return `${dateStr}T${customEntryTime}:00-06:00`;
-  }, [selectedDayKey, entryMode, selectedBlock, customEntryTime]);
+    if (resolvedEntryMode === 'official' && selectedShift) return selectedShift.startTimeIso;
+    return `${parseDayKeyToDateStr(selectedDayKey)}T${customEntryTime}:00-06:00`;
+  }, [customEntryTime, resolvedEntryMode, selectedDayKey, selectedShift]);
 
   const exitIso = useMemo(() => {
     if (!selectedDayKey || sessionState === 'open') return null;
-    const dateStr = parseDayKeyToDateStr(selectedDayKey);
-    if (exitMode === 'official' && selectedBlock) {
-      return selectedBlock.endTimeIso;
-    }
-    return `${dateStr}T${customExitTime}:00-06:00`;
-  }, [selectedDayKey, sessionState, exitMode, selectedBlock, customExitTime]);
+    if (resolvedExitMode === 'official' && selectedShift) return selectedShift.endTimeIso;
+    return `${parseDayKeyToDateStr(selectedDayKey)}T${customExitTime}:00-06:00`;
+  }, [customExitTime, resolvedExitMode, selectedDayKey, selectedShift, sessionState]);
 
-  // Worked Minutes
   const workedMinutes = useMemo(() => {
     if (!entryIso) return 0;
-    const calc = calculateSessionMinutes(entryIso, exitIso);
-    return calc.isClosed ? calc.totalWorkedMinutes : calc.provisionalMinutes;
+    const calculation = calculateSessionMinutes(entryIso, exitIso);
+    return calculation.isClosed ? calculation.totalWorkedMinutes : calculation.provisionalMinutes;
   }, [entryIso, exitIso]);
 
-  // Check if chosen times fall outside the selected block
-  const isOutsideBlock = useMemo(() => {
-    if (!selectedBlock || !entryIso) return false;
-    const blockStartMs = new Date(selectedBlock.startTimeIso).getTime();
-    const blockEndMs = new Date(selectedBlock.endTimeIso).getTime();
-
+  const isOutsideShift = useMemo(() => {
+    if (!selectedShift || !entryIso) return false;
+    const shiftStartMs = new Date(selectedShift.startTimeIso).getTime();
+    const shiftEndMs = new Date(selectedShift.endTimeIso).getTime();
     const entryMs = new Date(entryIso).getTime();
-    const exitMs = exitIso ? new Date(exitIso).getTime() : Date.now();
+    const entryOutsideShift = entryMs < shiftStartMs - 900000;
+    const exitOutsideShift = exitIso ? new Date(exitIso).getTime() > shiftEndMs + 900000 : false;
+    return entryOutsideShift || exitOutsideShift;
+  }, [entryIso, exitIso, selectedShift]);
 
-    return entryMs < blockStartMs - 900000 || exitMs > blockEndMs + 900000; // >15m buffer
-  }, [selectedBlock, entryIso, exitIso]);
+  const handleDrawerTouchStart = (event: React.TouchEvent<HTMLElement>) => {
+    if (window.matchMedia('(min-width: 640px)').matches || isSubmitting) return;
+    touchStartYRef.current = event.touches[0]?.clientY ?? null;
+    dragDistanceRef.current = 0;
+  };
 
-  if (!isOpen) return null;
+  const handleDrawerTouchMove = (event: React.TouchEvent<HTMLElement>) => {
+    if (touchStartYRef.current === null || !drawerRef.current || isSubmitting) return;
+    const distance = (event.touches[0]?.clientY ?? touchStartYRef.current) - touchStartYRef.current;
+    if (distance <= 0 || (scrollAreaRef.current?.scrollTop ?? 0) > 0) return;
 
-  if (!isAdmin) {
-    return (
-      <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="bg-card border border-destructive/30 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl">
-          <span className="material-symbols-outlined text-4xl text-destructive mb-2">lock</span>
-          <h3 className="text-lg font-bold text-foreground">Acceso Restringido</h3>
-          <p className="text-sm text-muted-foreground mt-2">
-            Solo un Administrador puede crear registros manuales de asistencia faltante.
-          </p>
-          <button
-            onClick={onClose}
-            className="mt-5 min-h-[44px] px-6 py-2.5 rounded-2xl bg-surface border border-border text-text font-bold text-xs hover:bg-surface-hover w-full sm:w-auto"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    );
-  }
+    event.preventDefault();
+    dragDistanceRef.current = distance;
+    drawerRef.current.style.transition = 'none';
+    drawerRef.current.style.transform = `translateY(${distance}px)`;
+  };
+
+  const handleDrawerTouchEnd = () => {
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+
+    const shouldClose = dragDistanceRef.current >= 88 && !isSubmitting;
+    drawer.style.transition = 'transform 200ms cubic-bezier(0.22, 1, 0.36, 1)';
+    drawer.style.transform = shouldClose ? 'translateY(100%)' : '';
+    touchStartYRef.current = null;
+    dragDistanceRef.current = 0;
+
+    if (shouldClose) window.setTimeout(onClose, 180);
+  };
 
   const handleSubmit = async () => {
     if (!entryIso) {
@@ -142,13 +149,14 @@ export function AdminCreateSessionModal({
       return;
     }
 
-    if ((entryMode === 'custom' || exitMode === 'custom') && (!reason || reason.trim().length < 5)) {
+    if ((resolvedEntryMode === 'custom' || resolvedExitMode === 'custom') && reason.trim().length < 5) {
       setErrorMsg('Debes ingresar un motivo administrativo de al menos 5 caracteres.');
       return;
     }
 
-    if (isOutsideBlock && !confirmOutsideWarning) {
+    if (isOutsideShift && !confirmOutsideWarning) {
       setConfirmOutsideWarning(true);
+      setErrorMsg(null);
       return;
     }
 
@@ -156,7 +164,7 @@ export function AdminCreateSessionModal({
     setErrorMsg(null);
 
     if (isMockMode) {
-      setTimeout(() => {
+      window.setTimeout(() => {
         setIsSubmitting(false);
         onSuccess?.();
         onClose();
@@ -165,287 +173,227 @@ export function AdminCreateSessionModal({
     }
 
     try {
-      const res = await createAttendanceSessionAdminAction({
+      const response = await createAttendanceSessionAdminAction({
         volunteerId,
         dayKey: selectedDayKey,
         startedAt: entryIso,
         endedAt: sessionState === 'completed' ? exitIso : null,
-        correctionType: entryMode === 'official' ? 'official_shift_start' : 'custom_start_time',
+        correctionType: resolvedEntryMode === 'official' ? 'official_shift_start' : 'custom_start_time',
         reason: reason.trim(),
       });
 
-      if (res.success) {
+      if (response.success) {
         onSuccess?.();
         onClose();
       } else {
         setErrorMsg('No se pudo guardar la sesión de asistencia.');
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Error al procesar la sesión.');
+    } catch (error: unknown) {
+      setErrorMsg(error instanceof Error ? error.message : 'Error al procesar la sesión.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (!isOpen) return null;
+
+  if (!isAdmin) {
+    return (
+      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="missing-attendance-denied-title">
+        <button type="button" className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-label="Cerrar" />
+        <div className="relative w-full max-w-sm rounded-xl bg-dark2 p-6 text-center shadow-xl">
+          <span className="material-symbols-outlined mb-3 text-3xl text-red">lock</span>
+          <h2 id="missing-attendance-denied-title" className="text-lg font-bold text-text">Acceso restringido</h2>
+          <p className="mt-2 text-sm leading-relaxed text-text-dim">
+            Solo un Administrador puede crear registros manuales de asistencia faltante.
+          </p>
+          <Button onClick={onClose} className="mt-6 w-full rounded-full">Cerrar</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-      <div className="bg-card border border-border/80 rounded-t-3xl sm:rounded-3xl w-full max-w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col shadow-2xl relative overflow-hidden pb-[env(safe-area-inset-bottom)]">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border bg-card shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#4d7cfe]/15 border border-[#4d7cfe]/30 flex items-center justify-center text-[#4d7cfe] shrink-0">
-              <span className="material-symbols-outlined text-[22px]">more_time</span>
-            </div>
-            <div>
-              <h3 className="text-base font-extrabold text-text leading-snug">Registrar Asistencia Faltante</h3>
-              <p className="text-xs text-text-dim font-medium">{volunteerName}</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-text-dim hover:text-text hover:bg-surface-hover transition-colors shrink-0"
-            aria-label="Cerrar modal"
-          >
-            ✕
-          </button>
+    <div className="fixed inset-0 z-[120] flex items-end justify-end sm:items-stretch" role="dialog" aria-modal="true" aria-labelledby="missing-attendance-title">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 motion-reduce:animate-none"
+        onClick={() => !isSubmitting && onClose()}
+        disabled={isSubmitting}
+        aria-label="Cerrar panel"
+      />
+
+      <section
+        ref={drawerRef}
+        className="relative flex h-[94dvh] w-full flex-col overflow-hidden rounded-t-2xl border-border bg-dark2 text-text shadow-xl animate-in slide-in-from-bottom-4 duration-200 motion-reduce:animate-none sm:h-full sm:max-w-[520px] sm:rounded-none sm:border-l sm:slide-in-from-right-4"
+        onTouchStart={handleDrawerTouchStart}
+        onTouchMove={handleDrawerTouchMove}
+        onTouchEnd={handleDrawerTouchEnd}
+        onTouchCancel={handleDrawerTouchEnd}
+      >
+        <div className="flex justify-center pb-1 pt-3 sm:hidden" aria-hidden="true">
+          <div className="h-1 w-10 rounded-full bg-text-dim/30" />
         </div>
 
-        {/* Scrollable Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-5 py-4 sm:px-7 sm:py-6">
+          <h2 id="missing-attendance-title" className="text-xl font-bold leading-tight text-text">Registrar asistencia faltante</h2>
+          <Button type="button" variant="ghost" size="icon" onClick={onClose} disabled={isSubmitting} className="hidden shrink-0 rounded-full text-text-dim hover:text-text sm:inline-flex" aria-label="Cerrar panel">
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </Button>
+        </header>
 
+        <div ref={scrollAreaRef} className="flex-1 space-y-6 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7 sm:py-6">
           {errorMsg && (
-            <div className="p-3.5 rounded-2xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-semibold flex items-center gap-2">
-              <span className="material-symbols-outlined text-[20px] shrink-0">error</span>
+            <div className="flex items-start gap-2 rounded-lg bg-red/10 p-3.5 text-sm font-semibold text-red" role="alert">
+              <span className="material-symbols-outlined shrink-0 text-[20px]">error</span>
               <span>{errorMsg}</span>
             </div>
           )}
 
-          {/* 1. Day Selector (Dropdown) */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-text-dim tracking-widest uppercase mb-1.5 block">
-              Día asignado del evento
-            </label>
-            <Select value={selectedDayKey} onValueChange={(v) => v && setSelectedDayKey(v)}>
-              <SelectTrigger className="w-full h-11 border border-border bg-card text-text font-bold flex items-center justify-between px-3.5 rounded-xl text-xs focus:border-[#4d7cfe] focus:ring-2 focus:ring-[#4d7cfe]/20">
+          <div className="space-y-2">
+            <label className="block text-xs font-extrabold text-text">Día asignado del evento</label>
+            <Select value={selectedDayKey} onValueChange={(value) => value && setSelectedDayKey(value)}>
+              <SelectTrigger className="h-11 w-full rounded-lg border border-border bg-dark3 px-3 text-sm font-bold text-text focus:border-primary focus:ring-2 focus:ring-primary/20">
                 <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px] text-[#4d7cfe]">calendar_today</span>
+                  <span className="material-symbols-outlined text-[18px] text-primary">calendar_today</span>
                   <SelectValue placeholder="Selecciona el día" />
                 </div>
               </SelectTrigger>
-              <SelectContent className="bg-card border border-border text-text shadow-2xl z-[250]">
-                {availableDayKeys.map(dk => (
-                  <SelectItem key={dk} value={dk} className="font-bold text-xs text-text hover:bg-muted focus:bg-muted cursor-pointer py-2.5 px-3">
-                    {dk}
-                  </SelectItem>
+              <SelectContent className="z-[250] border-border bg-dark2 text-text shadow-lg">
+                {availableDayKeys.map((dayKey) => (
+                  <SelectItem key={dayKey} value={dayKey} className="cursor-pointer px-3 py-2.5 text-sm font-bold focus:bg-dark3">{dayKey}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* 2. Block Selection Cards (NO CHECKMARKS) */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold text-text-dim tracking-widest uppercase mb-1.5 block">
-              ¿A qué bloque programado corresponde?
-            </label>
-            {blocks.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {blocks.map((b, idx) => {
-                  const isSelected = selectedBlock?.blockLabel === b.blockLabel;
+          <fieldset className="space-y-2">
+            <legend className="text-xs font-extrabold text-text">Turno programado</legend>
+            {scheduledShifts.length > 0 ? (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {scheduledShifts.map((shift) => {
+                  const shiftKey = shift.shiftKeys[0];
+                  const isSelected = selectedShift?.shiftKeys[0] === shiftKey;
                   return (
                     <button
-                      key={idx}
+                      key={`${shiftKey}-${shift.startTimeIso}`}
                       type="button"
                       aria-pressed={isSelected}
-                      aria-selected={isSelected}
-                      onClick={() => setSelectedBlock(b)}
-                      className={`min-h-[56px] p-3.5 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#4d7cfe]/15 border-2 border-[#4d7cfe] text-text shadow-sm'
-                          : 'bg-surface border-border text-text-dim hover:text-text hover:bg-surface-hover'
-                      }`}
+                      onClick={() => setSelectedShiftKey(shiftKey)}
+                      className={`flex min-h-[56px] items-center justify-between rounded-lg border px-3.5 py-3 text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${isSelected ? 'border-primary bg-primary/10 text-text' : 'border-border bg-dark2 text-text hover:bg-dark3'}`}
                     >
-                      <div>
-                        <span className="font-extrabold text-xs block text-text">{b.blockLabel}</span>
-                        <span className="text-[11px] text-text-dim font-medium">{b.startTimeFormatted} – {b.endTimeFormatted}</span>
-                      </div>
+                      <span>
+                        <span className="block text-sm font-extrabold">{shiftKey}</span>
+                        <span className="mt-0.5 block text-xs font-medium text-text-dim">{shift.startTimeFormatted} – {shift.endTimeFormatted}</span>
+                      </span>
+                      <span className={`material-symbols-outlined text-[19px] ${isSelected ? 'text-primary' : 'text-text-dim/40'}`}>
+                        {isSelected ? 'radio_button_checked' : 'radio_button_unchecked'}
+                      </span>
                     </button>
                   );
                 })}
               </div>
             ) : (
-              <div className="p-3.5 rounded-2xl bg-surface border border-border text-xs text-text-dim">
-                No hay turnos asignados para este día. Se utilizará horario personalizado.
-              </div>
+              <p className="rounded-lg bg-dark3 p-3.5 text-sm leading-relaxed text-text-dim">No hay turnos asignados para este día.</p>
             )}
-          </div>
+          </fieldset>
 
-          {/* 3. Session State: Completed vs Open */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-text-dim tracking-widest uppercase mb-1.5 block">
-              Estado de la jornada
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                className={`min-h-[44px] px-3 py-2 rounded-2xl border text-xs font-extrabold flex items-center justify-center gap-2 transition-all ${
-                  sessionState === 'completed' ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 shadow-sm' : 'bg-surface border-border text-text-dim hover:text-text'
-                }`}
-                onClick={() => setSessionState('completed')}
-              >
-                <span className="material-symbols-outlined text-[18px]">check_circle</span>
+          <fieldset className="space-y-2">
+            <legend className="text-xs font-extrabold text-text">Estado de la jornada</legend>
+            <div className="grid grid-cols-2 gap-1 rounded-lg bg-dark3 p-1">
+              <button type="button" aria-pressed={sessionState === 'completed'} className={`min-h-[44px] rounded-md px-3 py-2 text-xs font-extrabold transition-colors ${sessionState === 'completed' ? 'bg-dark2 text-text shadow-sm' : 'text-text-dim hover:text-text'}`} onClick={() => setSessionState('completed')}>
                 Jornada completada
               </button>
-              <button
-                type="button"
-                className={`min-h-[44px] px-3 py-2 rounded-2xl border text-xs font-extrabold flex items-center justify-center gap-2 transition-all ${
-                  sessionState === 'open' ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-sm' : 'bg-surface border-border text-text-dim hover:text-text'
-                }`}
-                onClick={() => setSessionState('open')}
-              >
-                <span className="material-symbols-outlined text-[18px]">play_circle</span>
+              <button type="button" aria-pressed={sessionState === 'open'} className={`min-h-[44px] rounded-md px-3 py-2 text-xs font-extrabold transition-colors ${sessionState === 'open' ? 'bg-dark2 text-text shadow-sm' : 'text-text-dim hover:text-text'}`} onClick={() => setSessionState('open')}>
                 Actualmente en turno
               </button>
             </div>
-          </div>
+          </fieldset>
 
-          {/* 4. Entry Time Controls */}
-          <div className="space-y-2.5 p-4 rounded-2xl bg-surface/50 border border-border">
-            <label className="text-xs font-extrabold text-text block">Hora de Entrada</label>
-            <div className="flex flex-col sm:flex-row gap-2">
-              {selectedBlock && (
-                <button
-                  type="button"
-                  className={`min-h-[44px] flex-1 py-2 px-3.5 rounded-2xl border text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                    entryMode === 'official' ? 'bg-[#4d7cfe] text-white border-[#4d7cfe] shadow-sm' : 'bg-surface border-border text-text-dim hover:text-text'
-                  }`}
-                  onClick={() => setEntryMode('official')}
-                >
-                  Usar inicio oficial ({selectedBlock.startTimeFormatted})
+          <fieldset className="space-y-3 border-t border-border pt-5">
+            <legend className="pr-3 text-sm font-extrabold text-text">Hora de entrada</legend>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {selectedShift && (
+                <button type="button" aria-pressed={entryMode === 'official'} onClick={() => setEntryMode('official')} className={`min-h-[44px] rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${entryMode === 'official' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-dark2 text-text-dim hover:bg-dark3 hover:text-text'}`}>
+                  Inicio oficial · {selectedShift.startTimeFormatted}
                 </button>
               )}
-              <button
-                type="button"
-                className={`min-h-[44px] flex-1 py-2 px-3.5 rounded-2xl border text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                  entryMode === 'custom' ? 'bg-[#4d7cfe] text-white border-[#4d7cfe] shadow-sm' : 'bg-surface border-border text-text-dim hover:text-text'
-                }`}
-                onClick={() => setEntryMode('custom')}
-              >
+              <button type="button" aria-pressed={resolvedEntryMode === 'custom'} onClick={() => setEntryMode('custom')} className={`min-h-[44px] rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${resolvedEntryMode === 'custom' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-dark2 text-text-dim hover:bg-dark3 hover:text-text'}`}>
                 Indicar otra hora
               </button>
             </div>
+            {resolvedEntryMode === 'custom' && <CustomTimePicker value={customEntryTime} onChange={setCustomEntryTime} />}
+          </fieldset>
 
-            {entryMode === 'custom' && (
-              <CustomTimePicker
-                value={customEntryTime}
-                onChange={setCustomEntryTime}
-              />
-            )}
-          </div>
-
-          {/* 5. Exit Time Controls (If Completed) */}
           {sessionState === 'completed' && (
-            <div className="space-y-2.5 p-4 rounded-2xl bg-surface/50 border border-border">
-              <label className="text-xs font-extrabold text-text block">Hora de Salida</label>
-              <div className="flex flex-col sm:flex-row gap-2">
-                {selectedBlock && (
-                  <button
-                    type="button"
-                    className={`min-h-[44px] flex-1 py-2 px-3.5 rounded-2xl border text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                      exitMode === 'official' ? 'bg-[#4d7cfe] text-white border-[#4d7cfe] shadow-sm' : 'bg-surface border-border text-text-dim hover:text-text'
-                    }`}
-                    onClick={() => setExitMode('official')}
-                  >
-                    Usar fin oficial ({selectedBlock.endTimeFormatted})
+            <fieldset className="space-y-3 border-t border-border pt-5">
+              <legend className="pr-3 text-sm font-extrabold text-text">Hora de salida</legend>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {selectedShift && (
+                  <button type="button" aria-pressed={exitMode === 'official'} onClick={() => setExitMode('official')} className={`min-h-[44px] rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${exitMode === 'official' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-dark2 text-text-dim hover:bg-dark3 hover:text-text'}`}>
+                    Fin oficial · {selectedShift.endTimeFormatted}
                   </button>
                 )}
-                <button
-                  type="button"
-                  className={`min-h-[44px] flex-1 py-2 px-3.5 rounded-2xl border text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                    exitMode === 'custom' ? 'bg-[#4d7cfe] text-white border-[#4d7cfe] shadow-sm' : 'bg-surface border-border text-text-dim hover:text-text'
-                  }`}
-                  onClick={() => setExitMode('custom')}
-                >
+                <button type="button" aria-pressed={resolvedExitMode === 'custom'} onClick={() => setExitMode('custom')} className={`min-h-[44px] rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${resolvedExitMode === 'custom' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-dark2 text-text-dim hover:bg-dark3 hover:text-text'}`}>
                   Indicar otra hora
                 </button>
               </div>
-
-              {exitMode === 'custom' && (
-                <CustomTimePicker
-                  value={customExitTime}
-                  onChange={setCustomExitTime}
-                />
-              )}
-            </div>
+              {resolvedExitMode === 'custom' && <CustomTimePicker value={customExitTime} onChange={setCustomExitTime} />}
+            </fieldset>
           )}
 
-          {/* 6. Summary Card */}
-          <div className="p-3.5 rounded-2xl bg-surface border border-border text-xs space-y-1.5">
-            <div className="flex justify-between items-center text-text-dim">
-              <span>Duración resultante:</span>
-              <strong className="text-[#4d7cfe] font-extrabold text-sm">
-                {formatUnifiedDuration(workedMinutes)}
-              </strong>
+          <div className="space-y-2 rounded-lg bg-dark3 p-4 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <span className="font-medium text-text-dim">Duración resultante</span>
+              <strong className="text-base font-extrabold text-primary">{formatUnifiedDuration(workedMinutes)}</strong>
             </div>
-            {selectedBlock && (
-              <div className="flex justify-between items-center text-[11px] text-text-dim border-t border-border/50 pt-1.5">
-                <span>Horario del bloque:</span>
-                <span className="text-text font-semibold">{selectedBlock.startTimeFormatted} – {selectedBlock.endTimeFormatted}</span>
+            {selectedShift && (
+              <div className="flex items-center justify-between gap-4 border-t border-border pt-2 text-xs">
+                <span className="text-text-dim">Horario del turno</span>
+                <span className="font-bold text-text">{selectedShift.startTimeFormatted} – {selectedShift.endTimeFormatted}</span>
               </div>
             )}
           </div>
 
-          {/* 7. Non-blocking Warning outside scheduled block */}
-          {isOutsideBlock && (
-            <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs space-y-1.5 flex items-start gap-3">
-              <span className="material-symbols-outlined text-[20px] text-amber-400 shrink-0">warning</span>
+          {isOutsideShift && (
+            <div className="flex items-start gap-3 rounded-lg bg-amber-500/10 p-4 text-amber-800 dark:text-amber-300">
+              <span className="material-symbols-outlined shrink-0 text-[20px]">warning</span>
               <div>
-                <span className="font-extrabold block text-xs text-amber-300">⚠ Horario fuera del bloque programado</span>
-                <p className="text-[11px] text-text-dim leading-relaxed">
-                  El horario indicado difiere del horario oficial del bloque. Puedes continuar si existe una justificación administrativa.
+                <p className="text-sm font-extrabold">Horario fuera del turno programado</p>
+                <p className="mt-1 text-xs leading-relaxed text-amber-900/80 dark:text-amber-200/80">
+                  {confirmOutsideWarning ? 'Confirma nuevamente para registrar este horario.' : 'El horario difiere del turno oficial. Revisa los datos antes de continuar.'}
                 </p>
               </div>
             </div>
           )}
 
-          {/* 8. Mandatory Reason for Custom Times */}
-          {(entryMode === 'custom' || exitMode === 'custom') && (
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-text-dim tracking-widest uppercase mb-1.5 block">
-                Motivo administrativo <span className="text-rose-400">*</span>
-              </label>
+          {(resolvedEntryMode === 'custom' || resolvedExitMode === 'custom') && (
+            <div className="space-y-2">
+              <label htmlFor="attendance-reason" className="block text-xs font-extrabold text-text">Motivo administrativo <span className="text-red">*</span></label>
               <textarea
-                rows={2}
-                placeholder="Ingresa el motivo de la corrección personalizada (mín. 5 caracteres)"
+                id="attendance-reason"
+                rows={3}
+                placeholder="Explica brevemente por qué se registra un horario diferente"
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="w-full rounded-2xl border border-border bg-card p-3 text-xs font-medium text-text focus:outline-none focus:border-[#4d7cfe] focus:ring-2 focus:ring-[#4d7cfe]/20 transition-all"
+                onChange={(event) => setReason(event.target.value)}
+                className="w-full resize-none rounded-lg border border-border bg-dark3 p-3 text-sm font-medium text-text outline-none transition-colors placeholder:text-text-dim focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
+              <p className="text-xs text-text-dim">Mínimo 5 caracteres.</p>
             </div>
           )}
-
         </div>
 
-        {/* Footer Actions */}
-        <div className="p-4 border-t border-border bg-card shrink-0 flex flex-col sm:flex-row gap-2.5">
-          <button
-            disabled={isSubmitting}
-            onClick={handleSubmit}
-            className="min-h-[48px] w-full sm:flex-1 py-3 px-4 rounded-2xl bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 transition-transform active:scale-[0.98]"
-          >
-            <span className="material-symbols-outlined text-[20px]">check</span>
-            {isSubmitting ? 'Guardando...' : (isOutsideBlock && !confirmOutsideWarning ? 'Confirmar de todas formas' : 'Crear Registro de Asistencia')}
-          </button>
-          <button
-            disabled={isSubmitting}
-            onClick={onClose}
-            className="min-h-[48px] w-full sm:w-auto px-5 py-3 rounded-2xl bg-surface border border-border text-text font-bold text-xs hover:bg-surface-hover transition-colors flex items-center justify-center"
-          >
-            Cancelar
-          </button>
-        </div>
-
-      </div>
+        <footer className="flex shrink-0 gap-3 border-t border-border bg-dark2 px-5 py-4 sm:px-7" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting} className="h-11 flex-1 rounded-full bg-dark3 text-xs sm:text-sm">Cancelar</Button>
+          <Button type="button" onClick={handleSubmit} disabled={isSubmitting} className="h-11 flex-[1.35] rounded-full bg-primary px-4 text-xs text-white hover:bg-primary/90 sm:text-sm">
+            {isSubmitting ? (
+              <><span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>Guardando…</>
+            ) : (
+              <><span className="material-symbols-outlined text-[18px]">check</span>{isOutsideShift && !confirmOutsideWarning ? 'Confirmar horario' : 'Registrar asistencia'}</>
+            )}
+          </Button>
+        </footer>
+      </section>
     </div>
   );
 }

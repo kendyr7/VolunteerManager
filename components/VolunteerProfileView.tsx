@@ -727,13 +727,15 @@ export function VolunteerProfileView({
 
       {/* Admin Create Missing Session Button (If Admin) */}
       {isAdmin && (
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex justify-center">
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-xs shadow-md flex items-center gap-2 transition-transform active:scale-95 w-full sm:w-auto justify-center"
+            className="min-h-[44px] w-full justify-center rounded-full bg-primary px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary/90 active:scale-[0.97] sm:w-auto"
           >
-            <span className="material-symbols-outlined text-[18px]">more_time</span>
-            Registrar asistencia / entrada faltante
+            <span className="inline-flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]">more_time</span>
+              Registrar asistencia / entrada faltante
+            </span>
           </button>
         </div>
       )}

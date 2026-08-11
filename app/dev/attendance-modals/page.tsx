@@ -163,7 +163,7 @@ export default function DevAttendanceModalsHarnessPage() {
           <div>
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold text-[#4d7cfe]">ESCENARIO 1</span>
-              <span className="text-[10px] text-text-dim font-mono">Nombre Largo + 2 Bloques</span>
+              <span className="text-[10px] text-text-dim font-mono">2 turnos separados</span>
             </div>
             <h3 className="font-bold text-sm text-text mt-1">María Fernanda de los Ángeles...</h3>
             <p className="text-xs text-text-dim mt-1 leading-relaxed">
@@ -175,7 +175,7 @@ export default function DevAttendanceModalsHarnessPage() {
             className="min-h-[44px] w-full py-2.5 px-4 rounded-2xl bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-1.5 transition-transform active:scale-95"
           >
             <span className="material-symbols-outlined text-[18px]">more_time</span>
-            Probar Entrada Olvidada (2 Bloques)
+            Probar selección de 2 turnos
           </button>
         </div>
 
@@ -184,7 +184,7 @@ export default function DevAttendanceModalsHarnessPage() {
           <div>
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold text-[#4d7cfe]">ESCENARIO 2</span>
-              <span className="text-[10px] text-text-dim font-mono">1 Bloque Continuo (T1+T2+T3)</span>
+              <span className="text-[10px] text-text-dim font-mono">3 turnos consecutivos</span>
             </div>
             <h3 className="font-bold text-sm text-text mt-1">Carlos Alberto Mendoza Silva</h3>
             <p className="text-xs text-text-dim mt-1 leading-relaxed">
@@ -196,7 +196,7 @@ export default function DevAttendanceModalsHarnessPage() {
             className="min-h-[44px] w-full py-2.5 px-4 rounded-2xl bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-1.5 transition-transform active:scale-95"
           >
             <span className="material-symbols-outlined text-[18px]">more_time</span>
-            Probar Entrada Olvidada (Continuo)
+            Probar selección individual
           </button>
         </div>
 

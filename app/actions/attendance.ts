@@ -326,6 +326,8 @@ export async function openAttendanceSessionAction(
   // Audit Log in activity_logs with JSON payload
   try {
     const supabase = getAdminClient();
+    const { getCurrentUserSession } = await import('@/lib/auth-helpers');
+    const actor = await getCurrentUserSession();
     const { data: vol } = await supabase
       .from('volunteers')
       .select('first_name, last_name')
@@ -335,8 +337,8 @@ export async function openAttendanceSessionAction(
     const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : 'Voluntario';
 
     await supabase.from('activity_logs').insert({
-      user_name: 'Escáner QR',
-      user_role: 'Sistema',
+      user_name: actor.userName || 'Coordinador',
+      user_role: actor.userRole || 'Editor',
       action_type: 'Check-in',
       description: `Inició sesión de asistencia de ${volName}`,
       details: JSON.stringify({
@@ -345,7 +347,7 @@ export async function openAttendanceSessionAction(
         startedAt: saved.started_at,
         dayKey: saved.day_key
       }),
-      target_id: saved.id
+      target_id: volunteerId
     });
   } catch (e) {}
 
@@ -405,11 +407,10 @@ export async function closeAttendanceSessionAction({
   let actorName = actorNameInput || 'Coordinador';
   let actorRole = actorRoleInput || 'Coordinador';
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session')?.value || '';
-    const session = verifySessionToken(sessionCookie);
-    if (session?.userName) actorName = session.userName;
-    if (session?.role) actorRole = session.role;
+    const { getCurrentUserSession } = await import('@/lib/auth-helpers');
+    const actor = await getCurrentUserSession();
+    if (actor.userId) actorName = actor.userName || actorName;
+    if (actor.userRole) actorRole = actor.userRole;
   } catch (e) {}
 
   const previousEndedAt = sessionToClose.ended_at;
@@ -457,7 +458,7 @@ export async function closeAttendanceSessionAction({
         previousEndedAt,
         newEndedAt: saved.ended_at
       }),
-      target_id: saved.id
+      target_id: saved.volunteer_id
     });
   } catch (e) {}
 
@@ -605,7 +606,9 @@ export async function adjustSessionTimesAdminAction({
     record: saved,
   });
 
-  const adminName = session.userName || 'Administrador';
+  const { getCurrentUserSession } = await import('@/lib/auth-helpers');
+  const currentActor = await getCurrentUserSession();
+  const adminName = currentActor.userName || 'Administrador';
   const adminId = session.userId || 'admin-server-session';
 
   // Log in activity_logs
@@ -629,7 +632,7 @@ export async function adjustSessionTimesAdminAction({
         adminId,
         adminName
       }),
-      target_id: saved.id
+      target_id: saved.volunteer_id
     });
   } catch (e) {}
 
@@ -731,7 +734,9 @@ export async function createAttendanceSessionAdminAction(input: {
     record: saved,
   });
 
-  const adminName = session.userName || 'Administrador';
+  const { getCurrentUserSession } = await import('@/lib/auth-helpers');
+  const currentActor = await getCurrentUserSession();
+  const adminName = currentActor.userName || 'Administrador';
   const adminId = session.userId || 'admin-server-session';
 
   try {
@@ -753,7 +758,7 @@ export async function createAttendanceSessionAdminAction(input: {
         adminId,
         adminName
       }),
-      target_id: saved.id
+      target_id: volunteerId
     });
   } catch (e) {}
 

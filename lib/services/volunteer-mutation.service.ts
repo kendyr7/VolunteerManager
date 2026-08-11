@@ -496,6 +496,25 @@ export class VolunteerMutationService {
       // Write all individual audit logs in a single call
       if (auditPayloads.length > 0) {
         await VolunteerAuditWriter.write(auditPayloads);
+
+        // One global summary keeps the batch visible in Settings without
+        // replacing the individual target_id entries used by each profile.
+        const { error: summaryError } = await supabase.from('activity_logs').insert({
+          user_name: actor.name,
+          user_role: actor.role,
+          action_type: 'Creación',
+          description: `Importó masivamente ${importedVolunteers.length} voluntario(s)`,
+          details: JSON.stringify({
+            type: 'import_batch_summary',
+            totalCount: importedVolunteers.length,
+            importedBy: actor.name,
+            volunteerIds: importedVolunteers.map(volunteer => volunteer.id),
+          }),
+          target_id: null,
+        });
+        if (summaryError) {
+          console.error('[VolunteerMutationService.bulkImportVolunteers] Failed to write batch audit summary:', summaryError);
+        }
       }
 
       return {
@@ -1224,7 +1243,6 @@ export class VolunteerMutationService {
     }
   }
 }
-
 
 
 

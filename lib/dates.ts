@@ -20,19 +20,16 @@ export interface OfficialShiftTime {
 }
 
 /**
- * Determines if a given day is an extended shift day (Friday, Saturday, or Special Dates Sep 14 & 15).
- * Extended days have T4 ending at 10:00 PM (5 hours), whereas Mon-Thu end at 9:00 PM (4 hours).
+ * Determines if a given day is an extended shift day.
+ * Only September 14 and 15 use the extended T4 ending at 10:00 PM.
  */
 export function isExtendedShiftDay(dayKey?: string | Date | null): boolean {
-  if (!dayKey) return true; // Default fallback to extended schedule if unspecified
+  if (!dayKey) return false;
 
   if (dayKey instanceof Date) {
-    const day = dayKey.getDay();
     const dateNum = dayKey.getDate();
     const month = dayKey.getMonth(); // 8 = September in 0-indexed JS Date
-    if (day === 5 || day === 6) return true; // Friday, Saturday
-    if (month === 8 && (dateNum === 14 || dateNum === 15)) return true; // Sep 14, 15
-    return false;
+    return month === 8 && (dateNum === 14 || dateNum === 15);
   }
 
   const raw = String(dayKey).trim().toLowerCase();
@@ -44,21 +41,15 @@ export function isExtendedShiftDay(dayKey?: string | Date | null): boolean {
     return isExtendedShiftDay(dateObj);
   }
 
-  // Check short day_key format like "vie 11", "sáb 12", "lun 14", "mar 15"
-  if (raw.includes('vie') || raw.includes('sáb') || raw.includes('sab')) {
-    return true;
-  }
-  if (raw.includes('14') || raw.includes('15')) {
-    return true;
-  }
-
-  return false; // Lun, Mar, Mié, Jue (except 14/15)
+  // Short event day_key format, e.g. "lun 14" or "mar 15".
+  const dayNumber = Number(raw.match(/\d+/)?.[0]);
+  return dayNumber === 14 || dayNumber === 15;
 }
 
 /**
  * Single Authoritative Source of Truth for Official Shift Schedule Times
- * - Lunes a Jueves: T1 (7-12), T2 (11-15), T3 (14-18), T4 (17-21, 4h)
- * - Viernes, Sábado, 14 y 15 Sep: T1 (7-12), T2 (11-15), T3 (14-18), T4 (17-22, 5h)
+ * - Días regulares: T1 (7-12), T2 (11-15), T3 (14-18), T4 (17-21, 4h)
+ * - 14 y 15 Sep: T1 (7-12), T2 (11-15), T3 (14-18), T4 (17-22, 5h)
  */
 export function getOfficialShiftTime(
   dayKey?: string | Date | null,
