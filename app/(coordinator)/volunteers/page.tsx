@@ -33,7 +33,6 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
 import { VolunteerProfileView } from "@/components/VolunteerProfileView";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
-import { EntryPassModal } from "@/components/EntryPassModal";
 import { VolunteerTableRow } from "@/components/VolunteerTableRow";
 import { VolunteerSearchService } from "@/lib/services/volunteer-search.service";
 import { filterVolunteerIds } from "@/lib/services/volunteer-filter.service";
@@ -152,7 +151,6 @@ export default function VolunteersPage() {
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
-  const [selectedPassVolunteer, setSelectedPassVolunteer] = useState<VolunteerType | null>(null);
 
   // Table Column Sort State
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -971,7 +969,6 @@ export default function VolunteersPage() {
                             onEditClick={handleEditClick}
                             onResetPin={handleResetPin}
                             onArchive={handleArchive}
-                            onShowPass={(v) => setSelectedPassVolunteer(v)}
                           />
                         );
                       });
@@ -1072,14 +1069,6 @@ export default function VolunteersPage() {
         initialMode={drawerMode}
       />
 
-      {/* Admin QR Entry Pass Modal */}
-      <EntryPassModal
-        isOpen={Boolean(selectedPassVolunteer)}
-        onClose={() => setSelectedPassVolunteer(null)}
-        volunteerId={selectedPassVolunteer?.id || ''}
-        volunteerName={selectedPassVolunteer?.name || ''}
-        committeeName={selectedPassVolunteer?.committee || ''}
-      />
 
       {/* Editor Lateral (Añadir) - Custom Fixed Drawer */}
       <div className={cn("fixed inset-0 z-[100] flex transition-all duration-300", isMobile ? "flex-col justify-end" : "justify-end", isAddSheetOpen ? "pointer-events-auto" : "pointer-events-none")}>

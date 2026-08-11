@@ -57,6 +57,7 @@ export const metadata: Metadata = {
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AutoLogout } from "@/components/AutoLogout";
 import { TokenProvider } from "@/components/TokenProvider";
+import { UnofficialSiteBanner } from "@/components/UnofficialSiteBanner";
 import { cookies } from "next/headers";
 
 export default async function RootLayout({
@@ -66,6 +67,7 @@ export default async function RootLayout({
 }>) {
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get('session')?.value || null;
+  const hasAcknowledgedUnofficialSite = cookieStore.get('unofficial_site_ack')?.value === '1';
 
   return (
     <html
@@ -83,6 +85,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col font-sans bg-dark text-text tracking-[-0.01em]">
         <TokenProvider token={sessionToken} />
         <AutoLogout />
+        <UnofficialSiteBanner initialAcknowledged={hasAcknowledgedUnofficialSite} />
         {children}
         <SpeedInsights />
         <Script
