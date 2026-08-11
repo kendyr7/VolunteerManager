@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useTransition, useMemo, useDeferredValue } from "react";
+import { useState, useEffect, useTransition, useMemo, useRef } from "react";
 import { getReportsData, ReportItem, ReportsData, AttendanceSummary } from "@/app/actions/reports";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -77,6 +77,56 @@ type SortOrder = 'asc' | 'desc';
 type HistorySortField = 'volunteerName' | 'committeeName' | 'neighborhood' | 'date' | 'durationMinutes' | 'status';
 type VolunteerSortField = 'name' | 'committee' | 'confirmed' | 'reliability' | 'minutes';
 
+function ReportPagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  pageSize,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const firstItem = (currentPage - 1) * pageSize + 1;
+  const lastItem = Math.min(currentPage * pageSize, totalItems);
+
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-border bg-dark3/40 px-4 py-3 sm:px-5">
+      <span className="text-[11px] font-bold font-inter text-text-dim">
+        {firstItem}–{lastItem} de {totalItems}
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={currentPage === 1}
+          onClick={() => onPageChange(currentPage - 1)}
+          className="flex h-8 items-center gap-1 rounded-full border border-border bg-dark2 px-3 text-[11px] font-bold text-text transition-colors hover:bg-dark disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <span className="material-symbols-outlined text-[15px]">chevron_left</span>
+          Anterior
+        </button>
+        <span className="min-w-14 text-center text-[11px] font-bold font-inter text-text-dim">
+          {currentPage} / {totalPages}
+        </span>
+        <button
+          type="button"
+          disabled={currentPage === totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+          className="flex h-8 items-center gap-1 rounded-full border border-border bg-dark2 px-3 text-[11px] font-bold text-text transition-colors hover:bg-dark disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Siguiente
+          <span className="material-symbols-outlined text-[15px]">chevron_right</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ReportsPage() {
   const [data, setData] = useState<ReportsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,7 +135,7 @@ export default function ReportsPage() {
 
   // Filters State (Multi-Selection arrays)
   const [inputValue, setInputValue] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
+  const appliedSearch = inputValue.trim();
 
   // Table Column Sort States
   const [historySortField, setHistorySortField] = useState<HistorySortField | null>(null);
@@ -111,14 +161,6 @@ export default function ReportsPage() {
       setVolunteerSortOrder('asc');
     }
   };
-
-  // Debounce search input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setAppliedSearch(inputValue);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [inputValue]);
 
   // Selected multi-filters
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
@@ -205,6 +247,7 @@ export default function ReportsPage() {
   }, [activeTab, selectedCommittees, selectedNeighborhoods, selectedStakes, selectedStatuses, selectedDates, appliedSearch]);
 
   const [isPending, startTransition] = useTransition();
+  const hasLoadedReportsRef = useRef(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -218,10 +261,19 @@ export default function ReportsPage() {
   };
 
   useEffect(() => {
+    if (hasLoadedReportsRef.current) return;
+    hasLoadedReportsRef.current = true;
     loadData();
   }, []);
 
   const items = useMemo(() => data?.items || [], [data?.items]);
+  const itemSearchIndex = useMemo(() => {
+    const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    return new Map(items.map(item => [
+      item.registrationId,
+      normalize(`${item.volunteerName} ${item.phone} ${item.neighborhood} ${item.stake}`),
+    ]));
+  }, [items]);
 
   // Compute ALL event days (Sep 10–26, excluding Sundays) matching Turnos page
   const allEventDays = useMemo(() => {
@@ -256,19 +308,7 @@ export default function ReportsPage() {
     return items.filter(item => {
       // 1. Search term
       if (normSearch) {
-        const itemVolName = (item.volunteerName || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const itemPhone = item.phone || '';
-        const itemNeigh = (item.neighborhood || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const itemStake = (item.stake || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-        const matchesSearch = itemVolName.includes(normSearch) ||
-                              itemPhone.includes(appliedSearch) ||
-                              itemNeigh.includes(normSearch) ||
-                              itemStake.includes(normSearch);
-
-        if (!matchesSearch) {
-          return false;
-        }
+        if (!itemSearchIndex.get(item.registrationId)?.includes(normSearch)) return false;
       }
       
       // 2. Committee filter (check both ID and Name)
@@ -299,7 +339,7 @@ export default function ReportsPage() {
 
       return true;
     });
-  }, [items, appliedSearch, selectedCommittees, selectedNeighborhoods, selectedStakes, selectedStatuses, selectedDates]);
+  }, [items, itemSearchIndex, appliedSearch, selectedCommittees, selectedNeighborhoods, selectedStakes, selectedStatuses, selectedDates]);
 
   // Single-pass calculation of KPIs from filtered items
   const kpiStats = useMemo(() => {
@@ -402,7 +442,7 @@ export default function ReportsPage() {
 
   // Dynamic Recruitment Summary filtered by active filters
   const filteredRecruitmentSummary = useMemo(() => {
-    if (!data) return [];
+    if (!data || activeTab !== 'recruitment') return [];
 
     const activeCommittees = data.uniqueCommittees.filter(c => {
       if (selectedCommittees.length > 0) {
@@ -438,10 +478,11 @@ export default function ReportsPage() {
         coverageRate,
       };
     });
-  }, [data, filteredItems, selectedCommittees, selectedDates]);
+  }, [data, filteredItems, selectedCommittees, selectedDates, activeTab]);
 
   // Dynamic Age Segmentation filtered by active filters
   const filteredAgeSegmentation = useMemo(() => {
+    if (activeTab !== 'recruitment') return [];
     const ageCounts: Record<string, number> = {
       '< 18': 0,
       '18 - 25': 0,
@@ -480,11 +521,11 @@ export default function ReportsPage() {
       count,
       percentage: totalVolsCount > 0 ? Math.round((count / totalVolsCount) * 100) : 0,
     }));
-  }, [filteredItems]);
+  }, [filteredItems, activeTab]);
 
   // Dynamic Daily Coverage filtered by active filters
   const filteredDailyCoverage = useMemo(() => {
-    if (!data) return [];
+    if (!data || activeTab !== 'daily') return [];
 
     const activeDays = data.dailyCoverage.filter(day => selectedDates.length === 0 || selectedDates.includes(day.date));
 
@@ -537,7 +578,7 @@ export default function ReportsPage() {
         byShift,
       };
     });
-  }, [data, filteredItems, selectedCommittees, selectedDates]);
+  }, [data, filteredItems, selectedCommittees, selectedDates, activeTab]);
 
   const sortedHistoryItems = useMemo(() => {
     if (!historySortField) return filteredItems;
@@ -587,8 +628,11 @@ export default function ReportsPage() {
     });
   }, [volunteerRanking, volunteerSortField, volunteerSortOrder]);
 
-  const paginatedHistoryItems = sortedHistoryItems;
-  const paginatedVolunteerItems = sortedVolunteerRanking;
+  const historyTotalPages = Math.max(1, Math.ceil(sortedHistoryItems.length / pageSize));
+  const volunteerTotalPages = Math.max(1, Math.ceil(sortedVolunteerRanking.length / pageSize));
+  const pageStart = (currentPage - 1) * pageSize;
+  const paginatedHistoryItems = sortedHistoryItems.slice(pageStart, pageStart + pageSize);
+  const paginatedVolunteerItems = sortedVolunteerRanking.slice(pageStart, pageStart + pageSize);
 
   if (loading) {
     return (
@@ -627,7 +671,7 @@ export default function ReportsPage() {
         `${item.startTime}-${item.endTime}`,
         formatMinutes(item.durationMinutes),
         item.status === 'confirmed' ? 'Asistió' :
-        item.status === 'registered' ? 'Inscrito' :
+        item.status === 'registered' ? 'Pendiente' :
         item.status === 'absent' ? 'Ausente' : 'Reemplazado'
       ]);
       filename = `historial_asistencia_${new Date().toISOString().split('T')[0]}.csv`;
@@ -663,7 +707,6 @@ export default function ReportsPage() {
 
   const clearFilters = () => {
     setInputValue("");
-    setAppliedSearch("");
     setSelectedCommittees([]);
     setSelectedNeighborhoods([]);
     setSelectedStakes([]);
@@ -933,12 +976,6 @@ export default function ReportsPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (appliedSearch && inputValue === appliedSearch) {
-              setInputValue('');
-              setAppliedSearch('');
-            } else if (inputValue.trim()) {
-              setAppliedSearch(inputValue.trim());
-            }
             setCurrentPage(1);
           }}
           className="w-full relative z-10"
@@ -961,7 +998,6 @@ export default function ReportsPage() {
                   type="button"
                   onClick={() => {
                     setInputValue('');
-                    setAppliedSearch('');
                     setCurrentPage(1);
                   }}
                   className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
@@ -1368,7 +1404,7 @@ export default function ReportsPage() {
                                 'bg-dark3 text-text-dim border-border'
                               }`}>
                                 {item.status === 'confirmed' && 'Asistió'}
-                                {item.status === 'registered' && 'Inscrito'}
+                                {item.status === 'registered' && 'Pendiente'}
                                 {item.status === 'absent' && 'Ausente'}
                                 {item.status === 'replaced' && 'Reemplazado'}
                               </Badge>
@@ -1414,6 +1450,13 @@ export default function ReportsPage() {
                       </div>
                     ))}
                   </div>
+                  <ReportPagination
+                    currentPage={currentPage}
+                    totalPages={historyTotalPages}
+                    totalItems={sortedHistoryItems.length}
+                    pageSize={pageSize}
+                    onPageChange={setCurrentPage}
+                  />
                 </motion.div>
               ) : activeTab === 'volunteers' ? (
                 <motion.div
@@ -1606,6 +1649,13 @@ export default function ReportsPage() {
                       );
                     })}
                   </div>
+                  <ReportPagination
+                    currentPage={currentPage}
+                    totalPages={volunteerTotalPages}
+                    totalItems={sortedVolunteerRanking.length}
+                    pageSize={pageSize}
+                    onPageChange={setCurrentPage}
+                  />
                 </motion.div>
               ) : activeTab === 'recruitment' ? (
                 <motion.div

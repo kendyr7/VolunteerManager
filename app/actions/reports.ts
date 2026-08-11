@@ -4,12 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase-helpers";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/auth";
-import { getActiveEventDays, SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
+import { getActiveEventDays, getOfficialShiftTime } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { getUnifiedShiftWorkedMinutes } from "@/lib/shift-calculations";
-import { fetchAllAttendanceSessionsFromDb } from "@/lib/services/session-store";
-import { inferShiftsForSession, calculateSessionMinutes } from "@/lib/session-utils";
+import { getNicaraguaHourFloat } from "@/lib/session-utils";
 
 export interface ReportItem {
   registrationId: string;
@@ -88,6 +86,47 @@ export interface ReportsData {
   recruitmentSummary: CommitteeRecruitment[];
   ageSegmentation: AgeSegmentation[];
   dailyCoverage: DailyCoverage[];
+}
+
+interface ReportVolunteerRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  age: string | number | null;
+  phone: string | null;
+  neighborhood: string | null;
+  stake: string | null;
+  status: string | null;
+  committee_id: string | null;
+  committees: { id: string; name: string; status?: string | null } | null;
+}
+
+interface ReportCommitteeRow {
+  id: string;
+  name: string;
+  status?: string | null;
+}
+
+interface ReportShiftRow {
+  id: string;
+  volunteer_id: string;
+  day_key: string;
+  shift_key: string;
+}
+
+interface ReportSessionRow {
+  id: string;
+  volunteer_id: string;
+  day_key: string;
+  started_at: string;
+  ended_at: string | null;
+  status: 'open' | 'completed';
+}
+
+interface ReportRequirementRow {
+  committee_id: string;
+  shift_key: string;
+  required: number;
 }
 
 
@@ -171,34 +210,81 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
       supabase = await createClient();
     }
 
-    // 1. Fetch all volunteers including archived ones for historical data retention
-    const volsData = await fetchAllRows(supabase, 'volunteers', '*, committees(id, name)');
-
-    // 2. Fetch all committees from database (guarantees new/empty committees appear in reports filters)
-    const commsData = await fetchAllRows(supabase, 'committees', 'id, name');
-
-    // 3. Fetch shifts, audit logs, and attendance_sessions (bypassing 1000 row limit)
-    const [shiftsData, auditLogsData, sessionsData] = await Promise.all([
-      fetchAllRows(supabase, 'shifts', '*'),
-      fetchAllRows(supabase, 'activity_logs', '*'),
-      fetchAllAttendanceSessionsFromDb()
+    // Fetch independent report datasets concurrently and request only the fields used below.
+    const [volsData, commsData, shiftsData, sessionsData, reqsData] = await Promise.all([
+      fetchAllRows<ReportVolunteerRow>(
+        supabase,
+        'volunteers',
+        'id, first_name, last_name, age, phone, neighborhood, stake, status, committee_id, committees(id, name, status)'
+      ),
+      fetchAllRows<ReportCommitteeRow>(
+        supabase,
+        'committees',
+        'id, name, status',
+        query => query.or('status.is.null,status.neq.archived')
+      ),
+      fetchAllRows<ReportShiftRow>(supabase, 'shifts', 'id, volunteer_id, day_key, shift_key'),
+      fetchAllRows<ReportSessionRow>(
+        supabase,
+        'attendance_sessions',
+        'id, volunteer_id, day_key, started_at, ended_at, status'
+      ),
+      fetchAllRows<ReportRequirementRow>(
+        supabase,
+        'committee_shift_requirements',
+        'committee_id, shift_key, required'
+      ),
     ]);
 
-    // Group attendance_sessions by volunteer_id for instant O(1) lookup
-    const sessionsByVolunteerMap = new Map<string, any[]>();
-    (sessionsData || []).forEach((sess: any) => {
-      const vId = sess.volunteer_id || sess.volunteerId;
-      if (!vId) return;
-      if (!sessionsByVolunteerMap.has(vId)) sessionsByVolunteerMap.set(vId, []);
-      sessionsByVolunteerMap.get(vId)!.push(sess);
+    // O(1) indexes replace the previous shifts x volunteers x audit-logs scans.
+    const volunteersById = new Map<string, ReportVolunteerRow>();
+    (volsData || []).forEach(vol => volunteersById.set(vol.id, vol));
+
+    const normalizeDayKey = (value: string) => (value || '').toLowerCase().trim();
+    const assignedShiftsByVolunteerDay = new Map<string, Set<string>>();
+    (shiftsData || []).forEach(shift => {
+      const key = `${shift.volunteer_id}|${normalizeDayKey(shift.day_key)}`;
+      if (!assignedShiftsByVolunteerDay.has(key)) assignedShiftsByVolunteerDay.set(key, new Set());
+      assignedShiftsByVolunteerDay.get(key)!.add(shift.shift_key);
     });
 
-    // 4. Fetch committee_shift_requirements (server-side authoritative source)
-    const reqsData = await fetchAllRows(supabase, 'committee_shift_requirements', 'committee_id, shift_key, required');
+    type SessionAttendance = { completedMinutes: number; hasOpen: boolean };
+    const attendanceByShift = new Map<string, SessionAttendance>();
+
+    (sessionsData || []).forEach(session => {
+      if (!session.volunteer_id || !session.day_key || !session.started_at) return;
+      const dayKey = normalizeDayKey(session.day_key);
+      const assignmentKey = `${session.volunteer_id}|${dayKey}`;
+      const assignedShiftKeys = assignedShiftsByVolunteerDay.get(assignmentKey);
+      if (!assignedShiftKeys?.size) return;
+
+      const startHour = getNicaraguaHourFloat(session.started_at);
+      let endHour = session.ended_at ? getNicaraguaHourFloat(session.ended_at) : startHour;
+      if (session.ended_at && endHour < startHour) endHour += 24;
+
+      assignedShiftKeys.forEach(shiftKey => {
+        const official = getOfficialShiftTime(session.day_key, shiftKey);
+        const overlapStart = Math.max(startHour, official.startHour);
+        const overlapEnd = Math.min(endHour, official.endHour);
+        const hasCompletedOverlap = session.status === 'completed' && Boolean(session.ended_at) && overlapEnd > overlapStart;
+
+        // Open sessions are indexed only when their start falls within the assigned slot.
+        const hasOpenOverlap = session.status === 'open' && startHour < official.endHour && startHour >= official.startHour;
+        if (!hasCompletedOverlap && !hasOpenOverlap) return;
+
+        const key = `${session.volunteer_id}|${dayKey}|${shiftKey}`;
+        const current = attendanceByShift.get(key) || { completedMinutes: 0, hasOpen: false };
+        if (hasCompletedOverlap) {
+          current.completedMinutes += Math.round((overlapEnd - overlapStart) * 60);
+        }
+        if (hasOpenOverlap) current.hasOpen = true;
+        attendanceByShift.set(key, current);
+      });
+    });
 
     // Build requirements map: committeeId -> shiftKey -> required
     const reqsMap: Record<string, Record<string, number>> = {};
-    (reqsData || []).forEach((r: any) => {
+    (reqsData || []).forEach(r => {
       if (!reqsMap[r.committee_id]) reqsMap[r.committee_id] = {};
       reqsMap[r.committee_id][r.shift_key] = r.required;
     });
@@ -215,7 +301,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
     const committeesMap = new Map<string, string>();
     
     // Populate all committees registered in database
-    (commsData || []).forEach((c: any) => {
+    (commsData || []).forEach(c => {
       if (c.id && c.name) {
         // Access isolation: non-Admin coordinators only see their own committee
         if (role !== 'Admin' && userCommittee && c.name.trim().toLowerCase() !== userCommittee.trim().toLowerCase()) {
@@ -227,10 +313,11 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
     
     const now = new Date();
 
-    shiftsData?.forEach((s: any) => {
+    shiftsData?.forEach(s => {
       // Find matching volunteer
-      const vol = volsData?.find(v => v.id === s.volunteer_id);
+      const vol = volunteersById.get(s.volunteer_id);
       if (!vol) return;
+      if (vol.committees?.status === 'archived') return;
 
       const committeeName = vol.committees?.name || 'Sin comité';
       const committeeId = vol.committees?.id || 'sin-comite';
@@ -246,17 +333,26 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
       committeesMap.set(committeeId, committeeName);
 
       const officialShift = getOfficialShiftTime(s.day_key, s.shift_key);
-      const shiftMeta = { start: officialShift.startTime, end: officialShift.endTime, hours: officialShift.hours };
+      const shiftMeta = { start: officialShift.startTime, end: officialShift.endTime };
       const dateStr = parseDayKeyToDateStr(s.day_key);
       const shiftNum = parseInt(s.shift_key.substring(1)) || 1;
 
       let status: 'registered' | 'confirmed' | 'absent' | 'replaced' = 'registered';
       let durationMinutes = 0;
 
-      const userSessions = sessionsByVolunteerMap.get(s.volunteer_id) || [];
-      const hasSessionsForThisDay = userSessions.some((sess: any) => (sess.day_key || sess.dayKey || '').toLowerCase().trim() === s.day_key.toLowerCase().trim());
+      const attendanceKey = `${s.volunteer_id}|${normalizeDayKey(s.day_key)}|${s.shift_key}`;
+      const attendance = attendanceByShift.get(attendanceKey);
 
-      if (hasSessionsForThisDay) {
+      if (attendance && attendance.completedMinutes > 0) {
+        status = 'confirmed';
+        durationMinutes = attendance.completedMinutes;
+      } else if (!attendance?.hasOpen) {
+        const shiftEndTime = parseNicaraguaShiftEnd(s.day_key, s.shift_key);
+        if (now > shiftEndTime) status = 'absent';
+      }
+
+      /* Legacy attendance inference removed. attendance_sessions is the sole source of worked time. */
+      /*
         // PRIMARY PATH: Evaluate exclusively from attendance_sessions for this specific day_key
         const matchingSessions = userSessions.filter((sess: any) => {
           const sessDay = sess.day_key || sess.dayKey || '';
@@ -322,13 +418,13 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
             status = 'absent';
           }
         }
-      }
+      */
 
       items.push({
         registrationId: s.id,
         volunteerId: vol.id,
         volunteerName: `${vol.first_name || ''} ${vol.last_name || ''}`.trim(),
-        age: vol.age ? parseInt(vol.age) : null,
+        age: vol.age != null ? Number(vol.age) : null,
         phone: vol.phone || '',
         neighborhood: vol.neighborhood || 'Sin barrio',
         stake: vol.stake || 'Sin estaca',
@@ -344,7 +440,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
       });
     });
 
-    // Add additional confirmed test shifts logged in audit_logs that are not present in shiftsData
+    /* Removed: audit logs must never synthesize attendance or worked hours.
     const createdKeys = new Set(items.map(i => `${i.volunteerId}_${i.date}_T${i.shiftNumber}`));
     
     (auditLogsData || []).forEach((log: any) => {
@@ -395,7 +491,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
           }
         });
       }
-    });
+    }); */
 
     const uniqueNeighborhoods = Array.from(neighborhoodsSet).sort();
     const uniqueStakes = Array.from(stakesSet).sort();
