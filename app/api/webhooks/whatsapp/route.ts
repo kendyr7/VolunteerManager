@@ -1,14 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getOfficialShiftTime } from '@/lib/dates';
 import {
   sendWhatsAppText,
-  sendWhatsAppInteractiveButton,
   sendWhatsAppInteractiveButtons,
   sendWhatsAppInteractiveList,
-  formatE164Phone,
   isWhatsAppEnabled
 } from '@/lib/whatsapp-api';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
+export const runtime = 'nodejs';
+
+type MetaWhatsAppMessage = {
+  id?: string;
+  from?: string;
+  type?: string;
+  context?: { id?: string };
+  text?: { body?: string };
+  button?: { payload?: string; text?: string };
+  interactive?: {
+    type?: string;
+    button_reply?: { id?: string; title?: string };
+    list_reply?: { id?: string; title?: string; description?: string };
+  };
+  [key: string]: unknown;
+};
+
+type MetaWebhookPayload = {
+  object?: string;
+  entry?: Array<{
+    id?: string;
+    changes?: Array<{
+      field?: string;
+      value?: {
+        messages?: MetaWhatsAppMessage[];
+      };
+    }>;
+  }>;
+};
+
+type VolunteerRecord = {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  status?: string | null;
+  committee_id?: string | null;
+  committees?: { name?: string | null } | Array<{ name?: string | null }> | null;
+};
+
+function getVolunteerRecord(value: unknown): VolunteerRecord | null {
+  const record = Array.isArray(value) ? value[0] : value;
+  if (!record || typeof record !== 'object' || !('id' in record)) return null;
+  return record as VolunteerRecord;
+}
+
+function getVolunteerCommitteeName(volunteer: VolunteerRecord): string {
+  const committee = Array.isArray(volunteer.committees)
+    ? volunteer.committees[0]
+    : volunteer.committees;
+  return committee?.name || 'Servicio';
+}
+
+function isValidMetaSignature(rawBody: string, signature: string | null, appSecret: string): boolean {
+  if (!signature?.startsWith('sha256=')) return false;
+
+  const expected = `sha256=${createHmac('sha256', appSecret).update(rawBody, 'utf8').digest('hex')}`;
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  const receivedBuffer = Buffer.from(signature, 'utf8');
+
+  return expectedBuffer.length === receivedBuffer.length
+    && timingSafeEqual(expectedBuffer, receivedBuffer);
+}
+
+function extractMessages(payload: MetaWebhookPayload): MetaWhatsAppMessage[] {
+  if (payload.object !== 'whatsapp_business_account') return [];
+
+  return (payload.entry || []).flatMap(entry =>
+    (entry.changes || []).flatMap(change =>
+      change.field === 'messages' ? (change.value?.messages || []) : []
+    )
+  );
+}
 
 function getAdminClient() {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -39,42 +112,37 @@ export async function GET(req: NextRequest) {
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'volunteermanager_verify_token_2026';
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
 
-  if (mode === 'subscribe' && token === verifyToken) {
-    console.log("✅ WhatsApp Webhook Verified Successfully!");
+  if (!verifyToken) {
+    console.error('[WHATSAPP WEBHOOK] Missing WHATSAPP_VERIFY_TOKEN configuration.');
+    return new Response('Webhook not configured', { status: 503 });
+  }
+
+  if (mode === 'subscribe' && token === verifyToken && challenge) {
+    console.log('[WHATSAPP WEBHOOK] Webhook verified successfully.');
     return new Response(challenge, { status: 200 });
   }
 
-  console.warn("❌ WhatsApp Webhook Verification Failed. Provided Token:", token);
+  console.warn('[WHATSAPP WEBHOOK] Webhook verification failed.');
   return new Response('Forbidden', { status: 403 });
 }
 
 /**
- * POST Handler: Process Incoming Messages & Button/List Responses from Meta
+ * Process one incoming message. Keeping this isolated lets a single Meta webhook
+ * batch contain multiple entries, changes and messages without dropping any.
  */
-export async function POST(req: NextRequest) {
+async function processIncomingMessage(message: MetaWhatsAppMessage) {
   try {
-    if (!isWhatsAppEnabled()) {
-      console.log("⏸️ WhatsApp webhook received but messaging is currently PAUSED via WHATSAPP_ENABLED=false");
-      return NextResponse.json({ status: 'paused' }, { status: 200 });
-    }
-
-    const body = await req.json();
-
-    // Verify webhook payload structure
-    const entry = body.entry?.[0];
-    const change = entry?.changes?.[0]?.value;
-
-    if (!change || !change.messages || change.messages.length === 0) {
-      return NextResponse.json({ status: 'ignored' }, { status: 200 });
-    }
-
-    const message = change.messages[0];
     const rawFrom = message.from; // Sender phone number e.g. "50588273034"
     const messageType = message.type;
     const wamid = message.id;
     const contextMsgId = message.context?.id;
+
+    if (!rawFrom || !messageType) {
+      console.warn('[WHATSAPP WEBHOOK] Ignoring malformed message without sender or type.');
+      return NextResponse.json({ status: 'ignored', reason: 'malformed_message' }, { status: 200 });
+    }
 
     console.log(`📩 Received Meta WhatsApp Webhook message of type "${messageType}" from ${rawFrom} (Context ID: ${contextMsgId || 'none'})`);
 
@@ -82,7 +150,6 @@ export async function POST(req: NextRequest) {
     const senderDigits = rawFrom.replace(/\D/g, '');
 
     // 1. Identify Volunteer / User in database
-    let targetVol: any = null;
     let targetVolId: string | null = null;
     let firstName = 'Voluntario(a)';
     let committeeName = 'Servicio';
@@ -95,10 +162,12 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (matchedLog && matchedLog.volunteers) {
-        targetVol = matchedLog.volunteers;
-        targetVolId = targetVol.id;
-        firstName = targetVol.first_name || 'Voluntario(a)';
-        committeeName = targetVol.committees?.name || 'Servicio';
+        const matchedVolunteer = getVolunteerRecord(matchedLog.volunteers);
+        if (matchedVolunteer) {
+          targetVolId = matchedVolunteer.id;
+          firstName = matchedVolunteer.first_name || 'Voluntario(a)';
+          committeeName = getVolunteerCommitteeName(matchedVolunteer);
+        }
       }
     }
 
@@ -108,7 +177,7 @@ export async function POST(req: NextRequest) {
         .select('id, first_name, last_name, phone, status, committee_id, committees(name)')
         .neq('status', 'archived');
 
-      const matchedVols = (volunteers || []).filter(v => {
+      const matchedVols = ((volunteers || []) as VolunteerRecord[]).filter(v => {
         if (!v.phone) return false;
         const vDigits = v.phone.replace(/\D/g, '');
         if (!vDigits || !senderDigits) return false;
@@ -116,10 +185,9 @@ export async function POST(req: NextRequest) {
       });
 
       if (matchedVols.length === 1) {
-        targetVol = matchedVols[0];
         targetVolId = matchedVols[0].id;
         firstName = matchedVols[0].first_name || 'Voluntario(a)';
-        committeeName = (matchedVols[0] as any).committees?.name || 'Servicio';
+        committeeName = getVolunteerCommitteeName(matchedVols[0]);
       } else if (matchedVols.length > 1) {
         // Verificar si el mensaje de texto es un número de opción (1, 2, 3...)
         const rawText = (message.text?.body || '').trim();
@@ -127,10 +195,9 @@ export async function POST(req: NextRequest) {
 
         if (!isNaN(selectedIndex) && selectedIndex >= 0 && selectedIndex < matchedVols.length) {
           const selectedVol = matchedVols[selectedIndex];
-          targetVol = selectedVol;
           targetVolId = selectedVol.id;
           firstName = selectedVol.first_name || 'Voluntario(a)';
-          committeeName = (selectedVol as any).committees?.name || 'Servicio';
+          committeeName = getVolunteerCommitteeName(selectedVol);
         } else {
           // Desambiguar: Enviar menú de selección de perfil vía WhatsApp
           const profileList = matchedVols.map((v, i) => `${i + 1}. ${v.first_name} ${v.last_name || ''}`).join('\n');
@@ -148,9 +215,9 @@ export async function POST(req: NextRequest) {
 
     if (messageType === 'interactive') {
       const interactive = message.interactive;
-      if (interactive.type === 'list_reply') {
+      if (interactive?.type === 'list_reply') {
         interactiveId = interactive.list_reply?.id || '';
-      } else if (interactive.type === 'button_reply') {
+      } else if (interactive?.type === 'button_reply') {
         interactiveId = interactive.button_reply?.id || '';
       }
     } else if (messageType === 'button') {
@@ -224,7 +291,7 @@ export async function POST(req: NextRequest) {
           });
 
           if (!btnRes.success) {
-            let optionsText = dayShifts.map(s => `• ${s.shift_key}`).join('\n');
+            const optionsText = dayShifts.map(s => `• ${s.shift_key}`).join('\n');
             await sendWhatsAppText({
               to: rawFrom,
               text: `¿Qué turno deseas confirmar para el *${selectedDayKey}*?\n\n${optionsText}`
@@ -291,7 +358,7 @@ export async function POST(req: NextRequest) {
         });
 
         if (!listRes.success) {
-          let textDays = uniqueDays.map(d => `• ${d}`).join('\n');
+          const textDays = uniqueDays.map(d => `• ${d}`).join('\n');
           await sendWhatsAppText({
             to: rawFrom,
             text: `Hola ${firstName}, por favor escribe cuál fecha deseas confirmar:\n\n${textDays}`
@@ -438,7 +505,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (!listRes.success) {
-        let shiftsText = userShifts.map(s => `• ${s.shift_key} (${s.day_key})`).join('\n');
+        const shiftsText = userShifts.map(s => `• ${s.shift_key} (${s.day_key})`).join('\n');
         await sendWhatsAppText({
           to: rawFrom,
           text: `Hola ${firstName}, ¿cuál de tus turnos actuales deseas cambiar?\n\n${shiftsText}`
@@ -564,8 +631,66 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ status: 'success' }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Critical error in WhatsApp Webhook Handler:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown webhook processing error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+/**
+ * POST Handler: validate and process incoming messages and button/list responses from Meta.
+ */
+export async function POST(req: NextRequest) {
+  if (!isWhatsAppEnabled()) {
+    console.log('[WHATSAPP WEBHOOK] Incoming message processing is paused via WHATSAPP_ENABLED=false.');
+    return NextResponse.json({ status: 'paused' }, { status: 200 });
+  }
+
+  const rawBody = await req.text();
+  const appSecret = process.env.META_APP_SECRET;
+
+  if (appSecret) {
+    const signature = req.headers.get('x-hub-signature-256');
+    if (!isValidMetaSignature(rawBody, signature, appSecret)) {
+      console.warn('[WHATSAPP WEBHOOK] Rejected request with an invalid Meta signature.');
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    }
+  } else {
+    console.warn('[WHATSAPP WEBHOOK] META_APP_SECRET is not configured; signature validation is disabled.');
+  }
+
+  let payload: MetaWebhookPayload;
+  try {
+    payload = JSON.parse(rawBody) as MetaWebhookPayload;
+  } catch {
+    console.warn('[WHATSAPP WEBHOOK] Rejected request with invalid JSON.');
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const messages = extractMessages(payload);
+  if (messages.length === 0) {
+    return NextResponse.json({ status: 'ignored', processed: 0 }, { status: 200 });
+  }
+
+  let processed = 0;
+  let failed = 0;
+
+  for (const message of messages) {
+    const result = await processIncomingMessage(message);
+    if (result.ok) processed += 1;
+    else failed += 1;
+  }
+
+  if (failed > 0) {
+    console.error(`[WHATSAPP WEBHOOK] ${failed} of ${messages.length} incoming messages failed to process.`);
+  }
+
+  // Acknowledge the batch so Meta does not retry already-processed messages.
+  return NextResponse.json({
+    status: failed === 0 ? 'success' : 'partial',
+    received: messages.length,
+    processed,
+    failed
+  }, { status: 200 });
 }

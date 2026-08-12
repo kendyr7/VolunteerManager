@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:whatsapp": "node scripts/check-whatsapp-config.mjs",
+    "subscribe:whatsapp": "node scripts/check-whatsapp-config.mjs --subscribe"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

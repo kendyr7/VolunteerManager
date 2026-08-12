@@ -107,6 +107,15 @@ function getMetaCredentials() {
   return { token, phoneNumberId };
 }
 
+function getMessagesUrl(phoneNumberId: string): string {
+  const configuredVersion = process.env.WHATSAPP_GRAPH_VERSION?.trim() || 'v20.0';
+  const graphVersion = configuredVersion.startsWith('v')
+    ? configuredVersion
+    : `v${configuredVersion}`;
+
+  return `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`;
+}
+
 /**
  * Send WhatsApp Template Message (required for initiating 24h window)
  */
@@ -128,7 +137,7 @@ export async function sendWhatsAppTemplate(options: {
   }
 
   const recipientPhone = formatE164Phone(options.to);
-  const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
+  const url = getMessagesUrl(phoneNumberId);
 
   const body: any = {
     messaging_product: 'whatsapp',
@@ -191,7 +200,7 @@ export async function sendWhatsAppText(options: {
   }
 
   const recipientPhone = formatE164Phone(options.to);
-  const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
+  const url = getMessagesUrl(phoneNumberId);
 
   try {
     const res = await fetch(url, {
@@ -243,7 +252,7 @@ export async function sendWhatsAppInteractiveButton(options: {
   }
 
   const recipientPhone = formatE164Phone(options.to);
-  const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
+  const url = getMessagesUrl(phoneNumberId);
 
   try {
     const res = await fetch(url, {
@@ -310,7 +319,7 @@ export async function sendWhatsAppInteractiveButtons(options: {
   }
 
   const recipientPhone = formatE164Phone(options.to);
-  const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
+  const url = getMessagesUrl(phoneNumberId);
 
   const interactiveObj: any = {
     type: 'button',
@@ -392,7 +401,7 @@ export async function sendWhatsAppInteractiveList(options: {
   }
 
   const recipientPhone = formatE164Phone(options.to);
-  const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
+  const url = getMessagesUrl(phoneNumberId);
 
   const interactiveObj: any = {
     type: 'list',
