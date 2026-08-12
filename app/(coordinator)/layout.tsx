@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/actions/auth";
 import Image from "next/image";
@@ -29,7 +29,8 @@ import {
   canSendWhatsappMessages,
   canImportData,
   canManageUsers,
-  getSystemPermission,
+  canViewRequests,
+  getAuthorizationSnapshotCache,
   syncAllPermissionsFromDatabase
 } from "@/lib/permissions";
 
@@ -40,9 +41,10 @@ function CoordinatorLayoutInner({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
 
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
-  const [currentCommittee, setCurrentCommittee] = useState<string>('Historia');
+  const [currentCommittee, setCurrentCommittee] = useState<string>('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -79,31 +81,63 @@ function CoordinatorLayoutInner({
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const syncRoleAndPermissions = () => {
-      const role = localStorage.getItem('mock_role');
-      if (role === 'Editor' || role === 'Coordinador') {
-        setCurrentRole('Editor');
-      } else if (role === 'Lector' || role === 'Voluntario') {
-        setCurrentRole('Lector');
-      } else if (role === 'Admin') {
-        setCurrentRole('Admin');
-      }
-      const committee = localStorage.getItem('mock_committee');
-      if (committee) setCurrentCommittee(committee);
-
+      const snapshot = getAuthorizationSnapshotCache();
+      setCurrentRole(snapshot.role);
+      setCurrentCommittee(snapshot.committeeName || '');
       setPermTick(v => v + 1);
     };
 
-    syncRoleAndPermissions();
-    syncAllPermissionsFromDatabase().then(() => syncRoleAndPermissions());
-    window.addEventListener('storage', syncRoleAndPermissions);
+    syncAllPermissionsFromDatabase(true).then(() => {
+      syncRoleAndPermissions();
+      setMounted(true);
+    });
     window.addEventListener('permissions-changed', syncRoleAndPermissions);
     return () => {
-      window.removeEventListener('storage', syncRoleAndPermissions);
       window.removeEventListener('permissions-changed', syncRoleAndPermissions);
     };
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const routeAllowed = (() => {
+      if (pathname.startsWith('/users')) return canManageUsers();
+      if (pathname.startsWith('/settings/phone')) return canManageUsers();
+      if (pathname.startsWith('/check-in')) return canQrCheckin();
+      if (pathname.startsWith('/import')) return canImportData();
+      if (pathname.startsWith('/reports')) return canViewReports();
+      if (pathname.startsWith('/reminders')) return canSendWhatsappMessages();
+      if (pathname.startsWith('/replacements')) return canViewRequests();
+      if (pathname.startsWith('/volunteers')) return canViewVolunteers();
+      if (pathname.startsWith('/dashboard')) return canViewDashboard();
+      return true;
+    })();
+
+    if (!routeAllowed) {
+      if (currentRole === 'Lector') {
+        router.replace('/shifts');
+        return;
+      }
+
+      const fallbackRoute = canViewDashboard()
+        ? '/dashboard'
+        : canViewVolunteers()
+          ? '/volunteers'
+          : canViewRequests()
+            ? '/replacements'
+            : canSendWhatsappMessages()
+              ? '/reminders'
+              : canViewReports()
+                ? '/reports'
+                : canQrCheckin()
+                  ? '/check-in'
+                  : canImportData()
+                    ? '/import'
+                    : '/settings';
+
+      router.replace(fallbackRoute);
+    }
+  }, [mounted, pathname, permTick, currentRole, router]);
 
   // Reset search when navigating to a new page
   useEffect(() => {
@@ -141,7 +175,7 @@ function CoordinatorLayoutInner({
       if (item.href === '/volunteers' && !canViewVolunteers()) return false;
       if (item.href === '/check-in' && !canQrCheckin()) return false;
       if (item.href === '/reminders' && !canSendWhatsappMessages()) return false;
-      if (item.href === '/replacements' && !canSendWhatsappMessages()) return false;
+      if (item.href === '/replacements' && !canViewRequests()) return false;
       if (item.href === '/reports' && !canViewReports()) return false;
       if (item.href === '/import' && !canImportData()) return false;
       if (item.href === '/users' && !canManageUsers()) return false;

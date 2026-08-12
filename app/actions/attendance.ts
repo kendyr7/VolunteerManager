@@ -9,6 +9,8 @@ import { revalidatePath } from "next/cache";
 import { broadcastShiftSync, broadcastSessionSync } from "@/lib/services/shift-broadcast.service";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/auth";
+import { requireCapability, requireVolunteerCapability } from "@/lib/authorization";
+import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
 import { getOfficialShiftTime } from "@/lib/dates";
 import { AttendanceSession, validateSessionConstraints } from "@/lib/session-utils";
 import {
@@ -19,14 +21,19 @@ import {
 } from "@/lib/services/session-store";
 
 export async function getAttendanceSessionsAction(): Promise<AttendanceSession[]> {
-  const sessionToken = (await cookies()).get('session')?.value;
-  const session = sessionToken ? verifySessionToken(sessionToken) : null;
+  const authorization = await requireCapability('view_volunteers');
+  const sessions = await fetchAllAttendanceSessionsFromDb();
+  if (hasCapability(authorization, 'view_all_volunteers')) return sessions;
+  if (!authorization.committeeId) return [];
 
-  if (!session?.userId) {
-    return [];
-  }
-
-  return fetchAllAttendanceSessionsFromDb();
+  const supabase = getAdminClient();
+  const { data: volunteers } = await supabase
+    .from('volunteers')
+    .select('id')
+    .eq('committee_id', authorization.committeeId)
+    .neq('status', 'archived');
+  const allowedIds = new Set((volunteers || []).map((volunteer: { id: string }) => volunteer.id));
+  return sessions.filter(session => allowedIds.has(session.volunteer_id));
 }
 
 function getSecret(): string {
@@ -105,31 +112,16 @@ async function safeUpdateShiftCheckIn(
 // Helper to log check-in to activity_logs table for audit history
 async function logCheckInActivity(
   supabase: ReturnType<typeof getAdminClient>,
-  coordinatorId: string,
+  actorName: string,
+  actorRole: string,
   volunteerName: string,
   shiftDetail: string,
   shiftId: string
 ) {
   try {
-    let userName = 'Coordinador';
-    let userRole = 'Coordinador';
-
-    if (coordinatorId && coordinatorId !== '99999999-9999-9999-9999-999999999999') {
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('full_name, role')
-        .eq('id', coordinatorId)
-        .maybeSingle();
-
-      if (prof) {
-        userName = prof.full_name || 'Coordinador';
-        userRole = prof.role || 'Coordinador';
-      }
-    }
-
     await supabase.from('activity_logs').insert({
-      user_name: userName,
-      user_role: userRole,
+      user_name: actorName,
+      user_role: actorRole,
       action_type: 'Check-in',
       description: `Registró asistencia de ${volunteerName}`,
       details: `Turno: ${shiftDetail}`,
@@ -267,22 +259,7 @@ export async function openAttendanceSessionAction(
   dayKeyInput?: string,
   isInternalCall = false
 ) {
-  // Authorization check: Must be internal call (from validated QR checkInVolunteer) OR authenticated Admin
-  if (!isInternalCall) {
-    let isAdmin = false;
-    try {
-      const cookieStore = await cookies();
-      const sessionCookie = cookieStore.get('session')?.value || '';
-      const session = verifySessionToken(sessionCookie);
-      const normalizedRole = (session?.role || '').toLowerCase().trim();
-      isAdmin = normalizedRole === 'admin' || normalizedRole === 'administrador';
-    } catch (e) {}
-
-    if (!isAdmin) {
-      throw new Error("No autorizado para abrir sesión directamente sin flujo QR o rol Admin.");
-    }
-  }
-
+  await requireCapability('scan_qr_attendance');
   // Server-generated Nicaragua time & day_key (Never trust client timestamp/dayKey for check-in)
   const nicaString = new Date().toLocaleString("en-US", { timeZone: "America/Managua" });
   const nicaNow = new Date(nicaString);
@@ -378,6 +355,7 @@ export async function closeAttendanceSessionAction({
   actorNameInput?: string;
   actorRoleInput?: string;
 }) {
+  await requireCapability('scan_qr_attendance');
   let sessionToClose: AttendanceSession | null = null;
 
   if (sessionId) {
@@ -507,23 +485,7 @@ export async function adjustSessionTimesAdminAction({
   reason?: string;
   correctionType?: 'official_shift_end' | 'custom_time' | 'manual_adjustment' | 'forgotten_entry_late_scan';
 }) {
-  let session = null;
-  try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session')?.value || '';
-    session = verifySessionToken(sessionCookie);
-  } catch (e) {}
-
-  if (!session) {
-    throw new Error("No autenticado. Debes iniciar sesión como Administrador.");
-  }
-
-  const normalizedRole = (session.role || '').toLowerCase().trim();
-  const isAdmin = normalizedRole === 'admin' || normalizedRole === 'administrador';
-  if (!isAdmin) {
-    throw new Error("Solo Administradores pueden realizar ajustes manuales de horario.");
-  }
-
+  await requireCapability('correct_attendance_times');
   let finalReason = (rawReason || '').trim();
   if (correctionType === 'official_shift_end') {
     finalReason = "Salida olvidada - se utilizó el fin oficial del bloque programado";
@@ -609,14 +571,14 @@ export async function adjustSessionTimesAdminAction({
   const { getCurrentUserSession } = await import('@/lib/auth-helpers');
   const currentActor = await getCurrentUserSession();
   const adminName = currentActor.userName || 'Administrador';
-  const adminId = session.userId || 'admin-server-session';
+  const adminId = currentActor.userId || 'admin-server-session';
 
   // Log in activity_logs
   try {
     const supabase = getAdminClient();
     await supabase.from('activity_logs').insert({
       user_name: adminName,
-      user_role: 'Admin',
+      user_role: currentActor.userRole,
       action_type: correctionType === 'forgotten_entry_late_scan' ? 'Corrección Entrada Olvidada' : 'Corrección Salida Olvidada',
       description: `Corrigió horario de sesión de asistencia (${correctionType})`,
       details: JSON.stringify({
@@ -654,23 +616,7 @@ export async function createAttendanceSessionAdminAction(input: {
   correctionType: 'official_shift_start' | 'custom_start_time' | 'manual_session_creation';
   reason?: string;
 }) {
-  let session: any = null;
-  try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session')?.value || '';
-    session = verifySessionToken(sessionCookie);
-  } catch (e) {}
-
-  if (!session) {
-    throw new Error("No autenticado. Debes iniciar sesión como Administrador.");
-  }
-
-  const normalizedRole = (session.role || '').toLowerCase().trim();
-  const isAdmin = normalizedRole === 'admin' || normalizedRole === 'administrador';
-  if (!isAdmin) {
-    throw new Error("Solo Administradores pueden crear sesiones manuales de asistencia.");
-  }
-
+  const authorizedActor = await requireCapability('register_missing_attendance');
   const { volunteerId, dayKey, startedAt, endedAt, correctionType, reason: rawReason } = input;
 
   let finalReason = (rawReason || '').trim();
@@ -736,14 +682,14 @@ export async function createAttendanceSessionAdminAction(input: {
 
   const { getCurrentUserSession } = await import('@/lib/auth-helpers');
   const currentActor = await getCurrentUserSession();
-  const adminName = currentActor.userName || 'Administrador';
-  const adminId = session.userId || 'admin-server-session';
+  const adminName = authorizedActor.name;
+  const adminId = authorizedActor.userId || 'admin-server-session';
 
   try {
     const supabase = getAdminClient();
     await supabase.from('activity_logs').insert({
       user_name: adminName,
-      user_role: 'Admin',
+      user_role: roleDisplayName(authorizedActor),
       action_type: 'Corrección Entrada Olvidada',
       description: `Registró entrada olvidada de sesión para el día ${dayKey}`,
       details: JSON.stringify({
@@ -767,6 +713,8 @@ export async function createAttendanceSessionAdminAction(input: {
 
 // 5. Process Check-in via QR Scan or manual selection
 export async function checkInVolunteer(qrValueString: string, coordinatorId: string, manualShiftId?: string) {
+  const authorizedActor = await requireCapability('scan_qr_attendance');
+  coordinatorId = authorizedActor.userId || coordinatorId;
   const supabase = getAdminClient();
 
   let volunteerId = "";
@@ -804,7 +752,14 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       const volunteerName = vol ? `${vol.first_name} ${vol.last_name}` : "Voluntario";
       const shiftDetail = `${shift.day_key} - ${shift.shift_key}`;
 
-      await logCheckInActivity(supabase, coordinatorId, volunteerName, shiftDetail, manualShiftId);
+      await logCheckInActivity(
+        supabase,
+        authorizedActor.name,
+        roleDisplayName(authorizedActor),
+        volunteerName,
+        shiftDetail,
+        manualShiftId
+      );
 
       try {
         revalidatePath('/shifts');
@@ -945,6 +900,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
 // 4. Process Check-out (Turno Completado)
 export async function checkOutVolunteer(shiftId: string) {
   try {
+    await requireCapability('scan_qr_attendance');
     const supabase = getAdminClient();
 
     const { data: updatedShift, error } = await supabase
@@ -997,6 +953,7 @@ export async function adjustCheckoutTimeAction({
   reason?: string;
 }) {
   try {
+    const authorizedActor = await requireCapability('correct_attendance_times');
     const supabase = getAdminClient();
 
     const { data: shift, error: fetchErr } = await supabase
@@ -1048,8 +1005,8 @@ export async function adjustCheckoutTimeAction({
     const newDateStr = new Date(newCheckOutIso).toLocaleTimeString('es-NI', { timeZone: 'America/Managua', hour: '2-digit', minute: '2-digit', hour12: true });
 
     await createActivityLog({
-      userName: 'Coordinación',
-      userRole: 'Admin',
+      userName: authorizedActor.name,
+      userRole: roleDisplayName(authorizedActor),
       actionType: 'Edición',
       description: `Ajustó hora de salida de ${volName} (${shift.day_key} ${shift.shift_key}): de ${oldDateStr} a ${newDateStr}`,
       details: reason ? `Motivo: ${reason}` : 'Ajuste de marcación de salida al mismo día',
@@ -1073,6 +1030,13 @@ export async function adjustCheckoutTimeAction({
 export async function reassignVolunteerShift(shiftId: string, newDayKey: string, newShiftKey: string) {
   try {
     const supabase = getAdminClient();
+    const { data: existingShift } = await supabase
+      .from('shifts')
+      .select('volunteer_id, day_key, shift_key')
+      .eq('id', shiftId)
+      .maybeSingle();
+    if (!existingShift?.volunteer_id) return { error: 'No se encontró el turno.' };
+    const authorizedActor = await requireVolunteerCapability('reschedule_volunteer', existingShift.volunteer_id);
     const { data, error } = await supabase
       .from('shifts')
       .update({
@@ -1094,6 +1058,38 @@ export async function reassignVolunteerShift(shiftId: string, newDayKey: string,
         table: 'shifts',
         record: data,
       });
+    }
+
+    const { data: volunteer } = await supabase
+      .from('volunteers')
+      .select('first_name, last_name')
+      .eq('id', existingShift.volunteer_id)
+      .maybeSingle();
+    const volunteerName = volunteer
+      ? `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim()
+      : 'Voluntario';
+    const auditCreated = await createActivityLog({
+      userName: authorizedActor.name,
+      userRole: roleDisplayName(authorizedActor),
+      actionType: 'Reasignación',
+      description: `Reagendó el turno de ${volunteerName}`,
+      details: JSON.stringify({
+        context: `De ${existingShift.day_key} ${existingShift.shift_key} a ${newDayKey} ${newShiftKey}`,
+        shiftId,
+        volunteerId: existingShift.volunteer_id,
+        previous: { dayKey: existingShift.day_key, shiftKey: existingShift.shift_key },
+        next: { dayKey: newDayKey, shiftKey: newShiftKey },
+      }),
+      targetId: existingShift.volunteer_id,
+    });
+
+    if (!auditCreated) {
+      const { error: rollbackError } = await supabase
+        .from('shifts')
+        .update({ day_key: existingShift.day_key, shift_key: existingShift.shift_key })
+        .eq('id', shiftId);
+      if (rollbackError) console.error('Error rolling back unaudited shift reassignment:', rollbackError);
+      return { error: 'No se pudo registrar la auditoría; la reasignación fue cancelada.' };
     }
 
     try {

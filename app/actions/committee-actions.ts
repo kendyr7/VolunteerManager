@@ -1,31 +1,13 @@
 'use server'
 
-import { cookies } from 'next/headers';
-import { verifySessionToken } from '@/lib/auth';
-import { getCurrentUserSession } from '@/lib/auth-helpers';
+import { requireCapability } from '@/lib/authorization';
 import { CommitteeMutationService, ShiftCapacities } from '@/lib/services/committee-mutation.service';
 
-async function verifyAdminSession() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('session')?.value;
-  if (!sessionCookie) return false;
-
-  const session = verifySessionToken(sessionCookie);
-  if (!session || session.role !== 'Admin') return false;
-
-  return true;
-}
-
 export async function createCommitteeAction(name: string) {
-  const isAdmin = await verifyAdminSession();
-  if (!isAdmin) {
-    return { error: "Solo los administradores pueden crear nuevos comités." };
-  }
-
-  const sessionUser = await getCurrentUserSession();
+  const sessionUser = await requireCapability('manage_committees');
   const actor = {
-    name: sessionUser.userName || 'Administrador',
-    role: sessionUser.userRole || 'Admin',
+    name: sessionUser.name,
+    role: sessionUser.role,
   };
 
   const res = await CommitteeMutationService.createCommittee(name, actor);
@@ -41,15 +23,10 @@ export async function archiveCommitteeAction(
   inputName: string,
   deleteText: string
 ) {
-  const isAdmin = await verifyAdminSession();
-  if (!isAdmin) {
-    return { error: "Solo los administradores pueden archivar comités." };
-  }
-
-  const sessionUser = await getCurrentUserSession();
+  const sessionUser = await requireCapability('manage_committees');
   const actor = {
-    name: sessionUser.userName || 'Administrador',
-    role: sessionUser.userRole || 'Admin',
+    name: sessionUser.name,
+    role: sessionUser.role,
   };
 
   const res = await CommitteeMutationService.archiveCommittee(
@@ -67,15 +44,10 @@ export async function archiveCommitteeAction(
 }
 
 export async function unarchiveCommitteeAction(committeeId: string) {
-  const isAdmin = await verifyAdminSession();
-  if (!isAdmin) {
-    return { error: "Solo los administradores pueden desarchivar comités." };
-  }
-
-  const sessionUser = await getCurrentUserSession();
+  const sessionUser = await requireCapability('manage_committees');
   const actor = {
-    name: sessionUser.userName || 'Administrador',
-    role: sessionUser.userRole || 'Admin',
+    name: sessionUser.name,
+    role: sessionUser.role,
   };
 
   const res = await CommitteeMutationService.unarchiveCommittee(committeeId, actor);
@@ -89,15 +61,10 @@ export async function updateCommitteeRequirementsAction(
   selectedCommitteeNames: string[],
   capacities: ShiftCapacities
 ) {
-  const isAdmin = await verifyAdminSession();
-  if (!isAdmin) {
-    return { error: "Solo los administradores pueden modificar los requerimientos de comités." };
-  }
-
-  const sessionUser = await getCurrentUserSession();
+  const sessionUser = await requireCapability('manage_committees');
   const actor = {
-    name: sessionUser.userName || 'Administrador',
-    role: sessionUser.userRole || 'Admin',
+    name: sessionUser.name,
+    role: sessionUser.role,
   };
 
   const res = await CommitteeMutationService.updateShiftRequirements(
@@ -111,4 +78,3 @@ export async function updateCommitteeRequirementsAction(
   }
   return { success: true };
 }
-

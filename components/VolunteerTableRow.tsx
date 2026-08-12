@@ -64,6 +64,9 @@ interface VolunteerTableRowProps {
   onEditClick: (vol: VolunteerType, startInEditMode?: boolean) => void;
   onResetPin: (vol: VolunteerType) => void;
   onArchive: (vol: VolunteerType) => void;
+  canEditProfile?: boolean;
+  canResetPin?: boolean;
+  canArchive?: boolean;
 }
 
 export const VolunteerTableRow = React.memo(function VolunteerTableRow({
@@ -73,6 +76,9 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
   onEditClick,
   onResetPin,
   onArchive,
+  canEditProfile = true,
+  canResetPin = true,
+  canArchive = true,
 }: VolunteerTableRowProps) {
   const [isHighlighted, setIsHighlighted] = useState(false);
 
@@ -137,23 +143,23 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
         )}
       </div>
       <div className="w-32 flex items-center justify-center gap-1 shrink-0">
-        <button
+        {canEditProfile && <button
           type="button"
           className="h-8 w-8 rounded-lg flex items-center justify-center text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90 cursor-pointer"
           title="Editar Perfil"
           onClick={(e) => { e.stopPropagation(); onEditClick(vol, true); }}
         >
           <span className="material-symbols-outlined text-[18px]">edit</span>
-        </button>
-        <button
+        </button>}
+        {canResetPin && <button
           type="button"
           className="h-8 w-8 rounded-lg flex items-center justify-center text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90 cursor-pointer"
           title="Resetear PIN"
           onClick={(e) => { e.stopPropagation(); onResetPin(vol); }}
         >
           <span className="material-symbols-outlined text-[18px]">lock_reset</span>
-        </button>
-        <button
+        </button>}
+        {canArchive && <button
           type="button"
           className="h-8 w-8 rounded-lg flex items-center justify-center text-amber-500/70 hover:bg-amber-500/10 hover:text-amber-500 transition-all active:scale-90 cursor-pointer"
           title={vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
@@ -163,7 +169,7 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
           }}
         >
           <span className="material-symbols-outlined text-[18px]">{vol.status === 'archived' ? 'unarchive' : 'archive'}</span>
-        </button>
+        </button>}
       </div>
     </div>
   );
@@ -178,5 +184,8 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
     prevProps.vol.status === nextProps.vol.status &&
     prevProps.vol.computedReliability === nextProps.vol.computedReliability &&
     prevProps.appliedSearch === nextProps.appliedSearch
+    && prevProps.canEditProfile === nextProps.canEditProfile
+    && prevProps.canResetPin === nextProps.canResetPin
+    && prevProps.canArchive === nextProps.canArchive
   );
 });

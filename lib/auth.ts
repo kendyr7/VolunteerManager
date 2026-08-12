@@ -87,8 +87,8 @@ export function verifySessionToken(token: string): SessionData | null {
 }
 
 export function getNormalizedRole(): string {
-  if (typeof window === 'undefined') return 'Admin';
-  const role = localStorage.getItem('mock_role') || 'Admin';
+  if (typeof window === 'undefined') return 'Lector';
+  const role = localStorage.getItem('mock_role') || 'Lector';
   const normalized = role.toLowerCase().trim();
   if (normalized === 'coordinador') return 'Editor';
   if (normalized === 'voluntario') return 'Lector';

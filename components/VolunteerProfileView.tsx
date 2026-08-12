@@ -7,7 +7,12 @@ import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EntryPassButton } from "@/components/EntryPassButton";
-import { canQrCheckin, getNormalizedRole } from "@/lib/permissions";
+import {
+  canCorrectAttendanceTimes,
+  canEditVolunteerPersonalInfo,
+  canRegisterMissingAttendance,
+  getNormalizedRole,
+} from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import {
   createShiftChangeRequestAction,
@@ -42,6 +47,7 @@ export interface VolunteerProfileData {
   first_name?: string;
   last_name?: string;
   committee?: string;
+  committee_id?: string;
   stake?: string;
   ward?: string;
   phone?: string;
@@ -98,6 +104,9 @@ export function VolunteerProfileView({
   const coordinatorData = useOptionalCoordinatorData();
   const { refresh } = coordinatorData ?? {};
   const isAdmin = getNormalizedRole() === 'Admin';
+  const mayCorrectAttendance = canCorrectAttendanceTimes();
+  const mayRegisterMissingAttendance = canRegisterMissingAttendance();
+  const mayEditPersonalInfo = canEditVolunteerPersonalInfo(volunteer.committee_id);
 
   const [showLegend, setShowLegend] = useState(false);
   const [activeTab, setActiveTab] = useState<'schedule' | 'requests' | 'audit'>('schedule');
@@ -694,7 +703,7 @@ export function VolunteerProfileView({
               </span>
             </div>
           </div>
-          {isAdmin ? (
+          {mayCorrectAttendance ? (
             <button
               onClick={() => setIsCorrectionModalOpen(true)}
               className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-[11px] shrink-0 shadow transition-transform active:scale-95"
@@ -703,7 +712,7 @@ export function VolunteerProfileView({
             </button>
           ) : (
             <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] shrink-0 font-bold uppercase">
-              Pendiente (Solo Admin)
+              Pendiente
             </Badge>
           )}
         </div>
@@ -726,7 +735,7 @@ export function VolunteerProfileView({
       )}
 
       {/* Admin Create Missing Session Button (If Admin) */}
-      {isAdmin && (
+      {mayRegisterMissingAttendance && (
         <div className="mb-4 flex justify-center">
           <button
             onClick={() => setIsCreateModalOpen(true)}
@@ -887,14 +896,14 @@ export function VolunteerProfileView({
                 <span className="material-symbols-outlined text-[17px] shrink-0 text-blue-500">call</span>
                 <span>LLAMAR</span>
               </Button>
-              <Button
+              {mayEditPersonalInfo && <Button
                 variant="outline"
                 className="h-11 px-1.5 gap-1.5 text-text border-border bg-dark3 hover:bg-dark font-bold text-[11px] sm:text-xs rounded-xl shadow-sm active:scale-95 transition-all truncate cursor-pointer"
                 onClick={onStartEditProfile}
               >
                 <span className="material-symbols-outlined text-[17px] shrink-0 text-[#4d7cfe]">edit_square</span>
                 <span>EDITAR</span>
-              </Button>
+              </Button>}
             </div>
           </div>
         )}
@@ -904,7 +913,7 @@ export function VolunteerProfileView({
       {mode === 'coordinator' && (
         <div className={cn(
           "w-full grid gap-1.5 p-1.5 bg-dark3/50 border border-border/80 rounded-2xl mb-5 shadow-sm text-center",
-          isAdmin ? "grid-cols-3" : "grid-cols-2"
+          "grid-cols-3"
         )}>
           <button
             type="button"
@@ -942,7 +951,7 @@ export function VolunteerProfileView({
             )}
           </button>
 
-          {isAdmin && (
+          {mode === 'coordinator' && (
             <button
               type="button"
               onClick={() => setActiveTab('audit')}

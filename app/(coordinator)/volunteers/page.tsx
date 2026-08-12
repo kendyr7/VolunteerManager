@@ -19,7 +19,14 @@ import { DataTableFilter } from "@/components/DataTableFilter";
 import { createClient } from "@/lib/supabase/client";
 import { cn, normalizeSearch } from "@/lib/utils";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
-import { canEditShifts, canViewVolunteers } from "@/lib/permissions";
+import {
+  canArchiveVolunteer,
+  canCreateVolunteer,
+  canEditShifts,
+  canEditVolunteerPersonalInfo,
+  canViewVolunteers,
+  getAuthorizationSnapshotCache,
+} from "@/lib/permissions";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
@@ -312,8 +319,14 @@ export default function VolunteersPage() {
 
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [currentCommittee, setCurrentCommittee] = useState<string>('');
+  const [canViewAllVolunteers, setCanViewAllVolunteers] = useState(false);
+  const [, setPermissionRevision] = useState(0);
 
   const handleResetPin = useCallback(async (vol: VolunteerType) => {
+    if (!canEditVolunteerPersonalInfo(vol.committee_id)) {
+      showToast("No tienes permiso para restablecer el PIN de este voluntario", "error");
+      return;
+    }
     setConfirmModal({
       isOpen: true,
       title: 'Resetear PIN',
@@ -336,6 +349,10 @@ export default function VolunteersPage() {
 
   const handleArchiveVolunteer = async () => {
     if (!volunteerToArchive) return;
+    if (!canArchiveVolunteer()) {
+      showToast("Solo los administradores pueden archivar voluntarios", "error");
+      return;
+    }
 
     const isUnarchiving = volunteerToArchive.status === 'archived';
     const newStatus: 'active' | 'archived' = isUnarchiving ? 'active' : 'archived';
@@ -426,11 +443,17 @@ export default function VolunteersPage() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    const role = localStorage.getItem('mock_role') as any;
-    const committee = localStorage.getItem('mock_committee');
-    if (role) setCurrentRole(role);
-    if (committee) setCurrentCommittee(committee);
+    const syncAuthorization = () => {
+      const snapshot = getAuthorizationSnapshotCache();
+      setCurrentRole(snapshot.role);
+      setCurrentCommittee(snapshot.committeeName || '');
+      setCanViewAllVolunteers(snapshot.role === 'Admin' || snapshot.coordinatorType === 'technology');
+      setPermissionRevision(value => value + 1);
+      setMounted(true);
+    };
+    syncAuthorization();
+    window.addEventListener('permissions-changed', syncAuthorization);
+    return () => window.removeEventListener('permissions-changed', syncAuthorization);
   }, []);
 
 
@@ -453,6 +476,10 @@ export default function VolunteersPage() {
   };
 
   const handleStartEditProfile = useCallback((vol: VolunteerType) => {
+    if (!canEditVolunteerPersonalInfo(vol.committee_id)) {
+      showToast("No tienes permiso para editar la información personal", "error");
+      return;
+    }
     const parts = (vol.name || '').trim().split(/\s+/);
     const fn = (vol as any).first_name || (parts.length >= 2 ? parts.slice(0, Math.ceil(parts.length / 2)).join(' ') : parts[0] || '');
     const ln = (vol as any).last_name || (parts.length >= 2 ? parts.slice(Math.ceil(parts.length / 2)).join(' ') : '');
@@ -487,6 +514,10 @@ export default function VolunteersPage() {
   }, [globalShifts, handleStartEditProfile]);
 
   const handleArchive = useCallback((vol: VolunteerType) => {
+    if (!canArchiveVolunteer()) {
+      showToast("Solo los administradores pueden archivar voluntarios", "error");
+      return;
+    }
     setVolunteerToArchive(vol);
     setIsArchiveModalOpen(true);
   }, []);
@@ -652,6 +683,7 @@ export default function VolunteersPage() {
     return filterVolunteerIds(augmentedVolunteers, matchedSearchIds, {
       currentRole,
       currentCommittee,
+      canViewAllVolunteers,
       showArchived,
       selectedCommittees,
       selectedStakes,
@@ -663,6 +695,7 @@ export default function VolunteersPage() {
     appliedSearch,
     currentRole,
     currentCommittee,
+    canViewAllVolunteers,
     showArchived,
     selectedCommittees,
     selectedStakes,
@@ -700,14 +733,14 @@ export default function VolunteersPage() {
 
   const { activeCount, archivedCount } = useMemo(() => {
     const baseList = augmentedVolunteers.filter(v => {
-      if (currentRole === 'Editor' && v.committee !== currentCommittee) return false;
+      if (currentRole === 'Editor' && !canViewAllVolunteers && v.committee !== currentCommittee) return false;
       if (currentRole === 'Lector') return false;
       return true;
     });
     const active = baseList.filter(v => v.status !== 'archived').length;
     const archived = baseList.filter(v => v.status === 'archived').length;
     return { activeCount: active, archivedCount: archived };
-  }, [augmentedVolunteers, currentRole, currentCommittee]);
+  }, [augmentedVolunteers, currentRole, currentCommittee, canViewAllVolunteers]);
 
   const { letters: sortedLetters, groupCounts, groupedVolunteers, groupsRecord, flatVolunteers } = useMemo(() => {
     return groupVolunteersAlphabetically(sortedFilteredVolunteers);
@@ -834,14 +867,16 @@ export default function VolunteersPage() {
           </form>
 
           {/* Añadir button next to search bar with matching height */}
-          <Button
-            type="button"
-            onClick={() => setIsAddSheetOpen(true)}
-            className="flex bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-4 sm:px-5 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
-          >
-            <span className="material-symbols-outlined text-[18px]">person_add</span>
-            <span>Añadir</span>
-          </Button>
+          {canCreateVolunteer() && (
+            <Button
+              type="button"
+              onClick={() => setIsAddSheetOpen(true)}
+              className="flex bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-4 sm:px-5 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
+            >
+              <span className="material-symbols-outlined text-[18px]">person_add</span>
+              <span>Añadir</span>
+            </Button>
+          )}
         </motion.div>
       </div>
 
@@ -969,6 +1004,9 @@ export default function VolunteersPage() {
                             onEditClick={handleEditClick}
                             onResetPin={handleResetPin}
                             onArchive={handleArchive}
+                            canEditProfile={canEditVolunteerPersonalInfo(vol.committee_id)}
+                            canResetPin={canEditVolunteerPersonalInfo(vol.committee_id)}
+                            canArchive={canArchiveVolunteer()}
                           />
                         );
                       });

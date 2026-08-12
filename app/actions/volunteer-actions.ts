@@ -23,7 +23,9 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { getCurrentUserSession } from '@/lib/auth-helpers';
+import { requireCapability, requireVolunteerCapability } from '@/lib/authorization';
+import { roleDisplayName } from '@/lib/role-permissions';
+import { createActivityLog } from '@/app/actions/activity-actions';
 import {
   VolunteerMutationService,
   UpdateProfilePayload,
@@ -53,10 +55,10 @@ export async function updateVolunteerAction(
   }
 
   // Resolve actor from session — NEVER from the client payload
-  const session = await getCurrentUserSession();
+  const session = await requireVolunteerCapability('edit_volunteer_personal_info', volunteerId);
   const actor = {
-    name: session.userName || 'Administrador',
-    role: session.userRole || 'Admin',
+    name: session.name,
+    role: roleDisplayName(session),
   };
 
   return VolunteerMutationService.updateProfile(volunteerId, payload, actor);
@@ -76,10 +78,10 @@ export async function createVolunteerAction(
     return { success: false, error: 'Nombre y teléfono son requeridos.' };
   }
 
-  const session = await getCurrentUserSession();
+  const session = await requireCapability('create_volunteer');
   const actor = {
-    name: session.userName || 'Administrador',
-    role: session.userRole || 'Admin',
+    name: session.name,
+    role: roleDisplayName(session),
   };
 
   return VolunteerMutationService.createVolunteer(payload, actor);
@@ -105,10 +107,10 @@ export async function bulkImportVolunteersAction(
     };
   }
 
-  const session = await getCurrentUserSession();
+  const session = await requireCapability('import_volunteers');
   const actor = {
-    name: session.userName || 'Administrador',
-    role: session.userRole || 'Admin',
+    name: session.name,
+    role: roleDisplayName(session),
   };
 
   return VolunteerMutationService.bulkImportVolunteers(items, actor);
@@ -128,10 +130,10 @@ export async function updateVolunteerStatusAction(
     return { success: false, reason: 'error', error: 'Parametros requeridos incompletos.' };
   }
 
-  const session = await getCurrentUserSession();
+  const session = await requireCapability('archive_volunteer');
   const actor = {
-    name: session.userName || 'Administrador',
-    role: session.userRole || 'Admin',
+    name: session.name,
+    role: roleDisplayName(session),
   };
 
   return VolunteerMutationService.updateStatus(request, actor);
@@ -148,10 +150,10 @@ export async function swapVolunteerActivationAction(
     return { success: false, error: 'Voluntarios requeridos incompletos.' };
   }
 
-  const session = await getCurrentUserSession();
+  const session = await requireCapability('archive_volunteer');
   const actor = {
-    name: session.userName || 'Administrador',
-    role: session.userRole || 'Admin',
+    name: session.name,
+    role: roleDisplayName(session),
   };
 
   return VolunteerMutationService.swapVolunteerActivation(activeVolunteerId, targetVolunteerId, actor);
@@ -169,10 +171,10 @@ export async function resetVolunteerPinAction(volunteerId: string): Promise<Muta
     return { success: false, error: 'volunteerId requerido.' };
   }
 
-  const session = await getCurrentUserSession();
+  const session = await requireVolunteerCapability('edit_volunteer_personal_info', volunteerId);
   const actor = {
-    name: session.userName || 'Administrador',
-    role: session.userRole || 'Admin',
+    name: session.name,
+    role: roleDisplayName(session),
   };
 
   return VolunteerMutationService.resetPin(volunteerId, actor);
@@ -190,7 +192,27 @@ export async function toggleShiftAction(
   if (!volunteerId || !dayKey || !shiftKey) {
     return { success: false, error: 'Parametros incompletos para turno.' };
   }
-  return VolunteerMutationService.toggleShift(volunteerId, dayKey, shiftKey, assign);
+  const session = await requireVolunteerCapability('reschedule_volunteer', volunteerId);
+  const result = await VolunteerMutationService.toggleShift(volunteerId, dayKey, shiftKey, assign);
+  if (!result.success) return result;
+
+  const auditCreated = await createActivityLog({
+    userName: session.name,
+    userRole: roleDisplayName(session),
+    actionType: 'Edición',
+    description: `${assign ? 'Asignó' : 'Quitó'} el turno ${shiftKey} (${dayKey})`,
+    details: JSON.stringify({
+      context: `${assign ? 'Turno asignado' : 'Turno removido'}: ${dayKey} ${shiftKey}`,
+      operation: assign ? 'assign_shift' : 'remove_shift',
+      dayKey,
+      shiftKey,
+    }),
+    targetId: volunteerId,
+  });
+
+  return auditCreated
+    ? result
+    : { success: false, error: 'El turno cambió, pero no se pudo registrar la auditoría.' };
 }
 
 /**
@@ -203,9 +225,27 @@ export async function saveShiftsAction(
   if (!volunteerId) {
     return { success: false, error: 'volunteerId requerido.' };
   }
-  return VolunteerMutationService.saveShifts(volunteerId, shiftsByDay);
+  const session = await requireVolunteerCapability('reschedule_volunteer', volunteerId);
+  const result = await VolunteerMutationService.saveShifts(volunteerId, shiftsByDay);
+  if (!result.success) return result;
+
+  const assignedShifts = Object.entries(shiftsByDay).flatMap(([dayKey, shiftKeys]) =>
+    shiftKeys.map(shiftKey => ({ dayKey, shiftKey }))
+  );
+  const auditCreated = await createActivityLog({
+    userName: session.name,
+    userRole: roleDisplayName(session),
+    actionType: 'Edición',
+    description: 'Actualizó los turnos programados del voluntario',
+    details: JSON.stringify({
+      context: `${assignedShifts.length} turno(s) programado(s)`,
+      operation: 'replace_scheduled_shifts',
+      assignedShifts,
+    }),
+    targetId: volunteerId,
+  });
+
+  return auditCreated
+    ? result
+    : { success: false, error: 'Los turnos cambiaron, pero no se pudo registrar la auditoría.' };
 }
-
-
-
-

@@ -2,8 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase-helpers";
-import { cookies } from "next/headers";
-import { verifySessionToken } from "@/lib/auth";
+import { requireCapability } from "@/lib/authorization";
+import { hasCapability } from "@/lib/role-permissions";
 import { getActiveEventDays, getOfficialShiftTime } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -190,13 +190,9 @@ function parseNicaraguaShiftEnd(dayKey: string, shiftKey: string): Date {
 
 export async function getReportsData(): Promise<{ error?: string; data?: ReportsData }> {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session')?.value || '';
-    const session = verifySessionToken(sessionCookie);
-
-    // Permit access for profile sessions or default coordinator fallback
-    const role = session?.role || 'Admin';
-    const userCommittee = session?.committee || '';
+    const authorization = await requireCapability('view_reports');
+    const canSeeGlobalReports = hasCapability(authorization, 'view_global_reports');
+    const userCommitteeId = authorization.committeeId;
 
     // Service Role fallback for Supabase RLS
     let supabase;
@@ -303,8 +299,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
     // Populate all committees registered in database
     (commsData || []).forEach(c => {
       if (c.id && c.name) {
-        // Access isolation: non-Admin coordinators only see their own committee
-        if (role !== 'Admin' && userCommittee && c.name.trim().toLowerCase() !== userCommittee.trim().toLowerCase()) {
+        if (!canSeeGlobalReports && c.id !== userCommitteeId) {
           return;
         }
         committeesMap.set(c.id, c.name);
@@ -322,8 +317,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
       const committeeName = vol.committees?.name || 'Sin comité';
       const committeeId = vol.committees?.id || 'sin-comite';
 
-      // Access isolation: non-Admin coordinators only see their own committee data
-      if (role !== 'Admin' && userCommittee && committeeName.trim().toLowerCase() !== userCommittee.trim().toLowerCase()) {
+      if (!canSeeGlobalReports && vol.committee_id !== userCommitteeId) {
         return;
       }
 
@@ -632,11 +626,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
     };
 
     const relevantVols = (volsData || []).filter((v: any) => {
-      const commName = v.committees?.name || 'Sin comité';
-      if (role !== 'Admin' && userCommittee && commName.trim().toLowerCase() !== userCommittee.trim().toLowerCase()) {
-        return false;
-      }
-      return true;
+      return canSeeGlobalReports || v.committee_id === userCommitteeId;
     });
 
     relevantVols.forEach((v: any) => {

@@ -3,6 +3,7 @@ import type { VolunteerType } from '@/components/VolunteerTableRow';
 export interface FilterCriteria {
   currentRole: 'Admin' | 'Editor' | 'Lector';
   currentCommittee?: string;
+  canViewAllVolunteers?: boolean;
   showArchived: boolean;
   selectedCommittees?: string[];
   selectedStakes?: string[];
@@ -17,6 +18,7 @@ export function filterVolunteerIds(
   const {
     currentRole,
     currentCommittee,
+    canViewAllVolunteers = false,
     showArchived,
     selectedCommittees = [],
     selectedStakes = [],
@@ -30,7 +32,7 @@ export function filterVolunteerIds(
     if (matchedSearchIds.size > 0 && !matchedSearchIds.has(v.id)) return false;
 
     // 2. Role-based isolation
-    if (currentRole === 'Editor' && v.committee !== currentCommittee) return false;
+    if (currentRole === 'Editor' && !canViewAllVolunteers && v.committee !== currentCommittee) return false;
 
     // 3. Status match
     const matchesStatus = showArchived ? v.status === 'archived' : v.status !== 'archived';

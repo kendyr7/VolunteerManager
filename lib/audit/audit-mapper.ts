@@ -189,6 +189,18 @@ export class AuditMapper {
       badgeText = 'Seguridad';
       badgeStyle = 'bg-purple-500/15 text-purple-400 border-purple-500/30';
       colorClass = 'bg-purple-500';
+    } else if (actionType === 'Permisos') {
+      actionCategory = 'security';
+      iconName = 'admin_panel_settings';
+      badgeText = 'Permisos';
+      badgeStyle = 'bg-purple-500/15 text-purple-400 border-purple-500/30';
+      colorClass = 'bg-purple-500';
+    } else if (actionType === 'Aviso') {
+      actionCategory = 'general';
+      iconName = 'campaign';
+      badgeText = 'Aviso';
+      badgeStyle = 'bg-sky-500/15 text-sky-400 border-sky-500/30';
+      colorClass = 'bg-sky-500';
     } else if (actionType === 'Creación' || descLower.includes('creó') || descLower.includes('importó')) {
       actionCategory = 'creation';
       iconName = 'person_add';
@@ -214,6 +226,13 @@ export class AuditMapper {
         })
       : rawLog.created_at || '';
 
+    const storedActorRole = rawLog.user_role || 'Admin';
+    const displayActorRole = storedActorRole === 'Editor'
+      ? 'Coordinador'
+      : storedActorRole === 'Lector'
+        ? 'Voluntario'
+        : storedActorRole;
+
     return {
       id: rawLog.id,
       rawActionType: actionType,
@@ -222,7 +241,7 @@ export class AuditMapper {
       // Backward compatibility mapping
       action_type: actionType,
       user_name: rawLog.user_name || 'Sistema',
-      user_role: rawLog.user_role || 'Admin',
+      user_role: displayActorRole,
       description: rawLog.description || '',
       details: rawLog.details || null,
       target_id: rawTargetId,
@@ -232,7 +251,7 @@ export class AuditMapper {
       resolvedVolunteerId,
       resolvedVolunteerName,
       actorName: rawLog.user_name || 'Sistema',
-      actorRole: rawLog.user_role || 'Admin',
+      actorRole: displayActorRole,
       title: rawLog.description || 'Evento registrado',
       subtitle: cleanSubtitle,
       formattedDate,

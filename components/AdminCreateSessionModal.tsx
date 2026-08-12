@@ -5,7 +5,7 @@ import { createAttendanceSessionAdminAction } from '@/app/actions/attendance';
 import { Button } from '@/components/ui/button';
 import { CustomTimePicker } from '@/components/CustomTimePicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getNormalizedRole } from '@/lib/auth';
+import { canRegisterMissingAttendance } from '@/lib/permissions';
 import { parseDayKeyToDateStr } from '@/lib/dates';
 import { formatUnifiedDuration } from '@/lib/shift-calculations';
 import { calculateSessionMinutes, getContinuousScheduledBlocks } from '@/lib/session-utils';
@@ -30,7 +30,7 @@ export function AdminCreateSessionModal({
   onSuccess,
   isMockMode = false,
 }: AdminCreateSessionModalProps) {
-  const isAdmin = getNormalizedRole() === 'Admin';
+  const isAdmin = canRegisterMissingAttendance();
 
   const availableDayKeys = useMemo(() => {
     const dayKeys = new Set<string>();

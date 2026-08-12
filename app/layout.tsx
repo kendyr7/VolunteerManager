@@ -9,6 +9,17 @@ const outfit = Outfit({
   display: "swap",
 });
 
+const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+const metadataBaseUrl = configuredAppUrl
+  ? configuredAppUrl.startsWith("http://") || configuredAppUrl.startsWith("https://")
+    ? configuredAppUrl
+    : `https://${configuredAppUrl}`
+  : process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000";
+
 export const viewport: Viewport = {
   themeColor: "#4d7cfe",
   width: "device-width",
@@ -18,6 +29,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL(metadataBaseUrl),
   title: "Gestión de Voluntarios • Puertas Abiertas",
   description: "Sistema de administración y organización de turnos de voluntariado para el Templo de Managua.",
   manifest: "/manifest.json",

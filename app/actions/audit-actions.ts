@@ -3,6 +3,7 @@
 import { getAdminSupabase } from "@/lib/supabase/admin";
 import { createActivityLog } from "./activity-actions";
 import { broadcastShiftSync } from "@/lib/services/shift-broadcast.service";
+import { requireCapability } from '@/lib/authorization';
 
 /**
  * Formatea una fecha según la zona horaria oficial de Nicaragua (America/Managua, UTC-6)
@@ -37,6 +38,9 @@ export async function undoVolunteerCheckInAction({
   actorRole?: string;
 }) {
   try {
+    const authorization = await requireCapability('manage_permissions');
+    actorName = authorization.name;
+    actorRole = authorization.role;
     const supabase = await getAdminSupabase();
 
     // 1. Obtener nombre del voluntario
@@ -107,6 +111,9 @@ export async function reopenCompletedShiftAction({
   actorRole?: string;
 }) {
   try {
+    const authorization = await requireCapability('manage_permissions');
+    actorName = authorization.name;
+    actorRole = authorization.role;
     const supabase = await getAdminSupabase();
 
     const { data: vol } = await supabase
@@ -180,6 +187,9 @@ export async function rollbackReassignmentAction({
   actorRole?: string;
 }) {
   try {
+    const authorization = await requireCapability('manage_permissions');
+    actorName = authorization.name;
+    actorRole = authorization.role;
     const supabase = await getAdminSupabase();
 
     const { data: vol } = await supabase

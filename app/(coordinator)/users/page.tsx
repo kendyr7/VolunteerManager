@@ -10,8 +10,15 @@ import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { generateWaMeLink, validatePhone8Digits } from "@/lib/whatsapp";
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
-import { createClient } from "@/lib/supabase/client";
 import { canManageUsers } from "@/lib/permissions";
+import {
+  createUserProfileAction,
+  listUserProfilesAction,
+  resetPlatformUserPinAction,
+  updatePlatformUserStatusAction,
+  updateUserProfileAction,
+} from "@/app/actions/user-actions";
+import { CoordinatorType } from "@/lib/role-permissions";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
 import { useSearch } from "@/lib/search-context";
 import { DataTableFilter } from "@/components/DataTableFilter";
@@ -93,17 +100,94 @@ function HighlightText({ text, term }: { text: string; term: string }) {
 
 const ROLES = ['Admin', 'Editor', 'Lector'] as const;
 type Role = typeof ROLES[number];
+type PlatformRoleSelection = 'admin' | 'technology' | 'committee' | 'volunteer';
+
+const PLATFORM_ROLE_OPTIONS: Array<{
+  value: PlatformRoleSelection;
+  label: string;
+  icon: string;
+  iconClassName: string;
+}> = [
+  { value: 'admin', label: 'Administrador', icon: 'admin_panel_settings', iconClassName: 'text-amber-400' },
+  { value: 'technology', label: 'Coordinador de tecnología', icon: 'qr_code_scanner', iconClassName: 'text-[#4d7cfe]' },
+  { value: 'committee', label: 'Coordinador de comité', icon: 'groups', iconClassName: 'text-emerald-400' },
+];
 
 interface PlatformUser {
   id: string;
   name: string;
   phone: string;
   role: Role;
+  coordinatorType?: CoordinatorType | null;
   committee?: string;
   status: 'pending' | 'active';
   isArchived?: boolean;
   inviteLink?: string;
   pin?: string;
+}
+
+function getPlatformRoleLabel(user: Pick<PlatformUser, 'role' | 'coordinatorType'>) {
+  if (user.role === 'Admin') return 'Administrador';
+  if (user.role === 'Lector') return 'Voluntario';
+  return user.coordinatorType === 'technology' ? 'Coord. tecnología' : 'Coord. comité';
+}
+
+function getPlatformRoleSelection(
+  role: Role,
+  coordinatorType?: CoordinatorType | null
+): PlatformRoleSelection {
+  if (role === 'Admin') return 'admin';
+  if (role === 'Lector') return 'volunteer';
+  return coordinatorType === 'technology' ? 'technology' : 'committee';
+}
+
+function getPlatformRoleDescription(selection: PlatformRoleSelection) {
+  switch (selection) {
+    case 'admin':
+      return 'Acceso total al sistema, incluyendo usuarios, comités y permisos.';
+    case 'technology':
+      return 'Acceso global sujeto a los permisos que configure un Administrador.';
+    case 'committee':
+      return 'Acceso limitado a los voluntarios, turnos y reportes de su comité.';
+    case 'volunteer':
+      return 'Perfil legado. Los voluntarios se administran por separado desde Voluntarios.';
+  }
+}
+
+function PlatformRoleSelect({
+  value,
+  onValueChange,
+}: {
+  value: PlatformRoleSelection;
+  onValueChange: (value: PlatformRoleSelection) => void;
+}) {
+  const selectedOption = PLATFORM_ROLE_OPTIONS.find(option => option.value === value);
+
+  return (
+    <Select value={value} onValueChange={nextValue => nextValue && onValueChange(nextValue as PlatformRoleSelection)}>
+      <SelectTrigger className="w-full h-10 border border-border bg-dark3 text-text font-inter font-bold flex items-center justify-between px-3 rounded-lg focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]">
+        <SelectValue placeholder="Selecciona un rol">
+          {() => selectedOption?.label || 'Voluntario (perfil legado)'}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent className="bg-dark2 border border-border text-text z-[200]">
+        {PLATFORM_ROLE_OPTIONS.map(option => (
+          <SelectItem
+            key={option.value}
+            value={option.value}
+            className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3"
+          >
+            <div className="flex items-center gap-2">
+              <span className={`material-symbols-outlined text-[18px] ${option.iconClassName}`} aria-hidden="true">
+                {option.icon}
+              </span>
+              <span>{option.label}</span>
+            </div>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 export const USER_TABLE_STYLES = {
@@ -130,13 +214,6 @@ export default function UsersPage() {
 
   const [isMobile, setIsMobile] = useState(false);
   const [showPin, setShowPin] = useState(false);
-  const [currentUserRole, setCurrentUserRole] = useState<string>('');
-  const [currentUserCommittee, setCurrentUserCommittee] = useState<string>('');
-
-  useEffect(() => {
-    setCurrentUserRole(localStorage.getItem('mock_role') || 'Admin');
-    setCurrentUserCommittee(localStorage.getItem('mock_committee') || '');
-  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -202,6 +279,7 @@ export default function UsersPage() {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newRole, setNewRole] = useState<Role>('Editor');
+  const [newCoordinatorType, setNewCoordinatorType] = useState<CoordinatorType>('committee');
   const [newCommittee, setNewCommittee] = useState<string>(COMMITTEES[0]);
   const [sendWelcomeWhatsApp, setSendWelcomeWhatsApp] = useState(true);
   const [generatedInvite, setGeneratedInvite] = useState<PlatformUser | null>(null);
@@ -209,24 +287,32 @@ export default function UsersPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
+  const selectedPlatformRole = getPlatformRoleSelection(newRole, newCoordinatorType);
+
+  const handlePlatformRoleChange = (selection: PlatformRoleSelection) => {
+    if (selection === 'admin') {
+      setNewRole('Admin');
+      return;
+    }
+    if (selection === 'volunteer') {
+      setNewRole('Lector');
+      return;
+    }
+
+    setNewRole('Editor');
+    setNewCoordinatorType(selection);
+  };
+
   const loadData = async () => {
     setLoading(true);
-    const supabase = createClient();
-    
-    // Fetch users
-    const { data: profilesData, error: profilesError } = await supabase
-      .from('profiles')
-      .select('*, committees(name)')
-      .order('created_at', { ascending: false });
-
-    // Fetch committees
-    const { data: commsData, error: commsError } = await supabase
-      .from('committees')
-      .select('id, name')
-      .or('status.is.null,status.neq.archived');
-
-    if (profilesError) console.error("Error loading users:", profilesError);
-    if (commsError) console.error("Error loading committees:", commsError);
+    const result = await listUserProfilesAction();
+    if (!result.success) {
+      showToast(result.error || "No se pudieron cargar los usuarios", "error");
+      setLoading(false);
+      return;
+    }
+    const profilesData = result.profiles;
+    const commsData = result.committees;
 
     if (profilesData) {
       setUsers(
@@ -235,6 +321,7 @@ export default function UsersPage() {
           name: p.full_name,
           phone: p.phone || '',
           role: p.role as Role,
+          coordinatorType: p.coordinator_type as CoordinatorType | null,
           committee: p.committees?.name,
           status: p.pin ? 'active' : 'pending',
           isArchived: p.status === 'archived',
@@ -280,19 +367,19 @@ export default function UsersPage() {
     const sanitizedPhone = phoneValidation.formatted;
 
     let commId: string | null = null;
-    if (newRole === 'Editor') {
+    if (newRole === 'Editor' && newCoordinatorType === 'committee') {
       const targetComm = committeesList.find(c => c.name === newCommittee);
       if (targetComm) {
         commId = targetComm.id;
       }
     }
 
-    const { createUserProfileAction } = await import('@/app/actions/user-actions');
     const result = await createUserProfileAction({
       fullName: newName.trim(),
       phone: sanitizedPhone,
       role: newRole,
       committeeId: commId,
+      coordinatorType: newRole === 'Editor' ? newCoordinatorType : null,
       sendWhatsApp: sendWelcomeWhatsApp
     });
 
@@ -307,6 +394,7 @@ export default function UsersPage() {
       name: result.user.name,
       phone: result.user.phone,
       role: result.user.role as Role,
+      coordinatorType: result.user.coordinatorType as CoordinatorType | null,
       committee: result.user.committee,
       status: 'pending',
       pin: result.user.pin,
@@ -327,6 +415,7 @@ export default function UsersPage() {
     setNewName(user.name);
     setNewPhone(user.phone);
     setNewRole(user.role);
+    setNewCoordinatorType(user.coordinatorType || 'committee');
     setNewCommittee(user.committee || COMMITTEES[0]);
     setIsEditSheetOpen(true);
   };
@@ -351,18 +440,18 @@ export default function UsersPage() {
     setIsUpdating(true);
 
     let commId: string | null = null;
-    if (newRole === 'Editor') {
+    if (newRole === 'Editor' && newCoordinatorType === 'committee') {
       const targetComm = committeesList.find(c => c.name === newCommittee);
       if (targetComm) commId = targetComm.id;
     }
 
-    const { updateUserProfileAction } = await import('@/app/actions/user-actions');
     const result = await updateUserProfileAction({
       userId: editingUser.id,
       fullName: newName.trim(),
       phone: sanitizedPhone,
       role: newRole,
-      committeeId: commId
+      committeeId: commId,
+      coordinatorType: newRole === 'Editor' ? newCoordinatorType : null,
     });
 
     if (!result.success) {
@@ -376,7 +465,7 @@ export default function UsersPage() {
       const activePhone = typeof window !== 'undefined' ? localStorage.getItem('volunteer_phone') : null;
       if (activePhone && (activePhone === sanitizedPhone || activePhone === editingUser.phone)) {
         const { setMockRole } = await import('@/lib/permissions');
-        setMockRole(newRole);
+        setMockRole();
       }
 
       loadData();
@@ -392,14 +481,9 @@ export default function UsersPage() {
       confirmText: 'Resetear',
       type: 'danger',
       onConfirm: async () => {
-        const supabase = createClient();
-        const { error } = await supabase
-          .from('profiles')
-          .update({ pin: '1234' })
-          .eq('id', user.id);
-
-        if (error) {
-          showToast("Error al resetear PIN", "error");
+        const result = await resetPlatformUserPinAction(user.id);
+        if (!result.success) {
+          showToast(result.error || "Error al resetear PIN", "error");
         } else {
           showToast(`PIN de ${user.name} reseteado a '1234'`);
           loadData();
@@ -422,15 +506,9 @@ export default function UsersPage() {
       confirmText: isArchived ? 'Desarchivar' : 'Archivar',
       type: isArchived ? 'primary' : 'danger',
       onConfirm: async () => {
-        const supabase = createClient();
-        const { error } = await supabase
-          .from('profiles')
-          .update({ status: newStatus })
-          .eq('id', user.id);
-
-        if (error) {
-          console.error("Error updating user status:", error);
-          showToast(`Error al ${isArchived ? 'desarchivar' : 'archivar'} el usuario`, "error");
+        const result = await updatePlatformUserStatusAction(user.id, newStatus);
+        if (!result.success) {
+          showToast(result.error || `Error al ${isArchived ? 'desarchivar' : 'archivar'} el usuario`, "error");
         } else {
           showToast(`${user.name} ${isArchived ? 'desarchivado' : 'archivado'} correctamente`, "success");
           loadData();
@@ -447,7 +525,7 @@ export default function UsersPage() {
   };
 
   const getWaLink = (user: PlatformUser) => {
-    const text = `¡Hola ${user.name}! Has sido invitado a ser ${user.role} en Volunteer Manager.\n\nIngresa con tu número y tu PIN temporal (${user.pin}) para acceder:\nhttp://localhost:3000/login`;
+    const text = `¡Hola ${user.name}! Has sido invitado como ${getPlatformRoleLabel(user)} en Volunteer Manager.\n\nIngresa con tu número y tu PIN temporal (${user.pin}) para acceder:\nhttp://localhost:3000/login`;
     return generateWaMeLink(user.phone, text);
   };
 
@@ -455,6 +533,7 @@ export default function UsersPage() {
     setNewName('');
     setNewPhone('');
     setNewRole('Editor');
+    setNewCoordinatorType('committee');
     setNewCommittee(COMMITTEES[0]);
     setGeneratedInvite(null);
     setIsInviteOpen(false);
@@ -476,7 +555,7 @@ export default function UsersPage() {
 
       const normName = normalizeSearch(user.name);
       const normPhone = normalizeSearch(user.phone);
-      const normRole = normalizeSearch(user.role);
+      const normRole = normalizeSearch(getPlatformRoleLabel(user));
       const normCommittee = normalizeSearch(user.committee);
       const normStatus = normalizeSearch(user.status === 'active' ? 'activo' : 'pendiente');
 
@@ -709,45 +788,21 @@ export default function UsersPage() {
 
                       <div className="space-y-2">
                         <label className="block mb-1.5 text-xs font-extrabold text-text">Rol en la plataforma</label>
-                        <Select value={newRole} onValueChange={(v) => setNewRole(v as Role)}>
-                          <SelectTrigger className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all flex items-center justify-between">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-dark2 border border-border text-text shadow-2xl z-[200]">
-                            <SelectItem value="Admin" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">
-                              <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[18px] text-amber-400">admin_panel_settings</span>
-                                <span>Administrador (Admin - Acceso Total)</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="Editor" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">
-                              <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[18px] text-[#4d7cfe]">manage_accounts</span>
-                                <span>Coordinador (Editor de Comité)</span>
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <PlatformRoleSelect value={selectedPlatformRole} onValueChange={handlePlatformRoleChange} />
                         <p className="text-[11px] font-inter text-text-dim">
-                          {newRole === 'Admin'
-                            ? 'Otorgará control total del sistema, gestión de usuarios, comités y reportes.'
-                            : 'Permite gestionar voluntarios, enviar avisos y ver reportes de su comité.'}
+                          {getPlatformRoleDescription(selectedPlatformRole)}
                         </p>
                       </div>
 
-                      {newRole === 'Editor' && (
+                      {selectedPlatformRole === 'committee' && (
                         <div className="space-y-2 animate-in fade-in zoom-in-95">
-                          <label className="block mb-1.5 text-xs font-extrabold text-text">Comité Asignado</label>
+                          <label className="block mb-1.5 text-xs font-extrabold text-text">Comité asignado</label>
                           <Select value={newCommittee} onValueChange={(v) => setNewCommittee(v || '')}>
-                            <SelectTrigger className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe] text-sm font-inter font-bold outline-none transition-all flex items-center justify-between">
+                            <SelectTrigger className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text text-sm font-inter font-bold">
                               <SelectValue placeholder="Selecciona un comité" />
                             </SelectTrigger>
-                            <SelectContent className="bg-dark2 border border-border text-text shadow-2xl z-[200]">
-                              {committeesList.map(c => (
-                                <SelectItem key={c.id} value={c.name} className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">
-                                  {c.name}
-                                </SelectItem>
-                              ))}
+                            <SelectContent className="bg-dark2 border border-border text-text z-[200]">
+                              {committeesList.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </div>
@@ -913,7 +968,7 @@ export default function UsersPage() {
                           <td className="px-3 py-4">
                             <div className="flex items-center gap-2">
                               <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.role === 'Admin' ? USER_TABLE_STYLES.roleAdmin : USER_TABLE_STYLES.roleEditor)}>
-                                {user.role}
+                                {getPlatformRoleLabel(user)}
                               </Badge>
                               {user.committee && (
                                 <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(user.committee))}>
@@ -1020,7 +1075,7 @@ export default function UsersPage() {
                         badges={
                           <>
                             <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, user.role === 'Admin' ? USER_TABLE_STYLES.roleAdmin : USER_TABLE_STYLES.roleEditor)}>
-                              {user.role}
+                              {getPlatformRoleLabel(user)}
                             </Badge>
                             {user.committee && (
                               <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(user.committee))}>
@@ -1170,29 +1225,19 @@ export default function UsersPage() {
                   </div>
                   <div className="space-y-2">
                     <label className="block mb-1.5 text-xs font-extrabold text-text">Rol en la plataforma</label>
-                    <Select value={newRole} onValueChange={(v) => v && setNewRole(v as Role)}>
-                      <SelectTrigger className="w-full h-10 border border-border bg-dark3 text-text font-inter font-bold flex items-center justify-between px-3 rounded-lg">
-                        <SelectValue placeholder="Selecciona un rol" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-dark2 border border-border text-text shadow-2xl z-[200]">
-                        <SelectItem value="Admin" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">Admin (Acceso total)</SelectItem>
-                        <SelectItem value="Editor" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">Editor (Coordinador de comité)</SelectItem>
-                        <SelectItem value="Lector" className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">Lector (Solo lectura)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <PlatformRoleSelect value={selectedPlatformRole} onValueChange={handlePlatformRoleChange} />
+                    <p className="text-[11px] font-inter text-text-dim">
+                      {getPlatformRoleDescription(selectedPlatformRole)}
+                    </p>
                   </div>
 
-                  {newRole === 'Editor' && (
+                  {selectedPlatformRole === 'committee' && (
                     <div className="space-y-2">
-                      <label className="block mb-1.5 text-xs font-extrabold text-text">Comité Asignado</label>
+                      <label className="block mb-1.5 text-xs font-extrabold text-text">Comité asignado</label>
                       <Select value={newCommittee} onValueChange={(v) => v && setNewCommittee(v)}>
-                        <SelectTrigger className="w-full h-10 border border-border bg-dark3 text-text font-inter font-bold flex items-center justify-between px-3 rounded-lg">
-                          <SelectValue placeholder="Selecciona un comité" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-dark2 border border-border text-text shadow-2xl z-[200]">
-                          {committeesList.map(c => (
-                            <SelectItem key={c.id} value={c.name} className="font-inter font-bold text-sm text-text hover:bg-dark3 focus:bg-dark3 cursor-pointer py-2 px-3">{c.name}</SelectItem>
-                          ))}
+                        <SelectTrigger className="w-full h-10 border border-border bg-dark3 text-text font-inter font-bold px-3 rounded-lg"><SelectValue placeholder="Selecciona un comité" /></SelectTrigger>
+                        <SelectContent className="bg-dark2 border border-border text-text z-[200]">
+                          {committeesList.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1207,13 +1252,12 @@ export default function UsersPage() {
                           type={showPin ? "text" : "password"}
                           value={
                             editingUser?.pin
-                              ? ((currentUserRole?.toLowerCase() === 'admin' || (currentUserRole?.toLowerCase() === 'editor' && editingUser.committee === currentUserCommittee))
-                                  ? editingUser.pin : '****')
+                              ? editingUser.pin
                               : ''
                           }
                           className="w-full h-10 pl-3 pr-8 rounded-lg border border-border bg-dark text-text-dim font-inter font-bold outline-none tracking-widest text-left"
                         />
-                        {(currentUserRole?.toLowerCase() === 'admin' || (currentUserRole?.toLowerCase() === 'editor' && editingUser?.committee === currentUserCommittee)) && editingUser?.pin && (
+                        {editingUser?.pin && (
                           <button
                             type="button"
                             onClick={() => setShowPin(!showPin)}

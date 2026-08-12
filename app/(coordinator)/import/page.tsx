@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { generatePinMessage, generateWaMeLink, formatE164, validatePhone8Digits } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
-import { canImportData } from "@/lib/permissions";
+import { canImportData, getAuthorizationSnapshotCache } from "@/lib/permissions";
 import { motion, AnimatePresence } from "framer-motion";
 // xlsx is loaded dynamically inside downloadExcelTemplate() and processFile()
 // to avoid bundling ~800 KB into the initial JS chunk for this route.
@@ -51,6 +51,7 @@ export default function ImportPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [committees, setCommittees] = useState<{ id: string, name: string }[]>([]);
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor'>('Admin');
+  const [isTechnologyCoordinator, setIsTechnologyCoordinator] = useState(false);
   const [userCommittee, setUserCommittee] = useState<string>('');
   const [existingPhones, setExistingPhones] = useState<Set<string>>(new Set());
   const [isImporting, setIsImporting] = useState(false);
@@ -149,10 +150,15 @@ export default function ImportPage() {
   };
 
   useEffect(() => {
-    const role = localStorage.getItem('mock_role') as any;
-    const comm = localStorage.getItem('mock_committee') || '';
-    if (role) setCurrentRole(role);
-    setUserCommittee(comm);
+    const syncAuthorization = () => {
+      const snapshot = getAuthorizationSnapshotCache();
+      const isTechnology = snapshot.coordinatorType === 'technology';
+      setIsTechnologyCoordinator(isTechnology);
+      setCurrentRole(snapshot.role === 'Admin' || isTechnology ? 'Admin' : 'Editor');
+      setUserCommittee(snapshot.committeeName || '');
+    };
+    syncAuthorization();
+    window.addEventListener('permissions-changed', syncAuthorization);
 
     const fetchCommittees = async () => {
       const supabase = createClient();
@@ -163,6 +169,7 @@ export default function ImportPage() {
       if (data) setCommittees(data.map(c => ({ id: c.id || '', name: c.name || '' })));
     };
     fetchCommittees();
+    return () => window.removeEventListener('permissions-changed', syncAuthorization);
   }, []);
 
   const downloadExcelTemplate = async () => {
@@ -569,7 +576,9 @@ export default function ImportPage() {
               <div>
                 <span className="font-bold text-text">Permisos:</span>{' '}
                 {currentRole === 'Admin'
-                  ? 'Como administrador, puedes subir voluntarios de cualquier comité.'
+                  ? isTechnologyCoordinator
+                    ? 'Como Coordinador de tecnología, puedes importar voluntarios de cualquier comité.'
+                    : 'Como administrador, puedes subir voluntarios de cualquier comité.'
                   : <>Como coordinador de <strong className="text-text">{userCommittee || 'tu comité'}</strong>, solo puedes importar voluntarios asignados a ese comité.</>}
               </div>
             </div>

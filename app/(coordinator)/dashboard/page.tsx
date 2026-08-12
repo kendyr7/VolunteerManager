@@ -10,7 +10,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatE164 } from "@/lib/whatsapp";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
-import { canViewDashboard } from "@/lib/permissions";
+import { canViewDashboard, getAuthorizationSnapshotCache } from "@/lib/permissions";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -124,7 +124,15 @@ export default function CoordinatorDashboard() {
 
   useEffect(() => {
     setMounted(true);
-    const handlePermissionsChange = () => setPermTick(v => v + 1);
+    const handlePermissionsChange = () => {
+      const snapshot = getAuthorizationSnapshotCache();
+      setCurrentRole(snapshot.role);
+      setUserCommittee(snapshot.committeeName || '');
+      if (snapshot.coordinatorType === 'committee' && snapshot.committeeName) {
+        setSelectedHeatmapCommittee(snapshot.committeeName);
+      }
+      setPermTick(v => v + 1);
+    };
     window.addEventListener("storage", handlePermissionsChange);
     window.addEventListener("permissions-changed", handlePermissionsChange);
     return () => {

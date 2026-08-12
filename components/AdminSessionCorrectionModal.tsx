@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { AttendanceSession, getContinuousScheduledBlockForSession } from '@/lib/session-utils';
 import { formatUnifiedDuration } from '@/lib/shift-calculations';
 import { adjustSessionTimesAdminAction, closeAttendanceSessionAction } from '@/app/actions/attendance';
-import { getNormalizedRole } from '@/lib/auth';
+import { canCorrectAttendanceTimes } from '@/lib/permissions';
 import { getOfficialShiftTime, parseDayKeyToDateStr } from '@/lib/dates';
 import { CustomTimePicker } from '@/components/CustomTimePicker';
 
@@ -27,7 +27,7 @@ export function AdminSessionCorrectionModal({
   onSuccess,
   isMockMode = false,
 }: AdminSessionCorrectionModalProps) {
-  const isAdmin = getNormalizedRole() === 'Admin';
+  const isAdmin = canCorrectAttendanceTimes();
   
   // Calculate continuous block based on started_at
   const block = useMemo(() => {

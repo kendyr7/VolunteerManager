@@ -1,234 +1,217 @@
-import { createClient } from "@/lib/supabase/client";
+'use client';
 
-// ─── CROSS-TAB & REALTIME PERMISSIONS SYNC ──────────────────────────
-let permissionsChannel: BroadcastChannel | null = null;
-if (typeof window !== "undefined" && "BroadcastChannel" in window) {
-  try {
-    permissionsChannel = new BroadcastChannel("volunteer_manager_permissions");
-    permissionsChannel.onmessage = (event) => {
-      if (event.data && event.data.key) {
-        if (event.data.key === "mock_role" && event.data.role) {
-          localStorage.setItem("mock_role", event.data.role);
-        } else if (event.data.allowed !== undefined) {
-          localStorage.setItem(event.data.key, event.data.allowed ? "true" : "false");
-        }
-        window.dispatchEvent(new CustomEvent("permissions-changed", { detail: event.data }));
-      }
-    };
-  } catch (e) {}
+import { createClient } from '@/lib/supabase/client';
+import { getCurrentAuthorizationAction } from '@/app/actions/permission-actions';
+import {
+  AuthorizationSnapshot,
+  CONFIGURABLE_PERMISSION_DEFAULTS,
+  ConfigurablePermissionKey,
+  EMPTY_AUTHORIZATION_SNAPSHOT,
+  hasCapability,
+} from '@/lib/role-permissions';
+
+let currentSnapshot: AuthorizationSnapshot = { ...EMPTY_AUTHORIZATION_SNAPSHOT };
+let syncPromise: Promise<AuthorizationSnapshot> | null = null;
+let realtimeStarted = false;
+
+const permissionsChannel =
+  typeof window !== 'undefined' && 'BroadcastChannel' in window
+    ? new BroadcastChannel('volunteer_manager_permissions')
+    : null;
+
+function dispatchPermissionChange() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('permissions-changed', { detail: currentSnapshot }));
 }
 
-// Subscribe to Supabase Realtime for instant multi-device sync
-if (typeof window !== "undefined") {
-  try {
-    const supabase = createClient();
-    supabase
-      .channel("system_settings_realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "system_settings" },
-        (payload: any) => {
-          if (payload.new && payload.new.key) {
-            const isAllowed = payload.new.value === "true";
-            localStorage.setItem(payload.new.key, payload.new.value);
-            window.dispatchEvent(
-              new CustomEvent("permissions-changed", {
-                detail: { key: payload.new.key, allowed: isAllowed },
-              })
-            );
-            if (permissionsChannel) {
-              permissionsChannel.postMessage({ key: payload.new.key, allowed: isAllowed });
-            }
-          }
-        }
-      )
-      .subscribe();
-  } catch (e) {}
-}
+export function setAuthorizationSnapshot(snapshot: AuthorizationSnapshot) {
+  currentSnapshot = snapshot;
 
-// ─── ROLE NORMALIZATION HELPER ──────────────────────────────────────
-export function getNormalizedRole(): "Admin" | "Editor" | "Lector" {
-  if (typeof window === "undefined") return "Admin";
-  const rawRole = localStorage.getItem("mock_role") || "Admin";
-  const lower = rawRole.toLowerCase().trim();
-  if (lower === "admin" || lower === "administrador") return "Admin";
-  if (lower === "lector" || lower === "voluntario") return "Lector";
-  return "Editor";
-}
-
-// ─── GENERIC SYSTEM PERMISSION HELPERS ──────────────────────────────
-export function getSystemPermission(key: string, defaultValue = true): boolean {
-  if (typeof window === "undefined") return defaultValue;
-  const val = localStorage.getItem(key);
-  if (val === null || val === undefined) return defaultValue;
-  return val === "true";
-}
-
-export function setSystemPermission(key: string, allowed: boolean): void {
-  if (typeof window === "undefined") return;
-  const strVal = allowed ? "true" : "false";
-  localStorage.setItem(key, strVal);
-  
-  // Instant local event dispatch
-  window.dispatchEvent(new Event("storage"));
-  window.dispatchEvent(new CustomEvent("permissions-changed", { detail: { key, allowed } }));
-
-  // Instant broadcast to all open tabs
-  if (permissionsChannel) {
-    permissionsChannel.postMessage({ key, allowed });
+  // Compatibility cache for pages that are still being migrated. These values
+  // are never used by Server Actions to authorize a request.
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('mock_role', snapshot.role);
+    if (snapshot.committeeName) localStorage.setItem('mock_committee', snapshot.committeeName);
+    else localStorage.removeItem('mock_committee');
+    localStorage.setItem('authorization_snapshot', JSON.stringify(snapshot));
   }
-
-  // Sync to database
-  try {
-    const supabase = createClient();
-    supabase.from("system_settings").upsert(
-      { key, value: strVal, updated_at: new Date().toISOString() },
-      { onConflict: "key" }
-    ).then(({ error }) => {
-      if (error && error.code !== 'PGRST205') console.warn("Could not save system_settings:", error.message);
-    });
-  } catch (e) {}
+  dispatchPermissionChange();
 }
 
-export function setMockRole(role: string): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("mock_role", role);
-  window.dispatchEvent(new Event("storage"));
-  window.dispatchEvent(new CustomEvent("permissions-changed", { detail: { key: "mock_role", role } }));
-  if (permissionsChannel) {
-    permissionsChannel.postMessage({ key: "mock_role", role });
-  }
+export function getAuthorizationSnapshotCache() {
+  return currentSnapshot;
 }
 
-export async function fetchSystemPermission(key: string, defaultValue = true): Promise<boolean> {
-  if (typeof window === "undefined") return defaultValue;
-  try {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("system_settings")
-      .select("value")
-      .eq("key", key)
-      .maybeSingle();
+function startRealtimePermissionSync() {
+  if (typeof window === 'undefined' || realtimeStarted) return;
+  realtimeStarted = true;
 
-    if (!error && data && data.value !== undefined && data.value !== null) {
-      const isAllowed = data.value === "true";
-      localStorage.setItem(key, isAllowed ? "true" : "false");
-      return isAllowed;
-    }
-  } catch (e) {}
-  return getSystemPermission(key, defaultValue);
-}
-
-export async function syncAllPermissionsFromDatabase(): Promise<void> {
-  if (typeof window === "undefined") return;
-  try {
-    const supabase = createClient();
-    const { data, error } = await supabase.from("system_settings").select("key, value");
-    if (!error && data && data.length > 0) {
-      let changed = false;
-      data.forEach((row: { key: string; value: string }) => {
-        if (row.key && row.value !== undefined) {
-          const current = localStorage.getItem(row.key);
-          if (current !== row.value) {
-            localStorage.setItem(row.key, row.value);
-            changed = true;
-          }
+  const supabase = createClient();
+  supabase
+    .channel('role_permissions_and_profile_realtime')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'system_settings' },
+      () => void syncAllPermissionsFromDatabase(true)
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'profiles' },
+      payload => {
+        if (payload.new?.id === currentSnapshot.userId) {
+          void syncAllPermissionsFromDatabase(true);
         }
-      });
-      if (changed) {
-        window.dispatchEvent(new Event("storage"));
-        window.dispatchEvent(new CustomEvent("permissions-changed", { detail: { synced: true } }));
       }
-    }
-  } catch (e) {}
-}
+    )
+    .subscribe();
 
-export function resetAllPermissionsToDefault(): void {
-  if (typeof window === "undefined") return;
-  const defaults: Record<string, boolean> = {
-    allow_coordinator_dashboard: true,
-    allow_coordinator_volunteers: true,
-    allow_coordinator_shift_edit: false,
-    allow_coordinator_whatsapp: true,
-    allow_coordinator_reports: true,
-    allow_coordinator_qr: true,
-    allow_coordinator_import: true,
-    allow_coordinator_users: false,
-    allow_volunteer_view_volunteers: true,
-  };
-
-  Object.entries(defaults).forEach(([key, val]) => {
-    setSystemPermission(key, val);
+  permissionsChannel?.addEventListener('message', () => {
+    void syncAllPermissionsFromDatabase(true);
   });
 }
 
-// ─── COORDINATOR & VOLUNTEER SPECIFIC PERMISSIONS ─────────────────────
-export function canViewDashboard(): boolean {
-  const role = getNormalizedRole();
-  if (role === "Lector") return false;
-  if (role === "Admin") return true;
-  return getSystemPermission("allow_coordinator_dashboard", true);
+export async function syncAllPermissionsFromDatabase(force = false): Promise<AuthorizationSnapshot> {
+  startRealtimePermissionSync();
+  if (syncPromise && !force) return syncPromise;
+
+  syncPromise = getCurrentAuthorizationAction()
+    .then(result => {
+      if (result.success && result.snapshot) {
+        setAuthorizationSnapshot(result.snapshot);
+        return result.snapshot;
+      }
+      setAuthorizationSnapshot({ ...EMPTY_AUTHORIZATION_SNAPSHOT });
+      return currentSnapshot;
+    })
+    .finally(() => {
+      syncPromise = null;
+    });
+
+  return syncPromise;
 }
 
-export function canEditShifts(): boolean {
-  const role = getNormalizedRole();
-  if (role === "Lector") return false;
-  if (role === "Admin") return true;
-  return getSystemPermission("allow_coordinator_shift_edit", false);
+export function notifyPermissionsChanged() {
+  permissionsChannel?.postMessage({ refresh: true });
+  void syncAllPermissionsFromDatabase(true);
 }
 
-export function canSendWhatsappMessages(): boolean {
-  const role = getNormalizedRole();
-  if (role === "Lector") return false;
-  if (role === "Admin") return true;
-  return getSystemPermission("allow_coordinator_whatsapp", true);
+export function getNormalizedRole(): 'Admin' | 'Editor' | 'Lector' {
+  return currentSnapshot.role;
 }
 
-export function canViewReports(): boolean {
-  const role = getNormalizedRole();
-  if (role === "Lector") return false;
-  if (role === "Admin") return true;
-  return getSystemPermission("allow_coordinator_reports", true);
-}
-
-export function canViewVolunteers(): boolean {
-  const role = getNormalizedRole();
-  if (role === "Lector") {
-    return getSystemPermission("allow_volunteer_view_volunteers", true);
+export function getSystemPermission(key: string, defaultValue = false): boolean {
+  if (key in currentSnapshot.permissions) {
+    return currentSnapshot.permissions[key as ConfigurablePermissionKey];
   }
-  if (role === "Admin") return true;
-  return getSystemPermission("allow_coordinator_volunteers", true);
+
+  const legacyCapabilities: Record<string, () => boolean> = {
+    allow_coordinator_dashboard: canViewDashboard,
+    allow_coordinator_volunteers: canViewVolunteers,
+    allow_coordinator_shift_edit: canEditShifts,
+    allow_coordinator_whatsapp: canSendWhatsappMessages,
+    allow_coordinator_reports: canViewReports,
+    allow_coordinator_qr: canQrCheckin,
+    allow_coordinator_import: canImportData,
+    allow_coordinator_users: canManageUsers,
+    allow_volunteer_view_volunteers: canViewVolunteers,
+  };
+  return legacyCapabilities[key]?.() ?? defaultValue;
 }
 
-export function canQrCheckin(): boolean {
-  const role = getNormalizedRole();
-  if (role === "Lector") return false;
-  if (role === "Admin") return true;
-  return getSystemPermission("allow_coordinator_qr", true);
+/** @deprecated Permission writes must use updateRolePermissionAction. */
+export function setSystemPermission(): void {
+  throw new Error('Los permisos solo pueden modificarse mediante la acción segura de Administrador.');
 }
 
-export function canImportData(): boolean {
-  const role = getNormalizedRole();
-  if (role === "Lector") return false;
-  if (role === "Admin") return true;
-  return getSystemPermission("allow_coordinator_import", true);
+export async function fetchSystemPermission(key: string, defaultValue = false): Promise<boolean> {
+  await syncAllPermissionsFromDatabase();
+  return getSystemPermission(key, defaultValue);
 }
 
-export function canManageUsers(): boolean {
-  const role = getNormalizedRole();
-  if (role === "Admin") return true;
-  return getSystemPermission("allow_coordinator_users", false);
+/** @deprecated Role comes from the authenticated database profile. */
+export function setMockRole(): void {
+  void syncAllPermissionsFromDatabase(true);
 }
 
-// Legacy exports for backward compatibility
-export const isCoordinatorShiftEditAllowed = () => getSystemPermission("allow_coordinator_shift_edit", false);
-export const setCoordinatorShiftEditAllowed = (allowed: boolean) => setSystemPermission("allow_coordinator_shift_edit", allowed);
-export const fetchCoordinatorShiftEditAllowed = () => fetchSystemPermission("allow_coordinator_shift_edit", false);
+/** @deprecated Use resetRolePermissionsAction. */
+export function resetAllPermissionsToDefault(): void {
+  currentSnapshot = {
+    ...currentSnapshot,
+    permissions: { ...CONFIGURABLE_PERMISSION_DEFAULTS },
+  };
+  dispatchPermissionChange();
+}
 
-export const isCoordinatorWhatsappAllowed = () => getSystemPermission("allow_coordinator_whatsapp", true);
-export const setCoordinatorWhatsappAllowed = (allowed: boolean) => setSystemPermission("allow_coordinator_whatsapp", allowed);
-export const fetchCoordinatorWhatsappAllowed = () => fetchSystemPermission("allow_coordinator_whatsapp", true);
+export function canViewDashboard() {
+  return hasCapability(currentSnapshot, 'view_dashboard');
+}
 
-export const isCoordinatorReportsAllowed = () => getSystemPermission("allow_coordinator_reports", true);
-export const setCoordinatorReportsAllowed = (allowed: boolean) => setSystemPermission("allow_coordinator_reports", allowed);
-export const fetchCoordinatorReportsAllowed = () => fetchSystemPermission("allow_coordinator_reports", true);
+export function canEditShifts(targetCommitteeId?: string | null) {
+  return hasCapability(currentSnapshot, 'reschedule_volunteer', targetCommitteeId);
+}
+
+export function canSendWhatsappMessages() {
+  return hasCapability(currentSnapshot, 'view_notices');
+}
+
+export function canViewRequests() {
+  return hasCapability(currentSnapshot, 'view_requests');
+}
+
+export function canViewReports() {
+  return hasCapability(currentSnapshot, 'view_reports');
+}
+
+export function canViewGlobalReports() {
+  return hasCapability(currentSnapshot, 'view_global_reports');
+}
+
+export function canViewVolunteers() {
+  return hasCapability(currentSnapshot, 'view_volunteers');
+}
+
+export function canViewVolunteerProfile(targetCommitteeId?: string | null) {
+  return hasCapability(currentSnapshot, 'view_volunteer_profile', targetCommitteeId);
+}
+
+export function canEditVolunteerPersonalInfo(targetCommitteeId?: string | null) {
+  return hasCapability(currentSnapshot, 'edit_volunteer_personal_info', targetCommitteeId);
+}
+
+export function canQrCheckin() {
+  return hasCapability(currentSnapshot, 'scan_qr_attendance');
+}
+
+export function canImportData() {
+  return hasCapability(currentSnapshot, 'import_volunteers');
+}
+
+export function canCreateVolunteer() {
+  return hasCapability(currentSnapshot, 'create_volunteer');
+}
+
+export function canRegisterMissingAttendance() {
+  return hasCapability(currentSnapshot, 'register_missing_attendance');
+}
+
+export function canCorrectAttendanceTimes() {
+  return hasCapability(currentSnapshot, 'correct_attendance_times');
+}
+
+export function canArchiveVolunteer() {
+  return hasCapability(currentSnapshot, 'archive_volunteer');
+}
+
+export function canManageUsers() {
+  return hasCapability(currentSnapshot, 'manage_platform_users');
+}
+
+export const isCoordinatorShiftEditAllowed = canEditShifts;
+export const setCoordinatorShiftEditAllowed = () => setSystemPermission();
+export const fetchCoordinatorShiftEditAllowed = () => fetchSystemPermission('allow_coordinator_shift_edit', false);
+export const isCoordinatorWhatsappAllowed = canSendWhatsappMessages;
+export const setCoordinatorWhatsappAllowed = () => setSystemPermission();
+export const fetchCoordinatorWhatsappAllowed = () => fetchSystemPermission('allow_coordinator_whatsapp', true);
+export const isCoordinatorReportsAllowed = canViewReports;
+export const setCoordinatorReportsAllowed = () => setSystemPermission();
+export const fetchCoordinatorReportsAllowed = () => fetchSystemPermission('allow_coordinator_reports', true);

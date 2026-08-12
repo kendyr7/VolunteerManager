@@ -3,6 +3,12 @@
 import { getAdminSupabase } from "@/lib/supabase/admin";
 import { AuditRepository } from "@/lib/audit/audit-repository";
 import { AuditEntryViewModel } from "@/lib/audit/audit-mapper";
+import {
+  requireAuthenticated,
+  requireCapability,
+  requireVolunteerSelfOrCapability,
+} from '@/lib/authorization';
+import { roleDisplayName } from '@/lib/role-permissions';
 
 export type ActivityLog = AuditEntryViewModel;
 
@@ -114,6 +120,7 @@ async function syncHistoricalImportsToVolunteerLogs(): Promise<void> {
 
 export async function syncPastRequestsToActivityLogs() {
   try {
+    await requireCapability('manage_permissions');
     const supabase = await getAdminSupabase();
 
     // Fetch all reviewed requests (approved or rejected)
@@ -165,6 +172,7 @@ export async function syncPastRequestsToActivityLogs() {
 
 export async function getActivityLogs(limit = 500): Promise<ActivityLog[]> {
   try {
+    await requireCapability('manage_permissions');
     await Promise.all([syncPastRequestsToActivityLogs(), syncHistoricalImportsToVolunteerLogs()]);
     return await AuditRepository.getGlobalAuditLogs(limit);
   } catch (err) {
@@ -180,6 +188,7 @@ export async function fetchVolunteerAuditLogsAction(
   volunteerCreatedAt?: string
 ): Promise<{ success: boolean; logs: ActivityLog[] }> {
   try {
+    await requireVolunteerSelfOrCapability('view_volunteer_profile', volunteerId);
     await syncHistoricalImportsToVolunteerLogs();
     const logs = await AuditRepository.getVolunteerAuditLogs(volunteerId);
     return { success: true, logs };
@@ -205,13 +214,14 @@ export async function createActivityLog({
   targetId?: string;
 }): Promise<boolean> {
   try {
+    const actor = await requireAuthenticated();
     const supabase = await getAdminSupabase();
 
     const { error } = await supabase
       .from('activity_logs')
       .insert({
-        user_name: userName,
-        user_role: userRole,
+        user_name: actor.name || userName,
+        user_role: actor.authenticated ? roleDisplayName(actor) : userRole,
         action_type: actionType,
         description,
         details: details || null,
@@ -241,12 +251,11 @@ export async function logImportActivityAction(
   customUserName?: string
 ): Promise<boolean> {
   try {
-    const { getCurrentUserSession } = await import('@/lib/auth-helpers');
-    const session = await getCurrentUserSession();
+    const session = await requireCapability('import_volunteers');
 
     const supabase = await getAdminSupabase();
 
-    const userName = customUserName || session.userName || 'Administrador';
+    const userName = session.name;
 
     const payload = {
       type: 'import_batch',
@@ -263,7 +272,7 @@ export async function logImportActivityAction(
 
     const { error } = await supabase.from('activity_logs').insert({
       user_name: userName,
-      user_role: session.userRole || 'Admin',
+      user_role: roleDisplayName(session),
       action_type: 'Creación',
       description: `Importó masivamente ${importedUsers.length} voluntario(s)`,
       details: JSON.stringify(payload)
@@ -283,6 +292,7 @@ export async function logImportActivityAction(
 
 export async function fetchVolunteerShiftRecordsAction(volunteerId: string): Promise<{ success: boolean; shiftRecords: any[] }> {
   try {
+    await requireVolunteerSelfOrCapability('view_volunteer_profile', volunteerId);
     const supabase = await getAdminSupabase();
     const { data, error } = await supabase
       .from('shifts')

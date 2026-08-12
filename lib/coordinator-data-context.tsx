@@ -17,7 +17,6 @@ import {
   processShiftsData,
   computeReliabilityMap,
 } from '@/lib/coordinator-data';
-import { fetchCoordinatorShiftEditAllowed } from '@/lib/permissions';
 import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
 import { useRealtimeStore } from '@/lib/store/use-realtime-store';
 import { RealtimeEventQueue } from '@/lib/services/realtime-event-queue';
@@ -181,8 +180,6 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
       const promise = (async () => {
         try {
-          fetchCoordinatorShiftEditAllowed();
-
           let commIdFilter: string | null = null;
           if (role === 'Editor' && committee) {
             const { data: commObj } = await supabase
@@ -259,6 +256,9 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchData();
+    const handleAuthorizationChange = () => void fetchData(true);
+    window.addEventListener('permissions-changed', handleAuthorizationChange);
+    return () => window.removeEventListener('permissions-changed', handleAuthorizationChange);
   }, [fetchData]);
 
   // Set up Supabase Realtime for instant synchronization across all active coordinators

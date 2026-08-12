@@ -219,7 +219,7 @@ const MODULES: ModuleCardProps[] = [
     route: "/users",
     description: "Administración de cuentas del equipo coordinador con control de roles y permisos.",
     features: [
-      { name: "Sistema de Roles y Permisos", description: "Tres niveles: Administrador (acceso total), Coordinador (gestión operativa), Editor (lectura limitada).", status: "done" },
+      { name: "Sistema de Roles y Permisos", description: "Administrador, Coordinador de tecnología, Coordinador de comité y Voluntario, cada uno con su alcance definido.", status: "done" },
       { name: "Actualización Segura de Roles (Admin Client)", description: "Server Action utilizando Service Role Key (getAdminClient) para guardar demociones y promociones de permisos sin errores RLS.", status: "done" },
       { name: "Creación de Cuentas", description: "Crear nuevas cuentas para el equipo coordinador y asignarles su rol correspondiente.", status: "done" },
       { name: "Sesión Persistente (Offline)", description: "Token de autenticación sin límite de tiempo para evitar cierres de sesión durante el evento.", status: "done" },
@@ -234,7 +234,7 @@ const MODULES: ModuleCardProps[] = [
       { name: "Gestión de Comités", description: "Agregar o archivar comités; los cambios se reflejan automáticamente en todas las listas y filtros de la plataforma sin recargar.", status: "done" },
       { name: "Gestión de Estacas y Barrios", description: "Configurar la estructura organizacional que se asigna en los perfiles de voluntarios.", status: "done" },
       { name: "Requerimientos por Turno", description: "Definir la cantidad de voluntarios requeridos para cada turno y comité para calcular cupos disponibles y estado de llenado.", status: "done" },
-      { name: "Permisos por Rol", description: "Control granular de acciones por rol (Admin, Coordinador, Editor) configurables por módulo.", status: "done" },
+      { name: "Permisos por Rol", description: "Permisos configurables por tipo de Coordinador, administrados exclusivamente por Administradores.", status: "done" },
       { name: "Historial de Actividades", description: "Registro cronológico de acciones importantes realizadas en la plataforma (check-ins, reasignaciones, cancelaciones).", status: "done" },
       { name: "Autenticación por PIN y Passkey", description: "Pantalla de login con ingreso por PIN de 4 dígitos como predeterminado y opción de botón inmediato para Passkey / Windows Hello.", status: "done" },
       { name: "Centro de Documentación", description: "Esta misma página: base de conocimiento integrada dentro de la plataforma para el equipo coordinador.", status: "done" },

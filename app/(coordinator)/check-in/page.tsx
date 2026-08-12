@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { CheckInScanner } from "@/components/CheckInScanner";
-import { verifySessionToken } from "@/lib/auth";
+import { getAuthorizationSnapshot } from '@/lib/authorization';
+import { hasCapability } from '@/lib/role-permissions';
 
 export const metadata = {
   title: "Escanear Turno | Volunteer Manager",
@@ -10,45 +9,23 @@ export const metadata = {
 };
 
 export default async function CheckInPage() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('session')?.value || '';
-  const session = verifySessionToken(sessionCookie);
-
-  if (!session || session.userType !== 'profile') {
+  const authorization = await getAuthorizationSnapshot();
+  if (!authorization.authenticated || authorization.userType !== 'profile') {
     redirect('/login');
   }
-
-  const { role, committee: committeeName, userId } = session;
-
-  // Admin Check: Solo Admin y Editor pueden acceder al check-in
-  if (role !== 'Admin' && role !== 'Editor') {
-    redirect('/login');
+  if (!hasCapability(authorization, 'scan_qr_attendance')) {
+    redirect('/dashboard');
   }
 
-  const supabase = await createClient();
-  
-  // Resolve coordinator ID directly from session userId
-  let coordinatorId = userId;
-  let coordinatorName = 'Coordinador';
-
-  if (userId) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, full_name')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (profile) {
-      coordinatorId = profile.id;
-      coordinatorName = profile.full_name || 'Coordinador';
-    }
-  }
+  const coordinatorId = authorization.userId!;
+  const coordinatorName = authorization.name || 'Coordinador';
+  const committeeName = authorization.committeeName || '';
 
   return (
     <CheckInScanner 
       coordinatorId={coordinatorId} 
       coordinatorName={coordinatorName}
-      role={role}
+      role={authorization.role}
       committeeName={committeeName}
     />
   );

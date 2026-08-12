@@ -12,6 +12,7 @@ import {
   BatchProcessingSummary
 } from '@/lib/services/phone-cleanup-processing.service';
 import { AuditActor } from '@/lib/services/volunteer-audit-writer';
+import { requireCapability } from '@/lib/authorization';
 
 export async function fetchPhoneCleanupGroupsAction(includeProcessed: boolean = false): Promise<{
   success: boolean;
@@ -19,6 +20,7 @@ export async function fetchPhoneCleanupGroupsAction(includeProcessed: boolean = 
   error?: string;
 }> {
   try {
+    await requireCapability('manage_platform_users');
     const groups = await PhoneCleanupReviewService.getDuplicatePhoneGroups(includeProcessed);
     return { success: true, data: groups };
   } catch (err: any) {
@@ -33,6 +35,7 @@ export async function savePersonCentricReviewAction(input: SavePersonCentricRevi
   error?: string;
 }> {
   try {
+    await requireCapability('manage_platform_users');
     const result = await PhoneCleanupReviewService.savePersonCentricReview(input);
     return { success: result.success, message: result.message };
   } catch (err: any) {
@@ -55,9 +58,10 @@ export async function applyPhoneCleanupItemsAction(
   error?: string;
 }> {
   try {
+    const authorization = await requireCapability('manage_platform_users');
     const actor: AuditActor = {
-      name: reviewedBy || 'Administrador',
-      role: 'Administrador',
+      name: authorization.name,
+      role: authorization.role,
     };
 
     const summary = await PhoneCleanupProcessingService.processSelectedItems(itemIds, actor, dryRun);
@@ -74,6 +78,7 @@ export async function submitPhoneCleanupDecisionAction(input: SubmitPerVolunteer
   error?: string;
 }> {
   try {
+    await requireCapability('manage_platform_users');
     const result = await PhoneCleanupReviewService.submitGroupReviewDecision(input);
     return { success: result.success, message: result.message };
   } catch (err: any) {
@@ -88,6 +93,7 @@ export async function getExecutionPreviewAction(): Promise<{
   error?: string;
 }> {
   try {
+    await requireCapability('manage_platform_users');
     const preview = await PhoneCleanupReviewService.getExecutionPreview();
     return { success: true, data: preview };
   } catch (err: any) {
@@ -105,7 +111,8 @@ export async function processApprovedPhoneCleanupDecisionsAction(processedBy: st
   message: string;
 }> {
   try {
-    return await PhoneCleanupReviewService.processApprovedDecisions(processedBy);
+    const authorization = await requireCapability('manage_platform_users');
+    return await PhoneCleanupReviewService.processApprovedDecisions(authorization.name);
   } catch (err: any) {
     console.error('Error in processApprovedPhoneCleanupDecisionsAction:', err);
     return {

@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { getActiveEventDays, formatDateShort } from "@/lib/dates";
 import { canViewReports } from "@/lib/permissions";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
+import { canViewVolunteerProfile } from "@/lib/permissions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { formatUnifiedDuration } from "@/lib/shift-calculations";
 
@@ -187,6 +188,8 @@ export default function ReportsPage() {
 
   const handleOpenProfile = (item: any) => {
     if (!item) return;
+    const targetCommitteeId = item.committeeId || item.committee_id || null;
+    if (!canViewVolunteerProfile(targetCommitteeId)) return;
     const targetVolId = item.id || item.volunteer_id || item.volunteerId;
     const targetName = item.volunteerName || item.name || item.volunteer || '';
 

@@ -634,6 +634,7 @@ export default function RemindersPage() {
     }
     showToast(`Enviando recordatorio de Meta WhatsApp a ${vol.name}...`);
     const res = await sendShiftReminderAction({
+      volunteerId: vol.id,
       phone: vol.phone,
       volunteerName: vol.name,
       committeeName: vol.committee,
@@ -656,7 +657,10 @@ export default function RemindersPage() {
         sent_at: new Date().toISOString()
       }]);
 
-      showToast(`✅ Recordatorio de WhatsApp enviado a ${vol.name}`);
+      showToast(
+        res.auditWarning || `✅ Recordatorio de WhatsApp enviado a ${vol.name}`,
+        res.auditWarning ? 'error' : 'success'
+      );
     } else {
       showToast(`❌ Error enviando WhatsApp: ${res.error}`, 'error');
     }
@@ -677,6 +681,7 @@ export default function RemindersPage() {
 
     let successCount = 0;
     let failCount = 0;
+    let auditWarningCount = 0;
 
     for (const vol of selectedVols) {
       if (!vol.phone) {
@@ -684,6 +689,7 @@ export default function RemindersPage() {
         continue;
       }
       const res = await sendShiftReminderAction({
+        volunteerId: vol.id,
         phone: vol.phone,
         volunteerName: vol.name,
         committeeName: vol.committee,
@@ -694,6 +700,7 @@ export default function RemindersPage() {
 
       if (res.success) {
         successCount++;
+        if (res.auditWarning) auditWarningCount++;
         const key = `${vol.id}-${selectedDayKey}-${selectedShiftId}`;
         setContactedReminders(prev => ({ ...prev, [key]: true }));
 
@@ -712,7 +719,12 @@ export default function RemindersPage() {
 
     setIsSendingBulkWA(false);
     setSelectedVolunteers(new Set());
-    if (failCount === 0) {
+    if (auditWarningCount > 0) {
+      showToast(
+        `Enviados: ${successCount}. ${auditWarningCount} no pudieron registrarse en la auditoría.`,
+        'error'
+      );
+    } else if (failCount === 0) {
       showToast(`✅ ¡Recordatorios enviados exitosamente a ${successCount} voluntarios!`);
     } else {
       showToast(`Enviados: ${successCount} | Fallidos: ${failCount}`, failCount > 0 ? 'error' : 'success');

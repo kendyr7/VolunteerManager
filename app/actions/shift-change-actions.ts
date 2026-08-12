@@ -1,12 +1,16 @@
 'use server'
 
-import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { sendWhatsAppText, sendShiftChangeResultTemplate } from '@/lib/whatsapp-api';
 import { formatE164 } from '@/lib/whatsapp';
-import { verifySessionToken } from '@/lib/auth';
 import { createActivityLog } from '@/app/actions/activity-actions';
 import { broadcastShiftSync } from '@/lib/services/shift-broadcast.service';
+import {
+  requireCapability,
+  requireVolunteerCapability,
+  requireVolunteerSelfOrCapability,
+} from '@/lib/authorization';
+import { hasCapability } from '@/lib/role-permissions';
 
 function getAdminClient() {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -21,21 +25,34 @@ function getAdminClient() {
 
 export async function fetchAllShiftChangeRequestsAction() {
   try {
+    const authorization = await requireCapability('view_requests');
     const supabase = getAdminClient();
     const { data, error } = await supabase
       .from('shift_change_requests')
-      .select('*, volunteers(id, first_name, last_name, phone), reviewer:profiles!shift_change_requests_reviewed_by_fkey(full_name)')
+      .select('*, volunteers(id, first_name, last_name, phone, committee_id), reviewer:profiles!shift_change_requests_reviewed_by_fkey(full_name)')
       .order('created_at', { ascending: false });
 
     if (error) {
       const fallback = await supabase
         .from('shift_change_requests')
-        .select('*, volunteers(id, first_name, last_name, phone)')
+        .select('*, volunteers(id, first_name, last_name, phone, committee_id)')
         .order('created_at', { ascending: false });
-      return { success: true, requests: fallback.data || [] };
+      const requests = fallback.data || [];
+      return {
+        success: true,
+        requests: hasCapability(authorization, 'view_all_volunteers')
+          ? requests
+          : requests.filter((request: any) => request.volunteers?.committee_id === authorization.committeeId),
+      };
     }
 
-    return { success: true, requests: data || [] };
+    const requests = data || [];
+    return {
+      success: true,
+      requests: hasCapability(authorization, 'view_all_volunteers')
+        ? requests
+        : requests.filter((request: any) => request.volunteers?.committee_id === authorization.committeeId),
+    };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
@@ -49,32 +66,6 @@ export async function approveShiftChangeRequestAction(requestId: string) {
   try {
     const supabase = getAdminClient();
 
-    // 0. Identify reviewer profile from session token
-    let sessionCookie = '';
-    try {
-      const cookieStore = await cookies();
-      sessionCookie = cookieStore.get('session')?.value || '';
-    } catch (_) {}
-    const session = verifySessionToken(sessionCookie);
-
-    let reviewerId: string | null = null;
-    let reviewerName = 'Administrador';
-    let reviewerRole = 'Admin';
-
-    if (session && session.userId) {
-      reviewerId = session.userId;
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, role')
-        .eq('id', session.userId)
-        .maybeSingle();
-
-      if (profile && profile.full_name) {
-        reviewerName = profile.full_name;
-        reviewerRole = profile.role || 'Coordinador';
-      }
-    }
-
     // 1. Fetch request details
     const { data: request, error: reqErr } = await supabase
       .from('shift_change_requests')
@@ -85,6 +76,10 @@ export async function approveShiftChangeRequestAction(requestId: string) {
     if (reqErr || !request) {
       return { success: false, error: "Solicitud no encontrada" };
     }
+    const reviewer = await requireVolunteerCapability('reschedule_volunteer', request.volunteer_id);
+    const reviewerId = reviewer.userId;
+    const reviewerName = reviewer.name;
+    const reviewerRole = reviewer.role;
 
     const vol = request.volunteers;
     if (!vol) {
@@ -185,29 +180,6 @@ export async function rejectShiftChangeRequestAction(requestId: string, reason?:
   try {
     const supabase = getAdminClient();
 
-    // 0. Identify reviewer profile from session token
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session')?.value || '';
-    const session = verifySessionToken(sessionCookie);
-
-    let reviewerId: string | null = null;
-    let reviewerName = 'Administrador';
-    let reviewerRole = 'Admin';
-
-    if (session && session.userId) {
-      reviewerId = session.userId;
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, role')
-        .eq('id', session.userId)
-        .maybeSingle();
-
-      if (profile && profile.full_name) {
-        reviewerName = profile.full_name;
-        reviewerRole = profile.role || 'Coordinador';
-      }
-    }
-
     const { data: request, error: reqErr } = await supabase
       .from('shift_change_requests')
       .select('*, volunteers(id, first_name, last_name, phone)')
@@ -217,6 +189,10 @@ export async function rejectShiftChangeRequestAction(requestId: string, reason?:
     if (reqErr || !request) {
       return { success: false, error: "Solicitud no encontrada" };
     }
+    const reviewer = await requireVolunteerCapability('reschedule_volunteer', request.volunteer_id);
+    const reviewerId = reviewer.userId;
+    const reviewerName = reviewer.name;
+    const reviewerRole = reviewer.role;
 
     const rejectionDetail = reason || 'limitación de disponibilidad de cupos en el turno solicitado';
 
@@ -275,6 +251,7 @@ export async function createShiftChangeRequestAction(params: {
   reason?: string;
 }) {
   try {
+    await requireVolunteerSelfOrCapability('reschedule_volunteer', params.volunteerId);
     const supabase = getAdminClient();
 
     // Check if there is already a pending request for this volunteer & shift
@@ -339,6 +316,7 @@ export async function createShiftChangeRequestAction(params: {
 
 export async function fetchVolunteerShiftChangeRequestsAction(volunteerId: string) {
   try {
+    await requireVolunteerSelfOrCapability('view_volunteer_profile', volunteerId);
     const supabase = getAdminClient();
     const { data, error } = await supabase
       .from('shift_change_requests')
@@ -372,6 +350,7 @@ export async function fetchVolunteerRescheduleContextAction(
   volunteerId: string
 ): Promise<{ success: boolean } & VolunteerRescheduleContext> {
   try {
+    await requireVolunteerSelfOrCapability('reschedule_volunteer', volunteerId);
     const supabase = getAdminClient();
 
     const [volRes, committeesRes, reqsRes, shiftsRes, volunteersRes] = await Promise.all([
