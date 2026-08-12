@@ -211,7 +211,8 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
       fetchAllRows<ReportVolunteerRow>(
         supabase,
         'volunteers',
-        'id, first_name, last_name, age, phone, neighborhood, stake, status, committee_id, committees(id, name, status)'
+        'id, first_name, last_name, age, phone, neighborhood, stake, status, committee_id, committees(id, name, status)',
+        query => query.or('status.is.null,status.neq.archived')
       ),
       fetchAllRows<ReportCommitteeRow>(
         supabase,
@@ -234,11 +235,20 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
 
     // O(1) indexes replace the previous shifts x volunteers x audit-logs scans.
     const volunteersById = new Map<string, ReportVolunteerRow>();
-    (volsData || []).forEach(vol => volunteersById.set(vol.id, vol));
+    (volsData || []).forEach(vol => {
+      if ((vol.status || '').toLowerCase() !== 'archived') {
+        volunteersById.set(vol.id, vol);
+      }
+    });
+
+    const reportShifts = (shiftsData || []).filter(shift => {
+      const volunteer = volunteersById.get(shift.volunteer_id);
+      return Boolean(volunteer) && (volunteer?.committees?.status || '').toLowerCase() !== 'archived';
+    });
 
     const normalizeDayKey = (value: string) => (value || '').toLowerCase().trim();
     const assignedShiftsByVolunteerDay = new Map<string, Set<string>>();
-    (shiftsData || []).forEach(shift => {
+    reportShifts.forEach(shift => {
       const key = `${shift.volunteer_id}|${normalizeDayKey(shift.day_key)}`;
       if (!assignedShiftsByVolunteerDay.has(key)) assignedShiftsByVolunteerDay.set(key, new Set());
       assignedShiftsByVolunteerDay.get(key)!.add(shift.shift_key);
@@ -308,11 +318,12 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
     
     const now = new Date();
 
-    shiftsData?.forEach(s => {
+    reportShifts.forEach(s => {
       // Find matching volunteer
       const vol = volunteersById.get(s.volunteer_id);
       if (!vol) return;
-      if (vol.committees?.status === 'archived') return;
+      if ((vol.status || '').toLowerCase() === 'archived') return;
+      if ((vol.committees?.status || '').toLowerCase() === 'archived') return;
 
       const committeeName = vol.committees?.name || 'Sin comité';
       const committeeId = vol.committees?.id || 'sin-comite';
@@ -493,7 +504,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
 
     // Calculate requirements accurately per unique (day_key, shift_key) slot
     const activeDayShiftSlots = new Set<string>();
-    shiftsData?.forEach((s: any) => {
+    reportShifts.forEach(s => {
       if (s.day_key && s.shift_key) {
         activeDayShiftSlots.add(`${s.day_key}_${s.shift_key}`);
       }

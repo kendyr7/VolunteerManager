@@ -206,7 +206,9 @@ export default function ShiftsPage() {
   // Map raw volunteers to the local VolunteerType shape
   const volunteers = useMemo<VolunteerType[]>(
     () =>
-      rawVolunteers.map((v: any) => ({
+      rawVolunteers
+        .filter(v => (v.status || '').toLowerCase() !== 'archived')
+        .map((v: any) => ({
         id: v.id,
         name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
         first_name: v.first_name || '',
@@ -452,7 +454,10 @@ export default function ShiftsPage() {
 
           // Optimization: Use pre-calculated assignments instead of filtering all volunteers
           const commAssignedIds = dayAssignments[shiftId]?.[comm] || [];
-          const count = commAssignedIds.length;
+          const count = commAssignedIds.reduce(
+            (total, volunteerId) => total + (volunteerMap.has(volunteerId) ? 1 : 0),
+            0
+          );
 
           totalAssignedInRequired += Math.min(count, req);
 
@@ -481,7 +486,7 @@ export default function ShiftsPage() {
       editorShiftsOk,
       editorShiftsUnderstaffed
     };
-  }, [committeesList, contextIndexedAssignments, committeeRequirements, EVENT_DAYS, currentRole, activeCommittee]);
+  }, [committeesList, contextIndexedAssignments, committeeRequirements, EVENT_DAYS, currentRole, activeCommittee, volunteerMap]);
 
 
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>(buildEmptyShifts);
@@ -701,8 +706,10 @@ export default function ShiftsPage() {
     setExpanded(prev => ({ ...prev, [key]: !prev[key] })), []);
 
   const totalActiveCount = useMemo(() => {
-    return rawShiftsData.filter(s => s.checked_in && !s.checked_out).length;
-  }, [rawShiftsData]);
+    return rawShiftsData.filter(
+      s => volunteerMap.has(s.volunteer_id) && s.checked_in && !s.checked_out
+    ).length;
+  }, [rawShiftsData, volunteerMap]);
 
   const activeVolunteers = useMemo(() => {
     if (!rawShiftsData || rawShiftsData.length === 0 || volunteers.length === 0) return [];
@@ -850,12 +857,22 @@ export default function ShiftsPage() {
   };
 
   const totalCompletedCount = useMemo(() => {
-    const dbCount = rawShiftsData.filter(s => s.checked_out === true).length;
+    const dbCount = rawShiftsData.filter(
+      s => volunteerMap.has(s.volunteer_id) && s.checked_out === true
+    ).length;
     let localCount = 0;
     
     // Contar los turnos en completedShiftsMap que NO están en dbCount (para evitar contar doble)
     Object.keys(completedShiftsMap).forEach(key => {
-      const [volId, dayKey, shiftKey] = key.split('-');
+      const volId = Array.from(volunteerMap.keys()).find(id => key.startsWith(`${id}-`));
+      if (!volId) return;
+
+      const shiftSuffix = key.slice(volId.length + 1);
+      const lastSeparator = shiftSuffix.lastIndexOf('-');
+      if (lastSeparator === -1) return;
+
+      const dayKey = shiftSuffix.slice(0, lastSeparator);
+      const shiftKey = shiftSuffix.slice(lastSeparator + 1);
       const isInDbAsCompleted = rawShiftsData.some(s => 
         s.volunteer_id === volId && s.day_key === dayKey && s.shift_key === shiftKey && s.checked_out === true
       );
@@ -865,7 +882,7 @@ export default function ShiftsPage() {
     });
     
     return dbCount + localCount;
-  }, [rawShiftsData, completedShiftsMap]);
+  }, [rawShiftsData, completedShiftsMap, volunteerMap]);
 
   const formatManaguaTime = (isoString?: string) => {
     if (!isoString) return undefined;

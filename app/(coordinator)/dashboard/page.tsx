@@ -10,7 +10,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatE164 } from "@/lib/whatsapp";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
-import { canViewDashboard, getAuthorizationSnapshotCache } from "@/lib/permissions";
+import { canViewDashboard, getAuthorizationSnapshotCache, syncAllPermissionsFromDatabase } from "@/lib/permissions";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -155,14 +155,17 @@ export default function CoordinatorDashboard() {
       }
     }
 
-    const fetchUserNameAndSetGreeting = async () => {
+    const fetchUserNameAndSetGreeting = async (authenticatedProfileName?: string) => {
       let userName = role === 'Lector' ? 'Voluntario' : 'Coordinador';
       const savedName = localStorage.getItem('volunteer_name');
-      if (savedName) {
+      if (authenticatedProfileName?.trim()) {
+        userName = authenticatedProfileName.trim().split(/\s+/)[0];
+        localStorage.setItem('volunteer_name', authenticatedProfileName.trim());
+      } else if (savedName) {
         userName = savedName.split(' ')[0];
       }
 
-      if (phone) {
+      if (!authenticatedProfileName?.trim() && phone) {
         const formatted = formatE164(phone);
         const rawDigits = phone.replace(/\D/g, '');
         const targetPhones = Array.from(new Set([
@@ -226,12 +229,27 @@ export default function CoordinatorDashboard() {
       );
     };
 
+    const loadAuthenticatedGreeting = async () => {
+      const snapshot = await syncAllPermissionsFromDatabase();
+      await fetchUserNameAndSetGreeting(snapshot.name);
+    };
+
+    const handleProfileChange = (event: Event) => {
+      const snapshot = (event as CustomEvent<{ name?: string }>).detail || getAuthorizationSnapshotCache();
+      void fetchUserNameAndSetGreeting(snapshot.name);
+    };
+
     setIsAuthorized(true);
-    fetchUserNameAndSetGreeting();
+    void loadAuthenticatedGreeting();
+    window.addEventListener('permissions-changed', handleProfileChange);
+
+    return () => {
+      window.removeEventListener('permissions-changed', handleProfileChange);
+    };
   }, []);
 
   const activeVolunteers = useMemo(() => {
-    return volunteers.filter(v => v.status !== 'archived');
+    return volunteers.filter(v => (v.status || '').toLowerCase() !== 'archived');
   }, [volunteers]);
 
   const activeVolunteerIds = useMemo(() => {
@@ -400,28 +418,29 @@ export default function CoordinatorDashboard() {
         let totalReq = 0;
         let totalAssigned = 0;
 
-        const allCommKeys = Object.keys(committeeRequirements);
+        const activeCommitteeNames = committeesList.map(committee => committee.name);
+        const allCommKeys = activeVolunteers.some(volunteer => volunteer.committee === 'Sin comité')
+          ? [...activeCommitteeNames, 'Sin comité']
+          : activeCommitteeNames;
         const targetCommittees = (selectedHeatmapCommittee === 'todos' || selectedHeatmapCommittee === 'all')
           ? allCommKeys
-          : allCommKeys.filter(c => c.trim().toLowerCase() === selectedHeatmapCommittee.trim().toLowerCase());
+          : [selectedHeatmapCommittee];
 
         targetCommittees.forEach(commName => {
-          const reqs = committeeRequirements[commName];
-          if (reqs && reqs[shiftId] > 0) {
-            totalReq += reqs[shiftId];
-            const assigned = activeVolunteers.filter(v => {
-              if (v.committee !== commName) return false;
-              const vShifts = globalShifts[v.id];
-              return vShifts && vShifts[day.key] && vShifts[day.key].includes(shiftId);
-            }).length;
-            totalAssigned += assigned;
-          }
+          totalReq += committeeRequirements[commName]?.[shiftId] ?? 0;
+
+          const assigned = activeVolunteers.filter(v => {
+            if (v.committee !== commName) return false;
+            const vShifts = globalShifts[v.id];
+            return vShifts && vShifts[day.key] && vShifts[day.key].includes(shiftId);
+          }).length;
+          totalAssigned += assigned;
         });
         return { shift: shiftId, required: totalReq, assigned: totalAssigned, coverage: totalReq === 0 ? 1 : totalAssigned / totalReq };
       });
       return { day: day.key, shortLabel: day.label, dayLabel: day.dateNum, shifts: shiftsData };
     });
-  }, [committeeRequirements, activeVolunteers, globalShifts, selectedHeatmapCommittee]);
+  }, [committeeRequirements, committeesList, activeVolunteers, globalShifts, selectedHeatmapCommittee]);
 
   // Volunteers per event day (unique volunteers with ≥1 shift that day)
   const volsPerDay = useMemo(() => {

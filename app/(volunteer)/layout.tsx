@@ -7,6 +7,8 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/actions/auth";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
+import { MobileThemeMenu } from "@/components/mobile-theme-menu";
+import { useThemePreference } from "@/lib/use-theme-preference";
 
 // Helper component for Material Symbols
 function Icon({ name, size = 20, className = "" }: { name: string, size?: number, className?: string }) {
@@ -27,16 +29,17 @@ export default function VolunteerLayout({
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [isMobileThemeOpen, setIsMobileThemeOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const { preference, resolvedTheme, setPreference, toggleTheme } = useThemePreference();
 
   useEffect(() => {
     setMounted(true);
-    const stored = localStorage.getItem('theme');
-    if (stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      setTheme('dark');
-    }
   }, []);
+
+  useEffect(() => {
+    setIsMobileThemeOpen(false);
+  }, [pathname]);
 
   const navItems = [
     { name: "Turnos", href: "/calendar", icon: "checklist" },
@@ -47,17 +50,6 @@ export default function VolunteerLayout({
   const handleLogoutClick = async () => {
     await logout();
     window.location.href = "/login";
-  };
-
-  const toggleTheme = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    if (newTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
   };
 
   if (!mounted) {
@@ -143,7 +135,7 @@ export default function VolunteerLayout({
                 sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5"
               )}
             >
-              <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={20} className="text-text-dim shrink-0" />
+              <Icon name={resolvedTheme === 'dark' ? 'light_mode' : 'dark_mode'} size={20} className="text-text-dim shrink-0" />
               {sidebarOpen && <span className="truncate">Cambiar Tema</span>}
             </button>
             <button
@@ -170,6 +162,12 @@ export default function VolunteerLayout({
 
       {/* Mobile Floating Glassmorphic Bottom Navigation */}
       <div className="lg:hidden fixed bottom-6 left-0 right-0 z-50 px-4">
+        <MobileThemeMenu
+          open={isMobileThemeOpen}
+          preference={preference}
+          onChange={setPreference}
+          onClose={() => setIsMobileThemeOpen(false)}
+        />
         <div className="relative w-full">
           <div className="relative w-full overflow-hidden rounded-full">
             <div
@@ -182,7 +180,7 @@ export default function VolunteerLayout({
             >
               {navItems.map((item) => {
                 const isActive = pathname === item.href;
-                const sharedStyle = { width: 'calc((100vw - 32px) / 4)' };
+                const sharedStyle = { width: 'calc((100vw - 32px) / 5)' };
                 return (
                   <Link
                     key={item.href}
@@ -198,11 +196,32 @@ export default function VolunteerLayout({
                   </Link>
                 );
               })}
+
+              <button
+                type="button"
+                onClick={() => setIsMobileThemeOpen(open => !open)}
+                aria-expanded={isMobileThemeOpen}
+                aria-label="Cambiar apariencia"
+                style={{ width: 'calc((100vw - 32px) / 5)' }}
+                className={cn(
+                  "flex flex-col items-center justify-center py-2 rounded-full transition-all duration-200 shrink-0 active:scale-[0.95]",
+                  isMobileThemeOpen
+                    ? "bg-[#4d7cfe]/15 text-[#4d7cfe]"
+                    : "text-black/50 dark:text-white/60 hover:text-black dark:hover:text-white"
+                )}
+              >
+                <Icon
+                  name={resolvedTheme === 'dark' ? 'dark_mode' : 'light_mode'}
+                  size={20}
+                  className={cn("mb-1", isMobileThemeOpen ? "text-[#4d7cfe]" : "text-black/50 dark:text-white/60")}
+                />
+                <span className="font-inter text-[10px] font-semibold whitespace-nowrap">Tema</span>
+              </button>
               
               {/* Logout button */}
               <button
                 onClick={handleLogoutClick}
-                style={{ width: 'calc((100vw - 32px) / 4)' }}
+                style={{ width: 'calc((100vw - 32px) / 5)' }}
                 className="flex flex-col items-center justify-center py-2 rounded-full transition-all duration-200 shrink-0 text-red-400 hover:text-red-300 active:scale-[0.95]"
               >
                 <Icon name="logout" size={20} className="mb-1 text-red-400" />

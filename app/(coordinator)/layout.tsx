@@ -8,6 +8,8 @@ import { logout } from "@/app/actions/auth";
 import Image from "next/image";
 import { SearchProvider, useSearch } from "@/lib/search-context";
 import { CoordinatorDataProvider } from "@/lib/coordinator-data-context";
+import { MobileThemeMenu } from "@/components/mobile-theme-menu";
+import { useThemePreference } from "@/lib/use-theme-preference";
 
 // Helper component for Material Symbols
 function Icon({ name, size = 20, className = "" }: { name: string, size?: number, className?: string }) {
@@ -47,35 +49,13 @@ function CoordinatorLayoutInner({
   const [currentCommittee, setCurrentCommittee] = useState<string>('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileThemeOpen, setIsMobileThemeOpen] = useState(false);
   const { searchTerm, setSearchTerm } = useSearch();
   const inputRef = useRef<HTMLInputElement>(null);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const [navPage, setNavPage] = useState(0);
 
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-
-  useEffect(() => {
-    const stored = localStorage.getItem('theme');
-    if (stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      setTheme('dark');
-      document.documentElement.classList.add('dark');
-    } else {
-      setTheme('light');
-      document.documentElement.classList.remove('dark');
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    if (newTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
+  const { preference, resolvedTheme, setPreference, toggleTheme } = useThemePreference();
 
   const [permTick, setPermTick] = useState(0);
   const [mounted, setMounted] = useState(false);
@@ -142,6 +122,7 @@ function CoordinatorLayoutInner({
   // Reset search when navigating to a new page
   useEffect(() => {
     setSearchTerm('');
+    setIsMobileThemeOpen(false);
   }, [pathname]);
 
   const handleLogout = async () => {
@@ -189,6 +170,7 @@ function CoordinatorLayoutInner({
   const allMobileNavItems = [
     ...visibleNavItems,
     ...visibleBottomItems,
+    { name: "Tema", href: "#theme", icon: resolvedTheme === 'dark' ? 'dark_mode' : 'light_mode', roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Salir", href: "#logout", icon: "logout", roles: ['Admin', 'Editor', 'Lector'] },
   ];
 
@@ -313,7 +295,7 @@ function CoordinatorLayoutInner({
                 sidebarOpen ? "gap-3 px-3 py-2.5" : "justify-center p-2.5"
               )}
             >
-              <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={20} className="text-text-dim shrink-0" />
+              <Icon name={resolvedTheme === 'dark' ? 'light_mode' : 'dark_mode'} size={20} className="text-text-dim shrink-0" />
               {sidebarOpen && <span className="truncate">Cambiar Tema</span>}
             </button>
             <button
@@ -340,6 +322,12 @@ function CoordinatorLayoutInner({
 
       {/* Mobile Bottom Navigation */}
       <div className="lg:hidden fixed bottom-6 left-0 right-0 z-50 px-4">
+        <MobileThemeMenu
+          open={isMobileThemeOpen}
+          preference={preference}
+          onChange={setPreference}
+          onClose={() => setIsMobileThemeOpen(false)}
+        />
         <div className="relative w-full">
           {/* Left arrow — shown only when not on first page */}
           {navPage > 0 && (
@@ -366,6 +354,7 @@ function CoordinatorLayoutInner({
               {allMobileNavItems.map((item, index) => {
                 const isActive = pathname.startsWith(item.href) && item.href !== '#logout';
                 const isLogout = item.href === '#logout';
+                const isTheme = item.href === '#theme';
                 const isPageStart = index % ITEMS_PER_PAGE === 0;
                 const sharedStyle = { width: 'calc((100vw - 32px) / 5)', scrollSnapAlign: isPageStart ? 'start' as const : undefined };
                 
@@ -398,6 +387,29 @@ function CoordinatorLayoutInner({
                     >
                       <Icon name="logout" size={20} className="mb-1 text-red-500 dark:text-red-400" />
                       <span className="font-inter text-[9px] sm:text-[10px] font-bold whitespace-nowrap truncate max-w-full">Salir</span>
+                    </button>
+                  );
+                }
+                if (isTheme) {
+                  return (
+                    <button
+                      key="theme"
+                      type="button"
+                      onClick={() => setIsMobileThemeOpen(open => !open)}
+                      aria-expanded={isMobileThemeOpen}
+                      aria-label="Cambiar apariencia"
+                      style={sharedStyle}
+                      className={cn(
+                        sharedClass,
+                        isMobileThemeOpen && "bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/40"
+                      )}
+                    >
+                      <Icon
+                        name={resolvedTheme === 'dark' ? 'dark_mode' : 'light_mode'}
+                        size={20}
+                        className={cn("mb-1", isMobileThemeOpen ? "text-[#4d7cfe]" : "text-text-dim")}
+                      />
+                      <span className="font-inter text-[9px] sm:text-[10px] font-semibold whitespace-nowrap">Tema</span>
                     </button>
                   );
                 }

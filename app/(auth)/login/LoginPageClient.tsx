@@ -295,10 +295,12 @@ export function LoginPageClient() {
     };
 
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    applyTheme(mediaQuery.matches);
+    const storedTheme = localStorage.getItem('theme');
+    const followsSystem = storedTheme !== 'light' && storedTheme !== 'dark';
+    applyTheme(storedTheme === 'dark' || (followsSystem && mediaQuery.matches));
 
     const listener = (e: MediaQueryListEvent) => {
-      applyTheme(e.matches);
+      if (followsSystem) applyTheme(e.matches);
     };
 
     mediaQuery.addEventListener("change", listener);
