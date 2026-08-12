@@ -8,6 +8,9 @@ export interface SessionData {
   userName?: string;
 }
 
+export const SESSION_DURATION_DAYS = 30;
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * SESSION_DURATION_DAYS;
+
 function getSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -21,7 +24,7 @@ function base64urlEncode(str: string | Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-export function signSession(data: SessionData, expiresInDays = 30): string {
+export function signSession(data: SessionData, expiresInDays = SESSION_DURATION_DAYS): string {
   const secret = getSecret();
   
   const header = { alg: "HS256", typ: "JWT" };
@@ -81,7 +84,7 @@ export function verifySessionToken(token: string): SessionData | null {
       role: payload.app_role,
       committee: payload.committee
     };
-  } catch (e) {
+  } catch {
     return null;
   }
 }

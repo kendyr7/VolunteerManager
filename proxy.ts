@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { verifySessionToken, signSession } from '@/lib/auth'
+import { SESSION_MAX_AGE_SECONDS, verifySessionToken, signSession } from '@/lib/auth'
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -108,7 +108,7 @@ export function proxy(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30,
+      maxAge: SESSION_MAX_AGE_SECONDS,
       path: '/',
     });
   }

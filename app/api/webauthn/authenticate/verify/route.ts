@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
 import { getAdminSupabase } from '@/lib/supabase/admin';
-import { signSession } from '@/lib/auth';
+import { SESSION_MAX_AGE_SECONDS, signSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
         cookieStore.set('session', sessionToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
-          maxAge: 60 * 60 * 24 * 7,
+          maxAge: SESSION_MAX_AGE_SECONDS,
           path: '/',
         });
 
@@ -138,7 +138,7 @@ export async function POST(request: Request) {
         cookieStore.set('session', sessionToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
-          maxAge: 60 * 60 * 24 * 7,
+          maxAge: SESSION_MAX_AGE_SECONDS,
           path: '/',
         });
       }

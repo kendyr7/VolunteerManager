@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
-import { signSession } from '@/lib/auth'
+import { SESSION_MAX_AGE_SECONDS, signSession } from '@/lib/auth'
 import { formatE164 } from '@/lib/whatsapp'
 
 export type AuthState = {
@@ -110,7 +110,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 30,
+        maxAge: SESSION_MAX_AGE_SECONDS,
         path: '/',
       });
 
@@ -160,7 +160,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 30,
+        maxAge: SESSION_MAX_AGE_SECONDS,
         path: '/',
       });
 

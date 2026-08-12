@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
-import { signSession } from '@/lib/auth'
+import { SESSION_MAX_AGE_SECONDS, signSession } from '@/lib/auth'
 import { formatE164 } from '@/lib/whatsapp'
 import { getCurrentUserSession } from '@/lib/auth-helpers'
 import { VolunteerMutationService } from '@/lib/services/volunteer-mutation.service'
@@ -106,7 +106,7 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     cookieStore.set('session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: SESSION_MAX_AGE_SECONDS,
       path: '/',
     });
 
@@ -133,7 +133,7 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     cookieStore.set('session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: SESSION_MAX_AGE_SECONDS,
       path: '/',
     });
 
@@ -285,4 +285,3 @@ export async function changeUserPin(currentPin: string, newPin: string, userPhon
     return { success: false, error: "Error interno del servidor al actualizar PIN." };
   }
 }
-
