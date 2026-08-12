@@ -141,7 +141,13 @@ export class AuditMapper {
           const labels = parsed.changes.map((c: any) => c.label || c.field).join(', ');
           cleanSubtitle = `Modificaciones: ${labels}`;
         } else if (parsed.context) {
-          cleanSubtitle = typeof parsed.context === 'string' ? parsed.context : '';
+          cleanSubtitle = typeof parsed.context === 'string'
+            ? parsed.context
+            : typeof parsed.context.summary === 'string'
+              ? parsed.context.summary
+              : typeof parsed.context.source === 'string'
+                ? parsed.context.source
+                : '';
         }
       } catch (e) {
         // Fallback to rawDetails string if JSON parsing fails
@@ -159,7 +165,13 @@ export class AuditMapper {
 
     const descLower = desc;
 
-    if (actionType === 'Check-out' || actionType.includes('Salida') || descLower.includes('check-out') || descLower.includes('salida')) {
+    if (actionType === 'Confirmación') {
+      actionCategory = 'general';
+      iconName = 'event_available';
+      badgeText = 'Confirmación';
+      badgeStyle = 'bg-sky-500/15 text-sky-400 border-sky-500/30';
+      colorClass = 'bg-sky-500';
+    } else if (actionType === 'Check-out' || actionType.includes('Salida') || descLower.includes('check-out') || descLower.includes('salida')) {
       actionCategory = 'checkout';
       iconName = 'logout';
       badgeText = actionType.includes('Corrección') ? 'Salida corregida' : 'Check-out';

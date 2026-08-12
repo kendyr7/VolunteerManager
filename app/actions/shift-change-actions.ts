@@ -251,6 +251,14 @@ export async function createShiftChangeRequestAction(params: {
   reason?: string;
 }) {
   try {
+    const normalizedReason = params.reason?.trim() || '';
+    if (!normalizedReason) {
+      return {
+        success: false,
+        error: 'Debes describir el motivo de la solicitud de cambio de turno.'
+      };
+    }
+
     await requireVolunteerSelfOrCapability('reschedule_volunteer', params.volunteerId);
     const supabase = getAdminClient();
 
@@ -271,7 +279,7 @@ export async function createShiftChangeRequestAction(params: {
       };
     }
 
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from('shift_change_requests')
       .insert({
         volunteer_id: params.volunteerId,
@@ -279,29 +287,11 @@ export async function createShiftChangeRequestAction(params: {
         current_shift_key: params.currentShiftKey,
         requested_day_key: params.requestedDayKey,
         requested_shift_key: params.requestedShiftKey,
-        reason: params.reason || '',
+        reason: normalizedReason,
         status: 'pending'
       })
       .select()
       .single();
-
-    if (error && (error.message?.includes('reason') || error.code === 'PGRST204')) {
-      const fallback = await supabase
-        .from('shift_change_requests')
-        .insert({
-          volunteer_id: params.volunteerId,
-          current_day_key: params.currentDayKey,
-          current_shift_key: params.currentShiftKey,
-          requested_day_key: params.requestedDayKey,
-          requested_shift_key: params.requestedShiftKey,
-          status: 'pending'
-        })
-        .select()
-        .single();
-
-      data = fallback.data;
-      error = fallback.error;
-    }
 
     if (error) {
       console.error("Error creating shift change request:", error);

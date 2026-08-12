@@ -10,7 +10,7 @@ import {
 } from "@/lib/whatsapp";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
-import { sendShiftReminderAction } from "@/app/actions/whatsapp";
+import { getReminderDeliveryLogsAction, sendShiftReminderAction } from "@/app/actions/whatsapp";
 import { updateVolunteerStatusAction } from "@/app/actions/volunteer-actions";
 import {
   getActiveEventDays,
@@ -50,6 +50,89 @@ type VolunteerType = {
   committee_id?: string;
   age?: number;
 };
+
+type ReminderDeliveryStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+type ReminderDeliveryInfo = {
+  status: ReminderDeliveryStatus;
+  updatedAt: string | null;
+  errorMessage: string | null;
+  errorDetails: string | null;
+};
+
+const DELIVERY_STATUS_UI: Record<ReminderDeliveryStatus, {
+  label: string;
+  compactLabel: string;
+  icon: string;
+  className: string;
+}> = {
+  pending: {
+    label: 'Procesando',
+    compactLabel: 'Procesando',
+    icon: 'schedule',
+    className: 'bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400',
+  },
+  sent: {
+    label: 'Enviado',
+    compactLabel: 'Enviado',
+    icon: 'send',
+    className: 'bg-sky-500/10 text-sky-600 border-sky-500/20 dark:text-sky-400',
+  },
+  delivered: {
+    label: 'Entregado',
+    compactLabel: 'Entregado',
+    icon: 'done_all',
+    className: 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400',
+  },
+  read: {
+    label: 'Leído',
+    compactLabel: 'Leído',
+    icon: 'visibility',
+    className: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-400',
+  },
+  failed: {
+    label: 'Error de entrega',
+    compactLabel: 'Error',
+    icon: 'error',
+    className: 'bg-[#fe4d97]/10 text-[#d92f76] border-[#fe4d97]/25 dark:text-[#fe75aa]',
+  },
+};
+
+function DeliveryStatusBadge({
+  info,
+  compact = false,
+}: {
+  info?: ReminderDeliveryInfo;
+  compact?: boolean;
+}) {
+  if (!info) {
+    return (
+      <Badge variant="outline" className="border-border bg-dark3 text-text-dim font-bold">
+        Sin envío
+      </Badge>
+    );
+  }
+
+  const display = DELIVERY_STATUS_UI[info.status];
+  const updatedLabel = info.updatedAt
+    ? new Date(info.updatedAt).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'short' })
+    : '';
+  const diagnostic = [display.label, info.errorMessage, info.errorDetails, updatedLabel]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <Badge
+      variant="outline"
+      title={diagnostic}
+      aria-label={diagnostic}
+      className={cn('gap-1 font-bold whitespace-nowrap', display.className)}
+    >
+      <span className="material-symbols-outlined text-[14px]" aria-hidden="true">{display.icon}</span>
+      {compact ? display.compactLabel : display.label}
+    </Badge>
+  );
+}
 
 const getCommitteeColor = (committee: string) => {
   const comm = committee.toLowerCase();
@@ -199,6 +282,8 @@ export default function RemindersPage() {
     }
     return {};
   });
+
+  const [deliveryReminders, setDeliveryReminders] = useState<Record<string, ReminderDeliveryInfo>>({});
 
   // Bulk Actions State
   const [selectedVolunteers, setSelectedVolunteers] = useState<Set<string>>(new Set());
@@ -447,6 +532,24 @@ export default function RemindersPage() {
 
   const currentVolunteers = activeVolunteers;
 
+  const deliverySummary = useMemo(() => {
+    const summary: Record<ReminderDeliveryStatus, number> = {
+      pending: 0,
+      sent: 0,
+      delivered: 0,
+      read: 0,
+      failed: 0,
+    };
+
+    activeVolunteers.forEach(volunteer => {
+      const key = `${volunteer.id}-${selectedDayKey}-${selectedShiftId}`;
+      const delivery = deliveryReminders[key];
+      if (delivery) summary[delivery.status] += 1;
+    });
+
+    return summary;
+  }, [activeVolunteers, deliveryReminders, selectedDayKey, selectedShiftId]);
+
   const groupedVolunteers = useMemo(() => {
     const groups: Record<string, VolunteerType[]> = {};
     activeVolunteers.forEach(v => {
@@ -566,14 +669,23 @@ export default function RemindersPage() {
   };
 
   const [isSendingBulkWA, setIsSendingBulkWA] = useState(false);
+  const [sendingVolunteerIds, setSendingVolunteerIds] = useState<Set<string>>(new Set());
 
-  // Sync reminder_logs from Supabase in real-time
+  // Delivery diagnostics are read through an authorized server action. Admins
+  // receive every sender's logs; coordinators receive only their own.
   useEffect(() => {
+    let disposed = false;
+
     const syncLogsFromSupabase = async () => {
       try {
-        const { data: logs } = await supabase
-          .from('reminder_logs')
-          .select('volunteer_id, day_key, shift_key, status');
+        const result = await getReminderDeliveryLogsAction();
+        if (disposed) return;
+        if (!result.success) {
+          console.error('Error loading WhatsApp delivery diagnostics:', result.error);
+          return;
+        }
+
+        const logs = result.logs;
 
         if (logs && logs.length > 0) {
           setContactedReminders(prev => {
@@ -597,72 +709,92 @@ export default function RemindersPage() {
             });
             return next;
           });
+
+          const latestDeliveryByShift: Record<string, ReminderDeliveryInfo> = {};
+          logs.forEach(log => {
+            const key = `${log.volunteer_id}-${log.day_key}-${log.shift_key}`;
+            if (latestDeliveryByShift[key] || !log.delivery_status) return;
+            latestDeliveryByShift[key] = {
+              status: log.delivery_status as ReminderDeliveryStatus,
+              updatedAt: log.delivery_updated_at || log.sent_at || null,
+              errorMessage: log.delivery_error_message || null,
+              errorDetails: log.delivery_error_details || null,
+            };
+          });
+          setDeliveryReminders(latestDeliveryByShift);
+        } else {
+          setDeliveryReminders({});
         }
       } catch (err) {
         console.error("Error syncing reminder logs:", err);
       }
     };
 
-    syncLogsFromSupabase();
-    const interval = setInterval(syncLogsFromSupabase, 4000);
-
-    const channel = supabase
-      .channel('reminder_logs_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'reminder_logs' },
-        () => {
-          syncLogsFromSupabase();
-        }
-      )
-      .subscribe();
+    void syncLogsFromSupabase();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void syncLogsFromSupabase();
+    }, 5000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void syncLogsFromSupabase();
+    };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
-      clearInterval(interval);
-      supabase.removeChannel(channel);
+      disposed = true;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
   }, []);
 
-  const handleSingleSendWhatsApp = async (vol: VolunteerType) => {
+  const handleSingleSendWhatsApp = async (vol: VolunteerType, mode: 'send' | 'retry' = 'send') => {
     if (!canSendWhatsappMessages()) {
       showToast("El Administrador ha deshabilitado el envío de WhatsApp para Coordinadores", "error");
       return;
     }
+    if (sendingVolunteerIds.has(vol.id)) return;
     if (!vol.phone) {
       showToast("El voluntario no tiene teléfono registrado", "error");
       return;
     }
-    showToast(`Enviando recordatorio de Meta WhatsApp a ${vol.name}...`);
-    const res = await sendShiftReminderAction({
-      volunteerId: vol.id,
-      phone: vol.phone,
-      volunteerName: vol.name,
-      committeeName: vol.committee,
-      shiftName: selectedShiftDetails?.name || 'Turno 1',
-      shiftHours: selectedShiftDetails?.time || '7:00 AM - 12:00 PM',
-      shiftDate: dateStr || 'Próximo turno'
-    });
+    setSendingVolunteerIds(prev => new Set(prev).add(vol.id));
+    showToast(`${mode === 'retry' ? 'Reintentando' : 'Enviando'} recordatorio de Meta WhatsApp a ${vol.name}...`, 'info');
 
-    if (res.success) {
-      const key = `${vol.id}-${selectedDayKey}-${selectedShiftId}`;
-      setContactedReminders(prev => ({ ...prev, [key]: true }));
+    try {
+      const res = await sendShiftReminderAction({
+        volunteerId: vol.id,
+        dayKey: selectedDayKey,
+        shiftKey: selectedShiftId,
+        mode,
+      });
 
-      // Insert log into Supabase
-      await supabase.from('reminder_logs').insert([{
-        volunteer_id: vol.id,
-        shift_key: selectedShiftId,
-        day_key: selectedDayKey,
-        whatsapp_message_id: res.messageId || null,
-        status: 'contactado',
-        sent_at: new Date().toISOString()
-      }]);
+      if (res.success) {
+        const key = `${vol.id}-${selectedDayKey}-${selectedShiftId}`;
+        setContactedReminders(prev => ({ ...prev, [key]: true }));
+        setDeliveryReminders(prev => ({
+          ...prev,
+          [key]: {
+            status: 'pending',
+            updatedAt: new Date().toISOString(),
+            errorMessage: null,
+            errorDetails: null,
+          },
+        }));
 
-      showToast(
-        res.auditWarning || `✅ Recordatorio de WhatsApp enviado a ${vol.name}`,
-        res.auditWarning ? 'error' : 'success'
-      );
-    } else {
-      showToast(`❌ Error enviando WhatsApp: ${res.error}`, 'error');
+        showToast(
+          res.trackingWarning || res.auditWarning || `✅ Recordatorio de WhatsApp ${mode === 'retry' ? 'reenviado' : 'enviado'} a ${vol.name}`,
+          res.trackingWarning || res.auditWarning ? 'error' : 'success'
+        );
+      } else {
+        showToast(`❌ ${res.error}`, 'error');
+      }
+    } finally {
+      setSendingVolunteerIds(prev => {
+        const next = new Set(prev);
+        next.delete(vol.id);
+        return next;
+      });
     }
   };
 
@@ -690,28 +822,24 @@ export default function RemindersPage() {
       }
       const res = await sendShiftReminderAction({
         volunteerId: vol.id,
-        phone: vol.phone,
-        volunteerName: vol.name,
-        committeeName: vol.committee,
-        shiftName: selectedShiftDetails?.name || 'Turno 1',
-        shiftHours: selectedShiftDetails?.time || '7:00 AM - 12:00 PM',
-        shiftDate: dateStr || 'Próximo turno'
+        dayKey: selectedDayKey,
+        shiftKey: selectedShiftId,
       });
 
       if (res.success) {
         successCount++;
-        if (res.auditWarning) auditWarningCount++;
+        if (res.auditWarning || res.trackingWarning) auditWarningCount++;
         const key = `${vol.id}-${selectedDayKey}-${selectedShiftId}`;
         setContactedReminders(prev => ({ ...prev, [key]: true }));
-
-        await supabase.from('reminder_logs').insert([{
-          volunteer_id: vol.id,
-          shift_key: selectedShiftId,
-          day_key: selectedDayKey,
-          whatsapp_message_id: res.messageId || null,
-          status: 'contactado',
-          sent_at: new Date().toISOString()
-        }]);
+        setDeliveryReminders(prev => ({
+          ...prev,
+          [key]: {
+            status: 'pending',
+            updatedAt: new Date().toISOString(),
+            errorMessage: null,
+            errorDetails: null,
+          },
+        }));
       } else {
         failCount++;
       }
@@ -1128,9 +1256,7 @@ export default function RemindersPage() {
                         setSelectedShiftId("");
                       } else {
                         setSelectedDayKey(day.key);
-                        if (!selectedShiftId) {
-                          setSelectedShiftId("T1");
-                        }
+                        setSelectedShiftId("");
                       }
                     }}
                     className={`relative overflow-hidden shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto md:flex-1 w-full bg-dark3 ${isSelected
@@ -1328,6 +1454,48 @@ export default function RemindersPage() {
                         </div>
                       </div>
                     )}
+                    <div className="border-b border-border px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-dark2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="material-symbols-outlined text-[18px] text-[#4d7cfe]" aria-hidden="true">monitoring</span>
+                        <span className="text-xs font-bold text-text">Entrega de WhatsApp</span>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-text-dim whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#6dd230]" aria-hidden="true" />
+                          En vivo
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5" aria-label="Resumen de entrega de WhatsApp">
+                        {(['pending', 'sent', 'delivered', 'read', 'failed'] as ReminderDeliveryStatus[]).map(status => {
+                          const display = DELIVERY_STATUS_UI[status];
+                          return (
+                            <span
+                              key={status}
+                              className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-bold whitespace-nowrap', display.className)}
+                            >
+                              <span className="material-symbols-outlined text-[13px]" aria-hidden="true">{display.icon}</span>
+                              {display.compactLabel} {deliverySummary[status]}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {deliverySummary.failed > 0 && (
+                      <div
+                        role="status"
+                        className="border-b border-[#fe4d97]/20 bg-[#fe4d97]/5 px-4 py-2.5 flex items-start sm:items-center gap-2.5 text-[#b72562] dark:text-[#fe75aa]"
+                      >
+                        <span className="material-symbols-outlined text-[18px] shrink-0" aria-hidden="true">warning</span>
+                        <div className="min-w-0 text-xs leading-relaxed">
+                          <span className="font-bold">
+                            {deliverySummary.failed === 1 ? '1 entrega falló.' : `${deliverySummary.failed} entregas fallaron.`}
+                          </span>{' '}
+                          <span className="hidden sm:inline">Usa el botón circular de reintento en cada fila.</span>
+                          <span className="sm:hidden">Desliza el registro a la derecha para reintentar.</span>
+                        </div>
+                        <span className="ml-auto hidden md:inline text-[10px] font-bold text-text-dim whitespace-nowrap">
+                          Máximo 3 intentos
+                        </span>
+                      </div>
+                    )}
                     <AlphabetScrubber isMobile={isMobile} />
                     <div className="bg-dark2 w-full relative lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:rounded-sm">
                       {activeVolunteers.length === 0 ? (
@@ -1345,6 +1513,7 @@ export default function RemindersPage() {
                                 {groupedVolunteers[letter].map((vol, index) => {
                               const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                               const isContacted = !!contactedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
+                              const deliveryInfo = deliveryReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                               const msg = generateReminderMessage(
                                 vol.name,
                                 dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
@@ -1373,10 +1542,10 @@ export default function RemindersPage() {
                                         showToast("El Administrador ha deshabilitado el envío de WhatsApp para Coordinadores", "error");
                                         return;
                                       }
-                                      handleSingleSendWhatsApp(vol);
+                                      void handleSingleSendWhatsApp(vol, deliveryInfo?.status === 'failed' ? 'retry' : 'send');
                                     }}
-                                    swipeRightIcon="send"
-                                    swipeRightText="WhatsApp"
+                                    swipeRightIcon={sendingVolunteerIds.has(vol.id) ? "hourglass_top" : deliveryInfo?.status === 'failed' ? "refresh" : "send"}
+                                    swipeRightText={deliveryInfo?.status === 'failed' ? "Reintentar" : "WhatsApp"}
                                     swipeRightColorClass="text-[#25D366]"
                                     swipeRightBgColor="rgba(37, 211, 102, 0.2)"
 
@@ -1396,6 +1565,7 @@ export default function RemindersPage() {
                                         <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, isConfirmed ? "bg-accent/10 text-accent border-accent/20" : isContacted ? "bg-sky-500/10 text-sky-500 border-sky-500/20" : "bg-amber-50 text-amber-600 border-amber-200")}>
                                           {isConfirmed ? 'Confirmado' : isContacted ? 'Contactado' : 'Pendiente'}
                                         </Badge>
+                                        <DeliveryStatusBadge info={deliveryInfo} compact />
                                       </>
                                     }
                                   />
@@ -1407,11 +1577,11 @@ export default function RemindersPage() {
                           </div>
 
                           {/* Desktop Table (Hidden on small screens) */}
-                          <div className="hidden lg:block bg-dark2 relative w-full pb-10">
-                            <table className="w-full text-sm text-left font-inter border-separate border-spacing-0">
+                          <div className="hidden lg:block bg-dark2 relative w-full pb-10 overflow-x-auto">
+                            <table className="w-full min-w-[860px] table-fixed text-sm text-left font-inter border-separate border-spacing-0">
                               <thead className="bg-dark3/90 sticky top-0 z-20 backdrop-blur-md border-b border-border text-[10px] font-bold text-text-dim uppercase tracking-wider">
                                 <tr>
-                                  <th className="px-5 py-4 text-center w-16">
+                                  <th className="px-3 py-4 text-center w-12">
                                     <button 
                                       onClick={() => {
                                         const allDisplayed = sortedLetters.flatMap(l => groupedVolunteers[l]).map(v => v.id);
@@ -1432,12 +1602,13 @@ export default function RemindersPage() {
                                       <span className="material-symbols-outlined text-[14px] font-bold">check</span>
                                     </button>
                                   </th>
-                                  <th className="px-5 py-4 text-left w-36">Estado</th>
-                                  <th className="px-5 py-4 text-left font-bold text-text-dim uppercase text-[10px]">Nombre y Apellido</th>
-                                  <th className="px-5 py-4 text-center font-bold text-text-dim uppercase text-[10px]">Barrio / Rama</th>
-                                  <th className="px-5 py-4 text-center font-bold text-text-dim uppercase text-[10px]">Estaca</th>
-                                  <th className="px-5 py-4 text-center">Comité</th>
-                                  <th className="px-5 py-4 text-center w-px whitespace-nowrap">Acciones</th>
+                                  <th className="px-3 py-4 text-left w-[120px]">Estado</th>
+                                  <th className="px-3 py-4 text-left w-[115px]">Entrega WA</th>
+                                  <th className="px-3 py-4 w-[210px] text-left font-bold text-text-dim uppercase text-[10px]">Nombre y Apellido</th>
+                                  <th className="px-3 py-4 w-[105px] text-center font-bold text-text-dim uppercase text-[10px]">Barrio / Rama</th>
+                                  <th className="px-3 py-4 w-[90px] text-center font-bold text-text-dim uppercase text-[10px]">Estaca</th>
+                                  <th className="px-3 py-4 w-[105px] text-center">Comité</th>
+                                  <th className="px-3 py-4 w-[80px] text-center whitespace-nowrap">Acciones</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border">
@@ -1447,6 +1618,7 @@ export default function RemindersPage() {
                                       {groupedVolunteers[letter].map((vol, index) => {
                                     const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                                     const isContacted = !!contactedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
+                                    const deliveryInfo = deliveryReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                                     const msg = generateReminderMessage(
                                       vol.name,
                                       dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
@@ -1480,7 +1652,7 @@ export default function RemindersPage() {
                                         )}
                                       >
 
-                                        <td className="px-5 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                        <td className="px-3 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                                           <button
                                             onClick={() => toggleSelection(vol.id)}
                                             className={cn(
@@ -1493,14 +1665,14 @@ export default function RemindersPage() {
                                             <span className="material-symbols-outlined text-[14px] font-bold">check</span>
                                           </button>
                                         </td>
-                                        <td className="px-5 py-4 text-left" onClick={(e) => e.stopPropagation()}>
+                                        <td className="px-3 py-4 text-left" onClick={(e) => e.stopPropagation()}>
                                           <Select 
                                             value={isConfirmed ? "Confirmado" : isContacted ? "Contactado" : "Pendiente"} 
                                             onValueChange={(val) => handleStatusChange(vol.id as string, val as string)}
                                           >
                                             <SelectTrigger 
                                               className={cn(
-                                                "h-6 border-0 focus:ring-0 focus:ring-offset-0 font-inter font-bold uppercase text-[10px] tracking-widest px-2.5 py-0.5 rounded-full w-[130px] shadow-none",
+                                                "h-6 border-0 focus:ring-0 focus:ring-offset-0 font-inter font-bold uppercase text-[10px] tracking-wide px-2 py-0.5 rounded-full w-[108px] shadow-none",
                                                 isConfirmed ? "bg-accent/10 text-accent" : 
                                                 isContacted ? "bg-sky-500/10 text-sky-500" : 
                                                 "bg-amber-50 text-amber-600 hover:bg-amber-100"
@@ -1515,15 +1687,25 @@ export default function RemindersPage() {
                                             </SelectContent>
                                           </Select>
                                         </td>
-                                        <td className="px-5 py-4 font-bold text-text">
+                                        <td className="px-3 py-4 text-left">
+                                          <div className="flex flex-col items-start gap-1">
+                                            <DeliveryStatusBadge info={deliveryInfo} compact />
+                                            {deliveryInfo?.status === 'failed' && deliveryInfo.errorMessage && (
+                                              <span className="max-w-[180px] truncate text-[10px] font-medium text-[#d92f76] dark:text-[#fe75aa]" title={deliveryInfo.errorMessage}>
+                                                {deliveryInfo.errorMessage}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="px-3 py-4 font-bold text-text leading-tight">
                                           <div className="flex items-center gap-2">
                                             <span>{vol.name}</span>
                                           </div>
                                         </td>
-                                        <td className="px-5 py-4 text-text text-center">{vol.ward || '—'}</td>
-                                        <td className="px-5 py-4 text-text-dim text-center">{vol.stake || '—'}</td>
-                                        <td className="px-5 py-4 text-center">
-                                          <Badge variant="outline" className={cn("font-bold px-2.5 py-0.5", getCommitteeColor(vol.committee))}>
+                                        <td className="px-3 py-4 text-xs text-text text-center break-words">{vol.ward || '—'}</td>
+                                        <td className="px-3 py-4 text-xs text-text-dim text-center break-words">{vol.stake || '—'}</td>
+                                        <td className="px-3 py-4 text-center">
+                                          <Badge variant="outline" title={vol.committee} className={cn("max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-bold px-2 py-0.5", getCommitteeColor(vol.committee))}>
                                             {vol.committee}
                                           </Badge>
                                         </td>
@@ -1532,17 +1714,24 @@ export default function RemindersPage() {
                                             <Button
                                               variant="ghost"
                                               size="icon"
+                                              disabled={!canSendWhatsappMessages() || sendingVolunteerIds.has(vol.id) || isSendingBulkWA}
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                handleSingleSendWhatsApp(vol);
+                                                void handleSingleSendWhatsApp(vol, deliveryInfo?.status === 'failed' ? 'retry' : 'send');
                                               }}
                                               className={cn(
                                                 "h-8 w-8 transition-all rounded-full border border-[#25D366]/20 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 active:scale-95",
-                                                !canSendWhatsappMessages() && "text-text-dim/30 border-transparent bg-transparent cursor-not-allowed"
+                                                (!canSendWhatsappMessages() || sendingVolunteerIds.has(vol.id) || isSendingBulkWA) && "text-text-dim/30 border-transparent bg-transparent cursor-not-allowed"
                                               )}
-                                              title={canSendWhatsappMessages() ? "Enviar recordatorio por Meta WhatsApp" : "Permiso deshabilitado por el administrador"}
+                                              title={!canSendWhatsappMessages()
+                                                ? "Permiso deshabilitado por el administrador"
+                                                : deliveryInfo?.status === 'failed'
+                                                  ? "Reintentar envío fallido"
+                                                  : "Enviar recordatorio por Meta WhatsApp"}
                                             >
-                                              <span className="material-symbols-outlined text-[18px]">send</span>
+                                              <span className="material-symbols-outlined text-[18px]">
+                                                {sendingVolunteerIds.has(vol.id) ? 'hourglass_top' : deliveryInfo?.status === 'failed' ? 'refresh' : 'send'}
+                                              </span>
                                             </Button>
                                             <Button
                                               variant="ghost"
