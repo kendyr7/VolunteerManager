@@ -36,6 +36,9 @@ import {
   CheckSquare,
   Square
 } from 'lucide-react';
+import { SortableTableHead, TableSortDirection } from '@/components/SortableTableHead';
+
+type ProcessedSortField = 'name' | 'phone' | 'decision' | 'processedBy' | 'date';
 
 export default function PhoneCleanupPersonCentricPage() {
   const [groups, setGroups] = useState<PhoneGroupReviewItem[]>([]);
@@ -46,6 +49,8 @@ export default function PhoneCleanupPersonCentricPage() {
   const [activeTab, setActiveTab] = useState<'PENDING' | 'READY' | 'PROCESSED'>('PENDING');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNREVIEWED' | 'SAVED' | 'REQUIRES_INFO' | 'LATER'>('ALL');
   const [reviewerName, setReviewerName] = useState('Administrador');
+  const [processedSortField, setProcessedSortField] = useState<ProcessedSortField>('date');
+  const [processedSortDirection, setProcessedSortDirection] = useState<TableSortDirection>('desc');
 
   // Selected Item IDs for batch execution in "Listas para aplicar"
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
@@ -223,6 +228,33 @@ export default function PhoneCleanupPersonCentricPage() {
     });
     return list;
   }, [groups]);
+
+  const sortedProcessedItems = useMemo(() => {
+    const getValue = (item: (typeof processedItemsList)[number]) => {
+      switch (processedSortField) {
+        case 'name': return item.fullName;
+        case 'phone': return item.phoneActual;
+        case 'decision': return item.decision || '';
+        case 'processedBy': return item.processedBy || '';
+        case 'date': return item.processedAt || '';
+      }
+    };
+
+    return [...processedItemsList].sort((left, right) => {
+      const comparison = getValue(left).localeCompare(getValue(right), 'es', { numeric: true, sensitivity: 'base' });
+      return processedSortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [processedItemsList, processedSortDirection, processedSortField]);
+
+  const handleProcessedSort = (field: string) => {
+    const nextField = field as ProcessedSortField;
+    if (processedSortField === nextField) {
+      setProcessedSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setProcessedSortField(nextField);
+    setProcessedSortDirection(nextField === 'date' ? 'desc' : 'asc');
+  };
 
   // Filter pending groups (excludes fully PROCESSED volunteers)
   const filteredGroups = useMemo(() => {
@@ -701,19 +733,19 @@ export default function PhoneCleanupPersonCentricPage() {
                 <p className="text-slate-400 text-sm">No se han ejecutado saneamientos todavía.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="max-h-[calc(100dvh-300px)] overflow-auto overscroll-contain rounded-xl border border-slate-700/60">
                 <table className="w-full text-left text-xs text-slate-300 border-collapse">
-                  <thead>
+                  <thead className="sticky top-0 z-20 bg-slate-950">
                     <tr className="border-b border-slate-700 text-slate-400 uppercase tracking-wider bg-slate-950/50">
-                      <th className="p-3">Voluntario</th>
-                      <th className="p-3">Teléfono</th>
-                      <th className="p-3">Decisión Aplicada</th>
-                      <th className="p-3">Procesado Por</th>
-                      <th className="p-3">Fecha</th>
+                      <SortableTableHead field="name" activeField={processedSortField} direction={processedSortDirection} onSort={handleProcessedSort} className="p-3">Voluntario</SortableTableHead>
+                      <SortableTableHead field="phone" activeField={processedSortField} direction={processedSortDirection} onSort={handleProcessedSort} className="p-3">Teléfono</SortableTableHead>
+                      <SortableTableHead field="decision" activeField={processedSortField} direction={processedSortDirection} onSort={handleProcessedSort} className="p-3">Decisión Aplicada</SortableTableHead>
+                      <SortableTableHead field="processedBy" activeField={processedSortField} direction={processedSortDirection} onSort={handleProcessedSort} className="p-3">Procesado Por</SortableTableHead>
+                      <SortableTableHead field="date" activeField={processedSortField} direction={processedSortDirection} onSort={handleProcessedSort} className="p-3">Fecha</SortableTableHead>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50">
-                    {processedItemsList.map(p => (
+                    {sortedProcessedItems.map(p => (
                       <tr key={p.volunteerId} className="hover:bg-slate-800/50">
                         <td className="p-3 font-semibold text-white">{p.fullName}</td>
                         <td className="p-3 font-mono">{p.phoneActual}</td>

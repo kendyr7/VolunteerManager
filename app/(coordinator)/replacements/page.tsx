@@ -12,12 +12,17 @@ import {
   approveShiftChangeRequestAction,
   rejectShiftChangeRequestAction
 } from "@/app/actions/shift-change-actions";
+import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
+
+type RequestSortField = 'volunteer' | 'committee' | 'currentShift' | 'requestedShift' | 'reason';
 
 export default function ReplacementsPage() {
   const [shiftRequests, setShiftRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+  const [sortField, setSortField] = useState<RequestSortField>('volunteer');
+  const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
 
   // Custom Reject Modal State
   const [rejectModal, setRejectModal] = useState<{ isOpen: boolean; requestId: string | null }>({
@@ -85,6 +90,41 @@ export default function ReplacementsPage() {
       );
     });
   }, [currentTabRequests, appliedSearch]);
+
+  const sortedDesktopRequests = useMemo(() => {
+    const getValue = (request: any) => {
+      switch (sortField) {
+        case 'volunteer':
+          return `${request.volunteers?.first_name || ''} ${request.volunteers?.last_name || ''}`.trim();
+        case 'committee':
+          return request.volunteers?.committees?.name || '';
+        case 'currentShift':
+          return `${request.current_day_key || ''} ${request.current_shift_key || ''}`;
+        case 'requestedShift':
+          return `${request.requested_day_key || ''} ${request.requested_shift_key || ''}`;
+        case 'reason':
+          return request.reason || '';
+      }
+    };
+
+    return [...filteredRequests].sort((left, right) => {
+      const comparison = getValue(left).localeCompare(getValue(right), 'es', {
+        numeric: true,
+        sensitivity: 'base',
+      });
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredRequests, sortDirection, sortField]);
+
+  const handleSort = (field: string) => {
+    const nextField = field as RequestSortField;
+    if (sortField === nextField) {
+      setSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setSortField(nextField);
+    setSortDirection('asc');
+  };
 
   const handleApproveRequest = async (requestId: string) => {
     setProcessingId(requestId);
@@ -262,20 +302,20 @@ export default function ReplacementsPage() {
           ) : (
             <>
               {/* DESKTOP TABLE VIEW (hidden on tablet/mobile, NO horizontal scrollbar) */}
-              <div className="hidden lg:block rounded-2xl border border-border bg-dark2 shadow-sm overflow-hidden w-full">
+              <div className="hidden lg:block rounded-2xl border border-border bg-dark2 shadow-sm max-h-[calc(100dvh-260px)] overflow-auto overscroll-contain w-full">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead>
+                  <thead className="sticky top-0 z-20 bg-dark3">
                     <tr className="border-b border-border/80 bg-dark3/80 text-[11px] font-extrabold uppercase text-text-dim tracking-wider">
-                      <th className="py-3.5 px-4 w-44">Voluntario</th>
-                      <th className="py-3.5 px-4 w-32">Comité</th>
-                      <th className="py-3.5 px-4 w-36">Turno Actual</th>
-                      <th className="py-3.5 px-4 w-36">Nuevo Turno</th>
-                      <th className="py-3.5 px-4">Motivo</th>
+                      <SortableTableHead field="volunteer" activeField={sortField} direction={sortDirection} onSort={handleSort} className="py-3.5 px-4 w-44">Voluntario</SortableTableHead>
+                      <SortableTableHead field="committee" activeField={sortField} direction={sortDirection} onSort={handleSort} className="py-3.5 px-4 w-32">Comité</SortableTableHead>
+                      <SortableTableHead field="currentShift" activeField={sortField} direction={sortDirection} onSort={handleSort} className="py-3.5 px-4 w-36">Turno Actual</SortableTableHead>
+                      <SortableTableHead field="requestedShift" activeField={sortField} direction={sortDirection} onSort={handleSort} className="py-3.5 px-4 w-36">Nuevo Turno</SortableTableHead>
+                      <SortableTableHead field="reason" activeField={sortField} direction={sortDirection} onSort={handleSort} className="py-3.5 px-4">Motivo</SortableTableHead>
                       <th className="py-3.5 px-4 text-center w-52">Acciones / Estado</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60 font-medium">
-                    {filteredRequests.map((req) => {
+                    {sortedDesktopRequests.map((req) => {
                       const volName = `${req.volunteers?.first_name || ''} ${req.volunteers?.last_name || ''}`.trim() || 'Voluntario';
                       const commName = req.volunteers?.committees?.name || 'Servicio';
                       const phone = req.volunteers?.phone || '';

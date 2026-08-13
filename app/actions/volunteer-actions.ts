@@ -35,6 +35,9 @@ import {
   MutationResult,
   CreateVolunteerResult,
   BulkImportResult,
+  PendingImportException,
+  ResolvePendingImportExceptionRequest,
+  ResolvePendingImportExceptionResult,
   UpdateStatusResult,
 } from '@/lib/services/volunteer-mutation.service';
 
@@ -102,6 +105,8 @@ export async function bulkImportVolunteersAction(
       success: false,
       importedCount: 0,
       skippedCount: 0,
+      pendingReviewCount: 0,
+      pendingReviewIds: [],
       importedVolunteers: [],
       error: 'La lista de importación está vacía.',
     };
@@ -113,7 +118,45 @@ export async function bulkImportVolunteersAction(
     role: roleDisplayName(session),
   };
 
-  return VolunteerMutationService.bulkImportVolunteers(items, actor);
+  return VolunteerMutationService.bulkImportVolunteers(items, actor, session.userId);
+}
+
+/**
+ * Loads phone-conflict imports awaiting approval. This queue is intentionally
+ * restricted to administrators even when Technology can import volunteers.
+ */
+export async function getPendingImportExceptionsAction(): Promise<{
+  success: boolean;
+  data: PendingImportException[];
+  error?: string;
+}> {
+  try {
+    await requireCapability('manage_platform_users');
+    const data = await VolunteerMutationService.getPendingImportExceptions();
+    return { success: true, data };
+  } catch (error) {
+    console.error('[getPendingImportExceptionsAction] Failed:', error);
+    return {
+      success: false,
+      data: [],
+      error: error instanceof Error ? error.message : 'No se pudieron cargar las aprobaciones pendientes.',
+    };
+  }
+}
+
+export async function resolvePendingImportExceptionAction(
+  request: ResolvePendingImportExceptionRequest
+): Promise<ResolvePendingImportExceptionResult> {
+  if (!request.exceptionId) {
+    return { success: false, error: 'La solicitud pendiente es requerida.' };
+  }
+
+  const session = await requireCapability('manage_platform_users');
+  const actor = {
+    name: session.name,
+    role: roleDisplayName(session),
+  };
+  return VolunteerMutationService.resolvePendingImportException(request, actor, session.userId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

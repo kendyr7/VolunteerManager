@@ -28,6 +28,7 @@ import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { createCommitteeAction, archiveCommitteeAction, unarchiveCommitteeAction, updateCommitteeRequirementsAction } from "@/app/actions/committee-actions";
 import { getActivityLogs, ActivityLog } from "@/app/actions/activity-actions";
 import { getCurrentSettingsProfileAction } from "@/app/actions/user-actions";
+import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -112,6 +113,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [isRegisteringPasskey, setIsRegisteringPasskey] = useState(false);
   const [hasPasskey, setHasPasskey] = useState(false);
+  const [permissionSortDirection, setPermissionSortDirection] = useState<TableSortDirection>('asc');
 
   // Committee Management States (Admin Only)
   const [newCommitteeName, setNewCommitteeName] = useState('');
@@ -191,6 +193,13 @@ export default function SettingsPage() {
     { id: "archive_volunteer", name: "Archivar voluntarios", description: "Exclusivo de Administradores", icon: "archive", technology: false, committee: false },
     { id: "manage_users", name: "Gestionar usuarios y permisos", description: "Exclusivo de Administradores desde /users y /settings", icon: "shield_person", technology: false, committee: false },
   ];
+
+  const sortedDesktopPermissionRows = useMemo(() => {
+    return [...SYSTEM_PERMISSIONS_MATRIX].sort((left, right) => {
+      const comparison = left.name.localeCompare(right.name, 'es', { sensitivity: 'base' });
+      return permissionSortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [permissionSortDirection]);
 
   const handleCreateCommittee = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1190,11 +1199,11 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Desktop Table View (hidden sm:block) */}
-                  <div className="hidden sm:block overflow-x-auto rounded-xl border border-border bg-dark3">
+                  <div className="hidden sm:block max-h-[480px] overflow-auto overscroll-contain rounded-xl border border-border bg-dark3">
                     <table className="w-full text-left text-xs border-collapse">
-                      <thead>
+                      <thead className="sticky top-0 z-20 bg-dark2">
                         <tr className="border-b border-border bg-dark2 text-[10px] font-bold text-text-dim uppercase tracking-wider">
-                          <th className="py-3 px-4 min-w-[200px]">Módulo / Función</th>
+                          <SortableTableHead field="module" activeField="module" direction={permissionSortDirection} onSort={() => setPermissionSortDirection(current => current === 'asc' ? 'desc' : 'asc')} className="py-3 px-4 min-w-[200px]">Módulo / Función</SortableTableHead>
                           <th className="py-3 px-3 text-center w-24">Admin</th>
                           <th className="py-3 px-3 text-center w-28">Tecnología</th>
                           <th className="py-3 px-3 text-center w-28">Comité</th>
@@ -1202,7 +1211,7 @@ export default function SettingsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border text-[11px] font-medium text-text">
-                        {SYSTEM_PERMISSIONS_MATRIX.map(row => (
+                        {sortedDesktopPermissionRows.map(row => (
                           <tr key={row.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
                             <td className="py-3 px-4">
                               <div className="flex items-start gap-2.5">

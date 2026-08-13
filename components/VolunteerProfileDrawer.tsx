@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from '@/lib/utils';
 import { getActiveEventDays, formatDateShort } from '@/lib/dates';
+import { validatePhone8Digits } from '@/lib/whatsapp';
 
 import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
 import { updateVolunteerAction, toggleShiftAction } from '@/app/actions/volunteer-actions';
@@ -263,11 +264,12 @@ export function VolunteerProfileDrawer({
       return;
     }
 
-    const phoneDigits = trimmedPhone.replace(/[^\d]/g, '');
-    if (!trimmedPhone || phoneDigits.length < 7) {
-      showToast('Ingresa un número de teléfono válido (mínimo 7 dígitos)', 'error');
+    const phoneValidation = validatePhone8Digits(trimmedPhone);
+    if (!phoneValidation.isValid) {
+      showToast(phoneValidation.error || 'Ingresa un número de teléfono válido de 8 dígitos', 'error');
       return;
     }
+    const sanitizedPhone = phoneValidation.formatted;
 
     let ageNum: number | null = null;
     if (trimmedAge) {
@@ -286,7 +288,7 @@ export function VolunteerProfileDrawer({
     const result = await updateVolunteerAction(activeVolunteer.id, {
       firstName:    trimmedFirstName,
       lastName:     trimmedLastName,
-      phone:        trimmedPhone,
+      phone:        sanitizedPhone,
       stake:        trimmedStake || null,
       neighborhood: trimmedWard || null,
       committeeId:  commObj ? commObj.id : (editCommitteeId || null),
@@ -296,7 +298,7 @@ export function VolunteerProfileDrawer({
     setIsSavingProfile(false);
 
     if (!result.success) {
-      showToast('Error al guardar cambios del perfil', 'error');
+      showToast(result.error || 'Error al guardar cambios del perfil', 'error');
     } else {
       showToast('Perfil de voluntario actualizado correctamente');
       setDrawerMode('view');

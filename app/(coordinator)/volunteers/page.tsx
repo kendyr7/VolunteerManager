@@ -881,15 +881,15 @@ export default function VolunteersPage() {
       </div>
 
       <div className="flex flex-col gap-4 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
-        <motion.div variants={itemVariants} className="bg-dark2 border border-white/10 rounded-[20px] shadow-lg overflow-clip flex flex-col w-full">
+        <motion.div variants={itemVariants} className="bg-dark2 border border-border rounded-[20px] shadow-lg overflow-clip flex flex-col w-full">
           <AlphabetScrubber isMobile={isMobile} />
           {/* Contenedor de Datos: Escritorio PC vs Móvil */}
           {!isMobile ? (
             <div className="bg-dark2 flex-1 relative w-full pb-10">
               {sortedFilteredVolunteers.length > 0 ? (
-                <div className="w-full overflow-x-auto">
+                <div className="w-full max-h-[calc(100dvh-250px)] overflow-auto overscroll-contain bg-dark2">
                   {/* Encabezado Fijo de Tabla con Ordenamiento */}
-                  <div className="flex items-center w-full px-5 py-3.5 bg-dark3 sticky top-0 z-20 text-[10px] font-bold text-text-dim uppercase tracking-wider border-b border-white/10 select-none">
+                  <div className="flex items-center w-full px-5 py-3.5 bg-dark3 sticky top-0 z-20 text-[10px] font-bold text-text-dim uppercase tracking-wider border-b border-border/70 select-none">
                     <button
                       type="button"
                       onClick={() => handleSort('name')}

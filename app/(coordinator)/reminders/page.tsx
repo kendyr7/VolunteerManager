@@ -36,6 +36,7 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { canEditShifts, canSendWhatsappMessages } from "@/lib/permissions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
+import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -52,6 +53,7 @@ type VolunteerType = {
 };
 
 type ReminderDeliveryStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+type ReminderSortField = 'status' | 'delivery' | 'name' | 'ward' | 'stake' | 'committee';
 
 type ReminderDeliveryInfo = {
   status: ReminderDeliveryStatus;
@@ -287,6 +289,8 @@ export default function RemindersPage() {
 
   // Bulk Actions State
   const [selectedVolunteers, setSelectedVolunteers] = useState<Set<string>>(new Set());
+  const [sortField, setSortField] = useState<ReminderSortField>('name');
+  const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
   const [isReassignSheetOpen, setIsReassignSheetOpen] = useState(false);
   const [reassignDayKey, setReassignDayKey] = useState<string>("");
   const [reassignShiftId, setReassignShiftId] = useState<string>("");
@@ -531,6 +535,44 @@ export default function RemindersPage() {
   }, [volunteers, globalShifts, selectedDayKey, selectedShiftId, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
 
   const currentVolunteers = activeVolunteers;
+
+  const sortedDesktopVolunteers = useMemo(() => {
+    const getValue = (volunteer: VolunteerType) => {
+      const key = `${volunteer.id}-${selectedDayKey}-${selectedShiftId}`;
+      switch (sortField) {
+        case 'status':
+          return confirmedReminders[key] ? '3-confirmado' : contactedReminders[key] ? '2-contactado' : '1-pendiente';
+        case 'delivery':
+          return deliveryReminders[key]?.status || '';
+        case 'name':
+          return volunteer.name;
+        case 'ward':
+          return volunteer.ward;
+        case 'stake':
+          return volunteer.stake;
+        case 'committee':
+          return volunteer.committee;
+      }
+    };
+
+    return [...activeVolunteers].sort((left, right) => {
+      const comparison = getValue(left).localeCompare(getValue(right), 'es', {
+        numeric: true,
+        sensitivity: 'base',
+      });
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [activeVolunteers, confirmedReminders, contactedReminders, deliveryReminders, selectedDayKey, selectedShiftId, sortDirection, sortField]);
+
+  const handleSort = (field: string) => {
+    const nextField = field as ReminderSortField;
+    if (sortField === nextField) {
+      setSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setSortField(nextField);
+    setSortDirection('asc');
+  };
 
   const deliverySummary = useMemo(() => {
     const summary: Record<ReminderDeliveryStatus, number> = {
@@ -1497,7 +1539,7 @@ export default function RemindersPage() {
                       </div>
                     )}
                     <AlphabetScrubber isMobile={isMobile} />
-                    <div className="bg-dark2 w-full relative lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:rounded-sm">
+                    <div className="bg-dark2 w-full relative lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:rounded-sm">
                       {activeVolunteers.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center text-text-dim h-full">
                           <span className="material-symbols-outlined text-[48px] text-text-dim mb-4">group_off</span>
@@ -1577,14 +1619,14 @@ export default function RemindersPage() {
                           </div>
 
                           {/* Desktop Table (Hidden on small screens) */}
-                          <div className="hidden lg:block bg-dark2 relative w-full pb-10 overflow-x-auto">
+                          <div className="hidden lg:block bg-dark2 relative w-full h-full pb-10 overflow-auto overscroll-contain">
                             <table className="w-full min-w-[860px] table-fixed text-sm text-left font-inter border-separate border-spacing-0">
                               <thead className="bg-dark3/90 sticky top-0 z-20 backdrop-blur-md border-b border-border text-[10px] font-bold text-text-dim uppercase tracking-wider">
                                 <tr>
                                   <th className="px-3 py-4 text-center w-12">
                                     <button 
                                       onClick={() => {
-                                        const allDisplayed = sortedLetters.flatMap(l => groupedVolunteers[l]).map(v => v.id);
+                                        const allDisplayed = sortedDesktopVolunteers.map(v => v.id);
                                         const allSelected = allDisplayed.every(id => selectedVolunteers.has(id));
                                         if (allSelected) {
                                           setSelectedVolunteers(new Set());
@@ -1594,7 +1636,7 @@ export default function RemindersPage() {
                                       }}
                                       className={cn(
                                         "w-5 h-5 rounded flex items-center justify-center transition-all mx-auto border",
-                                        sortedLetters.flatMap(l => groupedVolunteers[l]).every(v => selectedVolunteers.has(v.id)) && sortedLetters.flatMap(l => groupedVolunteers[l]).length > 0
+                                        sortedDesktopVolunteers.every(v => selectedVolunteers.has(v.id)) && sortedDesktopVolunteers.length > 0
                                           ? "bg-[#4d7cfe] border-[#4d7cfe] text-white"
                                           : "border-border hover:border-text-dim text-transparent dark:border-white/20 dark:hover:border-white/50"
                                       )}
@@ -1602,20 +1644,25 @@ export default function RemindersPage() {
                                       <span className="material-symbols-outlined text-[14px] font-bold">check</span>
                                     </button>
                                   </th>
-                                  <th className="px-3 py-4 text-left w-[120px]">Estado</th>
-                                  <th className="px-3 py-4 text-left w-[115px]">Entrega WA</th>
-                                  <th className="px-3 py-4 w-[210px] text-left font-bold text-text-dim uppercase text-[10px]">Nombre y Apellido</th>
-                                  <th className="px-3 py-4 w-[105px] text-center font-bold text-text-dim uppercase text-[10px]">Barrio / Rama</th>
-                                  <th className="px-3 py-4 w-[90px] text-center font-bold text-text-dim uppercase text-[10px]">Estaca</th>
-                                  <th className="px-3 py-4 w-[105px] text-center">Comité</th>
+                                  <SortableTableHead field="status" activeField={sortField} direction={sortDirection} onSort={handleSort} className="px-3 py-4 w-[120px]">Estado</SortableTableHead>
+                                  <SortableTableHead field="delivery" activeField={sortField} direction={sortDirection} onSort={handleSort} className="px-3 py-4 w-[115px]">Entrega WA</SortableTableHead>
+                                  <SortableTableHead field="name" activeField={sortField} direction={sortDirection} onSort={handleSort} className="px-3 py-4 w-[210px]">Nombre y Apellido</SortableTableHead>
+                                  <SortableTableHead field="ward" activeField={sortField} direction={sortDirection} onSort={handleSort} className="px-3 py-4 w-[105px]" buttonClassName="justify-center">Barrio / Rama</SortableTableHead>
+                                  <SortableTableHead field="stake" activeField={sortField} direction={sortDirection} onSort={handleSort} className="px-3 py-4 w-[90px]" buttonClassName="justify-center">Estaca</SortableTableHead>
+                                  <SortableTableHead field="committee" activeField={sortField} direction={sortDirection} onSort={handleSort} className="px-3 py-4 w-[105px]" buttonClassName="justify-center">Comité</SortableTableHead>
                                   <th className="px-3 py-4 w-[80px] text-center whitespace-nowrap">Acciones</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border">
                                 <AnimatePresence mode="popLayout">
-                                  {sortedLetters.map(letter => (
-                                    <Fragment key={letter}>
-                                      {groupedVolunteers[letter].map((vol, index) => {
+                                  {sortedDesktopVolunteers.map((vol, index) => {
+                                    const initial = /^[A-Z]$/.test(vol.name.charAt(0).toUpperCase())
+                                      ? vol.name.charAt(0).toUpperCase()
+                                      : '#';
+                                    const firstIndexForInitial = sortedDesktopVolunteers.findIndex(candidate => {
+                                      const candidateInitial = candidate.name.charAt(0).toUpperCase();
+                                      return (/^[A-Z]$/.test(candidateInitial) ? candidateInitial : '#') === initial;
+                                    });
                                     const isConfirmed = !!confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                                     const isContacted = !!contactedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
                                     const deliveryInfo = deliveryReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`];
@@ -1632,7 +1679,7 @@ export default function RemindersPage() {
                                     return (
                                       <motion.tr
                                         key={vol.id}
-                                        id={index === 0 ? `letter-${letter}` : undefined}
+                                        id={index === firstIndexForInitial ? `letter-${initial}` : undefined}
                                         layout
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
@@ -1750,8 +1797,6 @@ export default function RemindersPage() {
                                       </motion.tr>
                                     );
                                   })}
-                                </Fragment>
-                              ))}
                                 </AnimatePresence>
                               </tbody>
                             </table>

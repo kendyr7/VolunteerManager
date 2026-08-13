@@ -20,7 +20,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
   const [newStake, setNewStake] = useState('');
   const [newWard, setNewWard] = useState('');
   const [newCommitteeId, setNewCommitteeId] = useState('');
-  const [sendWelcomeMessage, setSendWelcomeMessage] = useState(true);
+  const [sendWelcomeMessage, setSendWelcomeMessage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleAddVolunteer = async (e: React.FormEvent) => {

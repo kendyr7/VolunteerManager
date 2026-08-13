@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
+import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -126,6 +127,8 @@ interface PlatformUser {
   pin?: string;
 }
 
+type UserSortField = 'name' | 'phone' | 'role';
+
 function getPlatformRoleLabel(user: Pick<PlatformUser, 'role' | 'coordinatorType'>) {
   if (user.role === 'Admin') return 'Administrador';
   if (user.role === 'Lector') return 'Voluntario';
@@ -211,6 +214,8 @@ export default function UsersPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
+  const [userSortField, setUserSortField] = useState<UserSortField>('name');
+  const [userSortDirection, setUserSortDirection] = useState<TableSortDirection>('asc');
 
   const [isMobile, setIsMobile] = useState(false);
   const [showPin, setShowPin] = useState(false);
@@ -569,6 +574,30 @@ export default function UsersPage() {
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [users, appliedSearch, showArchived]);
 
+  const desktopSortedUsers = useMemo(() => {
+    const rows = [...filteredUsers];
+    rows.sort((left, right) => {
+      const leftValue = userSortField === 'role' ? getPlatformRoleLabel(left) : left[userSortField];
+      const rightValue = userSortField === 'role' ? getPlatformRoleLabel(right) : right[userSortField];
+      const comparison = String(leftValue || '').localeCompare(String(rightValue || ''), 'es', {
+        numeric: true,
+        sensitivity: 'base',
+      });
+      return userSortDirection === 'asc' ? comparison : -comparison;
+    });
+    return rows;
+  }, [filteredUsers, userSortDirection, userSortField]);
+
+  const handleUserSort = (field: string) => {
+    const nextField = field as UserSortField;
+    if (userSortField === nextField) {
+      setUserSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+    } else {
+      setUserSortField(nextField);
+      setUserSortDirection('asc');
+    }
+  };
+
   const groupedUsers = useMemo(() => {
     const groups: Record<string, PlatformUser[]> = {};
     filteredUsers.forEach(u => {
@@ -919,18 +948,18 @@ export default function UsersPage() {
         {/* Users Table Card */}
         <motion.div 
           variants={itemVariants} 
-          className="overflow-clip flex flex-col w-full bg-dark2 border border-white/10 rounded-[20px] shadow-lg"
+          className="overflow-clip flex flex-col w-full bg-dark2 border border-border rounded-[20px] shadow-lg"
         >
           <AlphabetScrubber isMobile={isMobile} />
 
           {/* Table view for Desktop (md and up) */}
-          <div className="hidden md:block bg-dark2 flex-1 relative w-full pb-10">
+          <div className="hidden md:block bg-dark2 flex-1 relative w-full max-h-[calc(100dvh-250px)] overflow-auto overscroll-contain">
             <table className="w-full text-sm text-left border-separate border-spacing-0">
-              <thead className="bg-dark3/80 sticky top-[140px] z-10 backdrop-blur-md text-[10px] font-bold text-text-dim uppercase tracking-wider">
+              <thead className="bg-dark3 sticky top-0 z-20 text-[10px] font-bold text-text-dim uppercase tracking-wider border-b border-border/70">
                 <tr>
-                  <th className="px-5 py-4">Usuario</th>
-                  <th className="px-3 py-4">Teléfono</th>
-                  <th className="px-3 py-4">Rol y Acceso</th>
+                  <SortableTableHead field="name" activeField={userSortField} direction={userSortDirection} onSort={handleUserSort} className="px-5 py-4">Usuario</SortableTableHead>
+                  <SortableTableHead field="phone" activeField={userSortField} direction={userSortDirection} onSort={handleUserSort} className="px-3 py-4">Teléfono</SortableTableHead>
+                  <SortableTableHead field="role" activeField={userSortField} direction={userSortDirection} onSort={handleUserSort} className="px-3 py-4">Rol y Acceso</SortableTableHead>
                   <th className="px-3 py-4 text-center w-px whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
@@ -948,12 +977,19 @@ export default function UsersPage() {
                     </td>
                   </tr>
                 ) : (
-                  sortedLetters.map(letter => (
-                    <Fragment key={letter}>
-                      {groupedUsers[letter].map((user, index) => (
+                  desktopSortedUsers.map((user, index) => {
+                    const initial = /^[A-Z]$/.test(user.name.charAt(0).toUpperCase())
+                      ? user.name.charAt(0).toUpperCase()
+                      : '#';
+                    const firstIndexForInitial = desktopSortedUsers.findIndex(candidate => {
+                      const candidateInitial = candidate.name.charAt(0).toUpperCase();
+                      return (/^[A-Z]$/.test(candidateInitial) ? candidateInitial : '#') === initial;
+                    });
+
+                    return (
                         <tr 
                           key={user.id} 
-                          id={index === 0 ? `letter-${letter}` : undefined}
+                          id={index === firstIndexForInitial ? `letter-${initial}` : undefined}
                           className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
                           onClick={() => handleEditClick(user)}
                         >
@@ -1031,9 +1067,8 @@ export default function UsersPage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
-                    </Fragment>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

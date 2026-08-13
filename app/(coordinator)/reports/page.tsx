@@ -22,6 +22,7 @@ import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 import { canViewVolunteerProfile } from "@/lib/permissions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { formatUnifiedDuration } from "@/lib/shift-calculations";
+import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
 
 // Day names for week headers
 const DAY_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -77,6 +78,7 @@ function formatMinutes(totalMinutes: number): string {
 type SortOrder = 'asc' | 'desc';
 type HistorySortField = 'volunteerName' | 'committeeName' | 'neighborhood' | 'date' | 'durationMinutes' | 'status';
 type VolunteerSortField = 'name' | 'committee' | 'confirmed' | 'reliability' | 'minutes';
+type DailySortField = 'date' | 'required' | 'assigned' | 'checkedIn' | 'missing' | 'coverageRate';
 
 function ReportPagination({
   currentPage,
@@ -153,6 +155,8 @@ export default function ReportsPage() {
 
   const [volunteerSortField, setVolunteerSortField] = useState<VolunteerSortField | null>(null);
   const [volunteerSortOrder, setVolunteerSortOrder] = useState<SortOrder>('asc');
+  const [dailySortField, setDailySortField] = useState<DailySortField>('date');
+  const [dailySortDirection, setDailySortDirection] = useState<TableSortDirection>('asc');
 
   const handleVolunteerSort = (field: VolunteerSortField) => {
     if (volunteerSortField === field) {
@@ -161,6 +165,16 @@ export default function ReportsPage() {
       setVolunteerSortField(field);
       setVolunteerSortOrder('asc');
     }
+  };
+
+  const handleDailySort = (field: string) => {
+    const nextField = field as DailySortField;
+    if (dailySortField === nextField) {
+      setDailySortDirection(current => current === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setDailySortField(nextField);
+    setDailySortDirection('asc');
   };
 
   // Selected multi-filters
@@ -582,6 +596,17 @@ export default function ReportsPage() {
       };
     });
   }, [data, filteredItems, selectedCommittees, selectedDates, activeTab]);
+
+  const sortedDailyCoverage = useMemo(() => {
+    return [...filteredDailyCoverage].sort((left, right) => {
+      const leftValue = left[dailySortField];
+      const rightValue = right[dailySortField];
+      const comparison = typeof leftValue === 'number' && typeof rightValue === 'number'
+        ? leftValue - rightValue
+        : String(leftValue).localeCompare(String(rightValue), 'es', { numeric: true, sensitivity: 'base' });
+      return dailySortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [dailySortDirection, dailySortField, filteredDailyCoverage]);
 
   const sortedHistoryItems = useMemo(() => {
     if (!historySortField) return filteredItems;
@@ -1280,7 +1305,7 @@ export default function ReportsPage() {
                   className="bg-dark2 border border-border rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full"
                 >
                   {/* Desktop Table View */}
-                  <div className="hidden lg:block overflow-x-auto">
+                  <div className="hidden lg:block max-h-[calc(100dvh-310px)] overflow-auto overscroll-contain">
                     <table className="w-full text-sm text-left border-separate border-spacing-0">
                       <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md text-[10px] font-inter font-bold text-text-dim uppercase tracking-wider select-none">
                         <tr>
@@ -1471,7 +1496,7 @@ export default function ReportsPage() {
                   className="bg-dark2 border border-border rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full"
                 >
                   {/* Desktop Table View */}
-                  <div className="hidden lg:block overflow-x-auto">
+                  <div className="hidden lg:block max-h-[calc(100dvh-310px)] overflow-auto overscroll-contain">
                     <table className="w-full text-sm text-left border-separate border-spacing-0">
                       <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md text-[10px] font-inter font-bold text-text-dim uppercase tracking-wider select-none">
                         <tr>
@@ -1777,21 +1802,21 @@ export default function ReportsPage() {
                   </div>
 
                   {/* Desktop Table View (lg+) */}
-                  <div className="hidden lg:block overflow-x-auto">
+                  <div className="hidden lg:block max-h-[calc(100dvh-320px)] overflow-auto overscroll-contain">
                     <table className="w-full text-sm text-left border-separate border-spacing-0">
                       <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md text-[10px] font-inter font-bold text-text-dim uppercase tracking-wider">
                         <tr>
-                          <th className="px-5 py-4 font-inter font-bold">Día / Fecha</th>
-                          <th className="px-4 py-4 text-center font-inter font-bold">Requeridos</th>
-                          <th className="px-4 py-4 text-center font-inter font-bold">Asignados</th>
-                          <th className="px-4 py-4 text-center font-inter font-bold">Asistieron (Check-in)</th>
-                          <th className="px-4 py-4 text-center font-inter font-bold">Faltantes</th>
-                          <th className="px-4 py-4 text-center font-inter font-bold">% Cobertura</th>
+                          <SortableTableHead field="date" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-5 py-4 font-inter font-bold">Día / Fecha</SortableTableHead>
+                          <SortableTableHead field="required" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">Requeridos</SortableTableHead>
+                          <SortableTableHead field="assigned" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">Asignados</SortableTableHead>
+                          <SortableTableHead field="checkedIn" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">Asistieron (Check-in)</SortableTableHead>
+                          <SortableTableHead field="missing" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">Faltantes</SortableTableHead>
+                          <SortableTableHead field="coverageRate" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">% Cobertura</SortableTableHead>
                           <th className="px-5 py-4 text-center font-inter font-bold">Desglose por Turno</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {filteredDailyCoverage.map(day => (
+                        {sortedDailyCoverage.map(day => (
                           <tr key={day.date} className="hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                             <td className="px-5 py-4 font-inter font-bold text-text text-sm">
                               {day.dayLabel}

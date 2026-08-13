@@ -15,7 +15,12 @@ import { motion, AnimatePresence } from "framer-motion";
 // xlsx is loaded dynamically inside downloadExcelTemplate() and processFile()
 // to avoid bundling ~800 KB into the initial JS chunk for this route.
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
-import { bulkImportVolunteersAction } from "@/app/actions/volunteer-actions";
+import { bulkImportVolunteersAction, getPendingImportExceptionsAction } from "@/app/actions/volunteer-actions";
+import { ImportPendingApprovals } from "@/components/ImportPendingApprovals";
+import {
+  findPotentialVolunteerNameMatches,
+  VolunteerNameCandidate,
+} from "@/lib/volunteer-name-matching";
 
 interface ParsedVolunteer {
   rowNum: number;
@@ -31,6 +36,8 @@ interface ParsedVolunteer {
   waLink?: string;
   error?: string;
   isDuplicate?: boolean;
+  duplicateKind?: 'phone' | 'name';
+  duplicateMatches?: string[];
 }
 
 const containerVariants = {
@@ -52,12 +59,17 @@ export default function ImportPage() {
   const [committees, setCommittees] = useState<{ id: string, name: string }[]>([]);
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor'>('Admin');
   const [isTechnologyCoordinator, setIsTechnologyCoordinator] = useState(false);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [activeView, setActiveView] = useState<'import' | 'pending'>('import');
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [pendingRefreshKey, setPendingRefreshKey] = useState(0);
   const [userCommittee, setUserCommittee] = useState<string>('');
   const [existingPhones, setExistingPhones] = useState<Set<string>>(new Set());
+  const [existingNameCandidates, setExistingNameCandidates] = useState<VolunteerNameCandidate[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'valid' | 'error' | 'duplicate'>('all');
-  const [sendWelcomeMessage, setSendWelcomeMessage] = useState(true);
+  const [sendWelcomeMessage, setSendWelcomeMessage] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'success' as 'success' | 'error' | 'info', isVisible: false });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -77,6 +89,7 @@ export default function ImportPage() {
   const validateRow = (
     vol: ParsedVolunteer,
     phonesSet: Set<string>,
+    nameCandidates: VolunteerNameCandidate[],
     commsList: { id: string, name: string }[],
     role: string,
     userComm: string
@@ -85,7 +98,11 @@ export default function ImportPage() {
     const localPhone = getLocal8Digits(vol.phone || '');
     const phoneValidation = validatePhone8Digits(localPhone);
     const formattedPhone = phoneValidation.formatted;
-    const isDuplicate = formattedPhone ? phonesSet.has(formattedPhone) : false;
+    const isPhoneDuplicate = formattedPhone ? phonesSet.has(formattedPhone) : false;
+    const nameMatches = isPhoneDuplicate
+      ? []
+      : findPotentialVolunteerNameMatches(fullName, nameCandidates);
+    const isDuplicate = isPhoneDuplicate || nameMatches.length > 0;
 
     const match = commsList.find(c => c.name.toLowerCase() === (vol.committeeName || '').trim().toLowerCase());
     const isRoleAdmin = role === 'Admin';
@@ -125,7 +142,9 @@ export default function ImportPage() {
       committeeName: match ? match.name : vol.committeeName,
       committeeId: (isValidCommittee && match && match.id) ? match.id : undefined,
       error: errorMsg || undefined,
-      isDuplicate
+      isDuplicate,
+      duplicateKind: isPhoneDuplicate ? 'phone' : nameMatches.length > 0 ? 'name' : undefined,
+      duplicateMatches: nameMatches.map(candidate => candidate.name),
     };
   };
 
@@ -133,7 +152,27 @@ export default function ImportPage() {
     setParsedData(prev => {
       const updated = [...prev];
       const item = { ...updated[originalIndex], ...updates };
-      updated[originalIndex] = validateRow(item, existingPhones, committees, currentRole, userCommittee);
+      const otherRows = updated.filter((_, index) => index !== originalIndex);
+      const knownPhones = new Set(existingPhones);
+      for (const row of otherRows) {
+        const normalizedPhone = formatE164(row.phone);
+        if (normalizedPhone) knownPhones.add(normalizedPhone);
+      }
+      const otherFileCandidates: VolunteerNameCandidate[] = otherRows
+        .map(row => ({
+          id: `file-row-${row.rowNum}`,
+          name: `${row.firstName || ''} ${row.lastName || ''}`.trim(),
+          phone: row.phone,
+          sourceRow: row.rowNum,
+        }));
+      updated[originalIndex] = validateRow(
+        item,
+        knownPhones,
+        [...existingNameCandidates, ...otherFileCandidates],
+        committees,
+        currentRole,
+        userCommittee
+      );
       return updated;
     });
   };
@@ -150,14 +189,15 @@ export default function ImportPage() {
   };
 
   useEffect(() => {
-    const syncAuthorization = () => {
-      const snapshot = getAuthorizationSnapshotCache();
+    const applyAuthorization = (snapshot = getAuthorizationSnapshotCache()) => {
       const isTechnology = snapshot.coordinatorType === 'technology';
       setIsTechnologyCoordinator(isTechnology);
+      setIsPlatformAdmin(snapshot.role === 'Admin');
       setCurrentRole(snapshot.role === 'Admin' || isTechnology ? 'Admin' : 'Editor');
       setUserCommittee(snapshot.committeeName || '');
     };
-    syncAuthorization();
+    const syncAuthorization = () => applyAuthorization();
+    const initialSync = window.setTimeout(syncAuthorization, 0);
     window.addEventListener('permissions-changed', syncAuthorization);
 
     const fetchCommittees = async () => {
@@ -169,8 +209,22 @@ export default function ImportPage() {
       if (data) setCommittees(data.map(c => ({ id: c.id || '', name: c.name || '' })));
     };
     fetchCommittees();
-    return () => window.removeEventListener('permissions-changed', syncAuthorization);
+    return () => {
+      window.clearTimeout(initialSync);
+      window.removeEventListener('permissions-changed', syncAuthorization);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!isPlatformAdmin) return;
+    let cancelled = false;
+    void getPendingImportExceptionsAction().then(response => {
+      if (!cancelled && response.success) setPendingApprovalCount(response.data.length);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isPlatformAdmin, pendingRefreshKey]);
 
   const downloadExcelTemplate = async () => {
     const committeeExample = userCommittee || "Seguridad";
@@ -297,12 +351,21 @@ export default function ImportPage() {
         const supabase = createClient();
         const { data: existingVols } = await supabase
           .from('volunteers')
-          .select('phone')
+          .select('id, first_name, last_name, phone, committee_id')
           .neq('status', 'archived');
         const existingPhonesSet = new Set(existingVols?.map(v => formatE164(v.phone || '')) || []);
+        const existingNames: VolunteerNameCandidate[] = (existingVols || []).map(volunteer => ({
+          id: volunteer.id,
+          name: `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim(),
+          phone: volunteer.phone || '',
+          committeeId: volunteer.committee_id || null,
+        }));
         setExistingPhones(existingPhonesSet);
+        setExistingNameCandidates(existingNames);
 
         const parsedList: ParsedVolunteer[] = [];
+        const fileNameCandidates: VolunteerNameCandidate[] = [];
+        const knownPhones = new Set(existingPhonesSet);
 
         for (let i = 1; i < rawRows.length; i++) {
           const row = rawRows[i];
@@ -333,8 +396,23 @@ export default function ImportPage() {
             committeeName
           };
 
-          const validatedVol = validateRow(rawVol, existingPhonesSet, committees, currentRole, userCommittee);
+          const validatedVol = validateRow(
+            rawVol,
+            knownPhones,
+            [...existingNames, ...fileNameCandidates],
+            committees,
+            currentRole,
+            userCommittee
+          );
           parsedList.push(validatedVol);
+          fileNameCandidates.push({
+            id: `file-row-${rawVol.rowNum}`,
+            name: fullName,
+            phone: phoneRaw,
+            sourceRow: rawVol.rowNum,
+          });
+          const normalizedFilePhone = formatE164(phoneRaw);
+          if (normalizedFilePhone) knownPhones.add(normalizedFilePhone);
         }
 
         if (parsedList.length === 0) {
@@ -386,8 +464,9 @@ export default function ImportPage() {
     try {
       const results: any[] = [];
 
-      // Filter only valid ones (without errors or duplicates)
-      const toImport = parsedData.filter(v => !v.error && !v.isDuplicate);
+      // Phone conflicts are sent too: the server persists them in the
+      // administrator approval queue instead of discarding the row.
+      const toImport = parsedData.filter(v => !v.error);
 
       if (toImport.length === 0) {
         showToast("No hay registros válidos para importar.", "error");
@@ -404,6 +483,8 @@ export default function ImportPage() {
         stake: vol.stake,
         committeeId: vol.committeeId || null,
         committeeName: vol.committeeName || undefined,
+        sourceRow: vol.rowNum,
+        sendWelcomeMessage,
       }));
 
       const res = await bulkImportVolunteersAction(importPayloads);
@@ -433,13 +514,28 @@ export default function ImportPage() {
         });
       }
 
-      const totalDuplicatesCount = parsedData.filter(v => v.isDuplicate).length;
+      if (res.pendingReviewCount > 0) {
+        setPendingRefreshKey(value => value + 1);
+        setPendingApprovalCount(current => current + res.pendingReviewCount);
+      }
 
       if (results.length > 0) {
         setParsedData(results);
         setStep(3);
-        const skippedMsg = totalDuplicatesCount > 0 ? ` (${totalDuplicatesCount} duplicados omitidos)` : '';
-        showToast(`Importados ${results.length} voluntarios exitosamente${skippedMsg}.`, "success");
+        const reviewMessage = res.pendingReviewCount > 0
+          ? ` ${res.pendingReviewCount} ${res.pendingReviewCount === 1 ? 'fila quedó pendiente' : 'filas quedaron pendientes'} de aprobación.`
+          : '';
+        showToast(`Importados ${results.length} voluntarios exitosamente.${reviewMessage}`, "success");
+      } else if (res.pendingReviewCount > 0) {
+        setParsedData([]);
+        setStep(1);
+        if (isPlatformAdmin) setActiveView('pending');
+        showToast(
+          isPlatformAdmin
+            ? 'Las filas con números compartidos están listas para tu revisión.'
+            : 'Las filas con números compartidos fueron enviadas a un administrador.',
+          'info'
+        );
       } else {
         showToast("No se pudo importar ningún voluntario. Verifique los datos.", "error");
       }
@@ -462,6 +558,7 @@ export default function ImportPage() {
   const totalErrors = parsedData.filter(v => v.error).length;
   const totalDuplicates = parsedData.filter(v => v.isDuplicate).length;
   const totalValids = parsedData.filter(v => !v.error && !v.isDuplicate).length;
+  const totalProcessable = parsedData.filter(v => !v.error).length;
 
   const [permTick, setPermTick] = useState(0);
   const [mounted, setMounted] = useState(false);
@@ -499,22 +596,75 @@ export default function ImportPage() {
       className="w-full mx-auto pb-32 lg:pb-12 flex flex-col"
     >
       {/* Sticky Header */}
-      <div className="sticky top-0 z-40 bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto shrink-0">
-        <motion.div variants={itemVariants} className="w-full flex items-center justify-between">
-          <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
-            Importación
+      <div className="sticky top-0 z-40 bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 mb-4 pointer-events-auto shrink-0">
+        <motion.div variants={itemVariants} className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight text-wrap-balance">
+            {activeView === 'pending' ? 'Revisión de duplicados' : 'Importación'}
           </h1>
-          <div className="flex items-center gap-2">
-            {step === 1 && (
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+            {isPlatformAdmin && (
+              <div className="flex items-center bg-dark3 p-1 rounded-full border border-border shrink-0" role="tablist" aria-label="Secciones de importación">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeView === 'import'}
+                  onClick={() => setActiveView('import')}
+                  className={cn(
+                    "px-3 sm:px-4 py-1.5 text-[11px] sm:text-xs font-bold rounded-full transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe]",
+                    activeView === 'import'
+                      ? 'bg-[#4d7cfe] text-white shadow-md'
+                      : 'text-text-dim hover:text-text'
+                  )}
+                >
+                  <span>Importar archivo</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeView === 'pending'}
+                  onClick={() => setActiveView('pending')}
+                  className={cn(
+                    "px-3 sm:px-4 py-1.5 text-[11px] sm:text-xs font-bold rounded-full transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe]",
+                    activeView === 'pending'
+                      ? 'bg-[#4d7cfe] text-white shadow-md'
+                      : 'text-text-dim hover:text-text'
+                  )}
+                >
+                  <span>Pendientes de aprobación</span>
+                  {pendingApprovalCount > 0 && (
+                    <span className={cn(
+                      "min-w-5 h-5 px-1.5 rounded-full text-[10px] font-black flex items-center justify-center",
+                      activeView === 'pending'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-amber-500/15 text-amber-500'
+                    )}>
+                      {pendingApprovalCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
+            {activeView === 'import' && step === 1 && (
               <Button 
                 onClick={downloadExcelTemplate}
-                className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5"
+                aria-label="Descargar plantilla de importación"
+                className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full h-9 w-9 sm:w-[104px] sm:px-0 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5 shrink-0"
               >
                 <span className="material-symbols-outlined text-[16px]">download</span>
-                <span>Plantilla</span>
+                <span className="hidden sm:inline">Plantilla</span>
               </Button>
             )}
-            {step === 2 && (
+            {activeView === 'pending' && (
+              <Button
+                onClick={() => setPendingRefreshKey(value => value + 1)}
+                aria-label="Actualizar duplicados pendientes"
+                className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full h-9 w-9 sm:w-[104px] sm:px-0 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5 shrink-0"
+              >
+                <span className="material-symbols-outlined text-[16px]">refresh</span>
+                <span className="hidden sm:inline">Actualizar</span>
+              </Button>
+            )}
+            {activeView === 'import' && step === 2 && (
               <Button variant="ghost" onClick={() => { setParsedData([]); setStep(1); }} className="text-text-dim hover:text-text font-bold border border-border/50 bg-dark3 rounded-xl px-4 py-2 flex items-center gap-1">
                 <span className="material-symbols-outlined text-[18px]">arrow_back</span>
                 Volver
@@ -525,6 +675,13 @@ export default function ImportPage() {
       </div>
 
       <div className="flex flex-col gap-6 md:gap-10 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
+        {activeView === 'pending' && isPlatformAdmin ? (
+          <ImportPendingApprovals
+            refreshKey={pendingRefreshKey}
+            onPendingCountChange={setPendingApprovalCount}
+          />
+        ) : (
+          <>
         {step === 1 && (
           <motion.div variants={itemVariants} className="w-full space-y-5">
 
@@ -595,7 +752,7 @@ export default function ImportPage() {
                 { key: 'all',       label: 'Cargados',    value: parsedData.length, color: 'text-text',      ring: 'ring-white/20',       bg: 'bg-dark2'          },
                 { key: 'valid',     label: 'Válidos',     value: totalValids,       color: 'text-green-400', ring: 'ring-green-500/40',   bg: 'bg-dark2'          },
                 { key: 'error',     label: 'Con Errores', value: totalErrors,       color: 'text-red',       ring: 'ring-red/40',         bg: 'bg-dark2'          },
-                { key: 'duplicate', label: 'Duplicados',  value: totalDuplicates,   color: 'text-amber-500', ring: 'ring-amber-500/40',   bg: 'bg-dark2'          },
+                { key: 'duplicate', label: 'Por aprobar', value: totalDuplicates,   color: 'text-amber-500', ring: 'ring-amber-500/40',   bg: 'bg-dark2'          },
               ] as { key: typeof filterType; label: string; value: number; color: string; ring: string; bg: string }[]).map(({ key, label, value, color, ring }) => (
                 <button
                   key={key}
@@ -615,8 +772,8 @@ export default function ImportPage() {
 
             {/* Description outside the card */}
             <p className="text-xs text-text-dim leading-relaxed">
-              Solo los registros <span className="text-green-400 font-semibold">Válidos</span> se guardarán.
-              {filterType !== 'all' && <span className="ml-1 text-text-dim/60">— Filtrando por: <span className="font-semibold text-text-dim">{filterType === 'valid' ? 'Válidos' : filterType === 'error' ? 'Errores' : 'Duplicados'}</span></span>}
+              Los registros válidos se importarán de inmediato; los teléfonos repetidos y nombres similares se enviarán a aprobación.
+              {filterType !== 'all' && <span className="ml-1 text-text-dim/60">— Filtrando por: <span className="font-semibold text-text-dim">{filterType === 'valid' ? 'Válidos' : filterType === 'error' ? 'Errores' : 'Por aprobar'}</span></span>}
             </p>
 
             {/* Validation Data Display */}
@@ -771,9 +928,14 @@ export default function ImportPage() {
                                   ) : vol.isDuplicate ? (
                                     <div className="flex flex-col items-center justify-center gap-0.5">
                                       <Badge variant="outline" className="font-inter text-[9px] px-2 py-0.5 font-bold border rounded-full bg-amber-500/10 text-amber-500 border-amber-500/20 shrink-0">
-                                        Duplicado
+                                        Por aprobar
                                       </Badge>
-                                      <span className="text-[10px] font-medium text-amber-500/90 leading-tight">Ya registrado</span>
+                                      <span
+                                        className="text-[10px] font-medium text-amber-500/90 leading-tight"
+                                        title={vol.duplicateMatches?.join(', ')}
+                                      >
+                                        {vol.duplicateKind === 'name' ? 'Nombre similar' : 'Número compartido'}
+                                      </span>
                                     </div>
                                   ) : (
                                     <Badge variant="outline" className="font-inter text-[9px] px-2.5 py-0.5 font-bold border rounded-full bg-emerald-500/10 text-emerald-500 border-emerald-500/20 shrink-0">
@@ -922,7 +1084,11 @@ export default function ImportPage() {
                               <p className="text-[11px] text-rose-500 font-bold leading-tight mt-1">{vol.error}</p>
                             )}
                             {vol.isDuplicate && (
-                              <p className="text-[11px] text-amber-500 font-bold leading-tight mt-1">Teléfono ya registrado en el sistema. Se omitirá.</p>
+                              <p className="text-[11px] text-amber-500 font-bold leading-tight mt-1">
+                                {vol.duplicateKind === 'name'
+                                  ? `Nombre similar a: ${vol.duplicateMatches?.join(', ') || 'otro perfil'}. Se enviará a aprobación.`
+                                  : 'Este teléfono se enviará a aprobación administrativa.'}
+                              </p>
                             )}
                           </div>
                         );
@@ -934,7 +1100,8 @@ export default function ImportPage() {
 
               <CardFooter className="p-5 bg-dark3 border-t border-border flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div className="text-xs text-text-dim text-center sm:text-left leading-relaxed">
-                  Total de registros a importar: <strong className="text-green-400 text-sm">{totalValids}</strong> de {parsedData.length}.
+                  Filas listas para procesar: <strong className="text-green-400 text-sm">{totalProcessable}</strong> de {parsedData.length}.
+                  {totalDuplicates > 0 && <span className="block text-amber-500 font-medium">{totalDuplicates} {totalDuplicates === 1 ? 'fila requiere' : 'filas requieren'} revisión por posible duplicado.</span>}
                   {totalErrors > 0 && <span className="block text-red font-medium">Existen {totalErrors} registros con errores que deben corregirse en tu archivo.</span>}
                 </div>
                 
@@ -953,13 +1120,13 @@ export default function ImportPage() {
 
                   <Button 
                     onClick={handleImport} 
-                    disabled={isImporting || totalValids === 0} 
+                    disabled={isImporting || totalProcessable === 0}
                     className="w-full sm:w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-white/5 disabled:text-text-dim/50 text-white rounded-xl h-11 px-8 font-bold shadow-lg shadow-blue-500/10 transition-all active:scale-[0.98]"
                   >
                     {isImporting ? (
                       <><span className="material-symbols-outlined text-[18px] mr-2 animate-spin">progress_activity</span> Importando...</>
                     ) : (
-                      <><span className="material-symbols-outlined text-[18px] mr-2">cloud_upload</span> Cargar {totalValids} Válidos</>
+                      <><span className="material-symbols-outlined text-[18px] mr-2">cloud_upload</span> Procesar {totalProcessable} filas</>
                     )}
                   </Button>
                 </div>
@@ -1018,6 +1185,8 @@ export default function ImportPage() {
               </CardFooter>
             </Card>
           </motion.div>
+        )}
+          </>
         )}
       </div>
 

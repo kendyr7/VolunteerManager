@@ -25,6 +25,10 @@ import { getAdminSupabase } from '@/lib/supabase/admin';
 import { VolunteerDiffBuilder, VolunteerRow } from './volunteer-diff-builder';
 import { VolunteerAuditWriter, AuditActor, WriteEditAuditPayload } from './volunteer-audit-writer';
 import { getLocal8Digits, normalizePhoneE164 } from '@/lib/whatsapp';
+import {
+  findPotentialVolunteerNameMatches,
+  VolunteerNameCandidate,
+} from '@/lib/volunteer-name-matching';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 import { broadcastShiftSync } from './shift-broadcast.service';
 
@@ -59,6 +63,8 @@ export interface BulkImportItemPayload {
   committeeName?: string;
   age?: number | null;
   pin?: string | null;
+  sourceRow?: number | null;
+  sendWelcomeMessage?: boolean;
 }
 
 export interface MutationResult {
@@ -96,6 +102,8 @@ export interface BulkImportResult {
   success: boolean;
   importedCount: number;
   skippedCount: number;
+  pendingReviewCount: number;
+  pendingReviewIds: string[];
   importedVolunteers: Array<{
     id: string;
     firstName: string;
@@ -105,6 +113,69 @@ export interface BulkImportResult {
     committeeName?: string;
   }>;
   error?: string;
+}
+
+export interface PendingImportPhoneCandidate {
+  id: string;
+  name: string;
+  phone: string;
+  committeeName: string;
+  isSharedPhone: boolean;
+  sharedPhoneOwnerId: string | null;
+  matchScore?: number;
+}
+
+export interface PendingImportException {
+  id: string;
+  sourceRow: number | null;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  phoneNormalized: string;
+  age: number | null;
+  neighborhood: string | null;
+  stake: string | null;
+  committeeId: string | null;
+  committeeName: string;
+  submittedByName: string;
+  submittedByRole: string;
+  submittedAt: string;
+  sendWelcomeMessage: boolean;
+  conflictType: 'phone_conflict' | 'name_match';
+  candidates: PendingImportPhoneCandidate[];
+}
+
+export type ResolvePendingImportExceptionRequest =
+  | {
+      exceptionId: string;
+      resolution: 'shared_phone';
+      ownerVolunteerId: string;
+      reason: string;
+    }
+  | {
+      exceptionId: string;
+      resolution: 'corrected_phone';
+      correctedPhone: string;
+    }
+  | {
+      exceptionId: string;
+      resolution: 'confirmed_distinct_person';
+    }
+  | {
+      exceptionId: string;
+      resolution: 'rejected';
+      reason: string;
+    };
+
+export interface ResolvePendingImportExceptionResult extends MutationResult {
+  createdVolunteer?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    pin: string;
+    sendWelcomeMessage: boolean;
+  };
 }
 
 export class VolunteerMutationService {
@@ -170,17 +241,84 @@ export class VolunteerMutationService {
     return conflict || null;
   }
 
+  private static async queueImportException(
+    supabase: Awaited<ReturnType<typeof getAdminSupabase>>,
+    item: BulkImportItemPayload,
+    conflictVolunteerId: string,
+    conflictType: 'phone_conflict' | 'name_match',
+    actor: AuditActor,
+    actorUserId: string | null,
+    batchId: string
+  ): Promise<{ id: string | null; error?: string }> {
+    const phoneNormalized = normalizePhoneE164(item.phone);
+    if (!phoneNormalized) {
+      return { id: null, error: 'El número telefónico no es válido.' };
+    }
+
+    const row = {
+      batch_id: batchId,
+      source_row: item.sourceRow ?? null,
+      first_name: item.firstName.trim(),
+      last_name: item.lastName.trim(),
+      phone: phoneNormalized,
+      phone_normalized: phoneNormalized,
+      age: item.age ?? null,
+      neighborhood: item.neighborhood ?? null,
+      stake: item.stake ?? null,
+      committee_id: item.committeeId ?? null,
+      conflicting_volunteer_id: conflictVolunteerId,
+      conflict_type: conflictType,
+      send_welcome_message: item.sendWelcomeMessage === true,
+      submitted_by_user_id: actorUserId,
+      submitted_by_name: actor.name,
+      submitted_by_role: actor.role,
+    };
+
+    const { data, error } = await supabase
+      .from('volunteer_import_exceptions')
+      .insert(row)
+      .select('id')
+      .single();
+
+    if (!error && data?.id) return { id: data.id };
+
+    // A repeated click or a retried batch can encounter the partial unique
+    // index. Reuse the existing pending item instead of creating a duplicate.
+    if (error?.code === '23505') {
+      let existingQuery = supabase
+        .from('volunteer_import_exceptions')
+        .select('id')
+        .eq('status', 'pending')
+        .eq('phone_normalized', phoneNormalized)
+        .ilike('first_name', item.firstName.trim())
+        .ilike('last_name', item.lastName.trim());
+      existingQuery = item.committeeId
+        ? existingQuery.eq('committee_id', item.committeeId)
+        : existingQuery.is('committee_id', null);
+      const { data: existing } = await existingQuery.maybeSingle();
+      if (existing?.id) return { id: existing.id };
+    }
+
+    console.error('[VolunteerMutationService.queueImportException] Failed to queue exception:', error);
+    return {
+      id: null,
+      error: error?.message || 'No se pudo enviar el número compartido a revisión.',
+    };
+  }
+
   private static async persistVolunteer(
     supabase: Awaited<ReturnType<typeof getAdminSupabase>>,
     payload: CreateVolunteerPayload
   ): Promise<{ data: any | null; error: any | null }> {
     const pin = payload.pin || String(Math.floor(1000 + Math.random() * 9000));
+    const phoneNormalized = normalizePhoneE164(payload.phone);
     const { data, error } = await supabase
       .from('volunteers')
       .insert({
         first_name:   payload.firstName,
         last_name:    payload.lastName,
-        phone:        payload.phone,
+        phone:        phoneNormalized || payload.phone,
+        phone_normalized: phoneNormalized,
         stake:        payload.stake ?? null,
         neighborhood: payload.neighborhood ?? null,
         committee_id: payload.committeeId ?? null,
@@ -243,7 +381,7 @@ export class VolunteerMutationService {
       const incoming: VolunteerRow = {
         first_name:   payload.firstName,
         last_name:    payload.lastName,
-        phone:        payload.phone,
+        phone:        normPhone,
         stake:        payload.stake ?? null,
         neighborhood: payload.neighborhood ?? null,
         committee_id: payload.committeeId ?? null,
@@ -290,7 +428,7 @@ export class VolunteerMutationService {
         .update({
           first_name:   payload.firstName,
           last_name:    payload.lastName,
-          phone:        payload.phone,
+          phone:        normPhone,
           stake:        payload.stake ?? null,
           neighborhood: payload.neighborhood ?? null,
           committee_id: payload.committeeId ?? null,
@@ -424,14 +562,39 @@ export class VolunteerMutationService {
    */
   static async bulkImportVolunteers(
     items: BulkImportItemPayload[],
-    actor: AuditActor
+    actor: AuditActor,
+    actorUserId: string | null = null
   ): Promise<BulkImportResult> {
     try {
       const supabase = await getAdminSupabase();
       const importedVolunteers: BulkImportResult['importedVolunteers'] = [];
       const auditPayloads: any[] = [];
       let skippedCount = 0;
-      const seenLocalPhonesInBatch = new Set<string>();
+      const pendingReviewIds: string[] = [];
+      const batchId = crypto.randomUUID();
+
+      const { data: activeVolunteerRows, error: activeVolunteerError } = await supabase
+        .from('volunteers')
+        .select('id, first_name, last_name, phone, committee_id')
+        .neq('status', 'archived');
+      if (activeVolunteerError) {
+        return {
+          success: false,
+          importedCount: 0,
+          skippedCount: items.length,
+          pendingReviewCount: 0,
+          pendingReviewIds: [],
+          importedVolunteers: [],
+          error: `No se pudieron validar posibles duplicados: ${activeVolunteerError.message}`,
+        };
+      }
+
+      const nameCandidates: VolunteerNameCandidate[] = (activeVolunteerRows || []).map(volunteer => ({
+        id: volunteer.id,
+        name: `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim(),
+        phone: volunteer.phone || '',
+        committeeId: volunteer.committee_id || null,
+      }));
 
       for (const item of items) {
         const norm = normalizePhoneE164(item.phone);
@@ -443,22 +606,49 @@ export class VolunteerMutationService {
           continue;
         }
 
-        // 1. Check intra-batch canonical duplicate
-        if (seenLocalPhonesInBatch.has(local8)) {
-          console.error(`[VolunteerMutationService.bulkImportVolunteers] Intra-batch duplicate phone for ${item.firstName}: ${item.phone}`);
-          skippedCount++;
-          continue;
-        }
-
-        // 2. Check DB active volunteer conflict
+        // A previous row in this batch has already been inserted by the time
+        // this query runs, so both database and intra-file conflicts follow
+        // the same persistent approval flow.
         const dbConflict = await this.findActivePhoneConflict(supabase, item.phone);
         if (dbConflict) {
-          console.error(`[VolunteerMutationService.bulkImportVolunteers] DB active phone conflict for ${item.firstName}: ${item.phone}`);
-          skippedCount++;
+          const queued = await this.queueImportException(
+            supabase,
+            item,
+            dbConflict.id,
+            'phone_conflict',
+            actor,
+            actorUserId,
+            batchId
+          );
+          if (queued.id) {
+            if (!pendingReviewIds.includes(queued.id)) pendingReviewIds.push(queued.id);
+          } else {
+            console.error(`[VolunteerMutationService.bulkImportVolunteers] Could not queue phone conflict for ${item.firstName}:`, queued.error);
+            skippedCount++;
+          }
           continue;
         }
 
-        seenLocalPhonesInBatch.add(local8);
+        const fullName = `${item.firstName || ''} ${item.lastName || ''}`.trim();
+        const possibleNameMatch = findPotentialVolunteerNameMatches(fullName, nameCandidates, 1)[0];
+        if (possibleNameMatch) {
+          const queued = await this.queueImportException(
+            supabase,
+            item,
+            possibleNameMatch.id,
+            'name_match',
+            actor,
+            actorUserId,
+            batchId
+          );
+          if (queued.id) {
+            if (!pendingReviewIds.includes(queued.id)) pendingReviewIds.push(queued.id);
+          } else {
+            console.error(`[VolunteerMutationService.bulkImportVolunteers] Could not queue possible name duplicate for ${item.firstName}:`, queued.error);
+            skippedCount++;
+          }
+          continue;
+        }
 
         const { data: inserted, error } = await this.persistVolunteer(supabase, item);
 
@@ -477,6 +667,13 @@ export class VolunteerMutationService {
           phone: inserted.phone,
           pin: inserted.pin,
           committeeName: commName || undefined,
+        });
+
+        nameCandidates.push({
+          id: inserted.id,
+          name: `${inserted.first_name || ''} ${inserted.last_name || ''}`.trim(),
+          phone: inserted.phone || '',
+          committeeId: inserted.committee_id || null,
         });
 
         // Individual audit log payload for each imported volunteer
@@ -521,6 +718,8 @@ export class VolunteerMutationService {
         success: true,
         importedCount: importedVolunteers.length,
         skippedCount,
+        pendingReviewCount: pendingReviewIds.length,
+        pendingReviewIds,
         importedVolunteers,
       };
     } catch (err) {
@@ -529,9 +728,320 @@ export class VolunteerMutationService {
         success: false,
         importedCount: 0,
         skippedCount: items.length,
+        pendingReviewCount: 0,
+        pendingReviewIds: [],
         importedVolunteers: [],
         error: 'Error inesperado durante la importación masiva.',
       };
+    }
+  }
+
+  static async getPendingImportExceptions(): Promise<PendingImportException[]> {
+    const supabase = await getAdminSupabase();
+    const { data: exceptions, error } = await supabase
+      .from('volunteer_import_exceptions')
+      .select('*')
+      .eq('status', 'pending')
+      .order('submitted_at', { ascending: false });
+
+    if (error) {
+      console.error('[VolunteerMutationService.getPendingImportExceptions] Failed to load queue:', error);
+      throw new Error(error.message);
+    }
+    if (!exceptions?.length) return [];
+
+    const [{ data: volunteers }, { data: committees }] = await Promise.all([
+      supabase
+        .from('volunteers')
+        .select('id, first_name, last_name, phone, committee_id, is_shared_phone, shared_phone_owner_id')
+        .neq('status', 'archived'),
+      supabase.from('committees').select('id, name'),
+    ]);
+
+    const committeeNames = new Map((committees || []).map(row => [row.id, row.name || 'Sin comité']));
+    const candidatesByPhone = new Map<string, PendingImportPhoneCandidate[]>();
+    const candidatesById = new Map<string, PendingImportPhoneCandidate>();
+    const nameCandidates: VolunteerNameCandidate[] = [];
+
+    for (const volunteer of volunteers || []) {
+      const local8 = getLocal8Digits(volunteer.phone || '');
+      if (!local8 || local8.length !== 8) continue;
+      const list = candidatesByPhone.get(local8) || [];
+      const candidate = {
+        id: volunteer.id,
+        name: `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim(),
+        phone: volunteer.phone || '',
+        committeeName: committeeNames.get(volunteer.committee_id) || 'Sin comité',
+        isSharedPhone: volunteer.is_shared_phone === true,
+        sharedPhoneOwnerId: volunteer.shared_phone_owner_id || null,
+      };
+      list.push(candidate);
+      candidatesByPhone.set(local8, list);
+      candidatesById.set(volunteer.id, candidate);
+      nameCandidates.push({
+        id: volunteer.id,
+        name: candidate.name,
+        phone: candidate.phone,
+        committeeId: volunteer.committee_id || null,
+      });
+    }
+
+    return exceptions.map(row => {
+      const conflictType = row.conflict_type === 'name_match' ? 'name_match' : 'phone_conflict';
+      let candidates: PendingImportPhoneCandidate[];
+
+      if (conflictType === 'name_match') {
+        const matches = findPotentialVolunteerNameMatches(
+          `${row.first_name || ''} ${row.last_name || ''}`.trim(),
+          nameCandidates
+        );
+        candidates = matches.flatMap(match => {
+          const candidate = candidatesById.get(match.id);
+          return candidate ? [{ ...candidate, matchScore: match.score }] : [];
+        });
+
+        const originallyMatched = candidatesById.get(row.conflicting_volunteer_id);
+        if (originallyMatched && !candidates.some(candidate => candidate.id === originallyMatched.id)) {
+          candidates.unshift(originallyMatched);
+        }
+      } else {
+        candidates = candidatesByPhone.get(getLocal8Digits(row.phone_normalized || row.phone || '')) || [];
+      }
+
+      return {
+        id: row.id,
+        sourceRow: row.source_row ?? null,
+        firstName: row.first_name || '',
+        lastName: row.last_name || '',
+        phone: row.phone || '',
+        phoneNormalized: row.phone_normalized || '',
+        age: row.age ?? null,
+        neighborhood: row.neighborhood || null,
+        stake: row.stake || null,
+        committeeId: row.committee_id || null,
+        committeeName: committeeNames.get(row.committee_id) || 'Sin comité',
+        submittedByName: row.submitted_by_name || 'Usuario desconocido',
+        submittedByRole: row.submitted_by_role || '',
+        submittedAt: row.submitted_at,
+        sendWelcomeMessage: row.send_welcome_message === true,
+        conflictType,
+        candidates,
+      };
+    });
+  }
+
+  static async resolvePendingImportException(
+    request: ResolvePendingImportExceptionRequest,
+    actor: AuditActor,
+    actorUserId: string | null
+  ): Promise<ResolvePendingImportExceptionResult> {
+    try {
+      const supabase = await getAdminSupabase();
+      const { data: pending, error: pendingError } = await supabase
+        .from('volunteer_import_exceptions')
+        .select('*')
+        .eq('id', request.exceptionId)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (pendingError || !pending) {
+        return { success: false, error: 'La solicitud ya fue procesada o no existe.' };
+      }
+
+      const reviewedAt = new Date().toISOString();
+      const reviewBase = {
+        reviewed_by_user_id: actorUserId,
+        reviewed_by_name: actor.name,
+        reviewed_by_role: actor.role,
+        reviewed_at: reviewedAt,
+        updated_at: reviewedAt,
+      };
+
+      if (request.resolution === 'rejected') {
+        const reason = request.reason.trim();
+        if (reason.length < 3) {
+          return { success: false, error: 'Indica por qué se descartará esta importación.' };
+        }
+        const { error } = await supabase
+          .from('volunteer_import_exceptions')
+          .update({
+            ...reviewBase,
+            status: 'rejected',
+            resolution: 'rejected',
+            review_reason: reason,
+          })
+          .eq('id', pending.id)
+          .eq('status', 'pending');
+        if (error) return { success: false, error: error.message };
+
+        await VolunteerAuditWriter.write({
+          actionType: 'Seguridad',
+          volunteerId: null,
+          description: `Descartó la importación pendiente de "${pending.first_name} ${pending.last_name || ''}"`.trim(),
+          actor,
+          context: {
+            operation: 'reject_import_phone_exception',
+            phone: pending.phone_normalized,
+            reason,
+            exceptionId: pending.id,
+          },
+        });
+        return { success: true };
+      }
+
+      let phoneToCreate = pending.phone_normalized;
+      let sharedOwnerId: string | null = null;
+      let sharedReason: string | null = null;
+      const conflictType = pending.conflict_type === 'name_match' ? 'name_match' : 'phone_conflict';
+
+      if (conflictType === 'name_match') {
+        if (request.resolution !== 'confirmed_distinct_person') {
+          return { success: false, error: 'Confirma que se trata de una persona diferente o descarta la fila.' };
+        }
+        const phoneConflict = await this.findActivePhoneConflict(supabase, phoneToCreate);
+        if (phoneConflict) {
+          return {
+            success: false,
+            error: `Mientras se revisaba la fila, el teléfono fue asignado a ${phoneConflict.first_name} ${phoneConflict.last_name || ''}.`,
+          };
+        }
+      } else if (request.resolution === 'corrected_phone') {
+        const normalized = normalizePhoneE164(request.correctedPhone);
+        if (!normalized) {
+          return { success: false, error: 'El teléfono corregido debe tener exactamente 8 dígitos.' };
+        }
+        const conflict = await this.findActivePhoneConflict(supabase, normalized);
+        if (conflict) {
+          return {
+            success: false,
+            error: `El teléfono corregido ya pertenece a ${conflict.first_name} ${conflict.last_name || ''}.`,
+          };
+        }
+        phoneToCreate = normalized;
+      } else if (request.resolution === 'shared_phone') {
+        const reason = request.reason.trim();
+        if (reason.length < 3) {
+          return { success: false, error: 'La razón del número compartido es obligatoria.' };
+        }
+
+        const { data: owner } = await supabase
+          .from('volunteers')
+          .select('id, first_name, last_name, phone, status')
+          .eq('id', request.ownerVolunteerId)
+          .maybeSingle();
+        if (
+          !owner ||
+          owner.status === 'archived' ||
+          getLocal8Digits(owner.phone || '') !== getLocal8Digits(pending.phone_normalized || '')
+        ) {
+          return { success: false, error: 'Selecciona un titular activo que use este mismo número.' };
+        }
+
+        const { error: ownerUpdateError } = await supabase
+          .from('volunteers')
+          .update({
+            phone_normalized: pending.phone_normalized,
+            is_shared_phone: false,
+            shared_phone_owner_id: null,
+            shared_phone_reason: null,
+            shared_phone_authorized_by: null,
+            shared_phone_authorized_at: null,
+          })
+          .eq('id', owner.id);
+        if (ownerUpdateError) {
+          return {
+            success: false,
+            error: `No se pudo establecer el titular: ${ownerUpdateError.message}`,
+          };
+        }
+
+        sharedOwnerId = owner.id;
+        sharedReason = reason;
+      } else {
+        return { success: false, error: 'Selecciona una resolución válida para el número repetido.' };
+      }
+
+      const pin = String(Math.floor(1000 + Math.random() * 9000));
+      const insertPayload: Record<string, unknown> = {
+        first_name: pending.first_name,
+        last_name: pending.last_name || '',
+        phone: phoneToCreate,
+        phone_normalized: phoneToCreate,
+        stake: pending.stake ?? null,
+        neighborhood: pending.neighborhood ?? null,
+        committee_id: pending.committee_id ?? null,
+        age: pending.age ?? null,
+        pin,
+        status: 'active',
+        is_shared_phone: request.resolution === 'shared_phone',
+        shared_phone_owner_id: sharedOwnerId,
+        shared_phone_reason: sharedReason,
+        shared_phone_authorized_by: sharedOwnerId ? actor.name : null,
+        shared_phone_authorized_at: sharedOwnerId ? reviewedAt : null,
+      };
+
+      const { data: inserted, error: insertError } = await supabase
+        .from('volunteers')
+        .insert(insertPayload)
+        .select('id, first_name, last_name, phone, pin')
+        .single();
+      if (insertError || !inserted) {
+        return { success: false, error: insertError?.message || 'No se pudo crear el voluntario.' };
+      }
+
+      const { error: finalizeError } = await supabase
+        .from('volunteer_import_exceptions')
+        .update({
+          ...reviewBase,
+          status: 'approved',
+          resolution: request.resolution,
+          corrected_phone: request.resolution === 'corrected_phone' ? phoneToCreate : null,
+          created_volunteer_id: inserted.id,
+          review_reason: request.resolution === 'shared_phone'
+            ? sharedReason
+            : request.resolution === 'confirmed_distinct_person'
+              ? 'El administrador confirmó que es una persona diferente.'
+              : 'Teléfono corregido por un administrador.',
+        })
+        .eq('id', pending.id)
+        .eq('status', 'pending');
+
+      if (finalizeError) {
+        console.error('[VolunteerMutationService.resolvePendingImportException] Volunteer created but queue finalization failed:', finalizeError);
+      }
+
+      const committeeName = await this.resolveCommitteeName(supabase, pending.committee_id);
+      await VolunteerAuditWriter.write({
+        actionType: 'Creación',
+        volunteerId: inserted.id,
+        description: `Aprobó e importó al voluntario "${inserted.first_name} ${inserted.last_name || ''}"`.trim(),
+        actor,
+        context: {
+          operation: 'approve_import_phone_exception',
+          conflictType,
+          resolution: request.resolution,
+          phone: inserted.phone,
+          committee: committeeName || 'Sin comité',
+          sharedPhoneOwnerId: sharedOwnerId,
+          reason: sharedReason,
+          exceptionId: pending.id,
+        },
+      });
+
+      return {
+        success: true,
+        createdVolunteer: {
+          id: inserted.id,
+          firstName: inserted.first_name,
+          lastName: inserted.last_name || '',
+          phone: inserted.phone,
+          pin: inserted.pin,
+          sendWelcomeMessage: pending.send_welcome_message === true,
+        },
+      };
+    } catch (error) {
+      console.error('[VolunteerMutationService.resolvePendingImportException] Unexpected exception:', error);
+      return { success: false, error: 'Error inesperado al resolver la importación pendiente.' };
     }
   }
 
@@ -1243,6 +1753,3 @@ export class VolunteerMutationService {
     }
   }
 }
-
-
-

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,9 @@ import {
   isVolunteerShiftAssigned,
   getVolunteerShiftCapacity,
 } from "@/lib/use-volunteer-reschedule-context";
+import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
+
+type VolunteerRequestSortField = 'status' | 'currentShift' | 'requestedShift' | 'reason' | 'date';
 
 interface VolunteerRequestsClientProps {
   volunteerId: string;
@@ -29,6 +32,8 @@ export function VolunteerRequestsClient({
 }: VolunteerRequestsClientProps) {
   const [requests, setRequests] = useState<any[]>(initialRequests);
   const [loading, setLoading] = useState(false);
+  const [sortField, setSortField] = useState<VolunteerRequestSortField>('date');
+  const [sortDirection, setSortDirection] = useState<TableSortDirection>('desc');
 
   // Modal State
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
@@ -139,6 +144,41 @@ export function VolunteerRequestsClient({
     setIsSubmitting(false);
   };
 
+  const sortedDesktopRequests = useMemo(() => {
+    const getValue = (request: any) => {
+      switch (sortField) {
+        case 'status':
+          return request.status || '';
+        case 'currentShift':
+          return `${request.current_day_key || ''} ${request.current_shift_key || ''}`;
+        case 'requestedShift':
+          return `${request.requested_day_key || ''} ${request.requested_shift_key || ''}`;
+        case 'reason':
+          return request.reason || '';
+        case 'date':
+          return request.created_at || '';
+      }
+    };
+
+    return [...requests].sort((left, right) => {
+      const comparison = getValue(left).localeCompare(getValue(right), 'es', {
+        numeric: true,
+        sensitivity: 'base',
+      });
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [requests, sortDirection, sortField]);
+
+  const handleSort = (field: string) => {
+    const nextField = field as VolunteerRequestSortField;
+    if (sortField === nextField) {
+      setSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setSortField(nextField);
+    setSortDirection(nextField === 'date' ? 'desc' : 'asc');
+  };
+
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8 space-y-6 pb-32 lg:pb-8">
       {/* Header with Title, (?) Helper Badge, and + Nueva Solicitud button */}
@@ -188,19 +228,19 @@ export function VolunteerRequestsClient({
       ) : (
         <>
           {/* DESKTOP TABLE VIEW (hidden on tablet/mobile, NO horizontal scrollbar) */}
-          <div className="hidden lg:block rounded-2xl border border-border bg-dark2 shadow-sm overflow-hidden w-full">
+          <div className="hidden lg:block rounded-2xl border border-border bg-dark2 shadow-sm max-h-[calc(100dvh-250px)] overflow-auto overscroll-contain w-full">
             <table className="w-full text-left text-xs border-collapse">
-              <thead>
+              <thead className="sticky top-0 z-20 bg-dark3">
                 <tr className="border-b border-border/80 bg-dark3/80 text-[11px] font-extrabold uppercase text-text-dim tracking-wider">
-                  <th className="py-3.5 px-4 w-32">Estado</th>
-                  <th className="py-3.5 px-4 w-36">Turno Actual</th>
-                  <th className="py-3.5 px-4 w-40">Nuevo Turno</th>
-                  <th className="py-3.5 px-4">Motivo del Cambio</th>
-                  <th className="py-3.5 px-4 text-right w-32">Fecha</th>
+                  <SortableTableHead field="status" activeField={sortField} direction={sortDirection} onSort={handleSort} className="py-3.5 px-4 w-32">Estado</SortableTableHead>
+                  <SortableTableHead field="currentShift" activeField={sortField} direction={sortDirection} onSort={handleSort} className="py-3.5 px-4 w-36">Turno Actual</SortableTableHead>
+                  <SortableTableHead field="requestedShift" activeField={sortField} direction={sortDirection} onSort={handleSort} className="py-3.5 px-4 w-40">Nuevo Turno</SortableTableHead>
+                  <SortableTableHead field="reason" activeField={sortField} direction={sortDirection} onSort={handleSort} className="py-3.5 px-4">Motivo del Cambio</SortableTableHead>
+                  <SortableTableHead field="date" activeField={sortField} direction={sortDirection} onSort={handleSort} className="py-3.5 px-4 w-32" buttonClassName="justify-end">Fecha</SortableTableHead>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60 font-medium">
-                {requests.map((req) => {
+                {sortedDesktopRequests.map((req) => {
                   const isPending = req.status === 'pending';
                   const isApproved = req.status === 'approved';
                   const isRejected = req.status === 'rejected';
