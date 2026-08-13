@@ -72,26 +72,19 @@ export class VolunteerSearchService {
     const trimmed = query.trim();
     if (!trimmed) return this.volunteers.map(v => v.id);
 
-    const normQuery = normalizeSearch(trimmed);
-    const isSimpleQuery = !trimmed.includes(' ') && !trimmed.includes(',');
-
-    // Fast O(N) string includes for simple single-word / phone searches
-    if (isSimpleQuery) {
-      const results: string[] = [];
-      for (let i = 0; i < this.volunteers.length; i++) {
-        const v = this.volunteers[i];
-        const searchStr =
-          v.normalizedSearchText ||
-          normalizeSearch(`${v.name} ${v.phone} ${v.committee} ${v.stake} ${v.ward}`);
-
-        if (searchStr.includes(normQuery)) {
-          results.push(v.id);
-        }
-      }
-      return results;
+    const terms = trimmed.split(',').map(term => normalizeSearch(term.trim())).filter(Boolean);
+    const exactResults: string[] = [];
+    for (let i = 0; i < this.volunteers.length; i++) {
+      const volunteer = this.volunteers[i];
+      const searchText = volunteer.normalizedSearchText || normalizeSearch(
+        `${volunteer.name} ${volunteer.phone} ${volunteer.committee} ${volunteer.stake} ${volunteer.ward}`
+      );
+      if (terms.every(term => searchText.includes(term))) exactResults.push(volunteer.id);
     }
 
-    // Fuzzy search via Fuse.js for multi-word or multi-token queries
+    if (exactResults.length > 0 || terms.length > 1) return exactResults;
+
+    // Preserve fuzzy matching for misspelled single searches only when there is no exact match.
     if (!this.fuse) return this.volunteers.map(v => v.id);
 
     this.fuse.setCollection(this.volunteers);

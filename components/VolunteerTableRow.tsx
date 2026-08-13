@@ -116,15 +116,15 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
         </p>
       </div>
       <div className={cn("flex-[1.5] min-w-[140px] text-center font-inter font-bold text-[13px] text-text-dim shrink-0 truncate px-2 transition-all flex items-center justify-center gap-1", isHighlighted && "text-amber-300 font-extrabold")}>
-        <span>{vol.ward}</span>
+        <HighlightText text={vol.ward} term={appliedSearch} />
         {isHighlighted && <span className="text-[12px]">✨</span>}
       </div>
       <div className="flex-[1.5] min-w-[140px] text-center font-inter font-bold text-[13px] text-text-dim opacity-70 shrink-0 truncate px-2">
-        {vol.stake}
+        <HighlightText text={vol.stake} term={appliedSearch} />
       </div>
       <div className="flex-[1.8] min-w-[150px] text-center shrink-0 px-2 flex justify-center">
         <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, committeeColor, "truncate max-w-full inline-block")}>
-          {vol.committee}
+          <HighlightText text={vol.committee} term={appliedSearch} />
         </Badge>
       </div>
       <div className="w-24 text-center shrink-0">

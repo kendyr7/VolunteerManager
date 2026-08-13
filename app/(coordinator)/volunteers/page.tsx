@@ -30,7 +30,6 @@ import {
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
-import { useSearch } from "@/lib/search-context";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { USER_TABLE_STYLES } from "../users/page";
 import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
@@ -47,6 +46,9 @@ import { groupVolunteersAlphabetically } from "@/lib/services/volunteer-grouping
 import { RealtimeDebugOverlay } from "@/components/RealtimeDebugOverlay";
 import { useVolunteerStore } from "@/lib/store/use-volunteer-store";
 import { updateVolunteerAction } from "@/app/actions/volunteer-actions";
+import { SmartSearchBar } from "@/components/SmartSearchBar";
+import { HighlightText } from "@/components/HighlightText";
+import { useDebouncedSearch } from "@/lib/use-debounced-search";
 
 
 const containerVariants = {
@@ -116,25 +118,6 @@ const getCommitteeColor = (committee: string) => {
   return colors[index];
 };
 
-function HighlightText({ text, term }: { text: string; term: string }) {
-  if (!term.trim()) return <span>{text}</span>;
-  const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-  const parts = text.split(regex);
-  return (
-    <span>
-      {parts.map((part, i) =>
-        regex.test(part) ? (
-          <span key={i} style={{ backgroundColor: '#fde047', color: '#111827', borderRadius: '6px', padding: '0 4px', display: 'inline', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone' }}>{part}</span>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </span>
-  );
-}
-
-
-
 type SortField = 'name' | 'ward' | 'stake' | 'committee' | 'shifts' | 'reliability';
 type SortOrder = 'asc' | 'desc';
 
@@ -153,8 +136,7 @@ export default function VolunteersPage() {
     loading,
     refresh,
   } = useCoordinatorData();
-  const [inputValue, setInputValue] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
+  const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
@@ -171,14 +153,6 @@ export default function VolunteersPage() {
       setSortOrder('asc');
     }
   };
-
-  // Debounce search input to match Shifts page performance
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setAppliedSearch(inputValue);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [inputValue]);
 
   const committeesMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -817,54 +791,13 @@ export default function VolunteersPage() {
 
         {/* Search Input and Controls Row */}
         <motion.div variants={itemVariants} className="w-full relative z-10 flex items-center gap-2.5">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (appliedSearch && inputValue === appliedSearch) {
-                setInputValue('');
-                setAppliedSearch('');
-              } else if (inputValue.trim()) {
-                setAppliedSearch(inputValue.trim());
-              }
-            }}
-            className="relative flex-1 min-w-0 flex items-center"
-          >
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
-              <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
-            </div>
-            <input
-              type="text"
-              placeholder="Buscar voluntarios por nombre, teléfono, estaca o barrio..."
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-32 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              autoComplete="off"
-            />
-            <div className="absolute inset-y-0 right-1.5 flex items-center z-10">
-              {appliedSearch !== '' ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputValue('');
-                    setAppliedSearch('');
-                  }}
-                  className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[16px]">close</span>
-                  <span>Limpiar</span>
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!inputValue.trim()}
-                  className="h-9 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:opacity-40 text-white rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-md shadow-blue-500/20"
-                >
-                  <span className="material-symbols-outlined text-[16px]">search</span>
-                  <span>Buscar</span>
-                </button>
-              )}
-            </div>
-          </form>
+          <SmartSearchBar
+            value={inputValue}
+            onValueChange={setInputValue}
+            onImmediateSearch={applySearch}
+            placeholder="Buscar voluntarios por nombre, teléfono, estaca, barrio o subcomité..."
+            className="flex-1"
+          />
 
           {/* Añadir button next to search bar with matching height */}
           {canCreateVolunteer() && (

@@ -28,7 +28,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
-import { useSearch } from "@/lib/search-context";
 import { motion, AnimatePresence } from "framer-motion";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { USER_TABLE_STYLES } from "@/app/(coordinator)/users/page";
@@ -37,6 +36,9 @@ import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { canEditShifts, canSendWhatsappMessages } from "@/lib/permissions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
+import { SmartSearchBar } from "@/components/SmartSearchBar";
+import { useDebouncedSearch } from "@/lib/use-debounced-search";
+import { HighlightText } from "@/components/HighlightText";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -412,13 +414,7 @@ export default function RemindersPage() {
 
 
   // Estado de los filtros y visualización de plantilla
-  const { searchTerm, setSearchTerm } = useSearch();
-  const [inputValue, setInputValue] = useState(searchTerm);
-  const [appliedSearch, setAppliedSearch] = useState(searchTerm);
-
-  useEffect(() => {
-    setSearchTerm(appliedSearch);
-  }, [appliedSearch, setSearchTerm]);
+  const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
 
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
@@ -465,74 +461,43 @@ export default function RemindersPage() {
   }, []);
 
 
+  const filteredReminderVolunteers = useMemo(() => {
+    const searchTerms = appliedSearch.split(',').map(term => normalizeSearch(term.trim())).filter(Boolean);
+    return volunteers.filter(volunteer => {
+      const searchText = normalizeSearch(
+        `${volunteer.name} ${volunteer.phone} ${volunteer.committee} ${volunteer.stake} ${volunteer.ward}`
+      );
+      const matchesSearch = searchTerms.every(term => searchText.includes(term));
+      const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(volunteer.committee);
+      const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(volunteer.stake);
+      const matchesWard = selectedWards.length === 0 || selectedWards.includes(volunteer.ward);
+      return matchesSearch && matchesCommittee && matchesStake && matchesWard;
+    });
+  }, [appliedSearch, selectedCommittees, selectedStakes, selectedWards, volunteers]);
+
   // Calcular cantidad de voluntarios asignados por turno/día (respetando filtros)
   const shiftCounts = useMemo(() => {
     const counts: Record<string, Record<string, number>> = {};
     EVENT_DAYS.forEach(day => {
       counts[day.key] = { T1: 0, T2: 0, T3: 0, T4: 0 };
-      volunteers.forEach(vol => {
-        // Filtrado multicriterio
-        const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
-        const normName = normalizeSearch(vol.name);
-        const normCommittee = normalizeSearch(vol.committee);
-        const normStake = normalizeSearch(vol.stake);
-        const normWard = normalizeSearch(vol.ward);
-
-        const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
-          normName.includes(term) ||
-          normCommittee.includes(term) ||
-          normStake.includes(term) ||
-          normWard.includes(term)
-        );
-        const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(vol.committee);
-        const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(vol.stake);
-        const matchesWard = selectedWards.length === 0 || selectedWards.includes(vol.ward);
-
-        if (!(matchesSearch && matchesCommittee && matchesStake && matchesWard)) {
-          return;
-        }
-
-        const shifts = globalShifts[vol.id];
-        if (shifts && shifts[day.key]) {
-          shifts[day.key].forEach(shId => {
-            if (counts[day.key][shId] !== undefined) {
-              counts[day.key][shId]++;
-            }
-          });
-        }
+      filteredReminderVolunteers.forEach(volunteer => {
+        const shifts = globalShifts[volunteer.id];
+        shifts?.[day.key]?.forEach(shiftId => {
+          if (counts[day.key][shiftId] !== undefined) counts[day.key][shiftId] += 1;
+        });
       });
     });
     return counts;
-  }, [volunteers, globalShifts, EVENT_DAYS, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
+  }, [EVENT_DAYS, filteredReminderVolunteers, globalShifts]);
 
   // Obtener voluntarios asignados al turno seleccionado
   const activeVolunteers = useMemo(() => {
     if (!selectedDayKey || !selectedShiftId) return [];
-    return volunteers.filter(vol => {
-      const searchTerms = searchTerm.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
-      const normName = normalizeSearch(vol.name);
-      const normCommittee = normalizeSearch(vol.committee);
-      const normStake = normalizeSearch(vol.stake);
-      const normWard = normalizeSearch(vol.ward);
-
-      const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
-        normName.includes(term) ||
-        normCommittee.includes(term) ||
-        normStake.includes(term) ||
-        normWard.includes(term)
-      );
-      const matchesCommittee = selectedCommittees.length === 0 || selectedCommittees.includes(vol.committee);
-      const matchesStake = selectedStakes.length === 0 || selectedStakes.includes(vol.stake);
-      const matchesWard = selectedWards.length === 0 || selectedWards.includes(vol.ward);
-
-      if (!(matchesSearch && matchesCommittee && matchesStake && matchesWard)) {
-        return false;
-      }
-
+    return filteredReminderVolunteers.filter(vol => {
       const shifts = globalShifts[vol.id];
       return shifts && shifts[selectedDayKey] && shifts[selectedDayKey].includes(selectedShiftId);
     }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [volunteers, globalShifts, selectedDayKey, selectedShiftId, searchTerm, selectedCommittees, selectedStakes, selectedWards]);
+  }, [filteredReminderVolunteers, globalShifts, selectedDayKey, selectedShiftId]);
 
   const currentVolunteers = activeVolunteers;
 
@@ -1166,48 +1131,13 @@ export default function RemindersPage() {
 
         {/* Search Input Bar */}
         <div className="w-full relative z-10 flex items-center gap-2.5">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (appliedSearch && inputValue === appliedSearch) {
-                setInputValue('');
-                setAppliedSearch('');
-              } else if (inputValue.trim()) {
-                setAppliedSearch(inputValue.trim());
-              }
-            }}
-            className="relative flex-1 min-w-0 flex items-center"
-          >
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
-              <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
-            </div>
-            <input
-              type="text"
-              placeholder="Buscar voluntario, barrio o estaca..."
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-28 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
-              value={inputValue}
-              onChange={(e) => {
-                setInputValue(e.target.value);
-                setAppliedSearch(e.target.value);
-              }}
-              autoComplete="off"
-            />
-            {appliedSearch !== '' && (
-              <div className="absolute inset-y-0 right-1.5 flex items-center z-10">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputValue('');
-                    setAppliedSearch('');
-                  }}
-                  className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[16px]">close</span>
-                  <span>Limpiar</span>
-                </button>
-              </div>
-            )}
-          </form>
+          <SmartSearchBar
+            value={inputValue}
+            onValueChange={setInputValue}
+            onImmediateSearch={applySearch}
+            placeholder="Buscar por voluntario, barrio, estaca o subcomité..."
+            className="flex-1"
+          />
         </div>
       </div>
 
@@ -1573,7 +1503,7 @@ export default function RemindersPage() {
                                   <SwipeableMobileCard
                                     name={vol.name}
                                     phone={vol.phone}
-                                    searchTerm={searchTerm}
+                                    searchTerm={appliedSearch}
                                     onEdit={() => handleEditClick(vol)}
                                     isSelected={selectedVolunteers.has(vol.id)}
                                     onToggleSelect={() => toggleSelection(vol.id)}
@@ -1601,7 +1531,7 @@ export default function RemindersPage() {
                                       <>
                                         {vol.committee && (
                                           <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, getCommitteeColor(vol.committee))}>
-                                            {vol.committee}
+                                            <HighlightText text={vol.committee} term={appliedSearch} />
                                           </Badge>
                                         )}
                                         <Badge variant="outline" className={cn(USER_TABLE_STYLES.badgeBase, isConfirmed ? "bg-accent/10 text-accent border-accent/20" : isContacted ? "bg-sky-500/10 text-sky-500 border-sky-500/20" : "bg-amber-50 text-amber-600 border-amber-200")}>
@@ -1746,14 +1676,14 @@ export default function RemindersPage() {
                                         </td>
                                         <td className="px-3 py-4 font-bold text-text leading-tight">
                                           <div className="flex items-center gap-2">
-                                            <span>{vol.name}</span>
+                                            <HighlightText text={vol.name} term={appliedSearch} />
                                           </div>
                                         </td>
                                         <td className="px-3 py-4 text-xs text-text text-center break-words">{vol.ward || '—'}</td>
                                         <td className="px-3 py-4 text-xs text-text-dim text-center break-words">{vol.stake || '—'}</td>
                                         <td className="px-3 py-4 text-center">
                                           <Badge variant="outline" title={vol.committee} className={cn("max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-bold px-2 py-0.5", getCommitteeColor(vol.committee))}>
-                                            {vol.committee}
+                                            <HighlightText text={vol.committee} term={appliedSearch} />
                                           </Badge>
                                         </td>
                                         <td className="px-3 py-4 text-center w-px whitespace-nowrap">

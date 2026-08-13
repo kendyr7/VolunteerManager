@@ -24,7 +24,6 @@ import {
   Save,
   CheckCircle2,
   Clock,
-  Search,
   RefreshCw,
   AlertTriangle,
   Zap,
@@ -37,6 +36,10 @@ import {
   Square
 } from 'lucide-react';
 import { SortableTableHead, TableSortDirection } from '@/components/SortableTableHead';
+import { SmartSearchBar } from '@/components/SmartSearchBar';
+import { useDebouncedSearch } from '@/lib/use-debounced-search';
+import { HighlightText } from '@/components/HighlightText';
+import { normalizeSearch } from '@/lib/utils';
 
 type ProcessedSortField = 'name' | 'phone' | 'decision' | 'processedBy' | 'date';
 
@@ -45,7 +48,7 @@ export default function PhoneCleanupPersonCentricPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const { inputValue: searchInput, setInputValue: setSearchInput, appliedSearch: search, applySearch } = useDebouncedSearch();
   const [activeTab, setActiveTab] = useState<'PENDING' | 'READY' | 'PROCESSED'>('PENDING');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNREVIEWED' | 'SAVED' | 'REQUIRES_INFO' | 'LATER'>('ALL');
   const [reviewerName, setReviewerName] = useState('Administrador');
@@ -263,7 +266,13 @@ export default function PhoneCleanupPersonCentricPage() {
       return { ...g, volunteers: pendingVols };
     }).filter(g => {
       if (g.volunteers.length === 0) return false;
-      const matchSearch = !search || g.phoneNormalized.includes(search) || g.volunteers.some(v => v.fullName.toLowerCase().includes(search.toLowerCase()));
+      const searchTerms = search.split(',').map(term => normalizeSearch(term.trim())).filter(Boolean);
+      const matchSearch = searchTerms.length === 0 || searchTerms.every(term => {
+        if (normalizeSearch(g.phoneNormalized).includes(term)) return true;
+        return g.volunteers.some(volunteer => normalizeSearch(
+          `${volunteer.fullName} ${volunteer.phone} ${volunteer.committee} ${volunteer.stake || ''} ${volunteer.neighborhood || ''}`
+        ).includes(term));
+      });
       if (!matchSearch) return false;
 
       if (statusFilter === 'ALL') return true;
@@ -421,15 +430,13 @@ export default function PhoneCleanupPersonCentricPage() {
         <div className="max-w-6xl mx-auto space-y-8">
           {/* SEARCH & FILTERS */}
           <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por persona o número..."
-                className="pl-9 bg-slate-900 border-slate-700 text-sm text-white placeholder:text-slate-500"
-              />
-            </div>
+            <SmartSearchBar
+              value={searchInput}
+              onValueChange={setSearchInput}
+              onImmediateSearch={applySearch}
+              placeholder="Buscar por persona, número o subcomité..."
+              className="w-full sm:w-96"
+            />
 
             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
               <Button
@@ -546,7 +553,7 @@ export default function PhoneCleanupPersonCentricPage() {
                           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
                             <div className="space-y-1.5 max-w-md">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-bold text-base text-white">{vol.fullName}</span>
+                                <span className="font-bold text-base text-white"><HighlightText text={vol.fullName} term={search} /></span>
                                 {isReqInfo ? <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/30">🟡 Requiere información</Badge> : isLater ? <Badge className="bg-purple-500/20 text-purple-300 border border-purple-500/30">⏳ Revisar después</Badge> : isSaved ? <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">🟢 Guardado</Badge> : <Badge variant="outline" className="text-slate-400 border-slate-700 bg-slate-900/50">⚪ Sin revisar</Badge>}
                                 {hasLegacy && <Badge variant="outline" className="text-slate-400 border-slate-700 text-[10px]">📜 Existe historial anterior</Badge>}
                               </div>

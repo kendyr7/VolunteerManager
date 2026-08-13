@@ -29,6 +29,7 @@ import { createCommitteeAction, archiveCommitteeAction, unarchiveCommitteeAction
 import { getActivityLogs, ActivityLog } from "@/app/actions/activity-actions";
 import { getCurrentSettingsProfileAction } from "@/app/actions/user-actions";
 import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
+import { SmartSearchBar } from "@/components/SmartSearchBar";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -791,64 +792,18 @@ export default function SettingsPage() {
             Ajustes
           </h1>
         </div>
-        <form
-          className="relative flex w-full min-w-0 items-center"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (settingsSearchResults[0]) navigateToSetting(settingsSearchResults[0].id);
+        <SmartSearchBar
+          value={settingsSearch}
+          onValueChange={setSettingsSearch}
+          onImmediateSearch={(value) => {
+            if (value && settingsSearchResults[0]) navigateToSetting(settingsSearchResults[0].id);
           }}
-          onFocus={() => setIsSettingsSearchFocused(true)}
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-              setIsSettingsSearchFocused(false);
-            }
-          }}
-        >
-          <div className="pointer-events-none absolute inset-y-0 left-4 z-10 flex items-center">
-            <span className="material-symbols-outlined text-[20px] text-black/40 dark:text-white/70">search</span>
-          </div>
-          <input
-            type="text"
-            value={settingsSearch}
-            onChange={(event) => setSettingsSearch(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                setSettingsSearch('');
-                setIsSettingsSearchFocused(false);
-                event.currentTarget.blur();
-              }
-            }}
-            placeholder="Buscar ajustes: PIN, permisos, comités..."
-            aria-label="Buscar en ajustes"
-            aria-expanded={isSettingsSearchFocused}
-            aria-controls="settings-search-results"
-            autoComplete="off"
-            className="h-[48px] w-full rounded-full border border-black/10 bg-black/5 py-3.5 pl-12 pr-32 text-[13px] font-bold font-inter text-black outline-none transition-all placeholder:text-black/50 focus:ring-2 focus:ring-black/20 dark:border-white/10 dark:bg-[#fff6] dark:text-white dark:placeholder:text-white/70 dark:focus:ring-white/30"
-          />
-          <div className="absolute inset-y-0 right-1.5 z-10 flex items-center">
-            {settingsSearch ? (
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => setSettingsSearch('')}
-                className="flex h-9 cursor-pointer items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/20 px-3.5 text-xs font-bold font-inter text-rose-400 transition-all hover:bg-rose-500/30 active:scale-95"
-              >
-                <span className="material-symbols-outlined text-[16px]">close</span>
-                <span>Limpiar</span>
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled
-                className="flex h-9 items-center gap-1 rounded-full bg-[#4d7cfe] px-4 text-xs font-bold font-inter text-white opacity-40"
-              >
-                <span className="material-symbols-outlined text-[16px]">search</span>
-                <span>Buscar</span>
-              </button>
-            )}
-          </div>
-
-          {isSettingsSearchFocused && settingsSearch.trim() && (
+          onFocusChange={setIsSettingsSearchFocused}
+          placeholder="Buscar ajustes: PIN, permisos, subcomités..."
+          ariaLabel="Buscar en ajustes"
+          resultsId="settings-search-results"
+          showResults={isSettingsSearchFocused && Boolean(settingsSearch.trim())}
+          results={(
             <div
               id="settings-search-results"
               role="listbox"
@@ -883,7 +838,7 @@ export default function SettingsPage() {
               )}
             </div>
           )}
-        </form>
+        />
       </div>
 
       <motion.div
@@ -1491,7 +1446,7 @@ export default function SettingsPage() {
                     <div className="flex-1 w-full min-w-0">
                       <Input
                         type="text"
-                        placeholder="Nombre del nuevo comité (ej. Alimentos, Logística)..."
+                        placeholder="Nombre del nuevo subcomité (ej. Alimentos, Logística)..."
                         value={newCommitteeName}
                         onChange={(e) => setNewCommitteeName(e.target.value)}
                         className="w-full h-11 sm:h-10 min-h-[44px] px-4 py-2.5 rounded-xl border border-border bg-dark3 text-text placeholder:text-text-dim text-sm sm:text-xs font-inter font-bold outline-none focus:ring-1 focus:ring-[#4d7cfe] focus:border-[#4d7cfe] transition-all"

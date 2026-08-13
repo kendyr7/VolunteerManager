@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { SmartSearchBar } from '@/components/SmartSearchBar'
+import { useDebouncedSearch } from '@/lib/use-debounced-search'
+import { normalizeSearch } from '@/lib/utils'
 
 // Icon map matching sidebar exactly
 const MODULE_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
@@ -243,15 +246,16 @@ const MODULES: ModuleCardProps[] = [
 ]
 
 export default function DocsPage() {
-  const [searchTerm, setSearchTerm] = useState('')
+  const { inputValue: searchInput, setInputValue: setSearchInput, appliedSearch: searchTerm, applySearch } = useDebouncedSearch()
 
   const filteredModules = useMemo(() => {
     if (!searchTerm.trim()) return MODULES
-    const q = searchTerm.toLowerCase()
+    const searchTerms = searchTerm.split(',').map(term => normalizeSearch(term.trim())).filter(Boolean)
     return MODULES.map(mod => {
-      const titleMatch = mod.title.toLowerCase().includes(q) || mod.description.toLowerCase().includes(q)
+      const moduleSearchText = normalizeSearch(`${mod.title} ${mod.description}`)
+      const titleMatch = searchTerms.every(term => moduleSearchText.includes(term))
       const matchedFeatures = mod.features.filter(f =>
-        f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q)
+        searchTerms.every(term => normalizeSearch(`${f.name} ${f.description}`).includes(term))
       )
       if (titleMatch) return mod
       if (matchedFeatures.length > 0) return { ...mod, features: matchedFeatures }
@@ -274,28 +278,12 @@ export default function DocsPage() {
           </h1>
         </div>
         {/* Search */}
-        <div className="w-full relative">
-          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
-            <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
-          </div>
-          <input
-            type="text"
-            placeholder="Buscar módulo o función..."
-            className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            autoComplete="off"
-          />
-          {searchTerm && (
-            <button
-              type="button"
-              onClick={() => setSearchTerm('')}
-              className="absolute inset-y-0 right-3 flex items-center z-10 text-text-dim hover:text-text transition-colors"
-            >
-              <span className="material-symbols-outlined text-[18px]">close</span>
-            </button>
-          )}
-        </div>
+        <SmartSearchBar
+          value={searchInput}
+          onValueChange={setSearchInput}
+          onImmediateSearch={applySearch}
+          placeholder="Buscar módulo, función o subcomité..."
+        />
       </div>
 
       <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-20 pt-4">

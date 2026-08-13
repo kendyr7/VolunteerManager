@@ -1046,7 +1046,7 @@ export default function ImportPage() {
                                   onValueChange={(val) => handleUpdateRow(originalIndex, { committeeName: val || "" })}
                                 >
                                   <SelectTrigger className="w-full h-8 bg-dark3/60 border-border text-xs font-bold text-text rounded-lg px-2">
-                                    <SelectValue placeholder="Comité" />
+                                    <SelectValue placeholder="Subcomité" />
                                   </SelectTrigger>
                                   <SelectContent className="bg-dark2 border-border text-text text-xs z-[200]">
                                     {committees.map(c => (

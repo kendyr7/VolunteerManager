@@ -875,7 +875,7 @@ export default function CoordinatorDashboard() {
                 onValueChange={(val) => setSelectedHeatmapCommittee(val || 'todos')}
               >
                 <SelectTrigger className="h-8 min-h-[32px] w-full sm:w-[210px] bg-dark3 border-border text-xs font-bold text-text rounded-lg">
-                  <SelectValue placeholder="Todos los comités">
+                  <SelectValue placeholder="Todos los subcomités">
                     {selectedHeatmapCommittee === 'todos' || selectedHeatmapCommittee === 'all'
                       ? 'Todos los comités'
                       : selectedHeatmapCommittee}

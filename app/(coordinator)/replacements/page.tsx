@@ -5,7 +5,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { normalizeSearch } from "@/lib/utils";
-import { useSearch } from "@/lib/search-context";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import {
   fetchAllShiftChangeRequestsAction,
@@ -13,6 +12,9 @@ import {
   rejectShiftChangeRequestAction
 } from "@/app/actions/shift-change-actions";
 import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
+import { SmartSearchBar } from "@/components/SmartSearchBar";
+import { useDebouncedSearch } from "@/lib/use-debounced-search";
+import { HighlightText } from "@/components/HighlightText";
 
 type RequestSortField = 'volunteer' | 'committee' | 'currentShift' | 'requestedShift' | 'reason';
 
@@ -30,14 +32,7 @@ export default function ReplacementsPage() {
     requestId: null
   });
 
-  // Search Context & Local Input State
-  const { searchTerm, setSearchTerm } = useSearch();
-  const [inputValue, setInputValue] = useState(searchTerm);
-  const [appliedSearch, setAppliedSearch] = useState(searchTerm);
-
-  useEffect(() => {
-    setSearchTerm(appliedSearch);
-  }, [appliedSearch, setSearchTerm]);
+  const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
 
   const loadShiftRequests = async () => {
     setLoadingRequests(true);
@@ -223,48 +218,13 @@ export default function ReplacementsPage() {
 
         {/* Search Input Bar */}
         <div className="w-full relative z-10 flex items-center gap-2.5">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (appliedSearch && inputValue === appliedSearch) {
-                setInputValue('');
-                setAppliedSearch('');
-              } else if (inputValue.trim()) {
-                setAppliedSearch(inputValue.trim());
-              }
-            }}
-            className="relative flex-1 min-w-0 flex items-center"
-          >
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
-              <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
-            </div>
-            <input
-              type="text"
-              placeholder="Buscar por voluntario, comité, teléfono, turno o motivo..."
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-28 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
-              value={inputValue}
-              onChange={(e) => {
-                setInputValue(e.target.value);
-                setAppliedSearch(e.target.value);
-              }}
-              autoComplete="off"
-            />
-            {appliedSearch !== '' && (
-              <div className="absolute inset-y-0 right-1.5 flex items-center z-10">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputValue('');
-                    setAppliedSearch('');
-                  }}
-                  className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[16px]">close</span>
-                  <span>Limpiar</span>
-                </button>
-              </div>
-            )}
-          </form>
+          <SmartSearchBar
+            value={inputValue}
+            onValueChange={setInputValue}
+            onImmediateSearch={applySearch}
+            placeholder="Buscar por voluntario, subcomité, teléfono, turno o motivo..."
+            className="flex-1"
+          />
         </div>
       </div>
 
@@ -329,7 +289,7 @@ export default function ReplacementsPage() {
                         <tr key={req.id} className="hover:bg-dark3/40 transition-all">
                           {/* Voluntario */}
                           <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="font-bold text-text text-sm">{volName}</div>
+                            <div className="font-bold text-text text-sm"><HighlightText text={volName} term={appliedSearch} /></div>
                             {phone && (
                               <div className="text-[10px] text-text-dim font-mono">{phone}</div>
                             )}
@@ -338,7 +298,7 @@ export default function ReplacementsPage() {
                           {/* Comité */}
                           <td className="py-3.5 px-4 whitespace-nowrap">
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30">
-                              {commName}
+                              <HighlightText text={commName} term={appliedSearch} />
                             </span>
                           </td>
 
@@ -437,11 +397,11 @@ export default function ReplacementsPage() {
                       {/* Top line: Volunteer Name, Committee Badge */}
                       <div className="flex items-center justify-between gap-2">
                         <div>
-                          <h4 className="font-bold text-text text-sm leading-tight">{volName}</h4>
+                          <h4 className="font-bold text-text text-sm leading-tight"><HighlightText text={volName} term={appliedSearch} /></h4>
                           {phone && <p className="text-[10px] text-text-dim font-mono">{phone}</p>}
                         </div>
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 shrink-0">
-                          {commName}
+                          <HighlightText text={commName} term={appliedSearch} />
                         </span>
                       </div>
 

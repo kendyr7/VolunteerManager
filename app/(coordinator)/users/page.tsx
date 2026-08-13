@@ -20,13 +20,15 @@ import {
 } from "@/app/actions/user-actions";
 import { CoordinatorType } from "@/lib/role-permissions";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
-import { useSearch } from "@/lib/search-context";
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { cn } from "@/lib/utils";
 import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
+import { SmartSearchBar } from "@/components/SmartSearchBar";
+import { HighlightText } from "@/components/HighlightText";
+import { useDebouncedSearch } from "@/lib/use-debounced-search";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -82,23 +84,6 @@ const getCommitteeColor = (committee: string) => {
 };
 
 // ─── helper: highlight search term ─────────────────────────────────────────
-function HighlightText({ text, term }: { text: string; term: string }) {
-  if (!term.trim()) return <span>{text}</span>;
-  const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-  const parts = text.split(regex);
-  return (
-    <span>
-      {parts.map((part, i) =>
-        regex.test(part) ? (
-          <span key={i} style={{ backgroundColor: '#fde047', color: '#111827', borderRadius: '6px', padding: '0 4px', display: 'inline', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone' }}>{part}</span>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </span>
-  );
-}
-
 const ROLES = ['Admin', 'Editor', 'Lector'] as const;
 type Role = typeof ROLES[number];
 type PlatformRoleSelection = 'admin' | 'technology' | 'committee' | 'volunteer';
@@ -212,8 +197,7 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<PlatformUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
-  const [inputValue, setInputValue] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
+  const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
   const [userSortField, setUserSortField] = useState<UserSortField>('name');
   const [userSortDirection, setUserSortDirection] = useState<TableSortDirection>('asc');
 
@@ -686,54 +670,13 @@ export default function UsersPage() {
 
         {/* Search Input and Controls Row */}
         <motion.div variants={itemVariants} className="w-full relative z-10 flex items-center gap-2.5">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (appliedSearch && inputValue === appliedSearch) {
-                setInputValue('');
-                setAppliedSearch('');
-              } else if (inputValue.trim()) {
-                setAppliedSearch(inputValue.trim());
-              }
-            }}
-            className="relative flex-1 min-w-0 flex items-center"
-          >
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
-              <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
-            </div>
-            <input
-              type="text"
-              placeholder="Buscar por nombre, teléfono, rol o comité..."
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-32 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              autoComplete="off"
-            />
-            <div className="absolute inset-y-0 right-1.5 flex items-center z-10">
-              {appliedSearch !== '' ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputValue('');
-                    setAppliedSearch('');
-                  }}
-                  className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[16px]">close</span>
-                  <span>Limpiar</span>
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!inputValue.trim()}
-                  className="h-9 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:opacity-40 text-white rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-md shadow-blue-500/20"
-                >
-                  <span className="material-symbols-outlined text-[16px]">search</span>
-                  <span>Buscar</span>
-                </button>
-              )}
-            </div>
-          </form>
+          <SmartSearchBar
+            value={inputValue}
+            onValueChange={setInputValue}
+            onImmediateSearch={applySearch}
+            placeholder="Buscar por nombre, teléfono, rol o subcomité..."
+            className="flex-1"
+          />
 
           {/* Añadir button next to search bar with matching height */}
           <Button 
@@ -828,7 +771,7 @@ export default function UsersPage() {
                           <label className="block mb-1.5 text-xs font-extrabold text-text">Comité asignado</label>
                           <Select value={newCommittee} onValueChange={(v) => setNewCommittee(v || '')}>
                             <SelectTrigger className="w-full h-10 px-3 rounded-lg border border-border bg-dark3 text-text text-sm font-inter font-bold">
-                              <SelectValue placeholder="Selecciona un comité" />
+                              <SelectValue placeholder="Selecciona un subcomité" />
                             </SelectTrigger>
                             <SelectContent className="bg-dark2 border border-border text-text z-[200]">
                               {committeesList.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
@@ -1270,7 +1213,7 @@ export default function UsersPage() {
                     <div className="space-y-2">
                       <label className="block mb-1.5 text-xs font-extrabold text-text">Comité asignado</label>
                       <Select value={newCommittee} onValueChange={(v) => v && setNewCommittee(v)}>
-                        <SelectTrigger className="w-full h-10 border border-border bg-dark3 text-text font-inter font-bold px-3 rounded-lg"><SelectValue placeholder="Selecciona un comité" /></SelectTrigger>
+                        <SelectTrigger className="w-full h-10 border border-border bg-dark3 text-text font-inter font-bold px-3 rounded-lg"><SelectValue placeholder="Selecciona un subcomité" /></SelectTrigger>
                         <SelectContent className="bg-dark2 border border-border text-text z-[200]">
                           {committeesList.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
                         </SelectContent>

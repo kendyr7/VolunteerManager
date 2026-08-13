@@ -23,6 +23,9 @@ import { canViewVolunteerProfile } from "@/lib/permissions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { formatUnifiedDuration } from "@/lib/shift-calculations";
 import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
+import { SmartSearchBar } from "@/components/SmartSearchBar";
+import { useDebouncedSearch } from "@/lib/use-debounced-search";
+import { HighlightText } from "@/components/HighlightText";
 
 // Day names for week headers
 const DAY_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -137,8 +140,7 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<'history' | 'volunteers' | 'recruitment' | 'daily'>('history');
 
   // Filters State (Multi-Selection arrays)
-  const [inputValue, setInputValue] = useState("");
-  const appliedSearch = inputValue.trim();
+  const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
 
   // Table Column Sort States
   const [historySortField, setHistorySortField] = useState<HistorySortField | null>(null);
@@ -288,7 +290,7 @@ export default function ReportsPage() {
     const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     return new Map(items.map(item => [
       item.registrationId,
-      normalize(`${item.volunteerName} ${item.phone} ${item.neighborhood} ${item.stake}`),
+      normalize(`${item.volunteerName} ${item.phone} ${item.neighborhood} ${item.stake} ${item.committeeName} ${item.committeeId}`),
     ]));
   }, [items]);
 
@@ -320,12 +322,16 @@ export default function ReportsPage() {
   const filteredItems = useMemo(() => {
     if (items.length === 0) return [];
 
-    const normSearch = appliedSearch.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const searchTerms = appliedSearch
+      .split(',')
+      .map(term => term.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase())
+      .filter(Boolean);
 
     return items.filter(item => {
       // 1. Search term
-      if (normSearch) {
-        if (!itemSearchIndex.get(item.registrationId)?.includes(normSearch)) return false;
+      if (searchTerms.length > 0) {
+        const searchText = itemSearchIndex.get(item.registrationId) || '';
+        if (!searchTerms.every(term => searchText.includes(term))) return false;
       }
       
       // 2. Committee filter (check both ID and Name)
@@ -794,7 +800,7 @@ export default function ReportsPage() {
             }}
           >
             <SelectTrigger className="w-full h-11 bg-dark2 border-border text-xs text-text rounded-xl px-3 font-medium font-inter hover:border-border-strong transition-all outline-none">
-              <SelectValue placeholder="Todos los comités">
+              <SelectValue placeholder="Todos los subcomités">
                 {data.uniqueCommittees.find(c => c.id === selectedCommittees[0])?.name}
               </SelectValue>
             </SelectTrigger>
@@ -1001,51 +1007,16 @@ export default function ReportsPage() {
         </div>
 
         {/* Search Input with inline Buscar / Limpiar button */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
+        <SmartSearchBar
+          value={inputValue}
+          onValueChange={setInputValue}
+          onImmediateSearch={value => {
+            applySearch(value);
             setCurrentPage(1);
           }}
-          className="w-full relative z-10"
-        >
-          <div className="relative w-full flex items-center">
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
-              <span className="material-symbols-outlined text-text-dim text-[20px]">search</span>
-            </div>
-            <input
-              type="text"
-              placeholder="Buscar voluntario por nombre, teléfono, barrio o estaca..."
-              className="w-full bg-dark2 border border-border text-text placeholder:text-text-dim rounded-full pl-12 pr-32 py-3.5 focus:outline-none focus:ring-2 focus:ring-[#4d7cfe]/30 transition-all text-[13px] font-bold font-inter h-[48px]"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              autoComplete="off"
-            />
-            <div className="absolute inset-y-0 right-1.5 flex items-center z-10">
-              {appliedSearch !== '' ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputValue('');
-                    setCurrentPage(1);
-                  }}
-                  className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[16px]">close</span>
-                  <span>Limpiar</span>
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!inputValue.trim()}
-                  className="h-9 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:opacity-40 text-white rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-md shadow-blue-500/20"
-                >
-                  <span className="material-symbols-outlined text-[16px]">search</span>
-                  <span>Buscar</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </form>
+          placeholder="Buscar por nombre, teléfono, barrio, estaca o subcomité..."
+          className="z-10"
+        />
       </div>
 
       <div className="flex-1 px-4 sm:px-6 lg:px-8 w-full">
@@ -1411,10 +1382,10 @@ export default function ReportsPage() {
                         {paginatedHistoryItems.map((item) => (
                           <tr key={item.registrationId} className="hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors group">
                             <td className="px-5 py-4">
-                              <p className="font-inter font-bold text-text text-sm tracking-tight">{item.volunteerName}</p>
+                              <p className="font-inter font-bold text-text text-sm tracking-tight"><HighlightText text={item.volunteerName} term={appliedSearch} /></p>
                               <p className="text-[11px] text-text-dim font-inter font-bold mt-0.5">{item.phone}</p>
                             </td>
-                            <td className="px-4 py-4 font-inter font-bold text-[13px] text-text-dim">{item.committeeName}</td>
+                            <td className="px-4 py-4 font-inter font-bold text-[13px] text-text-dim"><HighlightText text={item.committeeName} term={appliedSearch} /></td>
                             <td className="px-4 py-4 font-inter">
                               <p className="leading-snug text-text font-inter font-bold text-[13px]">{item.neighborhood}</p>
                               <p className="text-[11px] font-inter font-bold text-text-dim opacity-70 mt-0.5">{item.stake}</p>
@@ -1449,11 +1420,11 @@ export default function ReportsPage() {
                       <div key={item.registrationId} className="px-4 py-3.5 flex flex-col gap-1.5 hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                         {/* Line 1: Volunteer Name + Committee & Stake Badges */}
                         <div className="flex items-center justify-between gap-2 w-full">
-                          <p className="font-inter font-bold text-text text-sm tracking-tight truncate">{item.volunteerName}</p>
+                          <p className="font-inter font-bold text-text text-sm tracking-tight truncate"><HighlightText text={item.volunteerName} term={appliedSearch} /></p>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {item.committeeName && (
                               <Badge variant="outline" className={`font-inter font-bold text-[10px] py-0.5 px-2 border ${getCommitteeColor(item.committeeName)}`}>
-                                {item.committeeName}
+                                <HighlightText text={item.committeeName} term={appliedSearch} />
                               </Badge>
                             )}
                             {item.stake && (

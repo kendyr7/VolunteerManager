@@ -7,7 +7,7 @@ import { canQrCheckin } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
-import { cn } from "@/lib/utils";
+import { cn, normalizeSearch } from "@/lib/utils";
 import { getActiveEventDays, formatDateShort, getOfficialShiftTime } from "@/lib/dates";
 import {
   DropdownMenu,
@@ -20,6 +20,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
+import { SmartSearchBar } from "@/components/SmartSearchBar";
+import { useDebouncedSearch } from "@/lib/use-debounced-search";
+import { HighlightText } from "@/components/HighlightText";
 
 import { AdminSessionCorrectionModal } from "@/components/AdminSessionCorrectionModal";
 
@@ -164,7 +167,7 @@ export function CheckInScanner({
   const [historyTab, setHistoryTab] = useState<'db' | 'session'>('db');
   const [dbHistory, setDbHistory] = useState<ScanEntry[]>([]);
   const [loadingDbHistory, setLoadingDbHistory] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const { inputValue: searchInput, setInputValue: setSearchInput, appliedSearch: searchQuery, applySearch } = useDebouncedSearch();
   const [selectedDayFilter, setSelectedDayFilter] = useState("all");
 
   const fetchDbHistory = useCallback(async () => {
@@ -261,11 +264,9 @@ export function CheckInScanner({
       return item;
     }).filter(item => {
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchName = item.volunteer.toLowerCase().includes(q);
-        const matchComm = item.committee.toLowerCase().includes(q);
-        const matchShift = (item.shiftDetail || '').toLowerCase().includes(q);
-        if (!matchName && !matchComm && !matchShift) return false;
+        const searchText = normalizeSearch(`${item.volunteer} ${item.committee} ${item.shiftDetail || ''}`);
+        const searchTerms = searchQuery.split(',').map(term => normalizeSearch(term.trim())).filter(Boolean);
+        if (!searchTerms.every(term => searchText.includes(term))) return false;
       }
       if (selectedDayFilter !== 'all') {
         const dayPart = item.shiftDetail ? item.shiftDetail.split(' - ')[0].trim().toLowerCase() : '';
@@ -1419,27 +1420,14 @@ export function CheckInScanner({
 
                   {/* Search Bar */}
                   <div className="flex gap-2 w-full">
-                    <div className="flex-1 relative flex items-center">
-                      <span className="material-symbols-outlined absolute left-4 text-[18px] text-text-dim pointer-events-none">
-                        search
-                      </span>
-                      <input
-                        type="text"
-                        placeholder="Buscar por voluntario, comité o turno..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-11 pr-10 py-2.5 text-xs font-bold font-inter focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 h-[44px]"
-                      />
-                      {searchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setSearchQuery("")}
-                          className="absolute right-3 text-text-dim hover:text-text p-1 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">close</span>
-                        </button>
-                      )}
-                    </div>
+                    <SmartSearchBar
+                      value={searchInput}
+                      onValueChange={setSearchInput}
+                      onImmediateSearch={applySearch}
+                      placeholder="Buscar por voluntario, subcomité o turno..."
+                      className="flex-1"
+                      inputClassName="h-11"
+                    />
 
                     {historyTab === 'db' && (
                       <button
@@ -1604,7 +1592,7 @@ export function CheckInScanner({
                                                             entry.type === 'already_checked_in' ? 'text-amber-400 font-extrabold' :
                                                             'text-rose-400 font-extrabold'
                                                           }`}>
-                                                            {entry.type === 'error' ? '—' : entry.volunteer}
+                                                            {entry.type === 'error' ? '—' : <HighlightText text={entry.volunteer} term={searchQuery} />}
                                                           </span>
                                                           <span className={`font-inter font-bold text-[9px] leading-tight truncate ${
                                                             entry.isCompleted
@@ -1819,7 +1807,7 @@ export function CheckInScanner({
                                     }`}
                                     title="Ver perfil completo del voluntario"
                                   >
-                                    {entry.type === 'error' ? '—' : entry.volunteer}
+                                    {entry.type === 'error' ? '—' : <HighlightText text={entry.volunteer} term={searchQuery} />}
                                   </span>
                                   <span className={`font-inter font-bold text-[9px] leading-tight truncate ${
                                     entry.isCompleted

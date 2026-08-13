@@ -430,7 +430,7 @@ export function VolunteerProfileDrawer({
                       </label>
                       <Select value={editCommitteeId} onValueChange={(v) => v && setEditCommitteeId(v)}>
                         <SelectTrigger className="w-full h-11 border border-border bg-dark3 text-text font-inter font-bold flex items-center justify-between px-3.5 rounded-xl text-xs focus:border-[#4d7cfe] focus:ring-1 focus:ring-[#4d7cfe]">
-                          <SelectValue placeholder="Selecciona un comité">
+                          <SelectValue placeholder="Selecciona un subcomité">
                             {committeesList.find((c: any) => c.id === editCommitteeId || c.name === editCommitteeId)?.name}
                           </SelectValue>
                         </SelectTrigger>

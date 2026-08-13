@@ -17,7 +17,6 @@ import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { checkOutVolunteer, adjustCheckoutTimeAction } from "@/app/actions/attendance";
 import { undoVolunteerCheckInAction } from "@/app/actions/audit-actions";
 import { motion, AnimatePresence } from "framer-motion";
-import { useSearch } from "@/lib/search-context";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn, normalizeSearch } from "@/lib/utils";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
@@ -26,6 +25,9 @@ import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 import { updateVolunteerAction, saveShiftsAction } from "@/app/actions/volunteer-actions";
+import { SmartSearchBar } from "@/components/SmartSearchBar";
+import { HighlightText } from "@/components/HighlightText";
+import { useDebouncedSearch } from "@/lib/use-debounced-search";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -134,23 +136,6 @@ const getProfileBg = (committee: string) => {
 };
 
 // ─── helper: highlight search term ─────────────────────────────────────────
-function HighlightText({ text, term }: { text: string; term: string }) {
-  if (!term.trim()) return <span>{text}</span>;
-  const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-  const parts = text.split(regex);
-  return (
-    <span>
-      {parts.map((part, i) =>
-        regex.test(part) ? (
-          <span key={i} style={{ backgroundColor: '#fde047', color: '#111827', borderRadius: '6px', padding: '0 4px', display: 'inline', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone' }}>{part}</span>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </span>
-  );
-}
-
 // ─── página ───────────────────────────────────────────────────────────────────
 export default function ShiftsPage() {
   const EVENT_DAYS_RAW = getActiveEventDays();
@@ -162,8 +147,7 @@ export default function ShiftsPage() {
   })), [EVENT_DAYS_RAW]);
 
   // Estados de filtros
-  const [inputValue, setInputValue] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
+  const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
@@ -194,14 +178,6 @@ export default function ShiftsPage() {
     loading,
     refresh,
   } = useCoordinatorData();
-
-  // Debounce search input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setAppliedSearch(inputValue);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [inputValue]);
 
   // Map raw volunteers to the local VolunteerType shape
   const volunteers = useMemo<VolunteerType[]>(
@@ -235,6 +211,25 @@ export default function ShiftsPage() {
 
   // rawShiftsData comes directly from the shared coordinator context (no local fetch)
   const rawShiftsData = contextShiftsData;
+
+  const shiftDataIndex = useMemo(() => {
+    const records = new Map<string, (typeof rawShiftsData)[number]>();
+    const volunteerIdsByShift = new Map<string, Set<string>>();
+
+    rawShiftsData.forEach(record => {
+      const dayShiftKey = `${normalizeSearch(record.day_key)}|${record.shift_key}`;
+      records.set(`${record.volunteer_id}|${dayShiftKey}`, record);
+      const volunteerIds = volunteerIdsByShift.get(dayShiftKey) || new Set<string>();
+      volunteerIds.add(record.volunteer_id);
+      volunteerIdsByShift.set(dayShiftKey, volunteerIds);
+    });
+
+    return { records, volunteerIdsByShift };
+  }, [rawShiftsData]);
+
+  const getShiftRecord = useCallback((volunteerId: string, dayKey: string, shiftKey: string) => {
+    return shiftDataIndex.records.get(`${volunteerId}|${normalizeSearch(dayKey)}|${shiftKey}`);
+  }, [shiftDataIndex]);
 
   const EVENT_DAYS = useMemo(() => {
     const existingKeys = new Set(EVENT_DAYS_DEFAULT.map(d => d.key.toLowerCase()));
@@ -512,14 +507,14 @@ export default function ShiftsPage() {
 
     const searchTerms = searchStr.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
     const normName = normalizeSearch(v.name);
-    const normPhone = v.phone || '';
+    const normPhone = normalizeSearch(v.phone);
     const normCommittee = normalizeSearch(v.committee);
     const normStake = normalizeSearch(v.stake);
     const normWard = normalizeSearch(v.ward);
 
     const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
       normName.includes(term) ||
-      normPhone.includes(searchStr) ||
+      normPhone.includes(term) ||
       normCommittee.includes(term) ||
       normStake.includes(term) ||
       normWard.includes(term)
@@ -541,9 +536,7 @@ export default function ShiftsPage() {
     const dayAssignments = contextIndexedAssignments[dateKey]?.[shiftId] || {};
     const assignedIdsFromProps = Object.values(dayAssignments).flat();
 
-    const dbShiftVols = rawShiftsData
-      .filter(s => (s.day_key === dateKey || (s.day_key && dateKey && s.day_key.toLowerCase() === dateKey.toLowerCase())) && s.shift_key === shiftId)
-      .map(s => s.volunteer_id);
+    const dbShiftVols = shiftDataIndex.volunteerIdsByShift.get(`${normalizeSearch(dateKey)}|${shiftId}`) || [];
 
     const allCandidateIds = Array.from(new Set([...assignedIdsFromProps, ...dbShiftVols]));
     const result: VolunteerType[] = [];
@@ -553,7 +546,7 @@ export default function ShiftsPage() {
       if (!vol) continue;
 
       if (matchesFilters(vol, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole)) {
-        const s = rawShiftsData.find(r => r.volunteer_id === vol.id && (r.day_key === dateKey || (r.day_key && dateKey && r.day_key.toLowerCase() === dateKey.toLowerCase())) && r.shift_key === shiftId);
+        const s = getShiftRecord(vol.id, dateKey, shiftId);
         const completedLocal = completedShiftsMap[`${vol.id}-${dateKey}-${shiftId}`];
         const isCheckedIn = !!(s && (s.checked_in || s.checked_in_at)) || contextCheckedInMap[`${vol.id}-${dateKey}-${shiftId}`];
         const isCheckedOut = !!(s && (s.checked_out || s.checked_out_at)) || !!completedLocal;
@@ -571,7 +564,7 @@ export default function ShiftsPage() {
     }
 
     return result.sort((a, b) => a.committee.localeCompare(b.committee));
-  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, rawShiftsData, matchesFilters, completedShiftsMap, contextCheckedInMap]);
+  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, completedShiftsMap, contextCheckedInMap, getShiftRecord]);
 
   const handleStartEditProfile = (vol: VolunteerType) => {
     const parts = (vol.name || '').trim().split(/\s+/);
@@ -686,7 +679,7 @@ export default function ShiftsPage() {
   const isVolunteerAssignedToShift = (vol: VolunteerType, dateKey: string, shiftId: string) => {
     const shifts = globalShifts[vol.id];
     const isAssigned = !!(shifts && shifts[dateKey] && shifts[dateKey].includes(shiftId));
-    const hasShiftRecord = rawShiftsData.some(r => r.volunteer_id === vol.id && r.day_key === dateKey && r.shift_key === shiftId);
+    const hasShiftRecord = Boolean(getShiftRecord(vol.id, dateKey, shiftId));
     return isAssigned || hasShiftRecord;
   };
 
@@ -747,14 +740,14 @@ export default function ShiftsPage() {
 
       const searchTerms = appliedSearch.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
       const normName = normalizeSearch(v.name);
-      const normPhone = v.phone || '';
+      const normPhone = normalizeSearch(v.phone);
       const normCommittee = normalizeSearch(v.committee);
       const normStake = normalizeSearch(v.stake);
       const normWard = normalizeSearch(v.ward);
 
       const matchesSearch = searchTerms.length === 0 || searchTerms.every(term =>
         normName.includes(term) ||
-        normPhone.includes(appliedSearch) ||
+        normPhone.includes(term) ||
         normCommittee.includes(term) ||
         normStake.includes(term) ||
         normWard.includes(term)
@@ -1155,7 +1148,7 @@ export default function ShiftsPage() {
                 let count = shiftData[t].length;
                 if (viewMode === 'active') {
                   count = shiftData[t].filter(vol => {
-                    const s = rawShiftsData.find(r => r.volunteer_id === vol.id && r.day_key === key && r.shift_key === t);
+                    const s = getShiftRecord(vol.id, key, t);
                     const isCompletedLocal = !!completedShiftsMap[`${vol.id}-${key}-${t}`];
                     const isCheckedOut = s?.checked_out || isCompletedLocal;
                     return !!(s && s.checked_in && !isCheckedOut);
@@ -1273,7 +1266,7 @@ export default function ShiftsPage() {
                           <>
                             <div className="space-y-1">
                               {displayedVols.map(vol => {
-                                const shiftRecord = rawShiftsData.find(s => s.volunteer_id === vol.id && s.day_key === key && s.shift_key === t);
+                                const shiftRecord = getShiftRecord(vol.id, key, t);
                                 const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
                                 const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
                                 const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
@@ -1334,7 +1327,7 @@ export default function ShiftsPage() {
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
                                       <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
-                                        {vol.committee}
+                                        <HighlightText text={vol.committee} term={appliedSearch} />
                                       </Badge>
 
                                       {isCheckedIn && !isCheckedOut ? (
@@ -1591,7 +1584,7 @@ export default function ShiftsPage() {
                               ) : (
                                 (isShiftExpanded ? vols : vols.slice(0, limit)).map(vol => {
                                   const isMatch = appliedSearch.trim() !== '' && vol.name.toLowerCase().includes(appliedSearch.toLowerCase());
-                                  const shiftRecord = rawShiftsData.find(s => s.volunteer_id === vol.id && s.day_key === key && s.shift_key === t);
+                                  const shiftRecord = getShiftRecord(vol.id, key, t);
                                   const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
                                   const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
                                   const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
@@ -1705,7 +1698,7 @@ export default function ShiftsPage() {
                                             <span className="material-symbols-outlined text-[15px]">sync_alt</span>
                                           </button>
                                           <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
-                                            {vol.committee}
+                                            <HighlightText text={vol.committee} term={appliedSearch} />
                                           </Badge>
                                         </div>
                                       )}
@@ -1812,54 +1805,12 @@ export default function ShiftsPage() {
 
         {/* Search Input matching image */}
         <motion.div variants={itemVariants} className="w-full relative z-10">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (appliedSearch && inputValue === appliedSearch) {
-                setInputValue('');
-                setAppliedSearch('');
-              } else if (inputValue.trim()) {
-                setAppliedSearch(inputValue.trim());
-              }
-            }}
-            className="relative w-full flex items-center"
-          >
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none z-10">
-              <span className="material-symbols-outlined text-black/40 dark:text-white/70 text-[20px]">search</span>
-            </div>
-            <input
-              type="text"
-              placeholder={viewMode === 'active' ? "Buscar voluntario en turno..." : "Buscar por voluntario, grupo o barrio..."}
-              className="w-full bg-black/5 dark:bg-[#fff6] border border-black/10 dark:border-white/10 text-black dark:text-white placeholder:text-black/50 dark:placeholder:text-white/70 rounded-full pl-12 pr-32 py-3.5 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 transition-all text-[13px] font-bold font-inter h-[48px]"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              autoComplete="off"
-            />
-            <div className="absolute inset-y-0 right-1.5 flex items-center z-10">
-              {appliedSearch !== '' ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputValue('');
-                    setAppliedSearch('');
-                  }}
-                  className="h-9 px-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[16px]">close</span>
-                  <span>Limpiar</span>
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!inputValue.trim()}
-                  className="h-9 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:opacity-40 text-white rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-md shadow-blue-500/20"
-                >
-                  <span className="material-symbols-outlined text-[16px]">search</span>
-                  <span>Buscar</span>
-                </button>
-              )}
-            </div>
-          </form>
+          <SmartSearchBar
+            value={inputValue}
+            onValueChange={setInputValue}
+            onImmediateSearch={applySearch}
+            placeholder={viewMode === 'active' ? "Buscar por voluntario o subcomité en turno..." : "Buscar por voluntario, subcomité o barrio..."}
+          />
         </motion.div>
       </div>
 
