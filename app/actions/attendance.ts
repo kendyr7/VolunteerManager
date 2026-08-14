@@ -1,6 +1,5 @@
 'use server'
 
-import crypto from "crypto";
 import { createActivityLog } from "./activity-actions";
 import { createClient, getAdminClient } from "@/lib/supabase/server";
 import { format } from "date-fns";
@@ -19,6 +18,7 @@ import {
   fetchAllAttendanceSessionsFromDb,
   completeOpenAttendanceSessionInDb,
 } from "@/lib/services/session-store";
+import { createEntryPassPayload, validateEntryPassQrValue } from "@/lib/entry-pass";
 
 export async function getAttendanceSessionsAction(): Promise<AttendanceSession[]> {
   const authorization = await requireCapability('view_volunteers');
@@ -34,14 +34,6 @@ export async function getAttendanceSessionsAction(): Promise<AttendanceSession[]
     .neq('status', 'archived');
   const allowedIds = new Set((volunteers || []).map((volunteer: { id: string }) => volunteer.id));
   return sessions.filter(session => allowedIds.has(session.volunteer_id));
-}
-
-function getSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("La variable de entorno JWT_SECRET no está configurada.");
-  }
-  return secret;
 }
 
 // Safely update checked_in status on shifts table, protecting against FK constraint errors on checked_in_by
@@ -191,15 +183,12 @@ export async function generateEntryPassToken(volunteerId: string) {
     throw new Error("No tienes permiso para generar el pase QR de este voluntario. Solo administradores pueden generar pases de otros usuarios.");
   }
 
-  const timestamp = Date.now();
-  const hmac = crypto.createHmac("sha256", getSecret());
-  hmac.update(`${volunteerId}:${timestamp}`);
-  const signature = hmac.digest("hex");
+  const payload = createEntryPassPayload(volunteerId);
 
   return {
-    volunteerId,
-    timestamp,
-    signature
+    volunteerId: payload.id,
+    timestamp: payload.ts,
+    signature: payload.sig,
   };
 }
 
@@ -782,31 +771,9 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
   }
 
   // standard QR scan flow
-  try {
-    const payload = JSON.parse(qrValueString);
-    const { id, ts, sig } = payload;
-
-    if (!id || !ts || !sig) {
-      return { error: "Código QR inválido. Formato no compatible." };
-    }
-
-    const hmac = crypto.createHmac("sha256", getSecret());
-    hmac.update(`${id}:${ts}`);
-    const expectedSig = hmac.digest("hex");
-
-    if (sig !== expectedSig) {
-      return { error: "Código QR no válido o alterado." };
-    }
-
-    const elapsed = Date.now() - ts;
-    if (elapsed > 30 * 60 * 1000 || elapsed < -5 * 60 * 1000) {
-      return { error: "El código QR ha expirado. Por favor, solicite al voluntario actualizar su pantalla." };
-    }
-
-    volunteerId = id;
-  } catch (e) {
-    return { error: "Error al leer el código QR. Formato inválido." };
-  }
+  const validation = validateEntryPassQrValue(qrValueString);
+  if (!validation.success) return { error: validation.error };
+  volunteerId = validation.payload.id;
 
   // Fetch volunteer details
   const { data: volunteer, error: volError } = await supabase

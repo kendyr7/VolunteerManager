@@ -107,13 +107,19 @@ function getMetaCredentials() {
   return { token, phoneNumberId };
 }
 
-function getMessagesUrl(phoneNumberId: string): string {
+function getGraphVersion(): string {
   const configuredVersion = process.env.WHATSAPP_GRAPH_VERSION?.trim() || 'v20.0';
-  const graphVersion = configuredVersion.startsWith('v')
+  return configuredVersion.startsWith('v')
     ? configuredVersion
     : `v${configuredVersion}`;
+}
 
-  return `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`;
+function getMessagesUrl(phoneNumberId: string): string {
+  return `https://graph.facebook.com/${getGraphVersion()}/${phoneNumberId}/messages`;
+}
+
+function getMediaUrl(phoneNumberId: string): string {
+  return `https://graph.facebook.com/${getGraphVersion()}/${phoneNumberId}/media`;
 }
 
 /**
@@ -228,6 +234,91 @@ export async function sendWhatsAppText(options: {
     return { success: true, messageId: data.messages?.[0]?.id };
   } catch (err: any) {
     return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Upload an image to Meta and send it by media ID inside the customer-service window.
+ */
+export async function sendWhatsAppImageBuffer(options: {
+  to: string;
+  image: Buffer;
+  caption?: string;
+  filename?: string;
+}): Promise<{ success: boolean; messageId?: string; mediaId?: string; error?: string }> {
+  if (!isWhatsAppEnabled()) {
+    return { success: false, error: 'WhatsApp messaging is temporarily paused by configuration.' };
+  }
+
+  const { token, phoneNumberId } = getMetaCredentials();
+  if (!token || !phoneNumberId) {
+    return { success: false, error: 'Missing WhatsApp Credentials' };
+  }
+
+  const uploadForm = new FormData();
+  uploadForm.append('messaging_product', 'whatsapp');
+  uploadForm.append('type', 'image/png');
+  uploadForm.append(
+    'file',
+    new Blob([Uint8Array.from(options.image)], { type: 'image/png' }),
+    options.filename || 'pase-qr.png',
+  );
+
+  try {
+    const uploadResponse = await fetch(getMediaUrl(phoneNumberId), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: uploadForm,
+    });
+    const uploadData = await uploadResponse.json();
+    const mediaId = uploadData.id as string | undefined;
+
+    if (!uploadResponse.ok || !mediaId) {
+      console.error('Meta WhatsApp Media Upload Error:', uploadData);
+      return {
+        success: false,
+        error: uploadData.error?.message || 'Error subiendo la imagen a WhatsApp',
+      };
+    }
+
+    const sendResponse = await fetch(getMessagesUrl(phoneNumberId), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: formatE164Phone(options.to),
+        type: 'image',
+        image: {
+          id: mediaId,
+          caption: options.caption?.slice(0, 1024),
+        },
+      }),
+    });
+    const sendData = await sendResponse.json();
+
+    if (!sendResponse.ok) {
+      console.error('Meta WhatsApp Image Send Error:', sendData);
+      return {
+        success: false,
+        mediaId,
+        error: sendData.error?.message || 'Error enviando la imagen por WhatsApp',
+      };
+    }
+
+    return {
+      success: true,
+      mediaId,
+      messageId: sendData.messages?.[0]?.id,
+    };
+  } catch (error: unknown) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error de conexión con WhatsApp',
+    };
   }
 }
 

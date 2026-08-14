@@ -8,6 +8,7 @@ import {
 } from '@/lib/dates';
 import {
   sendWhatsAppText,
+  sendWhatsAppImageBuffer,
   sendWhatsAppInteractiveButtons,
   sendWhatsAppInteractiveList,
   isWhatsAppEnabled
@@ -23,6 +24,12 @@ import {
   persistWhatsAppMessageStatus,
 } from '@/lib/services/whatsapp-status-store';
 import type { MetaWhatsAppStatus } from '@/lib/services/whatsapp-status-store';
+import { createEntryPassPayload } from '@/lib/entry-pass';
+import { createQrPngBuffer } from '@/lib/qr-code-image';
+import {
+  closeWhatsAppConversation,
+  touchWhatsAppConversation,
+} from '@/lib/services/whatsapp-conversation-store';
 
 export const runtime = 'nodejs';
 
@@ -90,6 +97,17 @@ const CHANGE_REASONS: Record<string, string> = {
   transport: 'Dificultad de transporte',
   schedule: 'Conflicto con otro horario',
 };
+const CONVERSATION_CLOSE_PHRASES = new Set([
+  'gracias',
+  'muchas gracias',
+  'eso es todo',
+  'finalizar',
+  'finalizar conversacion',
+  'cerrar',
+  'cerrar conversacion',
+  'salir',
+  'adios',
+]);
 
 function encodeAction(volunteerId: string, action: string, ...args: string[]): string {
   return [ACTION_PREFIX, volunteerId, action, ...args.map(encodeURIComponent)].join('|');
@@ -112,6 +130,18 @@ function parseAction(value: string): ScopedAction | null {
 
 function firstGivenName(name?: string | null): string {
   return name?.trim().split(/\s+/)[0] || 'Voluntario';
+}
+
+function isConversationClosingText(value: string): boolean {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[.!¡¿?]+$/g, '')
+    .trim();
+
+  return CONVERSATION_CLOSE_PHRASES.has(normalized);
 }
 
 function volunteerFullName(volunteer: VolunteerRecord): string {
@@ -281,7 +311,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       : messageType === 'button'
         ? message.button?.payload || message.button?.text || ''
         : '';
-    const scopedAction = parseAction(incomingActionId);
+    let scopedAction = parseAction(incomingActionId);
 
     if (!rawFrom || !messageType || !wamid) {
       console.warn('[WHATSAPP WEBHOOK] Ignoring malformed message without sender, type or wamid.');
@@ -292,6 +322,34 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
 
     const supabase = getAdminClient();
     const senderDigits = rawFrom.replace(/\D/g, '');
+
+    if (messageType === 'text' && isConversationClosingText(message.text?.body || '')) {
+      try {
+        await closeWhatsAppConversation(supabase, senderDigits, 'closing_phrase');
+      } catch (sessionError) {
+        console.error('[WHATSAPP WEBHOOK] Could not persist conversation closure.', {
+          senderPhone: senderDigits,
+          error: sessionError instanceof Error ? sessionError.message : String(sessionError),
+        });
+      }
+      await sendWhatsAppText({
+        to: rawFrom,
+        text: 'Con gusto. Hemos finalizado esta atención. Cuando necesites algo más, vuelve a escribirnos. 👋',
+      });
+      return NextResponse.json({ status: 'success', conversation: 'closed' }, { status: 200 });
+    }
+
+    let restartedConversation = false;
+    try {
+      restartedConversation = await touchWhatsAppConversation(supabase, senderDigits) === 'restarted';
+    } catch (sessionError) {
+      console.error('[WHATSAPP WEBHOOK] Could not update conversation inactivity timeout.', {
+        senderPhone: senderDigits,
+        error: sessionError instanceof Error ? sessionError.message : String(sessionError),
+      });
+    }
+
+    if (restartedConversation) scopedAction = null;
 
     // 1. Identify Volunteer / User in database
     let targetVolId: string | null = null;
@@ -394,7 +452,11 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
     // Extract payload IDs or typed numbers
     let interactiveId = '';
 
-    if (scopedAction) {
+    if (restartedConversation) {
+      // Ignore actions from a menu whose 30-minute session already expired.
+      // The default branch below will present a fresh menu.
+      interactiveId = '';
+    } else if (scopedAction) {
       const [arg1 = '', arg2 = '', arg3 = '', arg4 = '', arg5 = ''] = scopedAction.args;
       if (scopedAction.action === 'confirm') interactiveId = 'menu_confirm_shift';
       else if (scopedAction.action === 'confirm_page') interactiveId = `confirm_page_${arg1}`;
@@ -409,6 +471,8 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       else if (scopedAction.action === 'reschedule_to') interactiveId = `reschedule_to_${arg1}__${arg2}__${arg3}__${arg4}`;
       else if (scopedAction.action === 'reschedule_reason') interactiveId = `reschedule_reason_${arg1}__${arg2}__${arg3}__${arg4}__${arg5}`;
       else if (scopedAction.action === 'contact') interactiveId = 'menu_contact_coordinator';
+      else if (scopedAction.action === 'qr') interactiveId = 'menu_generate_qr';
+      else if (scopedAction.action === 'end') interactiveId = 'menu_end_session';
     } else if (messageType === 'interactive') {
       const interactive = message.interactive;
       if (interactive?.type === 'list_reply') {
@@ -428,10 +492,76 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
         interactiveId = 'menu_reschedule';
       } else if (textContent === '4' || textContent.includes('contactar coordinador') || textContent.includes('coordinador')) {
         interactiveId = 'menu_contact_coordinator';
+      } else if (textContent === '5' || textContent.includes('codigo qr') || textContent.includes('código qr') || textContent === 'qr') {
+        interactiveId = 'menu_generate_qr';
+      } else if (textContent === '6' || textContent.includes('finalizar conversacion') || textContent.includes('finalizar conversación')) {
+        interactiveId = 'menu_end_session';
       }
     }
 
     // 2. Process Actions
+    if (interactiveId === 'menu_end_session') {
+      try {
+        await closeWhatsAppConversation(supabase, senderDigits, 'user_requested');
+      } catch (sessionError) {
+        console.error('[WHATSAPP WEBHOOK] Could not persist conversation closure.', {
+          senderPhone: senderDigits,
+          error: sessionError instanceof Error ? sessionError.message : String(sessionError),
+        });
+      }
+      await sendWhatsAppText({
+        to: rawFrom,
+        text: `Gracias${targetVolId ? `, ${firstName}` : ''}. Hemos finalizado esta atención. Cuando necesites algo más, vuelve a escribirnos. 👋`,
+      });
+      return NextResponse.json({ status: 'success', conversation: 'closed' }, { status: 200 });
+    }
+
+    if (interactiveId === 'menu_generate_qr') {
+      if (!targetVolId) {
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: 'No encontramos un perfil activo asociado a este número para generar el pase QR.',
+        });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      const passPayload = createEntryPassPayload(targetVolId);
+      const qrImage = createQrPngBuffer(JSON.stringify(passPayload));
+      const imageResult = await sendWhatsAppImageBuffer({
+        to: rawFrom,
+        image: qrImage,
+        filename: `pase-qr-${targetVolId}.png`,
+        caption: `🎟️ *Pase QR de ${selectedVolunteerName}*\n\nMuéstralo al coordinador al llegar. Este código es personal y vence en 30 minutos.`,
+      });
+
+      if (!imageResult.success) {
+        console.error('[WHATSAPP WEBHOOK] Could not send volunteer QR image.', {
+          volunteerId: targetVolId,
+          error: imageResult.error,
+        });
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: `${firstName}, no pudimos generar tu imagen QR en este momento. Inténtalo nuevamente o abre tu perfil en la plataforma.`,
+        });
+        return NextResponse.json({ status: 'success', qr: 'failed' }, { status: 200 });
+      }
+
+      await writeWhatsAppVolunteerAudit(supabase, {
+        volunteerId: targetVolId,
+        volunteerName: selectedVolunteerName,
+        actionType: 'Pase QR',
+        description: 'Generó su pase QR desde WhatsApp',
+        wamid,
+        context: {
+          channel: 'WhatsApp',
+          expiresInMinutes: 30,
+          whatsappMessageId: imageResult.messageId || null,
+        },
+      });
+
+      return NextResponse.json({ status: 'success', qr: 'sent' }, { status: 200 });
+    }
+
     if (interactiveId === 'menu_confirm_shift' || interactiveId.startsWith('confirm_')) {
       // OPTION 1: Confirmar mi turno
       if (!targetVolId) {
@@ -1131,6 +1261,16 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
               id: encodeAction(targetVolId, 'contact'),
               title: 'Contactar coordinador',
               description: 'Consulta el contacto de tu comité'
+            },
+            {
+              id: encodeAction(targetVolId, 'qr'),
+              title: 'Generar mi código QR',
+              description: 'Recibe la imagen de tu pase de entrada'
+            },
+            {
+              id: encodeAction(targetVolId, 'end'),
+              title: 'Finalizar conversación',
+              description: 'Cierra esta atención por WhatsApp'
             }
           ]
         }
@@ -1141,7 +1281,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       console.warn("Main Interactive List failed, sending plain text fallback:", mainListRes.error);
       await sendWhatsAppText({
         to: rawFrom,
-        text: `Hola ${firstName}, ¿cómo podemos ayudarte el día de hoy?\n\n1. Confirmar asistencia\n2. Consultar mis turnos\n3. Solicitar un cambio\n4. Contactar a mi coordinador`
+        text: `Hola ${firstName}, ¿cómo podemos ayudarte el día de hoy?\n\n1. Confirmar asistencia\n2. Consultar mis turnos\n3. Solicitar un cambio\n4. Contactar a mi coordinador\n5. Generar mi código QR\n6. Finalizar conversación`
       });
     }
 
