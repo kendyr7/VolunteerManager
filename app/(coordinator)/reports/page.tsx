@@ -26,6 +26,7 @@ import { SortableTableHead, TableSortDirection } from "@/components/SortableTabl
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
+import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 
 // Day names for week headers
 const DAY_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -186,6 +187,10 @@ export default function ReportsPage() {
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+  const { drawerRef: filterDrawerRef, scrollAreaRef: filterScrollRef } = useMobileDrawerNavigation({
+    isOpen: isFilterDrawerOpen,
+    onClose: () => setIsFilterDrawerOpen(false),
+  });
   const [isMobile, setIsMobile] = useState(false);
 
   // Pagination State (30 items per page for instant 1ms DOM rendering)
@@ -1121,11 +1126,12 @@ export default function ReportsPage() {
 
         {/* Drawer Content Panel */}
         <div
+          ref={filterDrawerRef}
           id="drawer-filters"
           className={cn(
             "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 border-border",
             isMobile
-              ? `w-full h-[90dvh] rounded-t-[40px] shadow-2xl border-t ${isFilterDrawerOpen ? 'translate-y-0' : 'translate-y-full'}`
+              ? `w-full h-[90dvh] max-h-[calc(100dvh-env(safe-area-inset-top)-12px)] rounded-t-[40px] pb-[env(safe-area-inset-bottom)] shadow-2xl border-t ${isFilterDrawerOpen ? 'translate-y-0' : 'translate-y-full'}`
               : `w-[440px] h-full shadow-2xl border-l ${isFilterDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`
           )}
           style={{ willChange: 'transform' }}
@@ -1159,39 +1165,8 @@ export default function ReportsPage() {
 
             {/* Filter Content with touch-to-drag dismiss on mobile */}
             <div
+              ref={filterScrollRef}
               className="flex-1 overflow-y-auto scrollbar-hide px-6 py-6 space-y-6 overscroll-contain"
-              onTouchStart={(e) => {
-                if (!isMobile) return;
-                const drawer = document.getElementById('drawer-filters');
-                if (!drawer) return;
-                drawer.dataset.startY = e.touches[0].clientY.toString();
-                drawer.style.transition = 'none';
-              }}
-              onTouchMove={(e) => {
-                if (!isMobile) return;
-                const drawer = document.getElementById('drawer-filters');
-                if (!drawer) return;
-                const startY = parseFloat(drawer.dataset.startY || '0');
-                const currentY = e.touches[0].clientY;
-                const deltaY = currentY - startY;
-                if (deltaY > 0) {
-                  drawer.style.transform = `translateY(${deltaY}px)`;
-                }
-              }}
-              onTouchEnd={(e) => {
-                if (!isMobile) return;
-                const drawer = document.getElementById('drawer-filters');
-                if (!drawer) return;
-                drawer.style.transition = 'transform 300ms ease-out';
-                const startY = parseFloat(drawer.dataset.startY || '0');
-                const currentY = e.changedTouches[0].clientY;
-                if (currentY - startY > 120) {
-                  setIsFilterDrawerOpen(false);
-                  drawer.style.transform = '';
-                } else {
-                  drawer.style.transform = 'translateY(0)';
-                }
-              }}
             >
               {renderFilterControls()}
             </div>

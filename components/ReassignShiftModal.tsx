@@ -4,6 +4,7 @@ import { getActiveEventDays, formatDateShort } from '@/lib/dates';
 import { createClient } from '@/lib/supabase/client';
 import { useCoordinatorData } from '@/lib/coordinator-data-context';
 import { toggleShiftAction } from '@/app/actions/volunteer-actions';
+import { useMobileDrawerNavigation } from '@/lib/use-mobile-drawer-navigation';
 
 export interface ReassignShiftModalProps {
   isOpen: boolean;
@@ -43,6 +44,12 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
   const [targetDayKey, setTargetDayKey] = useState<string>(sourceDayKey || eventDays[0]?.key || '');
   const [targetShiftId, setTargetShiftId] = useState<string>(sourceShiftId || 'T1');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { drawerRef, scrollAreaRef } = useMobileDrawerNavigation({
+    isOpen,
+    onClose,
+    disabled: isSubmitting,
+    mobileQuery: '(max-width: 767px)',
+  });
 
   const {
     indexedAssignments,
@@ -260,15 +267,16 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
 
       {/* Sheet Content */}
       <motion.div
+        ref={drawerRef}
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 350, damping: 32 }}
-        className="relative w-full md:w-[420px] md:mx-auto bg-dark2 border border-white/10 rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden text-text"
+        className="relative w-full h-[90dvh] max-h-[calc(100dvh-env(safe-area-inset-top)-12px)] md:w-[420px] md:h-auto md:max-h-[94dvh] md:mx-auto bg-dark2 border border-white/10 rounded-t-[40px] pb-[env(safe-area-inset-bottom)] md:pb-0 shadow-2xl flex flex-col overflow-hidden text-text"
       >
         <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
 
-        <div className="p-6">
+        <div ref={scrollAreaRef} className="flex-1 overflow-y-auto overscroll-contain p-6">
           {/* Header */}
           <div className="text-center mb-6">
             <h3 className="text-xl font-bold text-text mb-1">

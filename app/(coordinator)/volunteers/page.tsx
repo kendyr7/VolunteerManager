@@ -49,6 +49,7 @@ import { updateVolunteerAction } from "@/app/actions/volunteer-actions";
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { HighlightText } from "@/components/HighlightText";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
+import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 
 
 const containerVariants = {
@@ -239,6 +240,11 @@ export default function VolunteersPage() {
 
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+  const { drawerRef: addVolunteerDrawerRef } = useMobileDrawerNavigation({
+    isOpen: isAddSheetOpen,
+    onClose: () => setIsAddSheetOpen(false),
+    mobileQuery: '(max-width: 767px)',
+  });
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [volunteerToArchive, setVolunteerToArchive] = useState<VolunteerType | null>(null);
   const [unarchiveConflict, setUnarchiveConflict] = useState<{
@@ -1051,11 +1057,12 @@ export default function VolunteersPage() {
 
         {/* Drawer Content */}
         <div
+          ref={addVolunteerDrawerRef}
           id="add-volunteer-drawer"
           className={cn(
             "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl border-l border-border",
             isMobile
-              ? `w-full h-[94dvh] rounded-t-[40px] border-0 ${isAddSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
+              ? `w-full h-[90dvh] max-h-[calc(100dvh-env(safe-area-inset-top)-12px)] rounded-t-[40px] border-0 pb-[env(safe-area-inset-bottom)] ${isAddSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
               : `w-[450px] h-full ${isAddSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
           )}
           style={{ willChange: 'transform' }}

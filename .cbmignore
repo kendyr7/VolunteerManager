@@ -1,0 +1,5 @@
+# Local agent packages and generated review artifacts are not part of the application architecture.
+.agents/
+.codex/
+.mimocode/
+scratch/

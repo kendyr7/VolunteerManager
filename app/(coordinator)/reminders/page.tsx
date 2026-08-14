@@ -39,6 +39,7 @@ import { SortableTableHead, TableSortDirection } from "@/components/SortableTabl
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
+import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -420,6 +421,12 @@ export default function RemindersPage() {
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
   const [showTemplate, setShowTemplate] = useState(false);
+  const { drawerRef: templateDrawerRef, scrollAreaRef: templateScrollRef } = useMobileDrawerNavigation({
+    isOpen: showTemplate,
+    onClose: () => setShowTemplate(false),
+    mobileQuery: '(max-width: 767px)',
+    closeThreshold: 120,
+  });
 
   // Escuchar actualizaciones del storage en caliente
   useEffect(() => {
@@ -1753,55 +1760,17 @@ export default function RemindersPage() {
 
           {/* Drawer Content */}
           <div
+            ref={templateDrawerRef}
             id="drawer-template"
-            className={`relative w-full md:w-[500px] md:mx-auto h-[80vh] md:h-[94vh] bg-dark2 border border-white/10 rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${showTemplate ? 'translate-y-0' : 'translate-y-full'}`}
+            className={`relative w-full md:w-[500px] md:mx-auto h-[90dvh] max-h-[calc(100dvh-env(safe-area-inset-top)-12px)] md:h-[94dvh] md:max-h-[94dvh] bg-dark2 border border-white/10 rounded-t-[40px] pb-[env(safe-area-inset-bottom)] md:pb-0 shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 ease-out ${showTemplate ? 'translate-y-0' : 'translate-y-full'}`}
             style={{ willChange: 'transform' }}
           >
             {/* Handle */}
             <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
 
             <div
+              ref={templateScrollRef}
               className="flex-1 overflow-y-auto scrollbar-hide px-6 pb-6 pt-2 overscroll-contain"
-              onTouchStart={(e) => {
-                const drawer = document.getElementById('drawer-template');
-                if (!drawer) return;
-                drawer.dataset.startY = e.touches[0].clientY.toString();
-                drawer.style.transition = 'none';
-              }}
-              onTouchMove={(e) => {
-                const drawer = document.getElementById('drawer-template');
-                if (!drawer) return;
-                const startY = parseFloat(drawer.dataset.startY || '0');
-                const currentY = e.touches[0].clientY;
-                const deltaY = currentY - startY;
-
-                if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
-                  drawer.style.transform = `translateY(${deltaY}px)`;
-                  drawer.dataset.swiping = 'true';
-                }
-              }}
-              onTouchEnd={(e) => {
-                const drawer = document.getElementById('drawer-template');
-                if (!drawer) return;
-
-                drawer.style.transition = 'transform 0.3s ease-out';
-
-                if (drawer.dataset.swiping === 'true') {
-                  const startY = parseFloat(drawer.dataset.startY || '0');
-                  const deltaY = e.changedTouches[0].clientY - startY;
-
-                  drawer.dataset.swiping = 'false';
-
-                  if (deltaY > 150) {
-                    setShowTemplate(false);
-                    setTimeout(() => { drawer.style.transform = ''; }, 300);
-                  } else {
-                    drawer.style.transform = `translateY(0)`;
-                  }
-                } else {
-                  drawer.style.transform = '';
-                }
-              }}
             >
               {/* Header Drawer Info */}
               <div className="text-center mt-2 mb-8 px-4">

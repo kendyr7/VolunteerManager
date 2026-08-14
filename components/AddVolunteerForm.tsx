@@ -89,7 +89,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
 
   return (
     <form onSubmit={handleAddVolunteer} className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+      <div data-mobile-drawer-scroll className="flex-1 overflow-y-auto px-6 py-4 space-y-6 overscroll-contain">
         <div className="space-y-2">
             <label className="block text-xs font-extrabold text-text">Nombre y Apellido</label>
             <Input required minLength={3} className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Juan Pérez" value={newName} onChange={(e) => setNewName(e.target.value)} />

@@ -16,6 +16,7 @@ import { validatePhone8Digits } from '@/lib/whatsapp';
 import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
 import { updateVolunteerAction, toggleShiftAction } from '@/app/actions/volunteer-actions';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
+import { useMobileDrawerNavigation } from '@/lib/use-mobile-drawer-navigation';
 
 
 export interface VolunteerProfileDrawerProps {
@@ -48,6 +49,11 @@ export function VolunteerProfileDrawer({
   const [editAge, setEditAge] = useState('');
   const [editCommitteeId, setEditCommitteeId] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const { drawerRef, scrollAreaRef } = useMobileDrawerNavigation({
+    isOpen,
+    onClose,
+    disabled: isSavingProfile,
+  });
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; isVisible: boolean }>({
@@ -324,11 +330,12 @@ export function VolunteerProfileDrawer({
 
       {/* Drawer Container */}
       <div
+        ref={drawerRef}
         id="unified-volunteer-drawer"
         className={cn(
-          'relative flex flex-col overflow-x-hidden overflow-y-auto transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl border-l border-border max-w-full z-10',
+          'relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl border-l border-border max-w-full z-10',
           isMobile
-            ? `w-full h-[94dvh] rounded-t-[40px] border-0 ${isOpen ? 'translate-y-0' : 'translate-y-full'}`
+            ? `w-full h-[90dvh] max-h-[calc(100dvh-env(safe-area-inset-top)-12px)] rounded-t-[40px] border-0 pb-[env(safe-area-inset-bottom)] ${isOpen ? 'translate-y-0' : 'translate-y-full'}`
             : `w-[450px] max-w-full h-full ${isOpen ? 'translate-x-0' : 'translate-x-full'}`
         )}
         style={{ willChange: 'transform' }}
@@ -342,6 +349,7 @@ export function VolunteerProfileDrawer({
 
 
           <div
+            ref={scrollAreaRef}
             className={cn(
               'flex-1 overflow-y-auto overflow-x-hidden max-w-full scrollbar-hide px-4 pb-6 overscroll-contain',
               !isMobile && 'pt-4 px-6'

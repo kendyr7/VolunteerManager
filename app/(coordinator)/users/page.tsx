@@ -29,6 +29,7 @@ import { SortableTableHead, TableSortDirection } from "@/components/SortableTabl
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { HighlightText } from "@/components/HighlightText";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
+import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -203,6 +204,16 @@ export default function UsersPage() {
 
   const [isMobile, setIsMobile] = useState(false);
   const [showPin, setShowPin] = useState(false);
+  const { drawerRef: addUserDrawerRef, scrollAreaRef: addUserScrollRef } = useMobileDrawerNavigation({
+    isOpen: isInviteOpen,
+    onClose: () => resetInviteForm(),
+    mobileQuery: '(max-width: 767px)',
+  });
+  const { drawerRef: editUserDrawerRef, scrollAreaRef: editUserScrollRef } = useMobileDrawerNavigation({
+    isOpen: isEditSheetOpen,
+    onClose: () => setIsEditSheetOpen(false),
+    mobileQuery: '(max-width: 767px)',
+  });
 
   useEffect(() => {
     const checkMobile = () => {
@@ -212,28 +223,6 @@ export default function UsersPage() {
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
-
-  // Lock <main> scroll when mobile drawer is open so the table doesn't jump
-  useEffect(() => {
-    if (!isMobile) return;
-    const main = document.querySelector('main') as HTMLElement | null;
-    if (!main) return;
-    if (isEditSheetOpen) {
-      const scrollY = main.scrollTop;
-      main.style.overflow = 'hidden';
-      main.style.top = `-${scrollY}px`;
-      main.dataset.scrollY = String(scrollY);
-    } else {
-      const scrollY = parseFloat(main.dataset.scrollY || '0');
-      main.style.overflow = '';
-      main.style.top = '';
-      main.scrollTop = scrollY;
-    }
-    return () => {
-      main.style.overflow = '';
-      main.style.top = '';
-    };
-  }, [isEditSheetOpen, isMobile]);
 
   // No pagination state needed for infinite scroll
 
@@ -700,11 +689,12 @@ export default function UsersPage() {
 
         {/* Drawer Content */}
         <div
+          ref={addUserDrawerRef}
           id="add-user-drawer"
           className={cn(
             "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl border-l border-border",
             isMobile
-              ? `w-full h-[94dvh] rounded-t-[40px] border-0 ${isInviteOpen ? 'translate-y-0' : 'translate-y-full'}`
+              ? `w-full h-[90dvh] max-h-[calc(100dvh-env(safe-area-inset-top)-12px)] rounded-t-[40px] border-0 pb-[env(safe-area-inset-bottom)] ${isInviteOpen ? 'translate-y-0' : 'translate-y-full'}`
               : `w-[450px] h-full ${isInviteOpen ? 'translate-x-0' : 'translate-x-full'}`
           )}
           style={{ willChange: 'transform' }}
@@ -720,7 +710,7 @@ export default function UsersPage() {
                 onSubmit={handleInvite}
                 className="flex-1 flex flex-col overflow-hidden"
               >
-                <div className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4" : "p-7 space-y-7")}>
+                <div ref={addUserScrollRef} className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4" : "p-7 space-y-7")}>
                   <div className="mb-6">
                     <h2 className="text-xl font-black text-text tracking-tight leading-none mb-1.5">Añadir Usuario</h2>
                     <p className="text-xs font-inter font-bold text-text-dim">Registra un nuevo usuario en la plataforma.</p>
@@ -1082,11 +1072,12 @@ export default function UsersPage() {
 
         {/* Drawer Content */}
         <div
+          ref={editUserDrawerRef}
           id="edit-user-drawer"
           className={cn(
             "relative flex flex-col overflow-hidden transition-transform duration-300 ease-out bg-dark2 text-text shadow-2xl border-l border-border",
             isMobile
-              ? `w-full max-h-[94dvh] rounded-t-[40px] border-0 ${isEditSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
+              ? `w-full h-[90dvh] max-h-[calc(100dvh-env(safe-area-inset-top)-12px)] rounded-t-[40px] border-0 pb-[env(safe-area-inset-bottom)] ${isEditSheetOpen ? 'translate-y-0' : 'translate-y-full'}`
               : `w-[400px] h-full ${isEditSheetOpen ? 'translate-x-0' : 'translate-x-full'}`
           )}
           style={{ willChange: 'transform' }}
@@ -1094,82 +1085,15 @@ export default function UsersPage() {
           <div className="relative z-10 flex flex-col h-full w-full">
             {/* Handle solo en móvil */}
             {isMobile && (
-              <div 
-                className="w-full pt-4 pb-2 flex justify-center shrink-0 touch-none"
-                onTouchStart={(e) => {
-                  const drawer = document.getElementById("edit-user-drawer");
-                  if (!drawer) return;
-                  drawer.dataset.startY = e.touches[0].clientY.toString();
-                  drawer.style.transition = 'none';
-                }}
-                onTouchMove={(e) => {
-                  const drawer = document.getElementById("edit-user-drawer");
-                  if (!drawer) return;
-                  const startY = parseFloat(drawer.dataset.startY || '0');
-                  const deltaY = e.touches[0].clientY - startY;
-                  if (deltaY > 0) {
-                    drawer.style.transform = `translateY(${deltaY}px)`;
-                    drawer.dataset.swiping = 'true';
-                  }
-                }}
-                onTouchEnd={(e) => {
-                  const drawer = document.getElementById("edit-user-drawer");
-                  if (!drawer) return;
-                  drawer.style.transition = 'transform 0.3s ease-out';
-                  if (drawer.dataset.swiping === 'true') {
-                    const startY = parseFloat(drawer.dataset.startY || '0');
-                    const deltaY = e.changedTouches[0].clientY - startY;
-                    drawer.dataset.swiping = 'false';
-                    if (deltaY > 80) {
-                      setIsEditSheetOpen(false);
-                      setTimeout(() => { drawer.style.transform = ''; }, 300);
-                    } else {
-                      drawer.style.transform = '';
-                    }
-                  }
-                }}
-              >
+              <div className="w-full pt-4 pb-2 flex justify-center shrink-0 touch-none">
                 <div className="w-12 h-1.5 bg-text-dim/30 rounded-full" />
               </div>
             )}
 
             <form onSubmit={handleUpdateUser} className="flex-1 flex flex-col overflow-hidden">
               <div
+                ref={editUserScrollRef}
                 className={cn("flex-1 overflow-y-auto scrollbar-hide overscroll-contain", isMobile ? "px-6 pb-6 pt-4" : "p-8 space-y-7 pt-12")}
-                onTouchStart={(e) => {
-                  const drawer = document.getElementById("edit-user-drawer");
-                  if (!drawer) return;
-                  drawer.dataset.startY = e.touches[0].clientY.toString();
-                  drawer.style.transition = 'none';
-                }}
-                onTouchMove={(e) => {
-                  const drawer = document.getElementById("edit-user-drawer");
-                  if (!drawer) return;
-                  const startY = parseFloat(drawer.dataset.startY || '0');
-                  const deltaY = e.touches[0].clientY - startY;
-                  if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
-                    drawer.style.transform = `translateY(${deltaY}px)`;
-                    drawer.dataset.swiping = 'true';
-                  }
-                }}
-                onTouchEnd={(e) => {
-                  const drawer = document.getElementById("edit-user-drawer");
-                  if (!drawer) return;
-                  drawer.style.transition = 'transform 0.3s ease-out';
-                  if (drawer.dataset.swiping === 'true') {
-                    const startY = parseFloat(drawer.dataset.startY || '0');
-                    const deltaY = e.changedTouches[0].clientY - startY;
-                    drawer.dataset.swiping = 'false';
-                    if (deltaY > 80) {
-                      setIsEditSheetOpen(false);
-                      setTimeout(() => { drawer.style.transform = ''; }, 300);
-                    } else {
-                      drawer.style.transform = '';
-                    }
-                  } else {
-                    drawer.style.transform = '';
-                  }
-                }}
               >
                 <div className="mb-6">
                   <h2 className="font-black text-text tracking-tight leading-none mb-1.5 text-xl">Editar Perfil</h2>

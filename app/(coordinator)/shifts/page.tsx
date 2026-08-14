@@ -28,6 +28,7 @@ import { updateVolunteerAction, saveShiftsAction } from "@/app/actions/volunteer
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { HighlightText } from "@/components/HighlightText";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
+import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -694,9 +695,37 @@ export default function ShiftsPage() {
 
   // qué días están expandidos (todos colapsados al inicio)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [mobileDrawerKey, setMobileDrawerKey] = useState<string | null>(null);
 
-  const toggleDay = useCallback((key: string) =>
-    setExpanded(prev => ({ ...prev, [key]: !prev[key] })), []);
+  const toggleDay = useCallback((key: string) => {
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      setMobileDrawerKey(currentKey => currentKey === key ? null : key);
+      setExpanded(prev => {
+        const willOpen = !prev[key];
+        const next = Object.fromEntries(Object.keys(prev).map(dayKey => [dayKey, false]));
+        return { ...next, [key]: willOpen };
+      });
+      return;
+    }
+
+    setExpanded(prev => {
+      const willOpen = !prev[key];
+      return { ...prev, [key]: willOpen };
+    });
+  }, []);
+
+  const closeMobileDayDrawer = useCallback(() => {
+    if (!mobileDrawerKey) return;
+    setExpanded(prev => ({ ...prev, [mobileDrawerKey]: false }));
+    setMobileDrawerKey(null);
+  }, [mobileDrawerKey]);
+
+  const { drawerRef: dayDrawerRef, scrollAreaRef: dayDrawerScrollRef } = useMobileDrawerNavigation({
+    isOpen: Boolean(mobileDrawerKey),
+    onClose: closeMobileDayDrawer,
+    mobileQuery: '(max-width: 767px)',
+    closeThreshold: 120,
+  });
 
   const totalActiveCount = useMemo(() => {
     return rawShiftsData.filter(
@@ -1419,58 +1448,17 @@ export default function ShiftsPage() {
                 onClick={(e) => { e.stopPropagation(); toggleDay(key); }}
               />
               <div
+                ref={mobileDrawerKey === key ? dayDrawerRef : undefined}
                 id={`drawer-${key}`}
-                className="relative w-full h-[94vh] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full duration-300 ease-out pointer-events-auto"
+                className="relative w-full h-[90dvh] max-h-[calc(100dvh-env(safe-area-inset-top)-12px)] bg-gradient-to-br from-[#009fd4] to-[#4d7cfe] dark:from-[#0f2027] dark:via-[#203a43] dark:to-[#194c7a] rounded-t-[40px] pb-[env(safe-area-inset-bottom)] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full duration-300 ease-out pointer-events-auto"
                 style={{ willChange: 'transform' }}
               >
                 {/* Handle */}
                 <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mt-4 mb-2 shrink-0 touch-none" />
 
                 <div
+                  ref={mobileDrawerKey === key ? dayDrawerScrollRef : undefined}
                   className="flex-1 overflow-y-auto scrollbar-hide px-4 pb-6 overscroll-contain"
-                  onTouchStart={(e) => {
-                    const drawer = document.getElementById(`drawer-${key}`);
-                    if (!drawer) return;
-                    drawer.dataset.startY = e.touches[0].clientY.toString();
-                    drawer.style.transition = 'none';
-                  }}
-                  onTouchMove={(e) => {
-                    const drawer = document.getElementById(`drawer-${key}`);
-                    if (!drawer) return;
-                    const startY = parseFloat(drawer.dataset.startY || '0');
-                    const currentY = e.touches[0].clientY;
-                    const deltaY = currentY - startY;
-
-                    if (e.currentTarget.scrollTop <= 0 && deltaY > 0) {
-                      drawer.style.transform = `translateY(${deltaY}px)`;
-                      drawer.dataset.swiping = 'true';
-                    }
-                  }}
-                  onTouchEnd={(e) => {
-                    const drawer = document.getElementById(`drawer-${key}`);
-                    if (!drawer) return;
-
-                    drawer.style.transition = 'transform 0.3s ease-out';
-
-                    if (drawer.dataset.swiping === 'true') {
-                      const startY = parseFloat(drawer.dataset.startY || '0');
-                      const deltaY = e.changedTouches[0].clientY - startY;
-
-                      drawer.dataset.swiping = 'false';
-
-                      if (deltaY > 150) {
-                        drawer.style.transform = `translateY(100%)`;
-                        setTimeout(() => {
-                          drawer.style.transform = '';
-                          toggleDay(key);
-                        }, 300);
-                      } else {
-                        drawer.style.transform = `translateY(0)`;
-                      }
-                    } else {
-                      drawer.style.transform = '';
-                    }
-                  }}
                 >
                   {/* Header (Like "Finished" and "Match 3...") */}
                   <div className="text-center mt-4 mb-8">

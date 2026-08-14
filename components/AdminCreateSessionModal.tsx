@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createAttendanceSessionAdminAction } from '@/app/actions/attendance';
 import { Button } from '@/components/ui/button';
 import { CustomTimePicker } from '@/components/CustomTimePicker';
@@ -9,6 +9,7 @@ import { canRegisterMissingAttendance } from '@/lib/permissions';
 import { parseDayKeyToDateStr } from '@/lib/dates';
 import { formatUnifiedDuration } from '@/lib/shift-calculations';
 import { calculateSessionMinutes, getContinuousScheduledBlocks } from '@/lib/session-utils';
+import { useMobileDrawerNavigation } from '@/lib/use-mobile-drawer-navigation';
 
 export interface AdminCreateSessionModalProps {
   isOpen: boolean;
@@ -51,10 +52,13 @@ export function AdminCreateSessionModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [confirmOutsideWarning, setConfirmOutsideWarning] = useState(false);
-  const drawerRef = useRef<HTMLElement>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const touchStartYRef = useRef<number | null>(null);
-  const dragDistanceRef = useRef(0);
+  const { drawerRef, scrollAreaRef } = useMobileDrawerNavigation<HTMLElement, HTMLDivElement>({
+    isOpen,
+    onClose,
+    disabled: isSubmitting,
+    mobileQuery: '(max-width: 639px)',
+    closeThreshold: 88,
+  });
 
   const assignedShiftKeys = useMemo(
     () => assignedShiftRecords.filter((record) => record.day_key === selectedDayKey).map((record) => record.shift_key),
@@ -112,36 +116,6 @@ export function AdminCreateSessionModal({
     const exitOutsideShift = exitIso ? new Date(exitIso).getTime() > shiftEndMs + 900000 : false;
     return entryOutsideShift || exitOutsideShift;
   }, [entryIso, exitIso, selectedShift]);
-
-  const handleDrawerTouchStart = (event: React.TouchEvent<HTMLElement>) => {
-    if (window.matchMedia('(min-width: 640px)').matches || isSubmitting) return;
-    touchStartYRef.current = event.touches[0]?.clientY ?? null;
-    dragDistanceRef.current = 0;
-  };
-
-  const handleDrawerTouchMove = (event: React.TouchEvent<HTMLElement>) => {
-    if (touchStartYRef.current === null || !drawerRef.current || isSubmitting) return;
-    const distance = (event.touches[0]?.clientY ?? touchStartYRef.current) - touchStartYRef.current;
-    if (distance <= 0 || (scrollAreaRef.current?.scrollTop ?? 0) > 0) return;
-
-    event.preventDefault();
-    dragDistanceRef.current = distance;
-    drawerRef.current.style.transition = 'none';
-    drawerRef.current.style.transform = `translateY(${distance}px)`;
-  };
-
-  const handleDrawerTouchEnd = () => {
-    const drawer = drawerRef.current;
-    if (!drawer) return;
-
-    const shouldClose = dragDistanceRef.current >= 88 && !isSubmitting;
-    drawer.style.transition = 'transform 200ms cubic-bezier(0.22, 1, 0.36, 1)';
-    drawer.style.transform = shouldClose ? 'translateY(100%)' : '';
-    touchStartYRef.current = null;
-    dragDistanceRef.current = 0;
-
-    if (shouldClose) window.setTimeout(onClose, 180);
-  };
 
   const handleSubmit = async () => {
     if (!entryIso) {
@@ -225,11 +199,7 @@ export function AdminCreateSessionModal({
 
       <section
         ref={drawerRef}
-        className="relative flex h-[94dvh] w-full flex-col overflow-hidden rounded-t-2xl border-border bg-dark2 text-text shadow-xl animate-in slide-in-from-bottom-4 duration-200 motion-reduce:animate-none sm:h-full sm:max-w-[520px] sm:rounded-none sm:border-l sm:slide-in-from-right-4"
-        onTouchStart={handleDrawerTouchStart}
-        onTouchMove={handleDrawerTouchMove}
-        onTouchEnd={handleDrawerTouchEnd}
-        onTouchCancel={handleDrawerTouchEnd}
+        className="relative flex h-[90dvh] max-h-[calc(100dvh-env(safe-area-inset-top)-12px)] w-full flex-col overflow-hidden rounded-t-2xl border-border bg-dark2 pb-[env(safe-area-inset-bottom)] text-text shadow-xl animate-in slide-in-from-bottom-4 duration-200 motion-reduce:animate-none sm:h-full sm:max-h-none sm:max-w-[520px] sm:rounded-none sm:border-l sm:pb-0 sm:slide-in-from-right-4"
       >
         <div className="flex justify-center pb-1 pt-3 sm:hidden" aria-hidden="true">
           <div className="h-1 w-10 rounded-full bg-text-dim/30" />

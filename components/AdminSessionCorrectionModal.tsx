@@ -7,6 +7,7 @@ import { adjustSessionTimesAdminAction, closeAttendanceSessionAction } from '@/a
 import { canCorrectAttendanceTimes } from '@/lib/permissions';
 import { getOfficialShiftTime, parseDayKeyToDateStr } from '@/lib/dates';
 import { CustomTimePicker } from '@/components/CustomTimePicker';
+import { useMobileDrawerNavigation } from '@/lib/use-mobile-drawer-navigation';
 
 export interface AdminSessionCorrectionModalProps {
   isOpen: boolean;
@@ -44,6 +45,12 @@ export function AdminSessionCorrectionModal({
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { drawerRef, scrollAreaRef } = useMobileDrawerNavigation({
+    isOpen,
+    onClose,
+    disabled: isSubmitting,
+    mobileQuery: '(max-width: 639px)',
+  });
 
   // Computed custom endedAt ISO
   const customTimeIso = useMemo(() => {
@@ -212,7 +219,7 @@ export function AdminSessionCorrectionModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-      <div className="bg-card border border-border/80 rounded-t-3xl sm:rounded-3xl w-full max-w-full sm:max-w-md max-h-[90dvh] flex flex-col shadow-2xl relative overflow-hidden pb-[env(safe-area-inset-bottom)]">
+      <div ref={drawerRef} className="bg-card border border-border/80 rounded-t-3xl sm:rounded-3xl w-full max-w-full sm:max-w-md h-[90dvh] max-h-[calc(100dvh-env(safe-area-inset-top)-12px)] sm:h-auto sm:max-h-[90dvh] flex flex-col shadow-2xl relative overflow-hidden pb-[env(safe-area-inset-bottom)] sm:pb-0">
         
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border bg-card shrink-0">
@@ -234,7 +241,7 @@ export function AdminSessionCorrectionModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+        <div ref={scrollAreaRef} className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4">
           {errorMsg && (
             <div className="p-3.5 rounded-2xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-semibold flex items-center gap-2">
               <span className="material-symbols-outlined text-[20px] shrink-0">error</span>
