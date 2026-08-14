@@ -3,6 +3,7 @@
 import {
   PhoneCleanupReviewService,
   PhoneGroupReviewItem,
+  AppliedPhoneReviewGroup,
   SavePersonCentricReviewInput,
   SubmitPerVolunteerGroupReviewInput,
   ExecutionSummaryPreview
@@ -17,26 +18,35 @@ import { requireCapability } from '@/lib/authorization';
 export async function fetchPhoneCleanupGroupsAction(includeProcessed: boolean = false): Promise<{
   success: boolean;
   data: PhoneGroupReviewItem[];
+  appliedGroups: AppliedPhoneReviewGroup[];
   error?: string;
 }> {
   try {
     await requireCapability('manage_platform_users');
-    const groups = await PhoneCleanupReviewService.getDuplicatePhoneGroups(includeProcessed);
-    return { success: true, data: groups };
+    const [groups, appliedGroups] = await Promise.all([
+      PhoneCleanupReviewService.getDuplicatePhoneGroups(includeProcessed),
+      PhoneCleanupReviewService.getAppliedPhoneGroups(),
+    ]);
+    return { success: true, data: groups, appliedGroups };
   } catch (err: any) {
     console.error('Error in fetchPhoneCleanupGroupsAction:', err);
-    return { success: false, data: [], error: err.message || 'Error al cargar teléfonos' };
+    return { success: false, data: [], appliedGroups: [], error: err.message || 'Error al cargar teléfonos' };
   }
 }
 
-export async function savePersonCentricReviewAction(input: SavePersonCentricReviewInput): Promise<{
+export async function savePersonCentricReviewAction(
+  input: Omit<SavePersonCentricReviewInput, 'reviewedBy'> & { reviewedBy?: string }
+): Promise<{
   success: boolean;
   message: string;
   error?: string;
 }> {
   try {
-    await requireCapability('manage_platform_users');
-    const result = await PhoneCleanupReviewService.savePersonCentricReview(input);
+    const authorization = await requireCapability('manage_platform_users');
+    const result = await PhoneCleanupReviewService.savePersonCentricReview({
+      ...input,
+      reviewedBy: authorization.name,
+    });
     return { success: result.success, message: result.message };
   } catch (err: any) {
     console.error('Error in savePersonCentricReviewAction:', err);
@@ -50,7 +60,6 @@ export async function savePersonCentricReviewAction(input: SavePersonCentricRevi
  */
 export async function applyPhoneCleanupItemsAction(
   itemIds: string[],
-  reviewedBy: string,
   dryRun: boolean = true
 ): Promise<{
   success: boolean;

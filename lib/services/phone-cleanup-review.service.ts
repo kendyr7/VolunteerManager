@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { getLocal8Digits, normalizePhoneE164 } from '@/lib/whatsapp';
-import { VolunteerMutationService } from './volunteer-mutation.service';
+import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
 
 export type PersonCentricDecision =
   | 'KEEP'
@@ -50,6 +50,7 @@ export interface SavePersonCentricReviewInput {
 
 export interface VolunteerReviewMember {
   id: string;
+  reviewItemId?: string | null;
   firstName: string;
   lastName: string;
   fullName: string;
@@ -96,6 +97,36 @@ export interface PhoneGroupReviewItem {
   archivedVolunteerIds?: string[];
   sharedPhoneOwnerId?: string;
   sharedPhoneReason?: string;
+}
+
+export interface AppliedPhoneReviewMember {
+  reviewItemId: string;
+  volunteerId: string;
+  fullName: string;
+  committee: string;
+  status: 'active' | 'archived';
+  originalPhone: string;
+  resultingPhone: string;
+  decision: PersonCentricDecision;
+  sharedPhoneOwnerId?: string | null;
+  sharedPhoneOwnerName?: string | null;
+  duplicatePrimaryVolunteerId?: string | null;
+  duplicatePrimaryVolunteerName?: string | null;
+  processedAt?: string | null;
+  processedBy?: string | null;
+}
+
+export interface AppliedPhoneReviewGroup {
+  reviewId: string;
+  phoneNormalized: string;
+  processedAt?: string | null;
+  processedBy: string[];
+  currentMembers: Array<{
+    volunteerId: string;
+    fullName: string;
+    committee: string;
+  }>;
+  members: AppliedPhoneReviewMember[];
 }
 
 export interface PerVolunteerDecisionItem {
@@ -298,33 +329,34 @@ export class PhoneCleanupReviewService {
     const supabase = this.getSupabaseClient();
 
     // 1. Fetch raw volunteers (READ-ONLY)
-    const { data: rawVolunteers, error: fetchErr } = await supabase
-      .from('volunteers')
-      .select('id, first_name, last_name, email, phone, status, age, stake, neighborhood, committee_id, created_at, committees(name)')
-      .order('created_at', { ascending: true });
-
-    if (fetchErr || !rawVolunteers) {
-      throw new Error(`Failed to load volunteers for phone review: ${fetchErr?.message}`);
-    }
+    const rawVolunteers = await fetchAllRowsStrict<any>(
+      supabase,
+      'volunteers',
+      'id, first_name, last_name, email, phone, status, age, stake, neighborhood, committee_id, created_at, committees(name)',
+      query => query.order('created_at', { ascending: true })
+    );
 
     // 2. Fetch existing review records directly from Supabase DB tables
-    let dbReviewsMap = new Map<string, any>();
-    let dbItemsMap = new Map<string, Map<string, any>>();
+    const dbReviewsMap = new Map<string, any>();
+    const dbItemsMap = new Map<string, Map<string, any>>();
 
     try {
-      const { data: dbReviews, error: errReviews } = await supabase.from('phone_cleanup_reviews').select('*');
-      if (!errReviews && dbReviews && Array.isArray(dbReviews)) {
+      const dbReviews = await fetchAllRowsStrict<any>(supabase, 'phone_cleanup_reviews');
+      if (Array.isArray(dbReviews)) {
         dbReviews.forEach(r => dbReviewsMap.set(r.phone_normalized, r));
       }
 
-      const { data: dbItems, error: errItems } = await supabase.from('phone_cleanup_review_items').select('*');
-      if (!errItems && dbItems && Array.isArray(dbItems)) {
+      const dbItems = await fetchAllRowsStrict<any>(supabase, 'phone_cleanup_review_items');
+      if (Array.isArray(dbItems)) {
+        const reviewPhoneById = new Map<string, string>(
+          Array.from(dbReviewsMap.values()).map((review: any) => [review.id, review.phone_normalized])
+        );
         dbItems.forEach(item => {
-          const parentReview = Array.from(dbReviewsMap.values()).find((r: any) => r.id === item.review_id);
-          if (parentReview) {
-            const phone = parentReview.phone_normalized;
+          const phone = reviewPhoneById.get(item.review_id);
+          if (phone) {
             const subMap = dbItemsMap.get(phone) || new Map<string, any>();
             subMap.set(item.volunteer_id, {
+              reviewItemId: item.id,
               volunteerId: item.volunteer_id,
               originalPhone: item.original_phone,
               decision: item.decision || null, // Preserves NULL for LEGACY rows
@@ -345,7 +377,9 @@ export class PhoneCleanupReviewService {
           }
         });
       }
-    } catch {}
+    } catch (error) {
+      throw new Error(`No se pudo cargar el estado completo de las revisiones: ${error instanceof Error ? error.message : 'error desconocido'}`);
+    }
 
     const volunteers: VolunteerReviewMember[] = rawVolunteers.map(v => ({
       id: v.id,
@@ -443,6 +477,7 @@ export class PhoneCleanupReviewService {
 
           return {
             ...v,
+            reviewItemId: itemDecision?.reviewItemId || null,
             proposedAction: proposedVolAction,
             approvedAction: itemDecision?.approvedAction,
             decision: itemDecision?.decision || null, // NULL for LEGACY rows
@@ -498,6 +533,118 @@ export class PhoneCleanupReviewService {
       if (a.confidence !== 'LOW' && b.confidence === 'LOW') return 1;
       return b.volunteers.length - a.volunteers.length;
     });
+  }
+
+  /**
+   * Audit history grouped by the original phone review. This intentionally
+   * reads review items directly instead of rebuilding history from current
+   * duplicate phones, because a corrected phone is no longer part of its
+   * original duplicate group.
+   */
+  public static async getAppliedPhoneGroups(): Promise<AppliedPhoneReviewGroup[]> {
+    const supabase = this.getSupabaseClient();
+    const [rawVolunteers, reviews, items] = await Promise.all([
+      fetchAllRowsStrict<any>(
+        supabase,
+        'volunteers',
+        'id, first_name, last_name, phone, status, committee_id, committees(name)'
+      ),
+      fetchAllRowsStrict<any>(supabase, 'phone_cleanup_reviews', 'id, phone_normalized'),
+      fetchAllRowsStrict<any>(
+        supabase,
+        'phone_cleanup_review_items',
+        'id, review_id, volunteer_id, original_phone, corrected_phone, decision, processing_status, processed_at, processed_by, shared_phone_owner_id, duplicate_primary_volunteer_id'
+      ),
+    ]);
+
+    const volunteerById = new Map(rawVolunteers.map(volunteer => [volunteer.id, volunteer]));
+    const phoneByReviewId = new Map(reviews.map(review => [review.id, review.phone_normalized]));
+    const currentMembersByPhone = new Map<string, AppliedPhoneReviewGroup['currentMembers']>();
+    const groups = new Map<string, AppliedPhoneReviewGroup>();
+
+    rawVolunteers
+      .filter(volunteer => volunteer.status === 'active' && volunteer.phone)
+      .forEach(volunteer => {
+        const phoneNormalized = normalizePhoneE164(volunteer.phone);
+        if (!phoneNormalized) return;
+        const currentMembers = currentMembersByPhone.get(phoneNormalized) || [];
+        currentMembers.push({
+          volunteerId: volunteer.id,
+          fullName: `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim(),
+          committee: volunteer?.committees?.name || 'Sin comité',
+        });
+        currentMembersByPhone.set(phoneNormalized, currentMembers);
+      });
+
+    items
+      .filter(item => item.processing_status === 'PROCESSED' && item.decision)
+      .forEach(item => {
+        const phoneNormalized = phoneByReviewId.get(item.review_id);
+        if (!phoneNormalized) return;
+
+        const volunteer = volunteerById.get(item.volunteer_id);
+        const sharedOwner = item.shared_phone_owner_id
+          ? volunteerById.get(item.shared_phone_owner_id)
+          : null;
+        const duplicatePrimary = item.duplicate_primary_volunteer_id
+          ? volunteerById.get(item.duplicate_primary_volunteer_id)
+          : null;
+
+        const fullName = volunteer
+          ? `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim()
+          : 'Voluntario no disponible';
+        const resultingPhone = volunteer?.phone || item.corrected_phone || item.original_phone || phoneNormalized;
+
+        const group: AppliedPhoneReviewGroup = groups.get(item.review_id) || {
+          reviewId: item.review_id,
+          phoneNormalized,
+          processedAt: null,
+          processedBy: [],
+          currentMembers: currentMembersByPhone.get(phoneNormalized) || [],
+          members: [],
+        };
+
+        group.members.push({
+          reviewItemId: item.id,
+          volunteerId: item.volunteer_id,
+          fullName,
+          committee: volunteer?.committees?.name || 'Sin comité',
+          status: volunteer?.status === 'archived' ? 'archived' : 'active',
+          originalPhone: item.original_phone || phoneNormalized,
+          resultingPhone,
+          decision: item.decision as PersonCentricDecision,
+          sharedPhoneOwnerId: item.shared_phone_owner_id,
+          sharedPhoneOwnerName: sharedOwner
+            ? `${sharedOwner.first_name || ''} ${sharedOwner.last_name || ''}`.trim()
+            : null,
+          duplicatePrimaryVolunteerId: item.duplicate_primary_volunteer_id,
+          duplicatePrimaryVolunteerName: duplicatePrimary
+            ? `${duplicatePrimary.first_name || ''} ${duplicatePrimary.last_name || ''}`.trim()
+            : null,
+          processedAt: item.processed_at,
+          processedBy: item.processed_by,
+        });
+
+        if (item.processed_at && (!group.processedAt || item.processed_at > group.processedAt)) {
+          group.processedAt = item.processed_at;
+        }
+        if (item.processed_by && !group.processedBy.includes(item.processed_by)) {
+          group.processedBy.push(item.processed_by);
+        }
+
+        groups.set(item.review_id, group);
+      });
+
+    return Array.from(groups.values())
+      .map(group => ({
+        ...group,
+        members: group.members.sort((left, right) => {
+          if (left.decision === 'PHONE_OWNER' && right.decision !== 'PHONE_OWNER') return -1;
+          if (left.decision !== 'PHONE_OWNER' && right.decision === 'PHONE_OWNER') return 1;
+          return left.fullName.localeCompare(right.fullName, 'es', { sensitivity: 'base' });
+        }),
+      }))
+      .sort((left, right) => (right.processedAt || '').localeCompare(left.processedAt || ''));
   }
 
   /**

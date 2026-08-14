@@ -30,6 +30,7 @@ import { getActivityLogs, ActivityLog } from "@/app/actions/activity-actions";
 import { getCurrentSettingsProfileAction } from "@/app/actions/user-actions";
 import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
 import { SmartSearchBar } from "@/components/SmartSearchBar";
+import { useMobileNavigationMode } from "@/lib/use-mobile-navigation-mode";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -108,6 +109,7 @@ const getCommitteeStyle = (committeeName: string, isSelected: boolean) => {
 
 export default function SettingsPage() {
   const { refresh } = useCoordinatorData();
+  const { mode: mobileNavigationMode, setMode: setMobileNavigationMode } = useMobileNavigationMode();
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [userProfile, setUserProfile] = useState<any>(null);
   const [committees, setCommittees] = useState<{ id: string, name: string, status?: string | null }[]>([]);
@@ -369,6 +371,7 @@ export default function SettingsPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     personal: false,
+    mobileNavigation: false,
     security: false,
     shiftEdit: false,
     permissions: false,
@@ -409,6 +412,16 @@ export default function SettingsPage() {
       },
     ];
 
+    if (isMobile) {
+      sections.splice(1, 0, {
+        id: 'mobileNavigation',
+        title: 'Navegación móvil',
+        description: 'Probar la nueva interfaz o volver a la barra inferior',
+        keywords: 'menú navbar buscador global clásica nueva interfaz teléfono móvil',
+        icon: 'mobile_friendly',
+      });
+    }
+
     if (currentRole === 'Admin') {
       sections.push(
         {
@@ -429,7 +442,7 @@ export default function SettingsPage() {
     }
 
     return sections;
-  }, [currentRole]);
+  }, [currentRole, isMobile]);
 
   const settingsSearchResults = useMemo(() => {
     const query = settingsSearch.trim();
@@ -799,7 +812,7 @@ export default function SettingsPage() {
             if (value && settingsSearchResults[0]) navigateToSetting(settingsSearchResults[0].id);
           }}
           onFocusChange={setIsSettingsSearchFocused}
-          placeholder="Buscar ajustes: PIN, permisos, subcomités..."
+          placeholder="Buscar ajustes: PIN, navegación, permisos, subcomités..."
           ariaLabel="Buscar en ajustes"
           resultsId="settings-search-results"
           showResults={isSettingsSearchFocused && Boolean(settingsSearch.trim())}
@@ -925,6 +938,105 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Navegación móvil — preferencia local del dispositivo */}
+          <div id="settings-mobileNavigation" className="w-full scroll-mt-44 transition-all lg:hidden">
+            <button
+              type="button"
+              onClick={() => isMobile && toggleSection('mobileNavigation')}
+              className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors ${isMobile ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'
+                } ${isSectionOpen('mobileNavigation') ? 'bg-black/[0.03] dark:bg-white/[0.02]' : ''}`}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-500/15 text-indigo-500 dark:text-indigo-400">
+                  <span className="material-symbols-outlined text-[18px]">mobile_friendly</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-xs font-bold leading-none tracking-tight text-text">Navegación móvil</h3>
+                  <p className="mt-1 truncate font-inter text-[10px] font-medium text-text-dim">Elige cómo moverte en este dispositivo</p>
+                </div>
+              </div>
+
+              {isMobile && (
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black/5 text-text-dim dark:bg-white/5">
+                  <span className="material-symbols-outlined text-[18px]">
+                    {isSectionOpen('mobileNavigation') ? 'expand_less' : 'expand_more'}
+                  </span>
+                </div>
+              )}
+            </button>
+
+            {isSectionOpen('mobileNavigation') && (
+              <div className="space-y-4 border-t border-border bg-black/[0.02] p-4 dark:bg-black/20 sm:p-6">
+                <div
+                  role="group"
+                  aria-label="Seleccionar navegación móvil"
+                  className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-dark p-1"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={mobileNavigationMode === 'classic'}
+                    onClick={() => setMobileNavigationMode('classic')}
+                    className={cn(
+                      "flex min-h-16 items-center gap-2.5 rounded-xl px-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe]",
+                      mobileNavigationMode === 'classic'
+                        ? "bg-dark2 text-text shadow-sm ring-1 ring-border"
+                        : "text-text-dim hover:bg-dark2/60 hover:text-text"
+                    )}
+                  >
+                    <span className={cn(
+                      "material-symbols-outlined text-[20px]",
+                      mobileNavigationMode === 'classic' ? "text-[#4d7cfe]" : "text-text-dim"
+                    )}>
+                      dock_to_bottom
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[11px] font-bold">Clásica</span>
+                      <span className="mt-0.5 block text-[9px] font-medium text-text-dim">Barra inferior</span>
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    aria-pressed={mobileNavigationMode === 'command'}
+                    onClick={() => setMobileNavigationMode('command')}
+                    className={cn(
+                      "flex min-h-16 items-center gap-2.5 rounded-xl px-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe]",
+                      mobileNavigationMode === 'command'
+                        ? "bg-[#4d7cfe] text-white shadow-sm"
+                        : "text-text-dim hover:bg-dark2/60 hover:text-text"
+                    )}
+                  >
+                    <span className={cn(
+                      "material-symbols-outlined text-[20px]",
+                      mobileNavigationMode === 'command' ? "text-white" : "text-text-dim"
+                    )}>
+                      search
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[11px] font-bold">Nueva</span>
+                      <span className={cn(
+                        "mt-0.5 block text-[9px] font-medium",
+                        mobileNavigationMode === 'command' ? "text-white/75" : "text-text-dim"
+                      )}>
+                        Buscador global
+                      </span>
+                    </span>
+                  </button>
+                </div>
+
+                <div className="flex items-start gap-2 rounded-xl border border-[#4d7cfe]/20 bg-[#4d7cfe]/[0.06] px-3 py-2.5">
+                  <span className="material-symbols-outlined mt-px text-[17px] text-[#4d7cfe]">info</span>
+                  <p className="font-inter text-[10px] leading-relaxed text-text-dim">
+                    {mobileNavigationMode === 'classic'
+                      ? 'La barra inferior está activa. Puedes probar la nueva navegación cuando quieras.'
+                      : 'El buscador global está activo. Elige Clásica para recuperar la barra inferior.'}
+                    {' '}Este ajuste solo se guarda en este dispositivo.
+                  </p>
                 </div>
               </div>
             )}

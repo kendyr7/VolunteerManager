@@ -11,6 +11,8 @@ import {
 } from '@/app/actions/phone-review-actions';
 import {
   PhoneGroupReviewItem,
+  AppliedPhoneReviewGroup,
+  AppliedPhoneReviewMember,
   PersonCentricDecision,
   PersonCentricItemInput,
 } from '@/lib/services/phone-cleanup-review.service';
@@ -19,41 +21,95 @@ import {
 } from '@/lib/services/phone-cleanup-processing.service';
 import {
   Phone,
-  ShieldCheck,
   History as HistoryIcon,
   Save,
   CheckCircle2,
-  Clock,
   RefreshCw,
   AlertTriangle,
   Zap,
   CheckCheck,
   Info,
-  Calendar,
-  User,
   XCircle,
   CheckSquare,
-  Square
+  Square,
+  ArrowRight,
+  Crown,
+  Users,
+  Archive,
+  Smartphone,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
-import { SortableTableHead, TableSortDirection } from '@/components/SortableTableHead';
 import { SmartSearchBar } from '@/components/SmartSearchBar';
 import { useDebouncedSearch } from '@/lib/use-debounced-search';
 import { HighlightText } from '@/components/HighlightText';
 import { normalizeSearch } from '@/lib/utils';
 
-type ProcessedSortField = 'name' | 'phone' | 'decision' | 'processedBy' | 'date';
+const phoneDigits = (value: string) => value.replace(/\D/g, '').slice(-8);
+
+function getAppliedDecisionCopy(member: AppliedPhoneReviewMember) {
+  switch (member.decision) {
+    case 'PHONE_OWNER':
+      return {
+        label: 'Titular del número',
+        detail: 'Este perfil conserva el teléfono del grupo.',
+        className: 'bg-[#4d7cfe]/10 text-[#4d7cfe] border-[#4d7cfe]/25',
+      };
+    case 'SHARED_PHONE':
+      return {
+        label: 'Teléfono compartido',
+        detail: member.sharedPhoneOwnerName
+          ? `Comparte el número con ${member.sharedPhoneOwnerName}.`
+          : 'Comparte el número con el titular autorizado.',
+        className: 'bg-violet-500/10 text-violet-500 border-violet-500/25',
+      };
+    case 'PHONE_DOES_NOT_BELONG':
+      return {
+        label: 'Número corregido',
+        detail: 'Se reemplazó el teléfono que pertenecía a este grupo.',
+        className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25',
+      };
+    case 'ARCHIVE_DUPLICATE':
+      return {
+        label: 'Registro archivado',
+        detail: member.duplicatePrimaryVolunteerName
+          ? `El registro principal es ${member.duplicatePrimaryVolunteerName}.`
+          : 'Se archivó como perfil duplicado.',
+        className: 'bg-[#fe4d97]/10 text-[#fe4d97] border-[#fe4d97]/25',
+      };
+    case 'KEEP':
+      return {
+        label: 'Número conservado',
+        detail: 'El teléfono se mantuvo sin cambios.',
+        className: 'bg-[#6dd230]/10 text-emerald-700 dark:text-[#6dd230] border-[#6dd230]/25',
+      };
+    default:
+      return {
+        label: 'Revisión aplicada',
+        detail: 'La decisión fue procesada.',
+        className: 'bg-dark3 text-text-dim border-border',
+      };
+  }
+}
 
 export default function PhoneCleanupPersonCentricPage() {
   const [groups, setGroups] = useState<PhoneGroupReviewItem[]>([]);
+  const [appliedGroups, setAppliedGroups] = useState<AppliedPhoneReviewGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const { inputValue: searchInput, setInputValue: setSearchInput, appliedSearch: search, applySearch } = useDebouncedSearch();
+  const {
+    inputValue: historySearchInput,
+    setInputValue: setHistorySearchInput,
+    appliedSearch: historySearch,
+    applySearch: applyHistorySearch,
+  } = useDebouncedSearch();
   const [activeTab, setActiveTab] = useState<'PENDING' | 'READY' | 'PROCESSED'>('PENDING');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNREVIEWED' | 'SAVED' | 'REQUIRES_INFO' | 'LATER'>('ALL');
-  const [reviewerName, setReviewerName] = useState('Administrador');
-  const [processedSortField, setProcessedSortField] = useState<ProcessedSortField>('date');
-  const [processedSortDirection, setProcessedSortDirection] = useState<TableSortDirection>('desc');
+  const [expandedPhoneKey, setExpandedPhoneKey] = useState<string | null>(null);
+  const [expandedAppliedReviewId, setExpandedAppliedReviewId] = useState<string | null>(null);
+  const [committeeFilter, setCommitteeFilter] = useState('ALL');
 
   // Selected Item IDs for batch execution in "Listas para aplicar"
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
@@ -80,7 +136,9 @@ export default function PhoneCleanupPersonCentricPage() {
     const res = await fetchPhoneCleanupGroupsAction(true);
     if (res.success && res.data) {
       setGroups(res.data);
+      setAppliedGroups(res.appliedGroups);
       initFormState(res.data);
+      setSelectedItemIds([]);
     } else {
       setErrorMsg(res.error || 'Error al cargar teléfonos desde Supabase.');
     }
@@ -174,7 +232,6 @@ export default function PhoneCleanupPersonCentricPage() {
     try {
       const res = await savePersonCentricReviewAction({
         phoneNormalized: phoneKey,
-        reviewedBy: reviewerName || 'Administrador',
         items: itemsToSave,
       });
 
@@ -190,16 +247,28 @@ export default function PhoneCleanupPersonCentricPage() {
     }
   };
 
+  // Only unresolved duplicates belong in the pending workflow. A phone with one
+  // active profile plus archived profiles is an already-resolved exception.
+  const pendingGroups = useMemo(() => {
+    return groups.map(g => {
+      const activeVolunteerCount = g.volunteers.filter(v => v.status === 'active').length;
+      const pendingVols = g.volunteers.filter(v => v.status === 'active' && v.processingStatus !== 'PROCESSED');
+      if (activeVolunteerCount < 2) return { ...g, volunteers: [] };
+      return { ...g, volunteers: pendingVols };
+    }).filter(g => g.volunteers.length > 0);
+  }, [groups]);
+
   // Items ready to process in "Listas para aplicar" tab
   const readyToProcessItems = useMemo(() => {
-    const list: Array<{ itemId: string; volunteerId: string; fullName: string; phoneNormalized: string; phoneActual: string; decision: PersonCentricDecision; correctedPhone?: string | null }> = [];
-    groups.forEach(g => {
+    const list: Array<{ itemId: string; volunteerId: string; fullName: string; committee: string; phoneNormalized: string; phoneActual: string; decision: PersonCentricDecision; correctedPhone?: string | null }> = [];
+    pendingGroups.forEach(g => {
       g.volunteers.forEach(v => {
-        if (v.reviewItemStatus === 'READY_TO_PROCESS' && v.processingStatus === 'PENDING' && v.decision) {
+        if (v.status === 'active' && v.reviewItemId && v.reviewItemStatus === 'READY_TO_PROCESS' && v.processingStatus === 'PENDING' && v.decision) {
           list.push({
-            itemId: v.id, // Item ID loaded in volunteer structure
+            itemId: v.reviewItemId,
             volunteerId: v.id,
             fullName: v.fullName,
+            committee: v.committee,
             phoneNormalized: g.phoneNormalized,
             phoneActual: v.phone,
             decision: v.decision,
@@ -209,98 +278,135 @@ export default function PhoneCleanupPersonCentricPage() {
       });
     });
     return list;
-  }, [groups]);
+  }, [pendingGroups]);
 
-  // Processed items in "Aplicadas" tab
-  const processedItemsList = useMemo(() => {
-    const list: Array<{ volunteerId: string; fullName: string; phoneNormalized: string; phoneActual: string; decision: PersonCentricDecision | null; processedAt?: string | null; processedBy?: string | null }> = [];
-    groups.forEach(g => {
-      g.volunteers.forEach(v => {
-        if (v.processingStatus === 'PROCESSED') {
-          list.push({
-            volunteerId: v.id,
-            fullName: v.fullName,
-            phoneNormalized: g.phoneNormalized,
-            phoneActual: v.phone,
-            decision: v.decision || null,
-            processedAt: v.processedAt,
-            processedBy: v.processedBy,
-          });
+  const committeeOptions = useMemo(() => {
+    const committees = new Set<string>();
+    groups.forEach(group => group.volunteers.forEach(volunteer => {
+      if (volunteer.committee) committees.add(volunteer.committee);
+    }));
+    appliedGroups.forEach(group => group.members.forEach(member => {
+      if (member.committee) committees.add(member.committee);
+    }));
+    return Array.from(committees).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [groups, appliedGroups]);
+
+  const filteredReadyToProcessItems = useMemo(() => {
+    if (committeeFilter === 'ALL') return readyToProcessItems;
+    return readyToProcessItems.filter(item => item.committee === committeeFilter);
+  }, [readyToProcessItems, committeeFilter]);
+
+  const filteredAppliedGroups = useMemo(() => {
+    const terms = historySearch.split(',').map(term => normalizeSearch(term.trim())).filter(Boolean);
+    return appliedGroups.filter(group => {
+      const matchesCommittee = committeeFilter === 'ALL' || group.members.some(member => member.committee === committeeFilter);
+      if (!matchesCommittee) return false;
+      if (terms.length === 0) return true;
+
+      const searchable = normalizeSearch([
+        group.phoneNormalized,
+        ...group.currentMembers.flatMap(member => [member.fullName, member.committee]),
+        ...group.members.flatMap(member => [
+          member.fullName,
+          member.committee,
+          member.originalPhone,
+          member.resultingPhone,
+          member.decision,
+          member.sharedPhoneOwnerName || '',
+          member.duplicatePrimaryVolunteerName || '',
+        ]),
+      ].join(' '));
+      return terms.every(term => searchable.includes(term));
+    });
+  }, [appliedGroups, historySearch, committeeFilter]);
+
+  const pendingGroupMetrics = useMemo(() => {
+    const metrics = new Map<string, {
+      reviewedCount: number;
+      unreviewedCount: number;
+      requiresInfoCount: number;
+      laterCount: number;
+      status: 'UNREVIEWED' | 'SAVED' | 'REQUIRES_INFO' | 'LATER';
+    }>();
+
+    pendingGroups.forEach(group => {
+      const groupVolState = formState[group.phoneNormalized] || {};
+      let reviewedCount = 0;
+      let unreviewedCount = 0;
+      let requiresInfoCount = 0;
+      let laterCount = 0;
+
+      group.volunteers.forEach(volunteer => {
+        const state = groupVolState[volunteer.id];
+        if (!state?.decision) {
+          unreviewedCount++;
+          return;
         }
+
+        reviewedCount++;
+        if (state.decision === 'PHONE_DOES_NOT_BELONG' && !state.hasCorrectedPhone) requiresInfoCount++;
+        if (state.decision === 'MANUAL_REVIEW') laterCount++;
+      });
+
+      const status = requiresInfoCount > 0
+        ? 'REQUIRES_INFO'
+        : unreviewedCount > 0
+          ? 'UNREVIEWED'
+          : laterCount > 0
+            ? 'LATER'
+            : 'SAVED';
+
+      metrics.set(group.phoneNormalized, {
+        reviewedCount,
+        unreviewedCount,
+        requiresInfoCount,
+        laterCount,
+        status,
       });
     });
-    return list;
-  }, [groups]);
 
-  const sortedProcessedItems = useMemo(() => {
-    const getValue = (item: (typeof processedItemsList)[number]) => {
-      switch (processedSortField) {
-        case 'name': return item.fullName;
-        case 'phone': return item.phoneActual;
-        case 'decision': return item.decision || '';
-        case 'processedBy': return item.processedBy || '';
-        case 'date': return item.processedAt || '';
-      }
-    };
+    return metrics;
+  }, [pendingGroups, formState]);
 
-    return [...processedItemsList].sort((left, right) => {
-      const comparison = getValue(left).localeCompare(getValue(right), 'es', { numeric: true, sensitivity: 'base' });
-      return processedSortDirection === 'asc' ? comparison : -comparison;
-    });
-  }, [processedItemsList, processedSortDirection, processedSortField]);
-
-  const handleProcessedSort = (field: string) => {
-    const nextField = field as ProcessedSortField;
-    if (processedSortField === nextField) {
-      setProcessedSortDirection(current => current === 'asc' ? 'desc' : 'asc');
-      return;
-    }
-    setProcessedSortField(nextField);
-    setProcessedSortDirection(nextField === 'date' ? 'desc' : 'asc');
-  };
-
-  // Filter pending groups (excludes fully PROCESSED volunteers)
-  const filteredGroups = useMemo(() => {
-    return groups.map(g => {
-      const pendingVols = g.volunteers.filter(v => v.processingStatus !== 'PROCESSED');
-      return { ...g, volunteers: pendingVols };
-    }).filter(g => {
-      if (g.volunteers.length === 0) return false;
-      const searchTerms = search.split(',').map(term => normalizeSearch(term.trim())).filter(Boolean);
+  const searchedPendingGroups = useMemo(() => {
+    const searchTerms = search.split(',').map(term => normalizeSearch(term.trim())).filter(Boolean);
+    return pendingGroups.filter(g => {
+      if (committeeFilter !== 'ALL' && !g.volunteers.some(volunteer => volunteer.committee === committeeFilter)) return false;
       const matchSearch = searchTerms.length === 0 || searchTerms.every(term => {
         if (normalizeSearch(g.phoneNormalized).includes(term)) return true;
         return g.volunteers.some(volunteer => normalizeSearch(
           `${volunteer.fullName} ${volunteer.phone} ${volunteer.committee} ${volunteer.stake || ''} ${volunteer.neighborhood || ''}`
         ).includes(term));
       });
-      if (!matchSearch) return false;
-
-      if (statusFilter === 'ALL') return true;
-
-      const groupVolState = formState[g.phoneNormalized] || {};
-      const hasUnreviewed = g.volunteers.some(v => !groupVolState[v.id]?.decision);
-      const hasSaved = g.volunteers.some(v => !!groupVolState[v.id]?.decision);
-      const hasReqInfo = g.volunteers.some(v => groupVolState[v.id]?.decision === 'PHONE_DOES_NOT_BELONG' && !groupVolState[v.id]?.hasCorrectedPhone);
-      const hasLater = g.volunteers.some(v => groupVolState[v.id]?.decision === 'MANUAL_REVIEW');
-
-      if (statusFilter === 'UNREVIEWED') return hasUnreviewed;
-      if (statusFilter === 'SAVED') return hasSaved;
-      if (statusFilter === 'REQUIRES_INFO') return hasReqInfo;
-      if (statusFilter === 'LATER') return hasLater;
-
-      return true;
+      return matchSearch;
     });
-  }, [groups, search, statusFilter, formState]);
+  }, [pendingGroups, search, committeeFilter]);
+
+  const pendingStatusCounts = useMemo(() => {
+    const counts = { ALL: searchedPendingGroups.length, UNREVIEWED: 0, SAVED: 0, REQUIRES_INFO: 0, LATER: 0 };
+    searchedPendingGroups.forEach(group => {
+      const status = pendingGroupMetrics.get(group.phoneNormalized)?.status;
+      if (status) counts[status]++;
+    });
+    return counts;
+  }, [searchedPendingGroups, pendingGroupMetrics]);
+
+  const filteredGroups = useMemo(() => {
+    if (statusFilter === 'ALL') return searchedPendingGroups;
+    return searchedPendingGroups.filter(group => pendingGroupMetrics.get(group.phoneNormalized)?.status === statusFilter);
+  }, [searchedPendingGroups, statusFilter, pendingGroupMetrics]);
 
   const toggleItemSelection = (id: string) => {
     setSelectedItemIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
   const toggleSelectAllReady = () => {
-    if (selectedItemIds.length === readyToProcessItems.length) {
-      setSelectedItemIds([]);
+    const visibleIds = filteredReadyToProcessItems.map(item => item.itemId);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedItemIds.includes(id));
+    if (allVisibleSelected) {
+      setSelectedItemIds(previous => previous.filter(id => !visibleIds.includes(id)));
     } else {
-      setSelectedItemIds(readyToProcessItems.map(i => i.volunteerId));
+      setSelectedItemIds(previous => Array.from(new Set([...previous, ...visibleIds])));
     }
   };
 
@@ -310,11 +416,17 @@ export default function PhoneCleanupPersonCentricPage() {
     setErrorMsg(null);
 
     try {
-      const res = await applyPhoneCleanupItemsAction(selectedItemIds, reviewerName, dryRun);
+      const res = await applyPhoneCleanupItemsAction(selectedItemIds, dryRun);
       if (res.success && res.summary) {
         setBatchSummary(res.summary);
-        setToastMsg(`✅ Procesamiento finalizado: ${res.summary.processedCount} exitosos, ${res.summary.conflictCount} conflictos.`);
-        setTimeout(() => setToastMsg(null), 5000);
+        const failedCount = res.summary.totalRequested - res.summary.processedCount - res.summary.alreadyProcessedCount;
+        if (failedCount > 0) {
+          setErrorMsg(`Se aplicaron ${res.summary.processedCount} de ${res.summary.totalRequested} cambios. Revisa el detalle de los ${failedCount} pendientes.`);
+          setActiveTab('READY');
+        } else {
+          setToastMsg(`${res.summary.processedCount} cambios aplicados correctamente.`);
+          setTimeout(() => setToastMsg(null), 5000);
+        }
         setShowConfirmModal(false);
         await loadData();
       } else {
@@ -327,98 +439,93 @@ export default function PhoneCleanupPersonCentricPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-10 font-sans">
-      {/* HEADER BANNER */}
-      <div className="max-w-6xl mx-auto mb-8 space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-800/80 backdrop-blur border border-slate-700/80 p-6 rounded-2xl shadow-xl">
+    <div className="min-h-screen bg-dark p-4 font-sans text-text sm:p-6 lg:p-8">
+      <header className="sticky top-0 z-40 -mx-4 -mt-4 mb-4 bg-dark/90 px-4 pb-4 pt-6 backdrop-blur-xl sm:-mx-6 sm:-mt-6 sm:px-6 lg:-mx-8 lg:-mt-8 lg:px-8">
+        <div className="flex w-full items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl">
-                <ShieldCheck className="w-7 h-7" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                  Saneamiento de Teléfonos
-                </h1>
-                <p className="text-sm text-slate-400">
-                  Revisión centrada en personas. Revisa, guarda tu progreso y aplica los cambios confirmados.
-                </p>
-              </div>
-            </div>
+            <h1 className="flex items-center gap-3 text-[28px] font-black tracking-tight text-text sm:text-4xl">
+              Revisión de teléfonos
+              <span className="rounded-full border border-[#4d7cfe]/20 bg-[#4d7cfe]/10 px-2.5 py-1 text-xs font-bold text-[#4d7cfe]">
+                {pendingGroups.length}
+              </span>
+            </h1>
+            <p className="mt-1 text-sm text-text-dim">Resuelve números compartidos o duplicados antes de aplicarlos.</p>
           </div>
-
-          <div className="flex items-center gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-700/60">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Revisor:</span>
-            <Input
-              value={reviewerName}
-              onChange={(e) => setReviewerName(e.target.value)}
-              placeholder="Nombre del revisor..."
-              className="w-40 h-8 bg-slate-800 border-slate-700 text-white text-xs"
-            />
-            <Button
-              onClick={loadData}
-              variant="outline"
-              size="sm"
-              className="h-8 border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 gap-1.5"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Recargar
-            </Button>
-          </div>
+          <Button
+            onClick={loadData}
+            variant="outline"
+            size="sm"
+            className="h-9 shrink-0 gap-1.5 border-border bg-dark2 text-text hover:bg-dark3"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Actualizar</span>
+          </Button>
         </div>
+      </header>
+
+      <div className="mb-8 w-full space-y-4">
 
         {/* TABS SELECTOR */}
-        <div className="flex border-b border-slate-700/80 gap-6 text-sm font-semibold">
+        <div className="grid grid-cols-1 gap-1 rounded-xl border border-border bg-dark2 p-1.5 text-sm font-semibold sm:grid-cols-3" role="tablist" aria-label="Etapas de revisión telefónica">
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'PENDING'}
             onClick={() => setActiveTab('PENDING')}
-            className={`pb-3 transition-colors border-b-2 flex items-center gap-2 ${
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 transition-colors ${
               activeTab === 'PENDING'
-                ? 'border-indigo-500 text-indigo-400 font-bold'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'bg-[#4d7cfe] text-white'
+                : 'text-text-dim hover:bg-dark3 hover:text-text'
             }`}
           >
             <Phone className="w-4 h-4" />
-            🔵 Pendientes ({filteredGroups.length} teléfonos)
+            Pendientes ({pendingGroups.length} teléfonos)
           </button>
 
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'READY'}
             onClick={() => setActiveTab('READY')}
-            className={`pb-3 transition-colors border-b-2 flex items-center gap-2 ${
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 transition-colors ${
               activeTab === 'READY'
-                ? 'border-emerald-500 text-emerald-400 font-bold'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'bg-[#4d7cfe] text-white'
+                : 'text-text-dim hover:bg-dark3 hover:text-text'
             }`}
           >
             <Zap className="w-4 h-4" />
-            🟢 Listas para aplicar ({readyToProcessItems.length} personas)
+            Listas para aplicar ({readyToProcessItems.length} {readyToProcessItems.length === 1 ? 'persona' : 'personas'})
           </button>
 
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'PROCESSED'}
             onClick={() => setActiveTab('PROCESSED')}
-            className={`pb-3 transition-colors border-b-2 flex items-center gap-2 ${
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 transition-colors ${
               activeTab === 'PROCESSED'
-                ? 'border-blue-500 text-blue-400 font-bold'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'bg-[#4d7cfe] text-white'
+                : 'text-text-dim hover:bg-dark3 hover:text-text'
             }`}
           >
             <CheckCheck className="w-4 h-4" />
-            ✅ Aplicadas / Completadas ({processedItemsList.length} personas)
+            Aplicadas ({appliedGroups.length} teléfonos)
           </button>
         </div>
 
         {/* NOTIFICATIONS */}
         {errorMsg && (
-          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-sm flex items-center justify-between">
+          <div className="flex items-center justify-between rounded-xl border border-[#fe4d97]/30 bg-[#fe4d97]/10 p-4 text-sm text-[#fe4d97]">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0" />
               <span>{errorMsg}</span>
             </div>
-            <Button size="sm" variant="ghost" onClick={() => setErrorMsg(null)} className="text-rose-400 hover:text-rose-200">Cerrar</Button>
+            <Button size="sm" variant="ghost" onClick={() => setErrorMsg(null)} className="text-[#fe4d97] hover:bg-[#fe4d97]/10">Cerrar</Button>
           </div>
         )}
 
         {toastMsg && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-sm flex items-center gap-2 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2 rounded-xl border border-[#6dd230]/30 bg-[#6dd230]/10 p-4 text-sm text-emerald-700 animate-in fade-in duration-200 dark:text-[#6dd230]">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
             <span className="font-medium">{toastMsg}</span>
           </div>
@@ -427,74 +534,205 @@ export default function PhoneCleanupPersonCentricPage() {
 
       {/* TAB CONTENT 1: PENDIENTES */}
       {activeTab === 'PENDING' && (
-        <div className="max-w-6xl mx-auto space-y-8">
+        <div className="w-full space-y-8">
           {/* SEARCH & FILTERS */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-            <SmartSearchBar
-              value={searchInput}
-              onValueChange={setSearchInput}
-              onImmediateSearch={applySearch}
-              placeholder="Buscar por persona, número o subcomité..."
-              className="w-full sm:w-96"
-            />
+          <div className="flex flex-col justify-between gap-4 rounded-xl border border-border bg-dark2 p-4 xl:flex-row xl:items-center">
+            <div className="flex w-full flex-col gap-2 sm:flex-row xl:w-auto">
+              <SmartSearchBar
+                value={searchInput}
+                onValueChange={(value) => {
+                  setSearchInput(value);
+                  setExpandedPhoneKey(null);
+                }}
+                onImmediateSearch={applySearch}
+                placeholder="Buscar por persona o número..."
+                className="w-full sm:w-96"
+                inputClassName="!border-border !bg-dark3 !text-text placeholder:!text-text-dim"
+              />
+              <label className="sr-only" htmlFor="pending-committee-filter">Filtrar por comité</label>
+              <select
+                id="pending-committee-filter"
+                value={committeeFilter}
+                onChange={(event) => {
+                  setCommitteeFilter(event.target.value);
+                  setExpandedPhoneKey(null);
+                }}
+                className="h-10 min-w-52 rounded-lg border border-border bg-dark3 px-3 text-sm font-medium text-text"
+              >
+                <option value="ALL">Todos los comités</option>
+                {committeeOptions.map(committee => <option key={committee} value={committee}>{committee}</option>)}
+              </select>
+            </div>
 
             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
               <Button
                 size="sm"
                 variant={statusFilter === 'ALL' ? 'default' : 'outline'}
-                onClick={() => setStatusFilter('ALL')}
-                className={statusFilter === 'ALL' ? 'bg-indigo-600 hover:bg-indigo-500' : 'border-slate-700 text-slate-400'}
+                onClick={() => { setStatusFilter('ALL'); setExpandedPhoneKey(null); }}
+                className={statusFilter === 'ALL' ? 'bg-[#4d7cfe] text-white hover:bg-[#3b66e0]' : 'border-border bg-dark2 text-text-dim'}
               >
-                Todos ({filteredGroups.length})
+                Todos ({pendingStatusCounts.ALL})
               </Button>
               <Button
                 size="sm"
                 variant={statusFilter === 'UNREVIEWED' ? 'default' : 'outline'}
-                onClick={() => setStatusFilter('UNREVIEWED')}
-                className={statusFilter === 'UNREVIEWED' ? 'bg-slate-700 text-white' : 'border-slate-700 text-slate-400'}
+                onClick={() => { setStatusFilter('UNREVIEWED'); setExpandedPhoneKey(null); }}
+                className={statusFilter === 'UNREVIEWED' ? 'bg-[#4d7cfe] text-white' : 'border-border bg-dark2 text-text-dim'}
               >
-                ⚪ Sin revisar
+                Sin revisar ({pendingStatusCounts.UNREVIEWED})
               </Button>
               <Button
                 size="sm"
                 variant={statusFilter === 'SAVED' ? 'default' : 'outline'}
-                onClick={() => setStatusFilter('SAVED')}
-                className={statusFilter === 'SAVED' ? 'bg-emerald-600 text-white' : 'border-slate-700 text-slate-400'}
+                onClick={() => { setStatusFilter('SAVED'); setExpandedPhoneKey(null); }}
+                className={statusFilter === 'SAVED' ? 'bg-[#4d7cfe] text-white' : 'border-border bg-dark2 text-text-dim'}
               >
-                🟢 Guardados
+                Guardados ({pendingStatusCounts.SAVED})
               </Button>
               <Button
                 size="sm"
                 variant={statusFilter === 'REQUIRES_INFO' ? 'default' : 'outline'}
-                onClick={() => setStatusFilter('REQUIRES_INFO')}
-                className={statusFilter === 'REQUIRES_INFO' ? 'bg-amber-600 text-white' : 'border-slate-700 text-slate-400'}
+                onClick={() => { setStatusFilter('REQUIRES_INFO'); setExpandedPhoneKey(null); }}
+                className={statusFilter === 'REQUIRES_INFO' ? 'bg-[#4d7cfe] text-white' : 'border-border bg-dark2 text-text-dim'}
               >
-                🟡 Requieren información
+                Requieren información ({pendingStatusCounts.REQUIRES_INFO})
               </Button>
               <Button
                 size="sm"
                 variant={statusFilter === 'LATER' ? 'default' : 'outline'}
-                onClick={() => setStatusFilter('LATER')}
-                className={statusFilter === 'LATER' ? 'bg-purple-600 text-white' : 'border-slate-700 text-slate-400'}
+                onClick={() => { setStatusFilter('LATER'); setExpandedPhoneKey(null); }}
+                className={statusFilter === 'LATER' ? 'bg-[#4d7cfe] text-white' : 'border-border bg-dark2 text-text-dim'}
               >
-                ⏳ Revisar después
+                Revisar después ({pendingStatusCounts.LATER})
               </Button>
             </div>
           </div>
 
           {loading ? (
-            <div className="text-center py-20 bg-slate-800/30 rounded-2xl border border-slate-800">
+            <div className="rounded-xl border border-border bg-dark2 py-20 text-center">
               <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin mx-auto mb-3" />
-              <p className="text-slate-400 text-sm">Cargando listas de teléfonos pendientes desde Supabase...</p>
+              <p className="text-sm text-text-dim">Cargando teléfonos pendientes…</p>
             </div>
           ) : filteredGroups.length === 0 ? (
-            <div className="text-center py-20 bg-slate-800/30 rounded-2xl border border-slate-800 space-y-2">
+            <div className="space-y-2 rounded-xl border border-border bg-dark2 py-20 text-center">
               <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto opacity-80" />
-              <h3 className="text-lg font-semibold text-white">¡No hay teléfonos pendientes!</h3>
-              <p className="text-slate-400 text-sm">Todas las revisiones de esta sección han sido completadas o aplicadas.</p>
+              <h3 className="text-lg font-semibold text-text">No hay teléfonos pendientes</h3>
+              <p className="text-sm text-text-dim">Todas las revisiones de esta sección fueron completadas o aplicadas.</p>
             </div>
           ) : (
-            filteredGroups.map(group => {
+            <>
+              <section className="overflow-hidden rounded-xl border border-border bg-dark2" aria-label="Teléfonos pendientes de revisión">
+                <div className="flex flex-col gap-1 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-semibold text-text">
+                    {filteredGroups.length} {filteredGroups.length === 1 ? 'teléfono encontrado' : 'teléfonos encontrados'}
+                  </p>
+                  <p className="text-xs text-text-dim">Selecciona un teléfono para revisar a las personas asociadas.</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full table-fixed border-collapse text-left text-sm md:min-w-[760px] md:table-auto">
+                    <thead className="bg-dark3 text-xs font-semibold text-text-dim">
+                      <tr>
+                        <th scope="col" className="px-4 py-3">Teléfono</th>
+                        <th scope="col" className="px-4 py-3">Personas</th>
+                        <th scope="col" className="hidden px-4 py-3 sm:table-cell">Comité</th>
+                        <th scope="col" className="px-4 py-3">Estado</th>
+                        <th scope="col" className="hidden px-4 py-3 md:table-cell">Progreso</th>
+                        <th scope="col" className="hidden px-4 py-3 text-right md:table-cell">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredGroups.filter(group => !expandedPhoneKey || group.phoneNormalized === expandedPhoneKey).map(group => {
+                        const metrics = pendingGroupMetrics.get(group.phoneNormalized);
+                        const isExpanded = expandedPhoneKey === group.phoneNormalized;
+                        const status = metrics?.status || 'UNREVIEWED';
+                        const statusCopy = status === 'REQUIRES_INFO'
+                          ? 'Requiere información'
+                          : status === 'LATER'
+                            ? 'Revisar después'
+                            : status === 'SAVED'
+                              ? 'Guardado'
+                              : 'Sin revisar';
+                        const statusClass = status === 'REQUIRES_INFO'
+                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                          : status === 'LATER'
+                            ? 'border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300'
+                            : status === 'SAVED'
+                              ? 'border-[#6dd230]/30 bg-[#6dd230]/10 text-emerald-700 dark:text-[#6dd230]'
+                              : 'border-border bg-dark3 text-text-dim';
+
+                        return (
+                          <tr key={group.phoneNormalized} className={isExpanded ? 'bg-[#4d7cfe]/5' : 'hover:bg-dark3/60'}>
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedPhoneKey(isExpanded ? null : group.phoneNormalized)}
+                                className="inline-flex items-center gap-1 font-bold tracking-wide text-text hover:text-[#4d7cfe] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe]"
+                              >
+                                <HighlightText text={group.phoneNormalized} term={search} />
+                                {isExpanded ? <ChevronUp className="h-3.5 w-3.5 md:hidden" /> : <ChevronDown className="h-3.5 w-3.5 md:hidden" />}
+                              </button>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-start gap-2">
+                                <Users className="mt-0.5 h-4 w-4 shrink-0 text-text-dim" />
+                                <div>
+                                  <p className="font-medium text-text">
+                                    {group.volunteers.slice(0, 2).map(volunteer => volunteer.fullName).join(', ')}
+                                  </p>
+                                  {group.volunteers.length > 2 && (
+                                    <p className="mt-0.5 text-xs text-text-dim">+{group.volunteers.length - 2} personas más</p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="hidden px-4 py-3 text-text-dim sm:table-cell">
+                              {Array.from(new Set(group.volunteers.map(volunteer => volunteer.committee))).join(', ')}
+                            </td>
+                            <td className="px-3 py-3 sm:px-4">
+                              <Badge variant="outline" className={`${statusClass} max-w-24 whitespace-normal text-center leading-tight md:max-w-none md:whitespace-nowrap`}>{statusCopy}</Badge>
+                            </td>
+                            <td className="hidden px-4 py-3 md:table-cell">
+                              <div className="w-36 space-y-1.5">
+                                <div className="flex justify-between text-xs text-text-dim">
+                                  <span>{metrics?.reviewedCount || 0} de {group.volunteers.length}</span>
+                                  <span>{Math.round(((metrics?.reviewedCount || 0) / group.volunteers.length) * 100)}%</span>
+                                </div>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-dark3">
+                                  <div
+                                    className="h-full rounded-full bg-[#4d7cfe] transition-[width] duration-200"
+                                    style={{ width: `${((metrics?.reviewedCount || 0) / group.volunteers.length) * 100}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="hidden px-4 py-3 text-right md:table-cell">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setExpandedPhoneKey(isExpanded ? null : group.phoneNormalized)}
+                                className="gap-1.5 text-[#4d7cfe] hover:bg-[#4d7cfe]/10 hover:text-[#4d7cfe]"
+                                aria-expanded={isExpanded}
+                              >
+                                {isExpanded ? 'Cerrar' : 'Revisar'}
+                                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              {!filteredGroups.some(group => group.phoneNormalized === expandedPhoneKey) && (
+                <p className="rounded-lg border border-dashed border-border px-4 py-5 text-center text-sm text-text-dim">
+                  Abre una fila para ver y guardar las decisiones de cada persona.
+                </p>
+              )}
+
+              {filteredGroups.filter(group => group.phoneNormalized === expandedPhoneKey).map(group => {
               const phoneKey = group.phoneNormalized;
               const groupVolState = formState[phoneKey] || {};
 
@@ -510,37 +748,37 @@ export default function PhoneCleanupPersonCentricPage() {
               });
 
               return (
-                <div key={phoneKey} className="bg-slate-800/90 border border-slate-700/80 rounded-2xl overflow-hidden shadow-xl">
+                <div key={phoneKey} className="overflow-hidden rounded-xl border border-border bg-dark2">
                   {/* PHONE HEADER BANNER */}
-                  <div className="bg-slate-950/70 p-5 border-b border-slate-700/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex flex-col justify-between gap-4 border-b border-border bg-dark3/70 p-5 md:flex-row md:items-center">
                     <div className="space-y-1">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg">
                           <Phone className="w-5 h-5" />
                         </div>
-                        <h2 className="text-xl font-bold text-white tracking-wide">📱 {phoneKey}</h2>
-                        <Badge variant="outline" className="bg-slate-800 text-slate-300 border-slate-700">
-                          {group.volunteers.length} personas pendientes en este teléfono
+                          <h2 className="text-xl font-bold tracking-wide text-text">{phoneKey}</h2>
+                        <Badge variant="outline" className="border-border bg-dark2 text-text-dim">
+                          {group.volunteers.length} {group.volunteers.length === 1 ? 'persona pendiente' : 'personas pendientes'} en este teléfono
                         </Badge>
                       </div>
 
                       <div className="flex items-center gap-3 text-xs font-medium pt-1">
-                        <span className="text-emerald-400">🟢 {reviewedCount} revisadas</span>
-                        {reqInfoCount > 0 && <span className="text-amber-400">🟡 {reqInfoCount} requiere información</span>}
-                        {unreviewedCount > 0 && <span className="text-slate-400">⚪ {unreviewedCount} sin revisar</span>}
+                        <span className="text-emerald-600 dark:text-[#6dd230]">{reviewedCount} {reviewedCount === 1 ? 'revisada' : 'revisadas'}</span>
+                        {reqInfoCount > 0 && <span className="text-amber-700 dark:text-amber-400">{reqInfoCount} {reqInfoCount === 1 ? 'requiere' : 'requieren'} información</span>}
+                        {unreviewedCount > 0 && <span className="text-text-dim">{unreviewedCount} sin revisar</span>}
                       </div>
                     </div>
 
                     <Button
                       onClick={() => handleSaveProgress(group)}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-lg gap-2 px-5 py-2.5 rounded-xl transition-all"
+                      className="gap-2 rounded-lg bg-[#4d7cfe] px-5 py-2.5 font-semibold text-white hover:bg-[#3b66e0]"
                     >
-                      <Save className="w-4 h-4" /> 💾 GUARDAR PROGRESO
+                      <Save className="w-4 h-4" /> Guardar decisiones
                     </Button>
                   </div>
 
                   {/* VOLUNTEERS LIST */}
-                  <div className="p-6 space-y-6 divide-y divide-slate-700/60">
+                  <div className="space-y-6 divide-y divide-border p-6">
                     {group.volunteers.map((vol, vIdx) => {
                       const st = groupVolState[vol.id] || { decision: '', hasCorrectedPhone: false, correctedPhone: '', sharedPhoneOwnerId: '', duplicatePrimaryVolunteerId: '', reviewerComment: '' };
                       const isSaved = !!st.decision;
@@ -553,26 +791,35 @@ export default function PhoneCleanupPersonCentricPage() {
                           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
                             <div className="space-y-1.5 max-w-md">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-bold text-base text-white"><HighlightText text={vol.fullName} term={search} /></span>
-                                {isReqInfo ? <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/30">🟡 Requiere información</Badge> : isLater ? <Badge className="bg-purple-500/20 text-purple-300 border border-purple-500/30">⏳ Revisar después</Badge> : isSaved ? <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">🟢 Guardado</Badge> : <Badge variant="outline" className="text-slate-400 border-slate-700 bg-slate-900/50">⚪ Sin revisar</Badge>}
-                                {hasLegacy && <Badge variant="outline" className="text-slate-400 border-slate-700 text-[10px]">📜 Existe historial anterior</Badge>}
+                                <span className="text-base font-bold text-text"><HighlightText text={vol.fullName} term={search} /></span>
+                                {isReqInfo ? <Badge className="border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">Requiere información</Badge> : isLater ? <Badge className="border border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300">Revisar después</Badge> : isSaved ? <Badge className="border border-[#6dd230]/30 bg-[#6dd230]/10 text-emerald-700 dark:text-[#6dd230]">Guardado</Badge> : <Badge variant="outline" className="border-border bg-dark3 text-text-dim">Sin revisar</Badge>}
+                                {(vol.processingStatus === 'CONFLICT' || vol.processingStatus === 'ERROR') && (
+                                  <Badge className="border border-rose-500/30 bg-rose-500/15 text-rose-300">Requiere corrección</Badge>
+                                )}
+                                {hasLegacy && <Badge variant="outline" className="border-border text-[10px] text-text-dim">Existe historial anterior</Badge>}
                               </div>
-                              <div className="text-xs text-slate-400 space-x-3">
-                                <span>Comité: <strong className="text-slate-300">{vol.committee}</strong></span>
+                              {vol.processingError && (
+                                <p className="flex max-w-xl items-start gap-1.5 text-xs text-rose-300" role="alert">
+                                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                  {vol.processingError}
+                                </p>
+                              )}
+                              <div className="space-x-3 text-xs text-text-dim">
+                                <span>Comité: <strong className="text-text">{vol.committee}</strong></span>
                                 <span>•</span>
-                                <span>Estado: <strong className={vol.status === 'active' ? 'text-emerald-400' : 'text-slate-400'}>{vol.status === 'active' ? 'Activo' : 'Archivado'}</strong></span>
+                                <span>Estado: <strong className={vol.status === 'active' ? 'text-emerald-600 dark:text-[#6dd230]' : 'text-text-dim'}>{vol.status === 'active' ? 'Activo' : 'Archivado'}</strong></span>
                               </div>
                             </div>
 
-                            <div className="flex-1 max-w-xl space-y-4 bg-slate-900/60 p-4 rounded-xl border border-slate-700/50">
+                            <div className="max-w-xl flex-1 space-y-4 rounded-xl bg-dark3 p-4">
                               <div>
-                                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Decisión para esta persona:</label>
+                                <label className="mb-1.5 block text-xs font-semibold text-text">Decisión para esta persona:</label>
                                 <select
                                   value={st.decision}
                                   onChange={(e) => handleDecisionChange(phoneKey, vol.id, e.target.value as PersonCentricDecision)}
-                                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 text-sm"
+                                  className="w-full rounded-lg border border-border bg-dark2 p-2.5 text-sm text-text"
                                 >
-                                  <option value="">[ Seleccionar opción humanos... ]</option>
+                                  <option value="">Seleccionar una decisión…</option>
                                   <option value="KEEP">1. Mantener este teléfono</option>
                                   <option value="PHONE_OWNER">2. Es el titular de este teléfono</option>
                                   <option value="SHARED_PHONE">3. Comparte este teléfono</option>
@@ -594,9 +841,9 @@ export default function PhoneCleanupPersonCentricPage() {
                                   </label>
 
                                   {st.hasCorrectedPhone ? (
-                                    <Input value={st.correctedPhone} onChange={(e) => handleFieldChange(phoneKey, vol.id, 'correctedPhone', e.target.value)} placeholder="Ej: 88888888" className="bg-slate-800 border-slate-700 text-white text-xs" />
+                                    <Input value={st.correctedPhone} onChange={(e) => handleFieldChange(phoneKey, vol.id, 'correctedPhone', e.target.value)} placeholder="Ej: 88888888" className="border-border bg-dark2 text-xs text-text" />
                                   ) : (
-                                    <div className="p-2 bg-slate-900/80 text-xs text-amber-300 rounded">⚠️ Esta persona requiere información. No se realizará ningún cambio.</div>
+                                    <div className="rounded bg-dark2 p-2 text-xs text-amber-700 dark:text-amber-300">Esta persona requiere información. No se realizará ningún cambio.</div>
                                   )}
                                 </div>
                               )}
@@ -604,7 +851,7 @@ export default function PhoneCleanupPersonCentricPage() {
                               {st.decision === 'SHARED_PHONE' && (
                                 <div className="space-y-1.5 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
                                   <label className="text-xs font-semibold text-indigo-300">¿Con quién comparte el teléfono?</label>
-                                  <select value={st.sharedPhoneOwnerId} onChange={(e) => handleFieldChange(phoneKey, vol.id, 'sharedPhoneOwnerId', e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 text-xs">
+                                  <select value={st.sharedPhoneOwnerId} onChange={(e) => handleFieldChange(phoneKey, vol.id, 'sharedPhoneOwnerId', e.target.value)} className="w-full rounded border border-border bg-dark2 p-2 text-xs text-text">
                                     <option value="">[ Seleccionar titular... ]</option>
                                     {group.volunteers.filter(other => other.id !== vol.id).map(other => (<option key={other.id} value={other.id}>{other.fullName}</option>))}
                                   </select>
@@ -614,7 +861,7 @@ export default function PhoneCleanupPersonCentricPage() {
                               {st.decision === 'ARCHIVE_DUPLICATE' && (
                                 <div className="space-y-1.5 p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg">
                                   <label className="text-xs font-semibold text-rose-300">¿Qué persona conserva el registro principal?</label>
-                                  <select value={st.duplicatePrimaryVolunteerId} onChange={(e) => handleFieldChange(phoneKey, vol.id, 'duplicatePrimaryVolunteerId', e.target.value)} className="w-full bg-slate-800 border border-slate-700 text-white rounded p-2 text-xs">
+                                  <select value={st.duplicatePrimaryVolunteerId} onChange={(e) => handleFieldChange(phoneKey, vol.id, 'duplicatePrimaryVolunteerId', e.target.value)} className="w-full rounded border border-border bg-dark2 p-2 text-xs text-text">
                                     <option value="">[ Seleccionar voluntario principal... ]</option>
                                     {group.volunteers.filter(other => other.id !== vol.id).map(other => (<option key={other.id} value={other.id}>{other.fullName}</option>))}
                                   </select>
@@ -628,24 +875,69 @@ export default function PhoneCleanupPersonCentricPage() {
                   </div>
                 </div>
               );
-            })
+              })}
+            </>
           )}
         </div>
       )}
 
       {/* TAB CONTENT 2: LISTAS PARA APLICAR */}
       {activeTab === 'READY' && (
-        <div className="max-w-6xl mx-auto space-y-6">
-          <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-700/60 pb-5">
+        <div className="w-full space-y-6">
+          {batchSummary && (
+            <section
+              aria-live="polite"
+              className="rounded-xl border border-border bg-dark2 p-5"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-bold text-text">Resultado de la última aplicación</h2>
+                  <p className="mt-1 text-sm text-text-dim">
+                    {batchSummary.processedCount} aplicados, {batchSummary.alreadyProcessedCount} ya estaban aplicados y{' '}
+                    {batchSummary.totalRequested - batchSummary.processedCount - batchSummary.alreadyProcessedCount} continúan pendientes.
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setBatchSummary(null)} className="text-text-dim">
+                  Cerrar
+                </Button>
+              </div>
+
+              {batchSummary.results.some(result => !result.success) && (
+                <div className="mt-4 divide-y divide-border rounded-lg bg-dark3 px-4">
+                  {batchSummary.results.filter(result => !result.success).map(result => (
+                    <div key={result.itemId} className="flex items-start gap-3 py-3 text-sm">
+                      <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+                      <div>
+                        <p className="font-semibold text-rose-300">Cambio no aplicado</p>
+                        <p className="text-text-dim">{result.message}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          <div className="space-y-6 rounded-xl border border-border bg-dark2 p-5 sm:p-6">
+            <div className="flex flex-col items-start justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-center">
               <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <h2 className="flex items-center gap-2 text-xl font-bold text-text">
                   <Zap className="w-5 h-5 text-emerald-400" />
-                  Decisiones Confirmadas Listas para Aplicar
+                  Listas para aplicar
                 </h2>
-                <p className="text-xs text-slate-400">
+                <p className="mt-1 text-sm text-text-dim">
                   Selecciona los voluntarios cuyas decisiones confirmadas deseas aplicar a la base de datos oficial.
                 </p>
+                <label className="sr-only" htmlFor="ready-committee-filter">Filtrar por comité</label>
+                <select
+                  id="ready-committee-filter"
+                  value={committeeFilter}
+                  onChange={(event) => setCommitteeFilter(event.target.value)}
+                  className="mt-3 h-9 min-w-52 rounded-lg border border-border bg-dark3 px-3 text-sm font-medium text-text"
+                >
+                  <option value="ALL">Todos los comités</option>
+                  {committeeOptions.map(committee => <option key={committee} value={committee}>{committee}</option>)}
+                </select>
               </div>
 
               <div className="flex items-center gap-3">
@@ -653,114 +945,80 @@ export default function PhoneCleanupPersonCentricPage() {
                   onClick={toggleSelectAllReady}
                   variant="outline"
                   size="sm"
-                  className="border-slate-700 text-slate-300 gap-1.5"
+                  className="gap-1.5 border-border bg-dark2 text-text"
                 >
-                  {selectedItemIds.length === readyToProcessItems.length ? <CheckSquare className="w-4 h-4 text-emerald-400" /> : <Square className="w-4 h-4" />}
-                  Seleccionar Todo ({readyToProcessItems.length})
+                  {filteredReadyToProcessItems.length > 0 && filteredReadyToProcessItems.every(item => selectedItemIds.includes(item.itemId)) ? <CheckSquare className="w-4 h-4 text-emerald-400" /> : <Square className="w-4 h-4" />}
+                  Seleccionar visibles ({filteredReadyToProcessItems.length})
                 </Button>
 
                 <Button
                   onClick={() => setShowConfirmModal(true)}
                   disabled={selectedItemIds.length === 0}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-lg gap-2"
+                  className="gap-2 bg-[#4d7cfe] font-semibold text-white hover:bg-[#3b66e0]"
                 >
                   <Zap className="w-4 h-4" /> APLICAR CAMBIOS SELECCIONADOS ({selectedItemIds.length})
                 </Button>
               </div>
             </div>
 
-            {readyToProcessItems.length === 0 ? (
+            {filteredReadyToProcessItems.length === 0 ? (
               <div className="text-center py-16 space-y-2">
-                <Info className="w-8 h-8 text-slate-500 mx-auto" />
-                <p className="text-slate-400 text-sm">No hay decisiones marcadas como "Listas para aplicar".</p>
-                <p className="text-xs text-slate-500">Revisa la pestaña "Pendientes" y guarda tus selecciones primero.</p>
+                <Info className="mx-auto h-8 w-8 text-text-dim" />
+                <p className="text-sm text-text-dim">No hay decisiones listas para aplicar con este filtro.</p>
+                <p className="text-xs text-text-dim">Cambia el comité o revisa la pestaña Pendientes.</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {readyToProcessItems.map(item => {
-                  const isSelected = selectedItemIds.includes(item.volunteerId);
-                  return (
-                    <div
-                      key={item.volunteerId}
-                      onClick={() => toggleItemSelection(item.volunteerId)}
-                      className={`p-4 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
-                        isSelected
-                          ? 'bg-emerald-500/10 border-emerald-500/40 text-white'
-                          : 'bg-slate-900/60 border-slate-700/60 text-slate-300 hover:border-slate-600'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => {}}
-                          className="w-4 h-4 accent-emerald-500 cursor-pointer"
-                        />
-                        <div>
-                          <p className="font-bold text-white text-sm">{item.fullName}</p>
-                          <p className="text-xs text-slate-400">Teléfono actual: {item.phoneActual} ({item.phoneNormalized})</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          {item.decision === 'PHONE_OWNER' && 'Titular del teléfono'}
-                          {item.decision === 'SHARED_PHONE' && 'Comparte este teléfono'}
-                          {item.decision === 'PHONE_DOES_NOT_BELONG' && `Cambiar a: ${item.correctedPhone}`}
-                          {item.decision === 'ARCHIVE_DUPLICATE' && 'Archivar duplicado'}
-                          {item.decision === 'KEEP' && 'Mantener teléfono'}
-                        </Badge>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB CONTENT 3: APLICADAS / COMPLETADAS */}
-      {activeTab === 'PROCESSED' && (
-        <div className="max-w-6xl mx-auto space-y-6">
-          <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-6">
-            <div>
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <CheckCheck className="w-5 h-5 text-blue-400" />
-                Historial de Personas Aplicadas / Completadas
-              </h2>
-              <p className="text-xs text-slate-400">
-                Registro histórico auditado de saneamientos telefónicos ejecutados en la base de datos official.
-              </p>
-            </div>
-
-            {processedItemsList.length === 0 ? (
-              <div className="text-center py-16 space-y-2">
-                <HistoryIcon className="w-8 h-8 text-slate-500 mx-auto" />
-                <p className="text-slate-400 text-sm">No se han ejecutado saneamientos todavía.</p>
-              </div>
-            ) : (
-              <div className="max-h-[calc(100dvh-300px)] overflow-auto overscroll-contain rounded-xl border border-slate-700/60">
-                <table className="w-full text-left text-xs text-slate-300 border-collapse">
-                  <thead className="sticky top-0 z-20 bg-slate-950">
-                    <tr className="border-b border-slate-700 text-slate-400 uppercase tracking-wider bg-slate-950/50">
-                      <SortableTableHead field="name" activeField={processedSortField} direction={processedSortDirection} onSort={handleProcessedSort} className="p-3">Voluntario</SortableTableHead>
-                      <SortableTableHead field="phone" activeField={processedSortField} direction={processedSortDirection} onSort={handleProcessedSort} className="p-3">Teléfono</SortableTableHead>
-                      <SortableTableHead field="decision" activeField={processedSortField} direction={processedSortDirection} onSort={handleProcessedSort} className="p-3">Decisión Aplicada</SortableTableHead>
-                      <SortableTableHead field="processedBy" activeField={processedSortField} direction={processedSortDirection} onSort={handleProcessedSort} className="p-3">Procesado Por</SortableTableHead>
-                      <SortableTableHead field="date" activeField={processedSortField} direction={processedSortDirection} onSort={handleProcessedSort} className="p-3">Fecha</SortableTableHead>
+              <div className="overflow-x-auto rounded-xl border border-border">
+                <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+                  <thead className="bg-dark3 text-xs font-semibold text-text-dim">
+                    <tr>
+                      <th scope="col" className="w-12 px-4 py-3">Elegir</th>
+                      <th scope="col" className="px-4 py-3">Persona</th>
+                      <th scope="col" className="px-4 py-3">Comité</th>
+                      <th scope="col" className="px-4 py-3">Teléfono</th>
+                      <th scope="col" className="px-4 py-3">Cambio confirmado</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-700/50">
-                    {sortedProcessedItems.map(p => (
-                      <tr key={p.volunteerId} className="hover:bg-slate-800/50">
-                        <td className="p-3 font-semibold text-white">{p.fullName}</td>
-                        <td className="p-3 font-mono">{p.phoneActual}</td>
-                        <td className="p-3 font-semibold text-emerald-400">{p.decision || 'SANEADO'}</td>
-                        <td className="p-3 text-slate-400">{p.processedBy || 'Sistema'}</td>
-                        <td className="p-3 text-slate-400">{p.processedAt ? new Date(p.processedAt).toLocaleString() : 'Reciente'}</td>
-                      </tr>
-                    ))}
+                  <tbody className="divide-y divide-border">
+                    {filteredReadyToProcessItems.map(item => {
+                      const isSelected = selectedItemIds.includes(item.itemId);
+                      const decisionCopy = item.decision === 'PHONE_OWNER'
+                        ? 'Titular del teléfono'
+                        : item.decision === 'SHARED_PHONE'
+                          ? 'Teléfono compartido'
+                          : item.decision === 'PHONE_DOES_NOT_BELONG'
+                            ? `Cambiar a ${item.correctedPhone}`
+                            : item.decision === 'ARCHIVE_DUPLICATE'
+                              ? 'Archivar duplicado'
+                              : 'Mantener teléfono';
+
+                      return (
+                        <tr
+                          key={item.itemId}
+                          onClick={() => toggleItemSelection(item.itemId)}
+                          className={`cursor-pointer ${isSelected ? 'bg-[#4d7cfe]/10' : 'hover:bg-dark3/60'}`}
+                        >
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleItemSelection(item.itemId)}
+                              onClick={(event) => event.stopPropagation()}
+                              aria-label={`Seleccionar ${item.fullName}`}
+                              className="h-4 w-4 cursor-pointer accent-[#4d7cfe]"
+                            />
+                          </td>
+                          <td className="px-4 py-3 font-bold text-text">{item.fullName}</td>
+                          <td className="px-4 py-3 text-text-dim">{item.committee}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-text">{item.phoneActual || item.phoneNormalized}</td>
+                          <td className="px-4 py-3">
+                            <Badge variant="outline" className="border-[#6dd230]/30 bg-[#6dd230]/10 text-emerald-700 dark:text-[#6dd230]">
+                              {decisionCopy}
+                            </Badge>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -769,22 +1027,261 @@ export default function PhoneCleanupPersonCentricPage() {
         </div>
       )}
 
+      {/* TAB CONTENT 3: APLICADAS / COMPLETADAS */}
+      {activeTab === 'PROCESSED' && (
+        <div className="w-full space-y-5">
+          <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-xl font-bold text-text">
+                <HistoryIcon className="h-5 w-5 text-[#4d7cfe]" />
+                Historial por teléfono
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm text-text-dim">
+                Cada bloque conserva el número original y muestra qué ocurrió con todas las personas procesadas dentro de ese grupo.
+              </p>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+              <SmartSearchBar
+                value={historySearchInput}
+                onValueChange={(value) => {
+                  setHistorySearchInput(value);
+                  setExpandedAppliedReviewId(null);
+                }}
+                onImmediateSearch={applyHistorySearch}
+                placeholder="Buscar historial…"
+                className="w-full lg:w-96"
+              />
+              <label className="sr-only" htmlFor="applied-committee-filter">Filtrar por comité</label>
+              <select
+                id="applied-committee-filter"
+                value={committeeFilter}
+                onChange={(event) => {
+                  setCommitteeFilter(event.target.value);
+                  setExpandedAppliedReviewId(null);
+                }}
+                className="h-10 min-w-52 rounded-lg border border-border bg-dark3 px-3 text-sm font-medium text-text"
+              >
+                <option value="ALL">Todos los comités</option>
+                {committeeOptions.map(committee => <option key={committee} value={committee}>{committee}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {appliedGroups.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-dark2 py-16 text-center">
+              <HistoryIcon className="mb-3 h-9 w-9 text-text-dim" />
+              <h3 className="font-bold text-text">Todavía no hay cambios aplicados</h3>
+              <p className="mt-1 text-sm text-text-dim">Los grupos procesados aparecerán aquí con su resultado completo.</p>
+            </div>
+          ) : filteredAppliedGroups.length === 0 ? (
+            <div className="rounded-xl border border-border bg-dark2 py-14 text-center">
+              <p className="font-bold text-text">No encontramos resultados para esa búsqueda.</p>
+              <p className="mt-1 text-sm text-text-dim">Prueba con el número original, el nuevo número o el nombre de una persona.</p>
+            </div>
+          ) : (
+            <>
+              <section className="overflow-hidden rounded-xl border border-border bg-dark2" aria-label="Historial de teléfonos aplicados">
+                <div className="border-b border-border px-4 py-3 text-sm font-semibold text-text">
+                  {filteredAppliedGroups.length} {filteredAppliedGroups.length === 1 ? 'teléfono aplicado' : 'teléfonos aplicados'}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+                    <thead className="bg-dark3 text-xs font-semibold text-text-dim">
+                      <tr>
+                        <th scope="col" className="px-4 py-3">Teléfono original</th>
+                        <th scope="col" className="px-4 py-3">Personas procesadas</th>
+                        <th scope="col" className="px-4 py-3">Comité</th>
+                        <th scope="col" className="px-4 py-3">Resultado</th>
+                        <th scope="col" className="px-4 py-3">Fecha</th>
+                        <th scope="col" className="px-4 py-3 text-right">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredAppliedGroups.filter(group => !expandedAppliedReviewId || group.reviewId === expandedAppliedReviewId).map(group => {
+                        const changedCount = group.members.filter(member => member.decision === 'PHONE_DOES_NOT_BELONG').length;
+                        const archivedCount = group.members.filter(member => member.decision === 'ARCHIVE_DUPLICATE').length;
+                        const isExpanded = expandedAppliedReviewId === group.reviewId;
+                        const committees = Array.from(new Set(group.members.map(member => member.committee))).join(', ');
+                        const resultCopy = [
+                          changedCount > 0 ? `${changedCount} ${changedCount === 1 ? 'cambio' : 'cambios'} de número` : '',
+                          archivedCount > 0 ? `${archivedCount} ${archivedCount === 1 ? 'archivo' : 'archivos'}` : '',
+                        ].filter(Boolean).join(' · ') || 'Número conservado';
+
+                        return (
+                          <tr key={group.reviewId} className={isExpanded ? 'bg-[#4d7cfe]/5' : 'hover:bg-dark3/60'}>
+                            <td className="px-4 py-3 font-mono font-bold text-text">{group.phoneNormalized}</td>
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-text">{group.members.slice(0, 2).map(member => member.fullName).join(', ')}</p>
+                              {group.members.length > 2 && <p className="mt-0.5 text-xs text-text-dim">+{group.members.length - 2} personas más</p>}
+                            </td>
+                            <td className="px-4 py-3 text-text-dim">{committees}</td>
+                            <td className="px-4 py-3 text-text">{resultCopy}</td>
+                            <td className="px-4 py-3 text-xs text-text-dim">
+                              {group.processedAt
+                                ? new Date(group.processedAt).toLocaleDateString('es-NI', { timeZone: 'America/Managua', day: '2-digit', month: 'short', year: 'numeric' })
+                                : 'No disponible'}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setExpandedAppliedReviewId(isExpanded ? null : group.reviewId)}
+                                className="gap-1.5 text-[#4d7cfe] hover:bg-[#4d7cfe]/10 hover:text-[#4d7cfe]"
+                                aria-expanded={isExpanded}
+                              >
+                                {isExpanded ? 'Cerrar' : 'Ver detalle'}
+                                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              {!filteredAppliedGroups.some(group => group.reviewId === expandedAppliedReviewId) && (
+                <p className="rounded-lg border border-dashed border-border px-4 py-5 text-center text-sm text-text-dim">
+                  Abre una fila para consultar quién conservó, compartió o cambió el número.
+                </p>
+              )}
+
+              {filteredAppliedGroups.filter(group => group.reviewId === expandedAppliedReviewId).map(group => {
+                const changedCount = group.members.filter(member => member.decision === 'PHONE_DOES_NOT_BELONG').length;
+                const archivedCount = group.members.filter(member => member.decision === 'ARCHIVE_DUPLICATE').length;
+
+                return (
+                  <article key={group.reviewId} className="overflow-hidden rounded-xl border border-border bg-dark2">
+                    <header className="flex flex-col gap-3 border-b border-border bg-dark3/70 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#4d7cfe]/10 text-[#4d7cfe]">
+                          <Phone className="h-4.5 w-4.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-mono text-base font-bold text-text sm:text-lg">{group.phoneNormalized}</p>
+                          <p className="text-xs text-text-dim">
+                            {group.members.length} {group.members.length === 1 ? 'persona procesada' : 'personas procesadas'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-dim">
+                        <span>
+                          {group.currentMembers.length} {group.currentMembers.length === 1 ? 'persona activa usa' : 'personas activas usan'} este número
+                        </span>
+                        {changedCount > 0 && <span>{changedCount} {changedCount === 1 ? 'cambió' : 'cambiaron'} de número</span>}
+                        {archivedCount > 0 && <span>{archivedCount} {archivedCount === 1 ? 'archivado' : 'archivados'}</span>}
+                        <span>
+                          {group.processedAt
+                            ? new Date(group.processedAt).toLocaleString('es-NI', {
+                                timeZone: 'America/Managua',
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : 'Fecha no disponible'}
+                        </span>
+                      </div>
+                    </header>
+
+                    <div className="flex flex-col gap-2 border-b border-border bg-[#4d7cfe]/[0.04] px-4 py-3 sm:px-5 lg:flex-row lg:items-center">
+                      <div className="flex shrink-0 items-center gap-2 text-xs font-bold text-text">
+                        <Users className="h-4 w-4 text-[#4d7cfe]" />
+                        Actualmente bajo este número
+                      </div>
+                      {group.currentMembers.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {group.currentMembers.map(currentMember => (
+                            <span key={currentMember.volunteerId} className="rounded-full border border-border bg-dark2 px-2.5 py-1 text-[11px] font-semibold text-text">
+                              {currentMember.fullName}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-text-dim">Ningún perfil activo conserva este número.</span>
+                      )}
+                    </div>
+
+                    <div className="divide-y divide-border">
+                      {group.members.map(member => {
+                        const presentation = getAppliedDecisionCopy(member);
+                        const phoneChanged = phoneDigits(member.originalPhone) !== phoneDigits(member.resultingPhone);
+                        const DecisionIcon = member.decision === 'PHONE_OWNER'
+                          ? Crown
+                          : member.decision === 'SHARED_PHONE'
+                            ? Users
+                            : member.decision === 'ARCHIVE_DUPLICATE'
+                              ? Archive
+                              : member.decision === 'PHONE_DOES_NOT_BELONG'
+                                ? Smartphone
+                                : CheckCircle2;
+
+                        return (
+                          <div key={member.reviewItemId} className="grid gap-4 px-4 py-4 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(240px,1.2fr)_minmax(220px,0.8fr)] lg:items-center">
+                            <div className="min-w-0">
+                              <p className="font-bold text-text">{member.fullName}</p>
+                              <p className="mt-0.5 text-xs text-text-dim">{member.committee}</p>
+                            </div>
+
+                            <div className="flex min-w-0 items-start gap-3">
+                              <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${presentation.className}`}>
+                                <DecisionIcon className="h-4 w-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-text">{presentation.label}</p>
+                                <p className="mt-0.5 text-xs leading-relaxed text-text-dim">{presentation.detail}</p>
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg bg-dark3 px-3 py-2.5 font-mono text-xs">
+                              {phoneChanged ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-text-dim line-through">{member.originalPhone}</span>
+                                  <ArrowRight className="h-3.5 w-3.5 text-[#4d7cfe]" />
+                                  <span className="font-bold text-text">{member.resultingPhone}</span>
+                                </div>
+                              ) : member.decision === 'ARCHIVE_DUPLICATE' ? (
+                                <span className="font-sans font-bold text-[#fe4d97]">Perfil archivado</span>
+                              ) : (
+                                <span className="font-bold text-text">{member.resultingPhone}</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <footer className="border-t border-border px-4 py-2.5 text-right text-[11px] text-text-dim sm:px-5">
+                      Procesado por {group.processedBy.length > 0 ? group.processedBy.join(', ') : 'Sistema'}
+                    </footer>
+                  </article>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
+
       {/* CONFIRMATION MODAL */}
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center gap-3 text-emerald-400 border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 animate-in fade-in">
+          <div role="dialog" aria-modal="true" aria-labelledby="phone-cleanup-confirm-title" className="w-full max-w-lg space-y-5 rounded-xl border border-border bg-dark2 p-6 text-text">
+            <div className="flex items-center gap-3 border-b border-border pb-3 text-[#4d7cfe]">
               <Zap className="w-6 h-6" />
-              <h3 className="text-lg font-bold text-white">¿Deseas aplicar estos cambios?</h3>
+              <h3 id="phone-cleanup-confirm-title" className="text-lg font-bold text-text">¿Deseas aplicar estos cambios?</h3>
             </div>
 
-            <p className="text-sm text-slate-300">
-              Estás a punto de actualizar oficialmente a <strong className="text-emerald-400 font-bold">{selectedItemIds.length} voluntariados</strong> en Supabase PostgreSQL.
+            <p className="text-sm text-text-dim">
+              Estás a punto de actualizar oficialmente a <strong className="text-emerald-400 font-bold">{selectedItemIds.length} voluntarios</strong> en Supabase PostgreSQL.
             </p>
 
-            <div className="max-h-48 overflow-y-auto p-3 bg-slate-950 rounded-xl space-y-2 text-xs border border-slate-800">
-              {readyToProcessItems.filter(i => selectedItemIds.includes(i.volunteerId)).map(i => (
-                <div key={i.volunteerId} className="flex justify-between items-center text-slate-300 border-b border-slate-900 pb-1">
+            <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl bg-dark3 p-3 text-xs">
+              {readyToProcessItems.filter(i => selectedItemIds.includes(i.itemId)).map(i => (
+                <div key={i.itemId} className="flex items-center justify-between border-b border-border pb-1 text-text">
                   <span>{i.fullName}</span>
                   <span className="font-semibold text-emerald-400">{i.decision}</span>
                 </div>
@@ -796,14 +1293,14 @@ export default function PhoneCleanupPersonCentricPage() {
                 variant="outline"
                 onClick={() => setShowConfirmModal(false)}
                 disabled={isApplying}
-                className="border-slate-700 text-slate-300"
+                className="border-border bg-dark2 text-text"
               >
                 Cancelar
               </Button>
               <Button
                 onClick={() => handleExecuteBatch(false)}
                 disabled={isApplying}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-2"
+                className="gap-2 bg-[#4d7cfe] font-bold text-white hover:bg-[#3b66e0]"
               >
                 {isApplying ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                 CONFIRMAR Y APLICAR {selectedItemIds.length} CAMBIOS

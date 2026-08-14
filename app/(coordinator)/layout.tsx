@@ -8,8 +8,10 @@ import { logout } from "@/app/actions/auth";
 import Image from "next/image";
 import { SearchProvider, useSearch } from "@/lib/search-context";
 import { CoordinatorDataProvider } from "@/lib/coordinator-data-context";
+import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
 import { MobileThemeMenu } from "@/components/mobile-theme-menu";
 import { useThemePreference } from "@/lib/use-theme-preference";
+import { useMobileNavigationMode } from "@/lib/use-mobile-navigation-mode";
 
 // Helper component for Material Symbols
 function Icon({ name, size = 20, className = "" }: { name: string, size?: number, className?: string }) {
@@ -48,17 +50,21 @@ function CoordinatorLayoutInner({
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [currentCommittee, setCurrentCommittee] = useState<string>('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isMobileThemeOpen, setIsMobileThemeOpen] = useState(false);
   const { searchTerm, setSearchTerm } = useSearch();
-  const inputRef = useRef<HTMLInputElement>(null);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const [navPage, setNavPage] = useState(0);
 
   const { preference, resolvedTheme, setPreference, toggleTheme } = useThemePreference();
+  const { isCommandMode } = useMobileNavigationMode();
 
   const [permTick, setPermTick] = useState(0);
   const [mounted, setMounted] = useState(false);
+
+  const openGlobalSearch = useCallback(() => {
+    window.setTimeout(() => setIsGlobalSearchOpen(true), 0);
+  }, []);
 
   useEffect(() => {
     const syncRoleAndPermissions = () => {
@@ -122,8 +128,19 @@ function CoordinatorLayoutInner({
   // Reset search when navigating to a new page
   useEffect(() => {
     setSearchTerm('');
-    setIsMobileThemeOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    const handleGlobalSearchShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsGlobalSearchOpen(open => !open);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalSearchShortcut);
+    return () => window.removeEventListener('keydown', handleGlobalSearchShortcut);
+  }, []);
 
   const handleLogout = async () => {
     localStorage.removeItem('mock_role');
@@ -173,34 +190,36 @@ function CoordinatorLayoutInner({
     { name: "Tema", href: "#theme", icon: resolvedTheme === 'dark' ? 'dark_mode' : 'light_mode', roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Salir", href: "#logout", icon: "logout", roles: ['Admin', 'Editor', 'Lector'] },
   ];
-
-  const activeItem = [...NAV_ITEMS, ...BOTTOM_ITEMS].find(item => pathname === item.href);
-  const currentTitle = activeItem ? activeItem.name : "Dashboard";
   const ITEMS_PER_PAGE = 5;
   const totalNavPages = Math.ceil(allMobileNavItems.length / ITEMS_PER_PAGE);
 
   const goToNavPage = useCallback((page: number) => {
-    const el = navScrollRef.current;
-    if (!el) return;
-    el.scrollTo({ left: page * el.clientWidth, behavior: 'smooth' });
+    const element = navScrollRef.current;
+    if (!element) return;
+    element.scrollTo({ left: page * element.clientWidth, behavior: 'smooth' });
   }, []);
 
   const checkNavScroll = useCallback(() => {
-    const el = navScrollRef.current;
-    if (!el) return;
-    const page = Math.round(el.scrollLeft / el.clientWidth);
-    setNavPage(page);
+    const element = navScrollRef.current;
+    if (!element) return;
+    setNavPage(Math.round(element.scrollLeft / element.clientWidth));
   }, []);
 
   useEffect(() => {
-    const el = navScrollRef.current;
-    if (!el) return;
+    if (isCommandMode) return;
+    const element = navScrollRef.current;
+    if (!element) return;
+
     checkNavScroll();
-    el.addEventListener('scroll', checkNavScroll, { passive: true });
-    const ro = new ResizeObserver(checkNavScroll);
-    ro.observe(el);
-    return () => { el.removeEventListener('scroll', checkNavScroll); ro.disconnect(); };
-  }, [checkNavScroll, allMobileNavItems.length]);
+    element.addEventListener('scroll', checkNavScroll, { passive: true });
+    const resizeObserver = new ResizeObserver(checkNavScroll);
+    resizeObserver.observe(element);
+
+    return () => {
+      element.removeEventListener('scroll', checkNavScroll);
+      resizeObserver.disconnect();
+    };
+  }, [checkNavScroll, allMobileNavItems.length, isCommandMode]);
 
   return (
     <div className="h-screen bg-dark flex flex-col font-sans text-text overflow-hidden">
@@ -232,6 +251,26 @@ function CoordinatorLayoutInner({
                 Volunteer Manager
               </span>
             </div>
+          </div>
+
+          <div className={cn("shrink-0 transition-all duration-300", sidebarOpen ? "px-4 pt-2" : "px-2 pt-2")}>
+            <button
+              type="button"
+              onClick={openGlobalSearch}
+              title={!sidebarOpen ? "Buscar en toda la plataforma (Ctrl + K)" : undefined}
+              className={cn(
+                "flex h-10 w-full items-center rounded-lg border border-border bg-dark3 text-text-dim transition-colors hover:border-[#4d7cfe]/40 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe]",
+                sidebarOpen ? "gap-3 px-3" : "justify-center px-0"
+              )}
+            >
+              <Icon name="search" size={19} className="shrink-0" />
+              {sidebarOpen && (
+                <>
+                  <span className="min-w-0 flex-1 truncate text-left text-[13px] font-bold">Buscar en todo</span>
+                  <kbd className="rounded-md border border-border bg-dark2 px-1.5 py-0.5 font-mono text-[9px] font-bold text-text-dim">Ctrl K</kbd>
+                </>
+              )}
+            </button>
           </div>
 
           {/* Scrollable nav content */}
@@ -313,133 +352,188 @@ function CoordinatorLayoutInner({
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto min-w-0 bg-dark relative pb-24 lg:pb-0" style={{ scrollbarGutter: 'stable' }}>
+        <main
+          className={cn(
+            "flex-1 overflow-y-auto min-w-0 bg-dark relative lg:pb-0",
+            isCommandMode ? "pb-4" : "pb-24"
+          )}
+          style={{ scrollbarGutter: 'stable' }}
+        >
           <div className="w-full h-full">
             {children}
           </div>
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation */}
-      <div className="lg:hidden fixed bottom-6 left-0 right-0 z-50 px-4">
-        <MobileThemeMenu
-          open={isMobileThemeOpen}
-          preference={preference}
-          onChange={setPreference}
-          onClose={() => setIsMobileThemeOpen(false)}
-        />
-        <div className="relative w-full">
-          {/* Left arrow — shown only when not on first page */}
-          {navPage > 0 && (
-            <button
-              onPointerDown={(e) => { e.preventDefault(); goToNavPage(navPage - 1); }}
-              className="absolute -left-3 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-dark2 text-text shadow-lg transition-all backdrop-blur-xl border border-border"
-              style={{ top: '50%', transform: 'translateY(-50%)' }}
-            >
-              <Icon name="chevron_left" size={18} />
-            </button>
+      {isCommandMode ? (
+        <button
+          type="button"
+          onClick={openGlobalSearch}
+          aria-label="Buscar en toda la plataforma"
+          className={cn(
+            "fixed bottom-5 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-[#4d7cfe] text-white shadow-lg transition-transform duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] focus-visible:ring-offset-2 focus-visible:ring-offset-dark lg:hidden",
+            isGlobalSearchOpen && "scale-[0.97]"
           )}
+        >
+          <Icon name="search" size={21} />
+        </button>
+      ) : (
+        <div className="fixed bottom-6 left-0 right-0 z-50 px-4 lg:hidden">
+          <MobileThemeMenu
+            open={isMobileThemeOpen}
+            preference={preference}
+            onChange={setPreference}
+            onClose={() => setIsMobileThemeOpen(false)}
+          />
+          <div className="relative w-full">
+            {navPage > 0 && (
+              <button
+                type="button"
+                aria-label="Ver opciones anteriores"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  goToNavPage(navPage - 1);
+                }}
+                className="absolute -left-3 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-dark2 text-text shadow-lg backdrop-blur-xl transition-all"
+                style={{ top: '50%', transform: 'translateY(-50%)' }}
+              >
+                <Icon name="chevron_left" size={18} />
+              </button>
+            )}
 
-          {/* Clip: clips left/right, contains items */}
-          <div className="relative w-full overflow-hidden rounded-full">
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 rounded-full border border-border bg-dark2/90 dark:bg-dark2/80 backdrop-blur-xl shadow-2xl"
-            />
-            <div
-              ref={navScrollRef}
-              className="relative z-10 flex overflow-x-auto rounded-full bg-transparent p-1"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', scrollSnapType: 'x mandatory' }}
-            >
-              {allMobileNavItems.map((item, index) => {
-                const isActive = pathname.startsWith(item.href) && item.href !== '#logout';
-                const isLogout = item.href === '#logout';
-                const isTheme = item.href === '#theme';
-                const isPageStart = index % ITEMS_PER_PAGE === 0;
-                const sharedStyle = { width: 'calc((100vw - 32px) / 5)', scrollSnapAlign: isPageStart ? 'start' as const : undefined };
-                
-                const TAB_COLORS: Record<string, { activeClass: string; iconClass: string }> = {
-                  "/dashboard": { activeClass: "bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/40 shadow-[0_0_14px_rgba(77,124,254,0.2)]", iconClass: "text-[#4d7cfe]" },
-                  "/volunteers": { activeClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 shadow-[0_0_14px_rgba(16,185,129,0.2)]", iconClass: "text-emerald-600 dark:text-emerald-400" },
-                  "/shifts": { activeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/40 shadow-[0_0_14px_rgba(245,158,11,0.2)]", iconClass: "text-amber-600 dark:text-amber-400" },
-                  "/check-in": { activeClass: "bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/40 shadow-[0_0_14px_rgba(236,72,153,0.2)]", iconClass: "text-pink-600 dark:text-pink-400" },
-                  "/reminders": { activeClass: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/40 shadow-[0_0_14px_rgba(139,92,246,0.2)]", iconClass: "text-purple-600 dark:text-purple-400" },
-                  "/replacements": { activeClass: "bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/40 shadow-[0_0_14px_rgba(20,184,166,0.2)]", iconClass: "text-teal-600 dark:text-teal-400" },
-                  "/reports": { activeClass: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/40 shadow-[0_0_14px_rgba(6,182,212,0.2)]", iconClass: "text-cyan-600 dark:text-cyan-400" },
-                  "/users": { activeClass: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/40 shadow-[0_0_14px_rgba(59,130,246,0.2)]", iconClass: "text-blue-600 dark:text-blue-400" },
-                  "/import": { activeClass: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/40 shadow-[0_0_14px_rgba(249,115,22,0.2)]", iconClass: "text-orange-600 dark:text-orange-400" },
-                  "/settings": { activeClass: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/40 shadow-[0_0_14px_rgba(99,102,241,0.2)]", iconClass: "text-indigo-600 dark:text-indigo-400" },
-                };
-
-                const tabColor = TAB_COLORS[item.href] || { activeClass: "bg-dark3 text-text border border-border", iconClass: "text-text" };
-
-                const sharedClass = cn(
-                  "flex flex-col items-center justify-center py-2 rounded-full transition-all duration-300 shrink-0 px-0.5 relative",
-                  isActive ? tabColor.activeClass : "text-text-dim hover:text-text hover:bg-dark3/50"
-                );
-                if (isLogout) {
-                  return (
-                    <button
-                      key="logout"
-                      onClick={handleLogout}
-                      style={sharedStyle}
-                      className={cn(sharedClass, "text-red-500 dark:text-red-400 hover:text-red-600 hover:bg-red-500/10")}
-                    >
-                      <Icon name="logout" size={20} className="mb-1 text-red-500 dark:text-red-400" />
-                      <span className="font-inter text-[9px] sm:text-[10px] font-bold whitespace-nowrap truncate max-w-full">Salir</span>
-                    </button>
+            <div className="relative w-full overflow-hidden rounded-full">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 rounded-full border border-border bg-dark2/90 shadow-2xl backdrop-blur-xl dark:bg-dark2/80"
+              />
+              <div
+                ref={navScrollRef}
+                className="relative z-10 flex overflow-x-auto rounded-full bg-transparent p-1"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', scrollSnapType: 'x mandatory' }}
+              >
+                {allMobileNavItems.map((item, index) => {
+                  const isActive = pathname.startsWith(item.href) && !item.href.startsWith('#');
+                  const isLogout = item.href === '#logout';
+                  const isTheme = item.href === '#theme';
+                  const isPageStart = index % ITEMS_PER_PAGE === 0;
+                  const sharedStyle = {
+                    width: 'calc((100vw - 32px) / 5)',
+                    scrollSnapAlign: isPageStart ? 'start' as const : undefined,
+                  };
+                  const tabColors: Record<string, { activeClass: string; iconClass: string }> = {
+                    "/dashboard": { activeClass: "bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/40 shadow-[0_0_14px_rgba(77,124,254,0.2)]", iconClass: "text-[#4d7cfe]" },
+                    "/volunteers": { activeClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 shadow-[0_0_14px_rgba(16,185,129,0.2)]", iconClass: "text-emerald-600 dark:text-emerald-400" },
+                    "/shifts": { activeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/40 shadow-[0_0_14px_rgba(245,158,11,0.2)]", iconClass: "text-amber-600 dark:text-amber-400" },
+                    "/check-in": { activeClass: "bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/40 shadow-[0_0_14px_rgba(236,72,153,0.2)]", iconClass: "text-pink-600 dark:text-pink-400" },
+                    "/reminders": { activeClass: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/40 shadow-[0_0_14px_rgba(139,92,246,0.2)]", iconClass: "text-purple-600 dark:text-purple-400" },
+                    "/replacements": { activeClass: "bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/40 shadow-[0_0_14px_rgba(20,184,166,0.2)]", iconClass: "text-teal-600 dark:text-teal-400" },
+                    "/reports": { activeClass: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/40 shadow-[0_0_14px_rgba(6,182,212,0.2)]", iconClass: "text-cyan-600 dark:text-cyan-400" },
+                    "/users": { activeClass: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/40 shadow-[0_0_14px_rgba(59,130,246,0.2)]", iconClass: "text-blue-600 dark:text-blue-400" },
+                    "/import": { activeClass: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/40 shadow-[0_0_14px_rgba(249,115,22,0.2)]", iconClass: "text-orange-600 dark:text-orange-400" },
+                    "/settings": { activeClass: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/40 shadow-[0_0_14px_rgba(99,102,241,0.2)]", iconClass: "text-indigo-600 dark:text-indigo-400" },
+                  };
+                  const tabColor = tabColors[item.href] ?? {
+                    activeClass: "border border-border bg-dark3 text-text",
+                    iconClass: "text-text",
+                  };
+                  const sharedClass = cn(
+                    "relative flex shrink-0 flex-col items-center justify-center rounded-full px-0.5 py-2 transition-all duration-300",
+                    isActive ? tabColor.activeClass : "text-text-dim hover:bg-dark3/50 hover:text-text"
                   );
-                }
-                if (isTheme) {
+
+                  if (isLogout) {
+                    return (
+                      <button
+                        key="logout"
+                        type="button"
+                        onClick={handleLogout}
+                        style={sharedStyle}
+                        className={cn(sharedClass, "text-red-500 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400")}
+                      >
+                        <Icon name="logout" size={20} className="mb-1 text-red-500 dark:text-red-400" />
+                        <span className="max-w-full truncate whitespace-nowrap font-inter text-[9px] font-bold sm:text-[10px]">Salir</span>
+                      </button>
+                    );
+                  }
+
+                  if (isTheme) {
+                    return (
+                      <button
+                        key="theme"
+                        type="button"
+                        onClick={() => setIsMobileThemeOpen(open => !open)}
+                        aria-expanded={isMobileThemeOpen}
+                        aria-label="Cambiar apariencia"
+                        style={sharedStyle}
+                        className={cn(
+                          sharedClass,
+                          isMobileThemeOpen && "border border-[#4d7cfe]/40 bg-[#4d7cfe]/15 text-[#4d7cfe]"
+                        )}
+                      >
+                        <Icon
+                          name={resolvedTheme === 'dark' ? 'dark_mode' : 'light_mode'}
+                          size={20}
+                          className={cn("mb-1", isMobileThemeOpen ? "text-[#4d7cfe]" : "text-text-dim")}
+                        />
+                        <span className="whitespace-nowrap font-inter text-[9px] font-semibold sm:text-[10px]">Tema</span>
+                      </button>
+                    );
+                  }
+
                   return (
-                    <button
-                      key="theme"
-                      type="button"
-                      onClick={() => setIsMobileThemeOpen(open => !open)}
-                      aria-expanded={isMobileThemeOpen}
-                      aria-label="Cambiar apariencia"
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setIsMobileThemeOpen(false)}
                       style={sharedStyle}
-                      className={cn(
-                        sharedClass,
-                        isMobileThemeOpen && "bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/40"
-                      )}
+                      className={sharedClass}
                     >
                       <Icon
-                        name={resolvedTheme === 'dark' ? 'dark_mode' : 'light_mode'}
+                        name={item.icon}
                         size={20}
-                        className={cn("mb-1", isMobileThemeOpen ? "text-[#4d7cfe]" : "text-text-dim")}
+                        className={cn(
+                          "mb-1 transition-transform duration-200",
+                          isActive ? `${tabColor.iconClass} scale-110` : "text-text-dim"
+                        )}
                       />
-                      <span className="font-inter text-[9px] sm:text-[10px] font-semibold whitespace-nowrap">Tema</span>
-                    </button>
+                      <span className={cn(
+                        "max-w-full truncate whitespace-nowrap font-inter text-[9px] sm:text-[10px]",
+                        isActive ? "font-extrabold" : "font-semibold"
+                      )}>
+                        {item.name}
+                      </span>
+                    </Link>
                   );
-                }
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    style={sharedStyle}
-                    className={sharedClass}
-                  >
-                    <Icon name={item.icon} size={20} className={cn("mb-1 transition-transform duration-200", isActive ? `${tabColor.iconClass} scale-110` : "text-text-dim")} />
-                    <span className={cn("font-inter text-[9px] sm:text-[10px] whitespace-nowrap truncate max-w-full", isActive ? "font-extrabold" : "font-semibold")}>{item.name}</span>
-                  </Link>
-                );
-              })}
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Right arrow — shown only when not on last page */}
-          {navPage < totalNavPages - 1 && (
-            <button
-              onPointerDown={(e) => { e.preventDefault(); goToNavPage(navPage + 1); }}
-              className="absolute -right-3 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-dark2 text-text shadow-lg transition-all backdrop-blur-xl border border-border"
-              style={{ top: '50%', transform: 'translateY(-50%)' }}
-            >
-              <Icon name="chevron_right" size={18} />
-            </button>
-          )}
+            {navPage < totalNavPages - 1 && (
+              <button
+                type="button"
+                aria-label="Ver más opciones"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  goToNavPage(navPage + 1);
+                }}
+                className="absolute -right-3 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-dark2 text-text shadow-lg backdrop-blur-xl transition-all"
+                style={{ top: '50%', transform: 'translateY(-50%)' }}
+              >
+                <Icon name="chevron_right" size={18} />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      <GlobalCommandPalette
+        open={isGlobalSearchOpen}
+        onOpenChange={setIsGlobalSearchOpen}
+        navigationItems={[...visibleNavItems, ...visibleBottomItems]}
+        resolvedTheme={resolvedTheme}
+        onToggleTheme={toggleTheme}
+        onLogout={handleLogout}
+      />
     </div>
   );
 }
