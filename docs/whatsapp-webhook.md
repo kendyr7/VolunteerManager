@@ -18,7 +18,9 @@ Meta debe apuntar este endpoint a la URL HTTPS pública de producción. Una URL 
 - `NEXT_PUBLIC_APP_URL`: origen público HTTPS de la aplicación desplegada.
 - `SUPABASE_SERVICE_ROLE_KEY`: necesaria para que el webhook use su bandeja entrante privada con RLS.
 - `CRON_SECRET`: secreto que autoriza exclusivamente al programador de recordatorios automáticos.
-- `WHATSAPP_REMINDER_LEAD_DAYS`: anticipación de los recordatorios automáticos; el valor predeterminado es `3` días.
+- `WHATSAPP_REMINDER_LEAD_DAYS`: fecha preferida de los recordatorios automáticos; el valor predeterminado es `2` días y acepta valores entre `1` y `3`.
+- `WHATSAPP_MESSAGING_LIMIT`: límite real de conversaciones iniciadas por la organización; el valor predeterminado es `250` destinatarios únicos en 24 horas.
+- `WHATSAPP_CAPACITY_RESERVE_PERCENT`: porcentaje reservado para envíos que no son recordatorios automáticos; el valor predeterminado es `10`, por lo que la automatización utiliza como máximo `225` de `250` destinatarios.
 
 Todas las variables deben configurarse también en el ambiente de producción; tenerlas únicamente en `.env.local` no configura el despliegue.
 
@@ -112,15 +114,25 @@ Antes de desplegar el programador, ejecutar también:
 
 `supabase/migrations/20261016000000_automatic_reminder_claims.sql`
 
-- Vercel ejecuta `/api/reminders/cron` diariamente a las 8:00 AM de Guatemala (`14:00 UTC`).
+La distribución durable y los datos de capacidad se agregan con:
+
+- `supabase/migrations/20260814214003_whatsapp_reminder_capacity_schedule.sql`
+- `supabase/migrations/20260814221205_whatsapp_reminder_schedule_volunteer_index.sql`
+
+- Vercel ejecuta `/api/reminders/cron` diariamente a medianoche de Guatemala (`06:00 UTC`). La frecuencia es compatible con los planes Hobby y Pro.
 - La ruta falla con `401` si falta `CRON_SECRET` o el encabezado `Authorization: Bearer ...` no coincide.
-- El valor predeterminado envía los avisos tres días calendario antes del turno; puede ajustarse entre 1 y 14 días con `WHATSAPP_REMINDER_LEAD_DAYS`.
+- El valor predeterminado intenta enviar cada aviso dos días calendario antes. Si una fecha rebasa la capacidad automática, el plan redistribuye grupos completos de destinatarios entre tres, dos y un día antes del turno, sin bajar de 24 horas de anticipación.
+- `/settings`, dentro de **Recordatorios automáticos**, muestra únicamente a administradores la demanda original y la distribución final por fecha. La gráfica usa el porcentaje real sobre `WHATSAPP_MESSAGING_LIMIT`, marca la reserva de seguridad y muestra cuántos destinatarios fueron reubicados o quedaron sin capacidad.
+- La proyección descuenta envíos ya registrados, excluye voluntarios archivados, no duplica números compartidos y conserva juntos todos los turnos del mismo teléfono en una misma fecha de evento.
+- Si el límite móvil de las últimas 24 horas sigue ocupado durante la ejecución, el recordatorio queda pendiente para la siguiente ejecución diaria. La ruta también recoge fechas programadas anteriores, pero rechaza el envío en cuanto ya no pueda mantener 24 horas de anticipación.
+- Cuando no existe capacidad dentro de esa ventana, el registro queda con el código `CAPACITY_LIMIT` y el mensaje visible comienza con **Se superó el límite de WhatsApp**.
+- El límite proyectado cubre solamente recordatorios automáticos; otras plantillas iniciadas por la organización dentro de la misma ventana móvil de 24 horas también consumen capacidad en Meta.
 - El cron reconoce tanto claves de fecha cortas (`jue 10`) como ISO (`2026-09-10`) y usa siempre el horario oficial del turno.
 - Cada voluntario recibe un mensaje independiente por turno. Si tiene dos turnos el mismo día recibe dos mensajes, lo que permite confirmar y rastrear cada turno por separado con la plantilla aprobada actual.
 - `automation_key` se reclama antes de contactar Meta. Una segunda ejecución del cron omite ese mismo voluntario, fecha y turno en vez de duplicar el mensaje.
 - Los envíos automáticos quedan con `sent_by_user_id = NULL`: los administradores los ven en `/reminders`, pero no se mezclan con los envíos propios de los coordinadores.
 - La respuesta del cron solo devuelve contadores; no expone nombres ni teléfonos.
-- Una prueba sin envíos puede ejecutarse con `GET /api/reminders/cron?dryRun=1&targetDate=2026-09-10`, incluyendo siempre el encabezado `Authorization: Bearer $CRON_SECRET`. `targetDate` solamente se acepta durante una prueba en seco.
+- Una prueba sin envíos puede ejecutarse con `GET /api/reminders/cron?dryRun=1&targetDate=2026-09-10`, incluyendo siempre el encabezado `Authorization: Bearer $CRON_SECRET`. `targetDate` solamente se acepta durante una prueba en seco y puede coincidir con la fecha del turno o con la fecha planificada de envío.
 
 Una futura plantilla agrupada puede reducir a un solo mensaje los casos con varios turnos, pero debe aprobarse en Meta y requeriría representar todos los turnos dentro de un mismo seguimiento. La configuración actual prioriza confirmación y diagnóstico individual.
 

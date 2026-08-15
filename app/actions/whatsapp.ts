@@ -1,6 +1,6 @@
 'use server'
 
-import { sendVolunteerWelcomeTemplate } from "@/lib/whatsapp-api";
+import { isWhatsAppCapacityError, sendVolunteerWelcomeTemplate } from "@/lib/whatsapp-api";
 import { formatE164 } from "@/lib/whatsapp";
 import { requireCapability } from "@/lib/authorization";
 import { hasCapability } from "@/lib/role-permissions";
@@ -10,6 +10,9 @@ import { evaluateWhatsAppRetry } from '@/lib/whatsapp-retry-policy';
 import { formatDateShort, getActiveEventDays, getOfficialShiftTime } from '@/lib/dates';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { buildAndPersistReminderCapacityPlan } from '@/lib/reminder-capacity-service';
+import type { ReminderCapacityDay } from '@/lib/reminder-capacity-planner';
+import type { PersistedReminderCapacityPlan } from '@/lib/reminder-capacity-service';
 
 export type ReminderDeliveryLog = {
   volunteer_id: string;
@@ -23,8 +26,30 @@ export type ReminderDeliveryLog = {
   sent_at: string;
 };
 
+export type ReminderCapacityProjectionRow = ReminderCapacityDay;
+export type ReminderCapacityProjection = PersistedReminderCapacityPlan;
+
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+export async function getReminderCapacityProjectionAction() {
+  try {
+    await requireCapability('manage_platform_users');
+    const supabase = await getAdminSupabase();
+    const projection = await buildAndPersistReminderCapacityPlan(supabase);
+
+    return {
+      success: true as const,
+      projection,
+    };
+  } catch (error) {
+    console.error('[WHATSAPP] Error calculating reminder capacity projection:', error);
+    return {
+      success: false as const,
+      error: getErrorMessage(error, 'No se pudo calcular la proyección de recordatorios.'),
+    };
+  }
 }
 
 export async function getReminderDeliveryLogsAction() {
@@ -228,10 +253,15 @@ export async function sendShiftReminderAction({
     if (!result.success) {
       console.error("Error enviando recordatorio de turno por WhatsApp:", result.error);
       const failedAt = new Date().toISOString();
+      const capacityError = isWhatsAppCapacityError(result);
+      const normalizedError = capacityError
+        ? `Se superó el límite de WhatsApp. ${result.error || 'Meta rechazó temporalmente el envío.'}`
+        : result.error || 'Meta rechazó el envío.';
       const { error: trackingError } = await supabase.from('reminder_logs').insert({
         volunteer_id: volunteerId,
         shift_key: shiftKey,
         day_key: dayKey,
+        recipient_phone: formattedPhone,
         sent_by_user_id: authorization.userId,
         whatsapp_message_id: null,
         status: 'error',
@@ -239,13 +269,16 @@ export async function sendShiftReminderAction({
         delivery_status: 'failed',
         delivery_updated_at: failedAt,
         failed_at: failedAt,
-        delivery_error_message: result.error || 'Meta rechazó el envío.',
+        delivery_error_code: capacityError ? 'CAPACITY_LIMIT' : result.errorCode || null,
+        delivery_error_title: capacityError ? 'Límite de WhatsApp superado' : null,
+        delivery_error_message: normalizedError,
+        delivery_error_details: result.errorDetails || null,
         raw_payload: { retry: mode === 'retry', attemptNumber },
       });
       if (trackingError) {
         console.error('Error registrando el envío fallido de WhatsApp:', trackingError.message);
       }
-      return { success: false, error: result.error };
+      return { success: false, error: normalizedError };
     }
 
     const sentAt = new Date().toISOString();
@@ -253,6 +286,7 @@ export async function sendShiftReminderAction({
       volunteer_id: volunteerId,
       shift_key: shiftKey,
       day_key: dayKey,
+      recipient_phone: formattedPhone,
       sent_by_user_id: authorization.userId,
       whatsapp_message_id: result.messageId || null,
       status: 'contactado',

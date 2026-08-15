@@ -13,6 +13,15 @@ export interface WhatsAppTemplateComponent {
   }>;
 }
 
+export type WhatsAppSendResult = {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+  errorCode?: string;
+  errorDetails?: string;
+  httpStatus?: number;
+};
+
 import { formatE164, validatePhone8Digits } from './whatsapp';
 
 export { formatE164, validatePhone8Digits };
@@ -130,7 +139,7 @@ export async function sendWhatsAppTemplate(options: {
   templateName: string;
   languageCode?: string;
   components?: WhatsAppTemplateComponent[];
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+}): Promise<WhatsAppSendResult> {
   if (!isWhatsAppEnabled()) {
     console.log("⏸️ WhatsApp message skipped: sending is PAUSED via WHATSAPP_ENABLED=false");
     return { success: false, error: "WhatsApp messaging is temporarily paused by configuration." };
@@ -176,7 +185,13 @@ export async function sendWhatsAppTemplate(options: {
 
     if (!res.ok) {
       console.error("Meta WhatsApp Template Error:", data);
-      return { success: false, error: data.error?.message || "Error enviando plantilla" };
+      return {
+        success: false,
+        error: data.error?.message || "Error enviando plantilla",
+        errorCode: data.error?.code ? String(data.error.code) : undefined,
+        errorDetails: data.error?.error_data?.details || data.error?.error_user_msg,
+        httpStatus: res.status,
+      };
     }
 
     const messageId = data.messages?.[0]?.id;
@@ -185,6 +200,15 @@ export async function sendWhatsAppTemplate(options: {
     console.error("WhatsApp API Network Exception:", err);
     return { success: false, error: err.message || "Error de conexión" };
   }
+}
+
+export function isWhatsAppCapacityError(result: WhatsAppSendResult): boolean {
+  if (result.success) return false;
+  const knownRateLimitCodes = new Set(['80007', '130429', '131048', '131049']);
+  const normalizedMessage = `${result.error || ''} ${result.errorDetails || ''}`.toLowerCase();
+  return result.httpStatus === 429
+    || Boolean(result.errorCode && knownRateLimitCodes.has(result.errorCode))
+    || /messaging limit|rate limit|too many requests|límite de mensajes|limite de mensajes/.test(normalizedMessage);
 }
 
 /**
@@ -591,7 +615,7 @@ export async function sendShiftReminderTemplate(options: {
   shiftName: string;
   shiftHours: string;
   shiftDate: string;
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+}): Promise<WhatsAppSendResult> {
   return sendWhatsAppTemplate({
     to: options.to,
     templateName: 'recordatorio_turno_comite',

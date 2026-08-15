@@ -31,6 +31,7 @@ import { getCurrentSettingsProfileAction } from "@/app/actions/user-actions";
 import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useMobileNavigationMode } from "@/lib/use-mobile-navigation-mode";
+import { ReminderCapacityProjectionCard } from "@/components/ReminderCapacityProjection";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -376,6 +377,7 @@ export default function SettingsPage() {
     shiftEdit: false,
     permissions: false,
     requirements: false,
+    reminderCapacity: false,
   });
   const [settingsSearch, setSettingsSearch] = useState('');
   const [isSettingsSearchFocused, setIsSettingsSearchFocused] = useState(false);
@@ -437,6 +439,13 @@ export default function SettingsPage() {
           description: 'Auditoría de operaciones y cambios del sistema',
           keywords: 'logs registros eventos ediciones seguridad configuración reasignaciones',
           icon: 'history',
+        },
+        {
+          id: 'reminderCapacity',
+          title: 'Capacidad de recordatorios',
+          description: 'Proyección, redistribución y límite de WhatsApp',
+          keywords: 'whatsapp recordatorios mensajes límite capacidad cron envíos reubicar 24 horas',
+          icon: 'monitoring',
         }
       );
     }
@@ -1666,7 +1675,50 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* 5. Historial de Actividades (Solo Admins) */}
+          {/* Capacidad de recordatorios automáticos (Solo Admins) */}
+          {currentRole === 'Admin' && (
+            <div id="settings-reminderCapacity" className="w-full scroll-mt-44 transition-all">
+              <button
+                type="button"
+                onClick={() => isMobile && toggleSection('reminderCapacity')}
+                className={`w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors ${isMobile ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'
+                  } ${isSectionOpen('reminderCapacity') ? 'bg-black/[0.03] dark:bg-white/[0.02]' : ''}`}
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                    <span className="material-symbols-outlined text-[18px]">monitoring</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="truncate text-xs font-bold leading-none tracking-tight text-text">Recordatorios automáticos</h3>
+                      <Badge className="h-4 border-[#4d7cfe]/30 bg-[#4d7cfe]/15 px-1.5 py-0 text-[9px] font-extrabold text-[#4d7cfe]">
+                        Solo Admins
+                      </Badge>
+                    </div>
+                    <p className="mt-1 truncate text-[10px] font-medium text-text-dim">
+                      Capacidad de WhatsApp, reserva y distribución por fecha
+                    </p>
+                  </div>
+                </div>
+
+                {isMobile && (
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black/5 text-text-dim dark:bg-white/5">
+                    <span className="material-symbols-outlined text-[18px]">
+                      {isSectionOpen('reminderCapacity') ? 'expand_less' : 'expand_more'}
+                    </span>
+                  </div>
+                )}
+              </button>
+
+              {isSectionOpen('reminderCapacity') && (
+                <div className="border-t border-border">
+                  <ReminderCapacityProjectionCard />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Historial de Actividades (Solo Admins) */}
           {currentRole === 'Admin' && (
             <div id="settings-activity" className="w-full scroll-mt-44 transition-all border-t border-border mt-2 pt-2">
               <div

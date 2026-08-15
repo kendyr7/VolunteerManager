@@ -2,21 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAdminSupabase } from '@/lib/supabase/admin';
-import { sendShiftReminderTemplate } from '@/lib/whatsapp-api';
+import { isWhatsAppCapacityError, sendShiftReminderTemplate } from '@/lib/whatsapp-api';
 import { formatE164 } from '@/lib/whatsapp';
-import { formatDateShort, getOfficialShiftTime } from '@/lib/dates';
+import { getOfficialShiftTime } from '@/lib/dates';
+import { buildAndPersistReminderCapacityPlan } from '@/lib/reminder-capacity-service';
+import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
+import type { ReminderPlanAssignment } from '@/lib/reminder-capacity-planner';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const REMINDER_TIME_ZONE = 'America/Guatemala';
-const DEFAULT_LEAD_DAYS = 3;
-
-type ShiftRow = {
-  volunteer_id: string;
-  day_key: string;
-  shift_key: string;
-};
+const CAPACITY_ERROR_MESSAGE = 'Se superó el límite de WhatsApp. No fue posible enviar este recordatorio manteniendo un mínimo de 24 horas de anticipación.';
 
 type VolunteerRow = {
   id: string;
@@ -27,19 +24,20 @@ type VolunteerRow = {
   committees: { name?: string | null } | Array<{ name?: string | null }> | null;
 };
 
+type RecentReminderRow = {
+  volunteer_id: string;
+  recipient_phone: string | null;
+  status: string;
+  delivery_status: string | null;
+  sent_at: string;
+};
+
 function isAuthorizedCronRequest(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET?.trim();
   return Boolean(cronSecret && request.headers.get('authorization') === `Bearer ${cronSecret}`);
 }
 
-function getLeadDays(): number {
-  const configured = Number.parseInt(process.env.WHATSAPP_REMINDER_LEAD_DAYS || '', 10);
-  return Number.isInteger(configured) && configured >= 1 && configured <= 14
-    ? configured
-    : DEFAULT_LEAD_DAYS;
-}
-
-function getTodayInTimeZone(now = new Date()): Date {
+function getTodayIsoInTimeZone(now = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: REMINDER_TIME_ZONE,
     year: 'numeric',
@@ -47,18 +45,8 @@ function getTodayInTimeZone(now = new Date()): Date {
     day: '2-digit',
   }).formatToParts(now);
   const value = (type: Intl.DateTimeFormatPartTypes) =>
-    Number(parts.find(part => part.type === type)?.value || 0);
-  return new Date(Date.UTC(value('year'), value('month') - 1, value('day'), 12));
-}
-
-function addUtcDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setUTCDate(result.getUTCDate() + days);
-  return result;
-}
-
-function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+    parts.find(part => part.type === type)?.value || '';
+  return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
 function committeeName(volunteer: VolunteerRow): string {
@@ -66,6 +54,62 @@ function committeeName(volunteer: VolunteerRow): string {
     ? volunteer.committees[0]
     : volunteer.committees;
   return relation?.name?.trim() || 'Servicio';
+}
+
+function reminderDeadline(assignment: ReminderPlanAssignment): Date {
+  const shift = getOfficialShiftTime(assignment.eventDate, assignment.shiftKey);
+  const startHour = String(Math.floor(shift.startHour)).padStart(2, '0');
+  const startMinute = String(Math.round((shift.startHour % 1) * 60)).padStart(2, '0');
+  const eventStart = new Date(`${assignment.eventDate}T${startHour}:${startMinute}:00-06:00`);
+  return new Date(eventStart.getTime() - 24 * 60 * 60 * 1000);
+}
+
+async function markCapacityFailure(
+  supabase: Awaited<ReturnType<typeof getAdminSupabase>>,
+  assignment: ReminderPlanAssignment,
+  nowIso: string,
+) {
+  const automationKey = `capacity-limit:${assignment.scheduleKey}`;
+  const { error: insertError } = await supabase.from('reminder_logs').insert({
+    volunteer_id: assignment.volunteerId,
+    shift_key: assignment.shiftKey,
+    day_key: assignment.dayKey,
+    recipient_phone: assignment.recipientPhone,
+    preferred_send_date: assignment.preferredSendDate,
+    scheduled_send_date: assignment.scheduledSendDate,
+    whatsapp_message_id: null,
+    status: 'error',
+    sent_at: nowIso,
+    delivery_status: 'failed',
+    delivery_updated_at: nowIso,
+    failed_at: nowIso,
+    delivery_error_code: 'CAPACITY_LIMIT',
+    delivery_error_title: 'Límite de WhatsApp superado',
+    delivery_error_message: CAPACITY_ERROR_MESSAGE,
+    send_source: 'automatic',
+    automation_key: automationKey,
+    raw_payload: {
+      automatic: true,
+      state: 'capacity_exceeded',
+      preferredSendDate: assignment.preferredSendDate,
+      scheduledSendDate: assignment.scheduledSendDate,
+    },
+  });
+  if (insertError && insertError.code !== '23505') {
+    throw new Error(`No se pudo registrar el error de capacidad: ${insertError.message}`);
+  }
+
+  const { error: scheduleError } = await supabase
+    .from('whatsapp_reminder_schedule')
+    .update({
+      allocation_status: 'overflow',
+      allocation_reason: 'capacity_exceeded',
+      scheduled_send_date: null,
+      scheduled_lead_days: null,
+      updated_at: nowIso,
+    })
+    .eq('schedule_key', assignment.scheduleKey);
+  if (scheduleError) throw new Error(`No se pudo actualizar el plan excedido: ${scheduleError.message}`);
 }
 
 export async function GET(request: NextRequest) {
@@ -77,235 +121,306 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, skipped: true, reason: 'whatsapp_disabled' });
   }
 
-  const leadDays = getLeadDays();
   const dryRun = request.nextUrl.searchParams.get('dryRun') === '1';
   const requestedTarget = dryRun ? request.nextUrl.searchParams.get('targetDate') : null;
-  const targetDate = requestedTarget && /^\d{4}-\d{2}-\d{2}$/.test(requestedTarget)
-    ? new Date(`${requestedTarget}T12:00:00.000Z`)
-    : addUtcDays(getTodayInTimeZone(), leadDays);
-  if (Number.isNaN(targetDate.getTime())) {
+  if (requestedTarget && !/^\d{4}-\d{2}-\d{2}$/.test(requestedTarget)) {
     return NextResponse.json({ error: 'Invalid targetDate.' }, { status: 400 });
   }
-  const targetIso = isoDate(targetDate);
-  const targetShort = formatDateShort(targetDate).toLowerCase();
-  const targetShortTitle = `${targetShort.charAt(0).toUpperCase()}${targetShort.slice(1)}`;
-  const targetKeys = Array.from(new Set([targetIso, targetShort, targetShortTitle]));
+
   const supabase = await getAdminSupabase();
-
-  const { data: shiftData, error: shiftsError } = await supabase
-    .from('shifts')
-    .select('volunteer_id, day_key, shift_key')
-    .in('day_key', targetKeys)
-    .in('shift_key', ['T1', 'T2', 'T3', 'T4']);
-
-  if (shiftsError) {
-    console.error('[REMINDER CRON] Could not load target shifts:', shiftsError.message);
-    return NextResponse.json({ error: 'Could not load target shifts.' }, { status: 500 });
-  }
-
-  const uniqueShifts = Array.from(
-    new Map(
-      ((shiftData || []) as ShiftRow[])
-        .filter(row => row.volunteer_id)
-        .map(row => [`${row.volunteer_id}:${row.shift_key}`, row])
-    ).values()
-  );
-
-  if (uniqueShifts.length === 0) {
-    return NextResponse.json({
-      success: true,
-      targetDate: targetIso,
-      leadDays,
-      scheduled: 0,
-      sent: 0,
-      failed: 0,
-      skipped: 0,
-    });
-  }
-
-  const volunteerIds = Array.from(new Set(uniqueShifts.map(row => row.volunteer_id)));
-  const { data: existingReminderData, error: existingReminderError } = await supabase
-    .from('reminder_logs')
-    .select('volunteer_id, shift_key, status, delivery_status')
-    .in('volunteer_id', volunteerIds)
-    .in('day_key', targetKeys)
-    .in('shift_key', ['T1', 'T2', 'T3', 'T4']);
-
-  if (existingReminderError) {
-    console.error('[REMINDER CRON] Could not check existing reminders:', existingReminderError.message);
-    return NextResponse.json({ error: 'Could not verify existing reminders.' }, { status: 500 });
-  }
-
-  const alreadyContacted = new Set(
-    (existingReminderData || [])
-      .filter(row =>
-        (row.status === 'contactado' || row.status === 'confirmado') &&
-        row.delivery_status !== 'failed'
-      )
-      .map(row => `${row.volunteer_id}:${row.shift_key}`)
-  );
-
-  const { data: volunteerData, error: volunteersError } = await supabase
-    .from('volunteers')
-    .select('id, first_name, last_name, phone, status, committees(name)')
-    .in('id', volunteerIds)
-    .or('status.is.null,status.neq.archived');
-
-  if (volunteersError) {
-    console.error('[REMINDER CRON] Could not load target volunteers:', volunteersError.message);
-    return NextResponse.json({ error: 'Could not load target volunteers.' }, { status: 500 });
-  }
-
-  const volunteers = new Map(
-    ((volunteerData || []) as VolunteerRow[]).map(volunteer => [volunteer.id, volunteer])
-  );
-  const shiftsPerVolunteer = new Map<string, number>();
-  for (const shift of uniqueShifts) {
-    shiftsPerVolunteer.set(shift.volunteer_id, (shiftsPerVolunteer.get(shift.volunteer_id) || 0) + 1);
-  }
-  const invalidRecipientsPreview = uniqueShifts.filter(shift => {
-    const volunteer = volunteers.get(shift.volunteer_id);
-    return !alreadyContacted.has(`${shift.volunteer_id}:${shift.shift_key}`) &&
-      (!volunteer || !formatE164(volunteer.phone || ''));
-  }).length;
-  const alreadyContactedCount = uniqueShifts.filter(shift =>
-    alreadyContacted.has(`${shift.volunteer_id}:${shift.shift_key}`)
-  ).length;
+  const plan = await buildAndPersistReminderCapacityPlan(supabase);
+  const todayIso = getTodayIsoInTimeZone();
+  const selectedAssignments = requestedTarget
+    ? plan.assignments.filter(item =>
+        item.eventDate === requestedTarget || item.scheduledSendDate === requestedTarget)
+    : plan.assignments.filter(item =>
+        item.scheduledSendDate !== null && item.scheduledSendDate <= todayIso);
 
   if (dryRun) {
+    const scheduled = selectedAssignments.filter(item => item.allocationStatus === 'scheduled');
     return NextResponse.json({
       success: true,
       dryRun: true,
-      targetDate: targetIso,
-      leadDays,
-      scheduled: uniqueShifts.length,
-      volunteers: volunteers.size,
-      volunteersWithMultipleShifts: Array.from(shiftsPerVolunteer.values()).filter(count => count > 1).length,
-      invalidRecipients: invalidRecipientsPreview,
-      alreadyContacted: alreadyContactedCount,
-      wouldSend: uniqueShifts.length - alreadyContactedCount - invalidRecipientsPreview,
+      targetDate: requestedTarget || todayIso,
+      preferredLeadDays: plan.preferredLeadDays,
+      messagingLimit: plan.messagingLimit,
+      automaticCapacity: plan.automaticCapacity,
+      reservePercent: plan.reservePercent,
+      scheduledMessages: scheduled.length,
+      uniqueRecipients: new Set(scheduled.map(item => item.recipientPhone).filter(Boolean)).size,
+      redistributedRecipients: new Set(
+        scheduled
+          .filter(item => item.scheduledSendDate !== item.preferredSendDate)
+          .map(item => `${item.eventDate}:${item.recipientPhone}`),
+      ).size,
+      overflowRecipients: plan.overflowRecipients,
+      invalidPhoneVolunteers: plan.invalidPhoneVolunteers,
+      assignments: scheduled.map(item => ({
+        eventDate: item.eventDate,
+        shiftKey: item.shiftKey,
+        preferredSendDate: item.preferredSendDate,
+        scheduledSendDate: item.scheduledSendDate,
+        allocationReason: item.allocationReason,
+      })),
     });
   }
 
-  const shiftDate = format(targetDate, "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
+  const activeVolunteers = await fetchAllRowsStrict<VolunteerRow>(
+    supabase,
+    'volunteers',
+    'id, first_name, last_name, phone, status, committees(name)',
+    query => query.or('status.is.null,status.neq.archived'),
+  );
+  const volunteers = new Map(activeVolunteers.map(volunteer => [volunteer.id, volunteer]));
+  const rollingWindowStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const recentRows = await fetchAllRowsStrict<RecentReminderRow>(
+    supabase,
+    'reminder_logs',
+    'volunteer_id, recipient_phone, status, delivery_status, sent_at',
+    query => query.gte('sent_at', rollingWindowStart),
+  );
+  const rollingRecipients = new Set<string>();
+  for (const row of recentRows) {
+    const countsTowardCapacity = (row.status === 'contactado' || row.status === 'confirmado')
+      && row.delivery_status !== 'failed';
+    if (!countsTowardCapacity) continue;
+    const fallbackPhone = volunteers.get(row.volunteer_id)?.phone || '';
+    const phone = formatE164(row.recipient_phone || fallbackPhone);
+    if (phone) rollingRecipients.add(phone);
+  }
+
+  const assignmentsByPhone = new Map<string, ReminderPlanAssignment[]>();
+  for (const assignment of selectedAssignments) {
+    if (assignment.allocationStatus !== 'scheduled' || !assignment.recipientPhone) continue;
+    const group = assignmentsByPhone.get(assignment.recipientPhone) || [];
+    group.push(assignment);
+    assignmentsByPhone.set(assignment.recipientPhone, group);
+  }
+
   let sent = 0;
   let failed = 0;
   let skipped = 0;
-  let invalidRecipients = 0;
+  let deferredByCapacity = 0;
+  let capacityFailures = 0;
   let trackingFailures = 0;
+  const now = new Date();
 
-  for (const shift of uniqueShifts) {
-    if (alreadyContacted.has(`${shift.volunteer_id}:${shift.shift_key}`)) {
-      skipped += 1;
-      continue;
-    }
+  for (const [recipientPhone, assignments] of assignmentsByPhone) {
+    const earliestDeadline = assignments
+      .map(reminderDeadline)
+      .sort((left, right) => left.getTime() - right.getTime())[0];
 
-    const volunteer = volunteers.get(shift.volunteer_id);
-    const phone = volunteer ? formatE164(volunteer.phone || '') : null;
-    if (!volunteer || !phone) {
-      invalidRecipients += 1;
-      continue;
-    }
-
-    const automationKey = `shift-reminder:${targetIso}:${volunteer.id}:${shift.shift_key}:${leadDays}d`;
-    const claimedAt = new Date().toISOString();
-    const { data: claim, error: claimError } = await supabase
-      .from('reminder_logs')
-      .insert({
-        volunteer_id: volunteer.id,
-        shift_key: shift.shift_key,
-        day_key: targetShort,
-        whatsapp_message_id: null,
-        status: 'contactado',
-        sent_at: claimedAt,
-        delivery_status: 'pending',
-        delivery_updated_at: claimedAt,
-        send_source: 'automatic',
-        automation_key: automationKey,
-        raw_payload: { automatic: true, leadDays, targetDate: targetIso, state: 'claimed' },
-      })
-      .select('id')
-      .single();
-
-    if (claimError) {
-      if (claimError.code === '23505') {
-        skipped += 1;
-      } else {
-        trackingFailures += 1;
-        console.error('[REMINDER CRON] Could not claim automatic reminder:', {
-          volunteerId: volunteer.id,
-          shiftKey: shift.shift_key,
-          error: claimError.message,
-        });
+    // A daily Hobby-compatible cron may retry a reminder on the following day.
+    // Never send that retry once fewer than 24 hours remain before the shift.
+    if (now >= earliestDeadline) {
+      for (const assignment of assignments) {
+        try {
+          await markCapacityFailure(supabase, assignment, now.toISOString());
+          capacityFailures += 1;
+        } catch (error) {
+          trackingFailures += 1;
+          console.error('[REMINDER CRON] Could not persist capacity failure:', error);
+        }
       }
       continue;
     }
 
-    const fullName = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || 'Hermano(a)';
-    const officialShift = getOfficialShiftTime(shift.day_key, shift.shift_key);
-    const result = await sendShiftReminderTemplate({
-      to: phone,
-      volunteerName: fullName,
-      committeeName: committeeName(volunteer),
-      shiftName: officialShift.name,
-      shiftHours: officialShift.timeLabel,
-      shiftDate,
-    });
-    const completedAt = new Date().toISOString();
-
-    const update = result.success
-      ? {
-          whatsapp_message_id: result.messageId || null,
-          status: 'contactado',
-          delivery_status: result.messageId ? 'pending' : null,
-          delivery_updated_at: completedAt,
-          raw_payload: { automatic: true, leadDays, targetDate: targetIso, state: 'sent' },
-        }
-      : {
-          status: 'error',
-          delivery_status: 'failed',
-          delivery_updated_at: completedAt,
-          failed_at: completedAt,
-          delivery_error_message: result.error || 'Meta rechazó el envío.',
-          raw_payload: { automatic: true, leadDays, targetDate: targetIso, state: 'failed' },
-        };
-
-    const { error: updateError } = await supabase
-      .from('reminder_logs')
-      .update(update)
-      .eq('id', claim.id);
-    if (updateError) {
-      trackingFailures += 1;
-      console.error('[REMINDER CRON] Could not finalize automatic reminder log:', {
-        reminderId: claim.id,
-        error: updateError.message,
-      });
+    const consumesNewSlot = !rollingRecipients.has(recipientPhone);
+    if (consumesNewSlot && rollingRecipients.size >= plan.automaticCapacity) {
+      deferredByCapacity += assignments.length;
+      continue;
     }
 
-    if (result.success) sent += 1;
-    else failed += 1;
+    rollingRecipients.add(recipientPhone);
+
+    for (const assignment of assignments) {
+      const volunteer = volunteers.get(assignment.volunteerId);
+      if (!volunteer) {
+        skipped += 1;
+        continue;
+      }
+
+      const automationKey = `shift-reminder:${assignment.scheduleKey}`;
+      const claimedAt = new Date().toISOString();
+      let claimId: string | null = null;
+      const { data: insertedClaim, error: claimError } = await supabase
+        .from('reminder_logs')
+        .insert({
+          volunteer_id: volunteer.id,
+          shift_key: assignment.shiftKey,
+          day_key: assignment.dayKey,
+          recipient_phone: recipientPhone,
+          preferred_send_date: assignment.preferredSendDate,
+          scheduled_send_date: assignment.scheduledSendDate,
+          whatsapp_message_id: null,
+          status: 'contactado',
+          sent_at: claimedAt,
+          delivery_status: 'pending',
+          delivery_updated_at: claimedAt,
+          send_source: 'automatic',
+          automation_key: automationKey,
+          raw_payload: {
+            automatic: true,
+            state: 'claimed',
+            allocationReason: assignment.allocationReason,
+            preferredSendDate: assignment.preferredSendDate,
+            scheduledSendDate: assignment.scheduledSendDate,
+          },
+        })
+        .select('id')
+        .single();
+
+      if (claimError?.code === '23505') {
+        const { data: existingClaim } = await supabase
+          .from('reminder_logs')
+          .select('id, delivery_status')
+          .eq('automation_key', automationKey)
+          .maybeSingle();
+        if (existingClaim?.delivery_status === 'failed') {
+          const { error: retryClaimError } = await supabase
+            .from('reminder_logs')
+            .update({
+              status: 'contactado',
+              sent_at: claimedAt,
+              delivery_status: 'pending',
+              delivery_updated_at: claimedAt,
+              failed_at: null,
+              delivery_error_code: null,
+              delivery_error_title: null,
+              delivery_error_message: null,
+              delivery_error_details: null,
+            })
+            .eq('id', existingClaim.id);
+          if (!retryClaimError) claimId = existingClaim.id;
+          else trackingFailures += 1;
+        } else {
+          skipped += 1;
+        }
+      } else if (claimError) {
+        trackingFailures += 1;
+        console.error('[REMINDER CRON] Could not claim automatic reminder:', claimError.message);
+      } else {
+        claimId = insertedClaim?.id || null;
+      }
+
+      if (!claimId) continue;
+
+      const fullName = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || 'Hermano(a)';
+      const officialShift = getOfficialShiftTime(assignment.eventDate, assignment.shiftKey);
+      const shiftDate = format(new Date(`${assignment.eventDate}T12:00:00.000Z`), "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
+      const result = await sendShiftReminderTemplate({
+        to: recipientPhone,
+        volunteerName: fullName,
+        committeeName: committeeName(volunteer),
+        shiftName: officialShift.name,
+        shiftHours: officialShift.timeLabel,
+        shiftDate,
+      });
+      const completedAt = new Date().toISOString();
+      const capacityError = isWhatsAppCapacityError(result);
+      const normalizedError = capacityError
+        ? `Se superó el límite de WhatsApp. ${result.error || 'Meta rechazó temporalmente el envío.'}`
+        : result.error || 'Meta rechazó el envío.';
+
+      const update = result.success
+        ? {
+            whatsapp_message_id: result.messageId || null,
+            status: 'contactado',
+            delivery_status: result.messageId ? 'pending' : null,
+            delivery_updated_at: completedAt,
+            raw_payload: {
+              automatic: true,
+              state: 'sent',
+              allocationReason: assignment.allocationReason,
+              preferredSendDate: assignment.preferredSendDate,
+              scheduledSendDate: assignment.scheduledSendDate,
+            },
+          }
+        : {
+            status: 'error',
+            delivery_status: 'failed',
+            delivery_updated_at: completedAt,
+            failed_at: completedAt,
+            delivery_error_code: capacityError ? 'CAPACITY_LIMIT' : result.errorCode || null,
+            delivery_error_title: capacityError ? 'Límite de WhatsApp superado' : null,
+            delivery_error_message: normalizedError,
+            delivery_error_details: result.errorDetails || null,
+            raw_payload: {
+              automatic: true,
+              state: capacityError ? 'capacity_exceeded' : 'failed',
+              metaErrorCode: result.errorCode || null,
+              metaHttpStatus: result.httpStatus || null,
+            },
+          };
+
+      const { error: updateError } = await supabase
+        .from('reminder_logs')
+        .update(update)
+        .eq('id', claimId);
+      if (updateError) {
+        trackingFailures += 1;
+        console.error('[REMINDER CRON] Could not finalize automatic reminder log:', updateError.message);
+      }
+
+      if (result.success) {
+        sent += 1;
+        const { error: scheduleError } = await supabase
+          .from('whatsapp_reminder_schedule')
+          .update({ allocation_status: 'sent', sent_at: completedAt, updated_at: completedAt })
+          .eq('schedule_key', assignment.scheduleKey);
+        if (scheduleError) trackingFailures += 1;
+      } else if (capacityError) {
+        capacityFailures += 1;
+        const { error: scheduleError } = await supabase
+          .from('whatsapp_reminder_schedule')
+          .update({
+            allocation_status: 'overflow',
+            allocation_reason: 'capacity_exceeded',
+            scheduled_send_date: null,
+            scheduled_lead_days: null,
+            updated_at: completedAt,
+          })
+          .eq('schedule_key', assignment.scheduleKey);
+        if (scheduleError) trackingFailures += 1;
+      } else {
+        failed += 1;
+      }
+    }
   }
 
+  const overflowToday = plan.assignments.filter(item =>
+    item.allocationStatus === 'overflow' && item.preferredSendDate === todayIso).length;
+  const exceeded = capacityFailures > 0 || overflowToday > 0;
+  const error = exceeded
+    ? 'Se superó el límite de WhatsApp. Revisa Ajustes > Recordatorios automáticos para ver la distribución y la cercanía al límite.'
+    : undefined;
+
   console.info('[REMINDER CRON] Automatic reminder run completed.', {
-    targetDate: targetIso,
-    leadDays,
-    scheduled: uniqueShifts.length,
+    sendDate: todayIso,
+    automaticCapacity: plan.automaticCapacity,
+    rollingUniqueRecipients: rollingRecipients.size,
     sent,
     failed,
     skipped,
-    invalidRecipients,
+    deferredByCapacity,
+    capacityFailures,
+    overflowToday,
     trackingFailures,
   });
 
   return NextResponse.json({
-    success: failed === 0 && trackingFailures === 0,
-    targetDate: targetIso,
-    leadDays,
-    scheduled: uniqueShifts.length,
+    success: failed === 0 && trackingFailures === 0 && !exceeded,
+    error,
+    sendDate: todayIso,
+    messagingLimit: plan.messagingLimit,
+    automaticCapacity: plan.automaticCapacity,
+    rollingUniqueRecipients: rollingRecipients.size,
     sent,
     failed,
     skipped,
-    invalidRecipients,
+    deferredByCapacity,
+    capacityFailures,
+    overflowToday,
     trackingFailures,
   }, { status: trackingFailures > 0 ? 500 : 200 });
 }
