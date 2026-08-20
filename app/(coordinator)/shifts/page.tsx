@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, getOfficialShiftTime, isSimulationEventDay } from "@/lib/dates";
 import { format } from "date-fns";
@@ -29,6 +30,7 @@ import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { HighlightText } from "@/components/HighlightText";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
+import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -139,6 +141,10 @@ const getProfileBg = (committee: string) => {
 // ─── helper: highlight search term ─────────────────────────────────────────
 // ─── página ───────────────────────────────────────────────────────────────────
 export default function ShiftsPage() {
+  const searchParams = useSearchParams();
+  const requestedSearch = searchParams.get('search')?.trim() || '';
+  const requestedView = searchParams.get('view') || '';
+  const removeUrlSearch = useRemoveSearchParam();
   const EVENT_DAYS_RAW = getOperationalEventDays();
   const EVENT_DAYS_DEFAULT = useMemo(() => EVENT_DAYS_RAW.map(date => ({
     date,
@@ -148,7 +154,7 @@ export default function ShiftsPage() {
   })), [EVENT_DAYS_RAW]);
 
   // Estados de filtros
-  const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
+  const { inputValue, setInputValue, appliedSearch, setAppliedSearch, applySearch } = useDebouncedSearch();
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
@@ -163,6 +169,16 @@ export default function ShiftsPage() {
   const [reassignSourceShiftId, setReassignSourceShiftId] = useState<string>("");
   const [reassignDayKey, setReassignDayKey] = useState<string>("");
   const [reassignShiftId, setReassignShiftId] = useState<string>("");
+
+  useEffect(() => {
+    if (requestedSearch) {
+      setInputValue(requestedSearch);
+      setAppliedSearch(requestedSearch);
+    }
+    if (requestedView === 'turnos' || requestedView === 'active' || requestedView === 'completed') {
+      setViewMode(requestedView);
+    }
+  }, [requestedSearch, requestedView, setAppliedSearch, setInputValue]);
 
   const supabase = createClient();
 
@@ -1803,6 +1819,7 @@ export default function ShiftsPage() {
             value={inputValue}
             onValueChange={setInputValue}
             onImmediateSearch={applySearch}
+            onClear={removeUrlSearch}
             placeholder={viewMode === 'active' ? "Buscar por voluntario o subcomité en turno..." : "Buscar por voluntario, subcomité o barrio..."}
           />
         </motion.div>

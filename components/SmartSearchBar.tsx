@@ -9,6 +9,7 @@ interface SmartSearchBarProps {
   placeholder: string;
   ariaLabel?: string;
   onImmediateSearch?: (value: string) => void;
+  onClear?: () => void;
   onFocusChange?: (focused: boolean) => void;
   results?: ReactNode;
   showResults?: boolean;
@@ -23,6 +24,7 @@ export function SmartSearchBar({
   placeholder,
   ariaLabel,
   onImmediateSearch,
+  onClear,
   onFocusChange,
   results,
   showResults = false,
@@ -41,6 +43,7 @@ export function SmartSearchBar({
     if (event.key !== 'Escape') return;
     onValueChange('');
     onImmediateSearch?.('');
+    onClear?.();
     onFocusChange?.(false);
     event.currentTarget.blur();
   };
@@ -88,6 +91,7 @@ export function SmartSearchBar({
             onClick={() => {
               onValueChange('');
               onImmediateSearch?.('');
+              onClear?.();
             }}
             className="flex h-9 cursor-pointer items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/20 px-3.5 text-xs font-bold font-inter text-rose-500 transition-colors hover:bg-rose-500/30 dark:text-rose-400"
             aria-label="Limpiar búsqueda"

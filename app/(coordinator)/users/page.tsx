@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
+import { useSearchParams } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { HighlightText } from "@/components/HighlightText";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
+import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -191,6 +193,9 @@ export const USER_TABLE_STYLES = {
 
 
 export default function UsersPage() {
+  const searchParams = useSearchParams();
+  const requestedSearch = searchParams.get('search')?.trim() || '';
+  const removeUrlSearch = useRemoveSearchParam();
   const [users, setUsers] = useState<PlatformUser[]>([]);
   const [committeesList, setCommitteesList] = useState<{ id: string, name: string }[]>([]);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -198,9 +203,15 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<PlatformUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
-  const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
+  const { inputValue, setInputValue, appliedSearch, setAppliedSearch, applySearch } = useDebouncedSearch();
   const [userSortField, setUserSortField] = useState<UserSortField>('name');
   const [userSortDirection, setUserSortDirection] = useState<TableSortDirection>('asc');
+
+  useEffect(() => {
+    if (!requestedSearch) return;
+    setInputValue(requestedSearch);
+    setAppliedSearch(requestedSearch);
+  }, [requestedSearch, setAppliedSearch, setInputValue]);
 
   const [isMobile, setIsMobile] = useState(false);
   const [showPin, setShowPin] = useState(false);
@@ -663,6 +674,7 @@ export default function UsersPage() {
             value={inputValue}
             onValueChange={setInputValue}
             onImmediateSearch={applySearch}
+            onClear={removeUrlSearch}
             placeholder="Buscar por nombre, teléfono, rol o subcomité..."
             className="flex-1"
           />

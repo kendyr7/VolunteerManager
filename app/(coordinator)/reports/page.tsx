@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useTransition, useMemo, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { getReportsData, ReportItem, ReportsData, AttendanceSummary } from "@/app/actions/reports";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,7 @@ import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
+import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 
 // Day names for week headers
 const DAY_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -135,6 +137,10 @@ function ReportPagination({
 }
 
 export default function ReportsPage() {
+  const searchParams = useSearchParams();
+  const requestedSearch = searchParams.get('search')?.trim() || '';
+  const requestedTab = searchParams.get('tab') || '';
+  const removeUrlSearch = useRemoveSearchParam();
   const [data, setData] = useState<ReportsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -142,7 +148,17 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<'history' | 'volunteers' | 'recruitment' | 'daily'>('history');
 
   // Filters State (Multi-Selection arrays)
-  const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
+  const { inputValue, setInputValue, appliedSearch, setAppliedSearch, applySearch } = useDebouncedSearch();
+
+  useEffect(() => {
+    if (requestedSearch) {
+      setInputValue(requestedSearch);
+      setAppliedSearch(requestedSearch);
+    }
+    if (requestedTab === 'history' || requestedTab === 'volunteers' || requestedTab === 'recruitment' || requestedTab === 'daily') {
+      setActiveTab(requestedTab);
+    }
+  }, [requestedSearch, requestedTab, setAppliedSearch, setInputValue]);
 
   // Table Column Sort States
   const [historySortField, setHistorySortField] = useState<HistorySortField | null>(null);
@@ -1044,6 +1060,7 @@ export default function ReportsPage() {
             applySearch(value);
             setCurrentPage(1);
           }}
+          onClear={removeUrlSearch}
           placeholder="Buscar por nombre, teléfono, barrio, estaca o subcomité..."
           className="z-10"
         />

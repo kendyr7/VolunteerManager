@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,10 +16,15 @@ import { SortableTableHead, TableSortDirection } from "@/components/SortableTabl
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
+import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 
 type RequestSortField = 'volunteer' | 'committee' | 'currentShift' | 'requestedShift' | 'reason';
 
 export default function ReplacementsPage() {
+  const searchParams = useSearchParams();
+  const requestedSearch = searchParams.get('search')?.trim() || '';
+  const requestedTab = searchParams.get('tab') || '';
+  const removeUrlSearch = useRemoveSearchParam();
   const [shiftRequests, setShiftRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -32,7 +38,17 @@ export default function ReplacementsPage() {
     requestId: null
   });
 
-  const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
+  const { inputValue, setInputValue, appliedSearch, setAppliedSearch, applySearch } = useDebouncedSearch();
+
+  useEffect(() => {
+    if (requestedSearch) {
+      setInputValue(requestedSearch);
+      setAppliedSearch(requestedSearch);
+    }
+    if (requestedTab === 'pending' || requestedTab === 'history') {
+      setActiveTab(requestedTab);
+    }
+  }, [requestedSearch, requestedTab, setAppliedSearch, setInputValue]);
 
   const loadShiftRequests = async () => {
     setLoadingRequests(true);
@@ -222,6 +238,7 @@ export default function ReplacementsPage() {
             value={inputValue}
             onValueChange={setInputValue}
             onImmediateSearch={applySearch}
+            onClear={removeUrlSearch}
             placeholder="Buscar por voluntario, subcomité, teléfono, turno o motivo..."
             className="flex-1"
           />

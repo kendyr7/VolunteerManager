@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from "react";
+import { useSearchParams } from "next/navigation";
 import { AlphabetScrubber } from "@/components/AlphabetScrubber";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -40,6 +41,7 @@ import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
+import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -151,6 +153,9 @@ const getCommitteeColor = (committee: string) => {
 };
 
 export default function RemindersPage() {
+  const searchParams = useSearchParams();
+  const requestedSearch = searchParams.get('search')?.trim() || '';
+  const removeUrlSearch = useRemoveSearchParam();
   const supabase = createClient();
   const EVENT_DAYS_RAW = getOperationalEventDays();
   const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
@@ -415,7 +420,13 @@ export default function RemindersPage() {
 
 
   // Estado de los filtros y visualización de plantilla
-  const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
+  const { inputValue, setInputValue, appliedSearch, setAppliedSearch, applySearch } = useDebouncedSearch();
+
+  useEffect(() => {
+    if (!requestedSearch) return;
+    setInputValue(requestedSearch);
+    setAppliedSearch(requestedSearch);
+  }, [requestedSearch, setAppliedSearch, setInputValue]);
 
   const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
@@ -1142,6 +1153,7 @@ export default function RemindersPage() {
             value={inputValue}
             onValueChange={setInputValue}
             onImmediateSearch={applySearch}
+            onClear={removeUrlSearch}
             placeholder="Buscar por voluntario, barrio, estaca o subcomité..."
             className="flex-1"
           />
