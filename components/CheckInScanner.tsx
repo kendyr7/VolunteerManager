@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn, normalizeSearch } from "@/lib/utils";
-import { getActiveEventDays, formatDateShort, getOfficialShiftTime } from "@/lib/dates";
+import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, getOfficialShiftTime } from "@/lib/dates";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -380,7 +380,7 @@ export function CheckInScanner({
     return groups;
   }, [scanResult?.shifts]);
 
-  const EVENT_DAYS_RAW = useMemo(() => getActiveEventDays(), []);
+  const EVENT_DAYS_RAW = useMemo(() => getOperationalEventDays(), []);
   const EVENT_DAYS = useMemo(() => EVENT_DAYS_RAW.map(date => ({
     date,
     key: formatDateShort(date),
@@ -1515,7 +1515,7 @@ export function CheckInScanner({
 
                                   {/* Right: T1 T2 T3 T4 Count Indicators */}
                                   <div className="flex items-center shrink-0 ml-auto border-l border-border pl-3 gap-2 sm:gap-4">
-                                    {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
+                                    {getAvailableShiftKeys(dayGroup.dayKey).map((t, i) => {
                                       const count = dayGroup.shifts[t].length;
                                       return (
                                         <div key={t} className={`flex flex-col items-center justify-center w-8 sm:w-12 ${i !== 0 ? 'border-l border-border/50 pl-2 sm:pl-4' : ''}`}>
@@ -1544,7 +1544,7 @@ export function CheckInScanner({
                                       className="border-t border-border/50 bg-dark3/40 p-4 sm:p-5 space-y-4"
                                     >
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {(['T1', 'T2', 'T3', 'T4'] as const).map((t) => {
+                                        {getAvailableShiftKeys(dayGroup.dayKey).map((t) => {
                                           const items = dayGroup.shifts[t];
                                           const timeInfo = getOfficialShiftTime(dayGroup.dayKey, t).timeLabel;
 
@@ -1729,7 +1729,7 @@ export function CheckInScanner({
             {/* Turnos Cards inside Mobile Drawer matching /shifts */}
             {mobileDrawerDayGroup && (
               <div className="space-y-3 pt-1">
-                {(['T1', 'T2', 'T3', 'T4'] as const).map((t) => {
+                {getAvailableShiftKeys(mobileDrawerDayGroup.dayKey).map((t) => {
                   const items = mobileDrawerDayGroup.shifts[t];
                   const timeInfo = getOfficialShiftTime(mobileDrawerDayGroup.dayKey, t).timeLabel;
 

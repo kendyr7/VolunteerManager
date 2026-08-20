@@ -1,7 +1,7 @@
-import { getActiveEventDays, formatDateShort } from "@/lib/dates";
+import { getOperationalEventDays, formatDateShort, isSimulationEventDay } from "@/lib/dates";
 
 export function buildEventDayKeys(): string[] {
-  return getActiveEventDays().map((date) => formatDateShort(date));
+  return getOperationalEventDays().map((date) => formatDateShort(date));
 }
 
 export function computeReliabilityMap(
@@ -88,7 +88,9 @@ export function processShiftsData(shiftsData: any[], volunteers: any[] = [], ses
     if (!s.volunteer_id) continue;
 
     // Basic stats
-    shiftCounts[s.volunteer_id] = (shiftCounts[s.volunteer_id] || 0) + 1;
+    if (!isSimulationEventDay(s.day_key)) {
+      shiftCounts[s.volunteer_id] = (shiftCounts[s.volunteer_id] || 0) + 1;
+    }
 
     // Personal schedule
     if (!globalShifts[s.volunteer_id]) {

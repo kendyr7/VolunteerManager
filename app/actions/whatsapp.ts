@@ -7,7 +7,7 @@ import { hasCapability } from "@/lib/role-permissions";
 import { createActivityLog } from "@/app/actions/activity-actions";
 import { getAdminSupabase } from '@/lib/supabase/admin';
 import { evaluateWhatsAppRetry } from '@/lib/whatsapp-retry-policy';
-import { formatDateShort, getActiveEventDays, getOfficialShiftTime } from '@/lib/dates';
+import { formatDateShort, getOperationalEventDays, getOfficialShiftTime } from '@/lib/dates';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { buildAndPersistReminderCapacityPlan } from '@/lib/reminder-capacity-service';
@@ -162,7 +162,7 @@ export async function sendShiftReminderAction({
       return { success: false, error: 'El turno seleccionado no es válido.' };
     }
 
-    const eventDate = getActiveEventDays().find(
+    const eventDate = getOperationalEventDays().find(
       date => formatDateShort(date).toLowerCase() === dayKey.trim().toLowerCase()
     );
     if (!eventDate) {

@@ -401,7 +401,8 @@ body[data-scroll-locked] {
   font-family: "Material Symbols Outlined";
   font-style: normal;
   font-weight: 100 700;
-  font-display: swap;
+  /* Icon ligatures must never fall back to visible words such as "search". */
+  font-display: block;
   src: url("/material-symbols-outlined.woff2") format("woff2");
 }
 .material-symbols-outlined {
@@ -420,6 +421,15 @@ body[data-scroll-locked] {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-feature-settings: "liga";
+  width: 1em;
+  height: 1em;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+/* Revealed only after the icon font has actually finished loading. */
+html.material-symbols-ready .material-symbols-outlined {
+  visibility: visible;
 }
 
 /* ── html5-qrcode: hide internal white scan-region box and shading ── */

@@ -3,7 +3,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getActiveEventDays, formatDateShort, SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
+import { getActiveEventDays, formatDateShort, SHIFT_TIMES, getOfficialShiftTime, isSimulationEventDay } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -68,7 +68,9 @@ export default async function AdminDashboard() {
 
   // Calculate KPIs
   const totalVolunteers = volunteers.length;
-  const activeShifts = shifts.filter(s => s.volunteer_id && activeVolIds.has(s.volunteer_id));
+  const activeShifts = shifts.filter(s =>
+    s.volunteer_id && activeVolIds.has(s.volunteer_id) && !isSimulationEventDay(s.day_key)
+  );
   const volsWithShift = new Set(activeShifts.map(s => s.volunteer_id));
   const volunteersNoShift = volunteers.filter(v => !volsWithShift.has(v.id)).length;
   const coveredShifts = activeShifts.length;

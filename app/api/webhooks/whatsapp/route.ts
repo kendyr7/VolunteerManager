@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
   formatDateShort,
-  getActiveEventDays,
+  getAvailableShiftKeys,
+  getOperationalEventDays,
   getOfficialShiftTime,
   parseDayKeyToDateStr,
 } from '@/lib/dates';
@@ -843,7 +844,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
           .replace('reschedule_reason_', '')
           .split('__');
         const reason = CHANGE_REASONS[reasonCode];
-        const validEventDays = new Set(getActiveEventDays().map(formatDateShort));
+        const validEventDays = new Set(getOperationalEventDays().map(formatDateShort));
         const validShiftKeys = new Set(['T1', 'T2', 'T3', 'T4']);
 
         if (!reason || !validEventDays.has(reqDay) || !validShiftKeys.has(reqShift)) {
@@ -953,7 +954,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
           .split(isPagedAction ? '__' : '_');
         const [currDay, currShift] = values;
         const requestedPage = Number(isPagedAction ? values[2] : 0);
-        const eventDayKeys = getActiveEventDays().map(formatDateShort);
+        const eventDayKeys = getOperationalEventDays().map(formatDateShort);
         const totalPages = Math.ceil(eventDayKeys.length / PAGE_SIZE);
         const page = Number.isFinite(requestedPage)
           ? Math.min(Math.max(requestedPage, 0), totalPages - 1)
@@ -999,7 +1000,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
           .eq('volunteer_id', targetVolId)
           .eq('day_key', reqDay);
         const alreadyAssigned = new Set((assignedTargets || []).map(item => item.shift_key));
-        const targetRows = ['T1', 'T2', 'T3', 'T4']
+        const targetRows = getAvailableShiftKeys(reqDay)
           .filter(shiftKey => !(currDay === reqDay && currShift === shiftKey) && !alreadyAssigned.has(shiftKey))
           .map(shiftKey => {
             const official = getOfficialShiftTime(reqDay, shiftKey);

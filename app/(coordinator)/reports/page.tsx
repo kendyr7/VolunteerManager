@@ -138,6 +138,7 @@ export default function ReportsPage() {
   const [data, setData] = useState<ReportsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [includeSimulation, setIncludeSimulation] = useState(false);
   const [activeTab, setActiveTab] = useState<'history' | 'volunteers' | 'recruitment' | 'daily'>('history');
 
   // Filters State (Multi-Selection arrays)
@@ -273,9 +274,10 @@ export default function ReportsPage() {
   const [isPending, startTransition] = useTransition();
   const hasLoadedReportsRef = useRef(false);
 
-  const loadData = async () => {
+  const loadData = async (includeSimulationData = includeSimulation) => {
     setLoading(true);
-    const res = await getReportsData();
+    setErrorMsg("");
+    const res = await getReportsData({ includeSimulation: includeSimulationData });
     if (res.error) {
       setErrorMsg(res.error);
     } else if (res.data) {
@@ -287,7 +289,7 @@ export default function ReportsPage() {
   useEffect(() => {
     if (hasLoadedReportsRef.current) return;
     hasLoadedReportsRef.current = true;
-    loadData();
+    loadData(false);
   }, []);
 
   const items = useMemo(() => data?.items || [], [data?.items]);
@@ -299,9 +301,9 @@ export default function ReportsPage() {
     ]));
   }, [items]);
 
-  // Compute ALL event days (Sep 10–26, excluding Sundays) matching Turnos page
+  // Compute official days and optionally add the September 5 simulation day.
   const allEventDays = useMemo(() => {
-    return getActiveEventDays().map(date => {
+    return getActiveEventDays({ includeSimulation }).map(date => {
       const isoDate = date.toISOString().split('T')[0];
       const dateNum = date.getDate();
       const monthShort = date.toLocaleString('es', { month: 'short' });
@@ -315,7 +317,7 @@ export default function ReportsPage() {
         key: formatDateShort(date)
       };
     });
-  }, []);
+  }, [includeSimulation]);
 
   // Map dates with active shift registrations in the dataset
   const datesWithData = useMemo(() => {
@@ -686,7 +688,7 @@ export default function ReportsPage() {
       <div className="min-h-screen bg-dark flex flex-col items-center justify-center text-white p-4">
         <span className="material-symbols-outlined text-[56px] text-red-500 mb-6 font-bold">warning</span>
         <h3 className="text-xl font-bold mb-4">{errorMsg}</h3>
-        <Button onClick={loadData} className="bg-[#4d7cfe] text-white px-6 h-10 rounded-xl">Reintentar</Button>
+        <Button onClick={() => loadData(includeSimulation)} className="bg-[#4d7cfe] text-white px-6 h-10 rounded-xl">Reintentar</Button>
       </div>
     );
   }
@@ -752,6 +754,14 @@ export default function ReportsPage() {
     setSelectedStatuses([]);
     setSelectedDates([]);
     setCurrentPage(1);
+  };
+
+  const handleSimulationToggle = async () => {
+    const nextValue = !includeSimulation;
+    setIncludeSimulation(nextValue);
+    setSelectedDates([]);
+    setCurrentPage(1);
+    await loadData(nextValue);
   };
 
   // Helper toggle functions for multi-select
@@ -909,7 +919,7 @@ export default function ReportsPage() {
             <label className="text-[10px] font-inter font-bold uppercase text-text-dim block">Calendario del Evento (Selección múltiple)</label>
             <p className="text-[9px] text-text-dim/60 font-inter mt-0.5">
               {selectedDates.length === 0
-                ? "Mostrando todas las fechas (Sep 10 – Sep 26)"
+                ? `Mostrando todas las fechas (${includeSimulation ? 'Sep 5 – Sep 26 · incluye simulación' : 'Sep 10 – Sep 26'})`
                 : `${selectedDates.length} día${selectedDates.length !== 1 ? 's' : ''} seleccionado${selectedDates.length !== 1 ? 's' : ''}`}
             </p>
           </div>
@@ -988,6 +998,21 @@ export default function ReportsPage() {
             </span>
           </h1>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={includeSimulation}
+              onClick={handleSimulationToggle}
+              disabled={loading}
+              className={cn(
+                "h-9 rounded-full border px-3 text-[11px] font-bold font-inter transition-all active:scale-[0.97] disabled:opacity-60",
+                includeSimulation
+                  ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-300"
+                  : "border-border bg-dark2 text-text-dim hover:bg-dark3 hover:text-text"
+              )}
+              title="Los datos del 5 de septiembre se excluyen de los reportes oficiales por defecto"
+            >
+              {includeSimulation ? 'Simulación incluida' : 'Incluir simulación'}
+            </button>
             {/* Filter Toggle button */}
             <Button
               onClick={() => setIsFilterDrawerOpen(true)}
@@ -1743,7 +1768,7 @@ export default function ReportsPage() {
                       Cobertura por Día de Evento
                     </h3>
                     <p className="text-xs text-text-dim mt-0.5 font-inter">
-                      Detalle diario de turnos requeridos, asignados, asistidos y faltantes del 10 al 26 de septiembre.
+                      Detalle diario de turnos requeridos, asignados, asistidos y faltantes {includeSimulation ? 'del 5 al 26 de septiembre, incluyendo la simulación' : 'del 10 al 26 de septiembre'}.
                     </p>
                   </div>
 

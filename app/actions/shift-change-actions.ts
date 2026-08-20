@@ -11,6 +11,7 @@ import {
   requireVolunteerSelfOrCapability,
 } from '@/lib/authorization';
 import { hasCapability } from '@/lib/role-permissions';
+import { isShiftAvailableForDay } from '@/lib/dates';
 
 function getAdminClient() {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -75,6 +76,9 @@ export async function approveShiftChangeRequestAction(requestId: string) {
 
     if (reqErr || !request) {
       return { success: false, error: "Solicitud no encontrada" };
+    }
+    if (!isShiftAvailableForDay(request.requested_day_key, request.requested_shift_key)) {
+      return { success: false, error: 'La jornada del 5 de septiembre solo permite T1 (9:00 AM - 2:00 PM).' };
     }
     const reviewer = await requireVolunteerCapability('reschedule_volunteer', request.volunteer_id);
     const reviewerId = reviewer.userId;
@@ -251,6 +255,9 @@ export async function createShiftChangeRequestAction(params: {
   reason?: string;
 }) {
   try {
+    if (!isShiftAvailableForDay(params.requestedDayKey, params.requestedShiftKey)) {
+      return { success: false, error: 'La jornada del 5 de septiembre solo permite T1 (9:00 AM - 2:00 PM).' };
+    }
     const normalizedReason = params.reason?.trim() || '';
     if (!normalizedReason) {
       return {

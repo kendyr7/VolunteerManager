@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
-import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
+import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, getOfficialShiftTime, isSimulationEventDay } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { DataTableFilter } from "@/components/DataTableFilter";
@@ -139,7 +139,7 @@ const getProfileBg = (committee: string) => {
 // ─── helper: highlight search term ─────────────────────────────────────────
 // ─── página ───────────────────────────────────────────────────────────────────
 export default function ShiftsPage() {
-  const EVENT_DAYS_RAW = getActiveEventDays();
+  const EVENT_DAYS_RAW = getOperationalEventDays();
   const EVENT_DAYS_DEFAULT = useMemo(() => EVENT_DAYS_RAW.map(date => ({
     date,
     key: formatDateShort(date),                   // clave única: 'jue 10'
@@ -444,7 +444,7 @@ export default function ShiftsPage() {
       const dayAssignments = contextIndexedAssignments[day.key] || {};
       
       targetCommittees.forEach(comm => {
-        ['T1', 'T2', 'T3', 'T4'].forEach(shiftId => {
+        getAvailableShiftKeys(day.key).forEach(shiftId => {
           const req = committeeRequirements[comm]?.[shiftId] ?? 0;
           totalRequired += req;
 
@@ -1127,7 +1127,8 @@ export default function ShiftsPage() {
       T3: getAssignedVolunteers(key, 'T3'),
       T4: getAssignedVolunteers(key, 'T4'),
     };
-    const totalVolsOnDay = (['T1', 'T2', 'T3', 'T4'] as const).reduce((acc, t) => acc + shiftData[t].length, 0);
+    const availableShiftKeys = getAvailableShiftKeys(key) as Array<keyof typeof shiftData>;
+    const totalVolsOnDay = availableShiftKeys.reduce((acc, t) => acc + shiftData[t].length, 0);
 
     const isFiltering = appliedSearch.trim() !== '' || selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0;
 
@@ -1166,6 +1167,11 @@ export default function ShiftsPage() {
               <p className="font-inter font-bold text-text text-[13px] truncate capitalize">
                 {format(date, "EEEE", { locale: es })} {dateNum}
               </p>
+              {isSimulationEventDay(key) && (
+                <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                  Simulación · 9 AM–2 PM
+                </span>
+              )}
               <span className={cn("material-symbols-outlined text-[20px] text-text-dim transition-transform duration-300", isOpen && "rotate-180 text-primary")}>
                 expand_more
               </span>
@@ -1173,7 +1179,7 @@ export default function ShiftsPage() {
 
             {/* Right: 4 Columns */}
             <div className="flex items-center shrink-0 ml-auto">
-              {(['T1', 'T2', 'T3', 'T4'] as const).map((t, i) => {
+              {availableShiftKeys.map((t, i) => {
                 let count = shiftData[t].length;
                 if (viewMode === 'active') {
                   count = shiftData[t].filter(vol => {
@@ -1234,8 +1240,8 @@ export default function ShiftsPage() {
               className="hidden md:block"
             >
               <div className="grid grid-cols-2 gap-4 p-4 md:p-5 items-start border-t border-border/50">
-                {(['T1', 'T2', 'T3', 'T4'] as const).map((t, index) => {
-                  const info = SHIFT_TIMES[parseInt(t[1]) - 1];
+                {availableShiftKeys.map((t, index) => {
+                  const info = getOfficialShiftTime(key, t);
                   const vols = shiftData[t];
                   const count = vols.length;
 
@@ -1477,7 +1483,7 @@ export default function ShiftsPage() {
                     <div className="text-xl font-black text-white/40 mb-4 px-2">-</div>
                     <div className="flex flex-col items-center flex-1">
                       <span className="text-drawer-kpi-value text-white drop-shadow-md">
-                        {(['T1', 'T2', 'T3', 'T4'] as const).reduce((acc, t) => {
+                        {availableShiftKeys.reduce((acc, t) => {
                           let minReq = 0;
                           if (activeCommittee) minReq = committeeRequirements[activeCommittee]?.[t] ?? 0;
                           else committees.forEach(c => minReq += (committeeRequirements[c]?.[t] ?? 0));
@@ -1490,7 +1496,7 @@ export default function ShiftsPage() {
 
                   <div className="text-center mb-8 px-4 border-t border-white/20 pt-6 mt-2">
                     <p className="font-inter text-sm font-medium text-white/90 leading-snug">
-                      Estado actual de reclutamiento para el día. {totalVolsOnDay >= (['T1', 'T2', 'T3', 'T4'] as const).reduce((acc, t) => {
+                      Estado actual de reclutamiento para el día. {totalVolsOnDay >= availableShiftKeys.reduce((acc, t) => {
                         let minReq = 0;
                         if (activeCommittee) minReq = committeeRequirements[activeCommittee]?.[t] ?? 0;
                         else committees.forEach(c => minReq += (committeeRequirements[c]?.[t] ?? 0));
@@ -1502,8 +1508,8 @@ export default function ShiftsPage() {
                   {/* Match highlights -> Turnos del Día (1 Card por Turno en Mobile) */}
                   <div className="w-full">
                     <div className="space-y-3">
-                      {(['T1', 'T2', 'T3', 'T4'] as const).map(t => {
-                        const info = SHIFT_TIMES[parseInt(t[1]) - 1];
+                      {availableShiftKeys.map(t => {
+                        const info = getOfficialShiftTime(key, t);
                         const vols = shiftData[t];
                         const count = vols.length;
                         let minRequired = 0;

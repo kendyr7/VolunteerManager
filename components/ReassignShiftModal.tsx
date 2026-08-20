@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { getActiveEventDays, formatDateShort } from '@/lib/dates';
+import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort } from '@/lib/dates';
 import { createClient } from '@/lib/supabase/client';
 import { useCoordinatorData } from '@/lib/coordinator-data-context';
 import { toggleShiftAction } from '@/app/actions/volunteer-actions';
@@ -32,7 +32,7 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
   mode = 'coordinator',
 }) => {
   const eventDays = useMemo(() => {
-    const raw = getActiveEventDays();
+    const raw = getOperationalEventDays();
     return raw.map(date => ({
       date,
       key: formatDateShort(date),
@@ -67,6 +67,13 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
       setTargetShiftId(sourceShiftId || 'T1');
     }
   }, [isOpen, sourceDayKey, sourceShiftId, eventDays]);
+
+  React.useEffect(() => {
+    const availableShiftKeys = getAvailableShiftKeys(targetDayKey);
+    if (!availableShiftKeys.some(shiftKey => shiftKey === targetShiftId)) {
+      setTargetShiftId(availableShiftKeys[0] || 'T1');
+    }
+  }, [targetDayKey, targetShiftId]);
 
   // Regla 1: Comprobar si el turno ORIGEN ya fue completado
   const isSourceCompleted = useMemo(() => {
@@ -324,7 +331,10 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
                       key={d.key}
                       type="button"
                       disabled={isSourceCompleted}
-                      onClick={() => setTargetDayKey(d.key)}
+                      onClick={() => {
+                        setTargetDayKey(d.key);
+                        setTargetShiftId(getAvailableShiftKeys(d.key)[0] || 'T1');
+                      }}
                       className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-lg border transition-all bg-dark3 cursor-pointer ${
                         isSourceCompleted
                           ? 'opacity-40 cursor-not-allowed border-border'
@@ -349,8 +359,8 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
               <label className="text-[10px] font-bold text-text-dim tracking-widest uppercase mb-3 block">
                 TURNO DESTINO (SLOTS / OCUPACIÓN)
               </label>
-              <div className="grid grid-cols-4 gap-2">
-                {['T1', 'T2', 'T3', 'T4'].map((t) => {
+              <div className={`grid gap-2 ${getAvailableShiftKeys(targetDayKey).length === 1 ? 'grid-cols-1' : 'grid-cols-4'}`}>
+                {getAvailableShiftKeys(targetDayKey).map((t) => {
                   const isSelected = targetShiftId === t;
                   const stStatus = getTargetShiftStatus(targetDayKey, t);
                   const capInfo = targetDayKey ? checkShiftCapacity(targetDayKey, t) : null;

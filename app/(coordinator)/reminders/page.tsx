@@ -13,9 +13,9 @@ import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 import { getReminderDeliveryLogsAction, sendShiftReminderAction } from "@/app/actions/whatsapp";
 import { updateVolunteerStatusAction } from "@/app/actions/volunteer-actions";
 import {
-  getActiveEventDays,
+  getOperationalEventDays,
+  getAvailableShiftKeys,
   formatDateShort,
-  SHIFT_TIMES,
   getOfficialShiftTime,
   isHoliday
 } from "@/lib/dates";
@@ -152,7 +152,7 @@ const getCommitteeColor = (committee: string) => {
 
 export default function RemindersPage() {
   const supabase = createClient();
-  const EVENT_DAYS_RAW = getActiveEventDays();
+  const EVENT_DAYS_RAW = getOperationalEventDays();
   const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
     date,
     key: formatDateShort(date),
@@ -1057,7 +1057,7 @@ export default function RemindersPage() {
 
           {/* Right: Shift Cards Quick Selector */}
           <div className="flex items-center gap-1.5 ml-auto mr-3">
-            {['T1', 'T2', 'T3', 'T4'].map((t) => {
+            {getAvailableShiftKeys(selectedDayKey).map((t) => {
               const isSelected = selectedShiftId === t;
               
               let count = 0;
@@ -1273,7 +1273,7 @@ export default function RemindersPage() {
               <div className="space-y-3">
                 <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase block">TURNOS</span>
                 <div className="grid grid-cols-4 md:flex md:flex-wrap gap-2">
-                  {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                  {getAvailableShiftKeys(selectedDayKey).map((t) => {
                     // Obtener conteo de voluntarios para este turno (si hay día seleccionado, del día; si no, total acumulado de todos los días)
                     let count = 0;
                     if (selectedDayKey) {

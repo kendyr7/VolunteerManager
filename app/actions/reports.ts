@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase-helpers";
 import { requireCapability } from "@/lib/authorization";
 import { hasCapability } from "@/lib/role-permissions";
-import { getActiveEventDays, getOfficialShiftTime } from "@/lib/dates";
+import { getActiveEventDays, getAvailableShiftKeys, getOfficialShiftTime, getOperationalEventDays, isSimulationEventDay } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { getNicaraguaHourFloat } from "@/lib/session-utils";
@@ -135,7 +135,7 @@ interface ReportRequirementRow {
 // e.g. "mié 16" -> "2026-09-16"
 function buildDayKeyMap(): Map<string, string> {
   const map = new Map<string, string>();
-  for (const date of getActiveEventDays()) {
+  for (const date of getOperationalEventDays()) {
     const key = format(date, "EEE d", { locale: es }).toLowerCase();
     const iso = format(date, "yyyy-MM-dd");
     map.set(key, iso);
@@ -188,8 +188,9 @@ function parseNicaraguaShiftEnd(dayKey: string, shiftKey: string): Date {
   return new Date(utcMillis);
 }
 
-export async function getReportsData(): Promise<{ error?: string; data?: ReportsData }> {
+export async function getReportsData(options: { includeSimulation?: boolean } = {}): Promise<{ error?: string; data?: ReportsData }> {
   try {
+    const includeSimulation = options.includeSimulation === true;
     const authorization = await requireCapability('view_reports');
     const canSeeGlobalReports = hasCapability(authorization, 'view_global_reports');
     const userCommitteeId = authorization.committeeId;
@@ -243,7 +244,9 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
 
     const reportShifts = (shiftsData || []).filter(shift => {
       const volunteer = volunteersById.get(shift.volunteer_id);
-      return Boolean(volunteer) && (volunteer?.committees?.status || '').toLowerCase() !== 'archived';
+      return Boolean(volunteer)
+        && (volunteer?.committees?.status || '').toLowerCase() !== 'archived'
+        && (includeSimulation || !isSimulationEventDay(shift.day_key));
     });
 
     const normalizeDayKey = (value: string) => (value || '').toLowerCase().trim();
@@ -667,7 +670,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
     // --- 3. DAILY COVERAGE BREAKDOWN (Informe de Cobertura por Día) ---
     const dailyCoverageMap: Record<string, DailyCoverage> = {};
 
-    for (const dateObj of getActiveEventDays()) {
+    for (const dateObj of getActiveEventDays({ includeSimulation })) {
       const isoDate = format(dateObj, 'yyyy-MM-dd');
       const dayLabel = format(dateObj, 'EEE d MMM', { locale: es });
       const dayKeyStr = format(dateObj, 'EEE d', { locale: es }).toLowerCase();
@@ -680,8 +683,10 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
         T4: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
       };
 
+      const availableShiftKeys = getAvailableShiftKeys(dayKeyStr);
+
       uniqueCommittees.forEach(c => {
-        ['T1', 'T2', 'T3', 'T4'].forEach(sk => {
+        availableShiftKeys.forEach(sk => {
           const req = getRequired(c.id, sk);
           byShift[sk].required += req;
           dayRequired += req;
@@ -705,7 +710,7 @@ export async function getReportsData(): Promise<{ error?: string; data?: Reports
         }
       });
 
-      ['T1', 'T2', 'T3', 'T4'].forEach(sk => {
+      availableShiftKeys.forEach(sk => {
         byShift[sk].missing = Math.max(0, byShift[sk].required - byShift[sk].assigned);
       });
 

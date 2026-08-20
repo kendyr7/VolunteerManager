@@ -14,7 +14,7 @@ import { MessageCircle, Phone, MoreHorizontal, UserPlus, Mail, Briefcase, MapPin
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { getActiveEventDays, formatDateShort, SHIFT_TIMES } from "@/lib/dates";
+import { getOperationalEventDays, formatDateShort, isShiftAvailableForDay } from "@/lib/dates";
 import { DataTableFilter } from "@/components/DataTableFilter";
 import { createClient } from "@/lib/supabase/client";
 import { cn, normalizeSearch } from "@/lib/utils";
@@ -410,7 +410,7 @@ export default function VolunteersPage() {
   };
 
   // Días reales del evento (Sep 10-26, sin domingos)
-  const EVENT_DAYS = getActiveEventDays().map(date => ({
+  const EVENT_DAYS = getOperationalEventDays().map(date => ({
     key: formatDateShort(date),                   // clave única: 'jue 10'
     label: formatDateShort(date).split(' ')[0],    // solo el día: 'jue'
     dateNum: formatDateShort(date).split(' ')[1],  // solo el número: '10'
@@ -583,6 +583,14 @@ export default function VolunteersPage() {
   const handleSaveShifts = async () => {
     setIsEditingShifts(false);
     if (!selectedVolunteer) return;
+
+    const hasInvalidSimulationShift = Object.entries(shiftsByDay).some(([dayKey, shiftKeys]) =>
+      shiftKeys.some(shiftKey => !isShiftAvailableForDay(dayKey, shiftKey))
+    );
+    if (hasInvalidSimulationShift) {
+      showToast('El 5 de septiembre solo permite T1 (9:00 AM - 2:00 PM).', 'error');
+      return;
+    }
 
     // Delete existing shifts for this volunteer
     const { error: delErr } = await supabase

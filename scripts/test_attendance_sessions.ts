@@ -161,6 +161,46 @@ async function runAttendanceSessionsTests() {
   assert.strictEqual(payloadTest.record.status, 'open', 'Caso 10: record status es open');
   console.log('✅ PASS: Caso 10 — Estructura de payload Realtime session_sync verificada');
 
+  // -------------------------------------------------------------------------
+  // CASO 11 — Jornada de simulación (9:00 AM - 2:00 PM)
+  // -------------------------------------------------------------------------
+  console.log('\n--- Caso 11: Jornada de simulación del 5 de septiembre ---');
+  const simulationStart = '2026-09-05T09:00:00-06:00';
+  const simulationEnd = '2026-09-05T14:00:00-06:00';
+  const simulationShifts = inferShiftsForSession('sáb 5', simulationStart, simulationEnd, ['T1']);
+  const simulationMinutes = calculateSessionMinutes(simulationStart, simulationEnd);
+
+  assert.strictEqual(simulationShifts.length, 1, 'Caso 11: La simulación debe vincular un único turno');
+  assert.strictEqual(simulationShifts[0].shiftKey, 'T1', 'Caso 11: La simulación debe vincular T1');
+  assert.strictEqual(simulationMinutes.totalWorkedMinutes, 300, 'Caso 11: 9:00 a 2:00 deben ser 300 minutos');
+
+  const simulationAssignments = [
+    { volunteer_id: 'simulation-vol', day_key: 'sáb 5', shift_key: 'T1' },
+  ];
+  const simulationSessions = [{
+    id: 'simulation-session',
+    volunteer_id: 'simulation-vol',
+    day_key: 'sáb 5',
+    started_at: simulationStart,
+    ended_at: simulationEnd,
+    status: 'completed',
+    auto_closed: false,
+  }];
+  const officialProfileMetrics = getVolunteerProfileMetrics('simulation-vol', simulationAssignments, [], simulationSessions);
+  const inclusiveProfileMetrics = getVolunteerProfileMetrics(
+    'simulation-vol',
+    simulationAssignments,
+    [],
+    simulationSessions,
+    { includeSimulation: true }
+  );
+
+  assert.strictEqual(officialProfileMetrics.totalWorkedMinutes, 0, 'Caso 11: Los KPI oficiales deben excluir la simulación');
+  assert.strictEqual(officialProfileMetrics.scheduledShiftsCount, 0, 'Caso 11: Los turnos oficiales deben excluir la simulación');
+  assert.strictEqual(inclusiveProfileMetrics.totalWorkedMinutes, 300, 'Caso 11: La vista inclusiva debe mostrar 300 minutos');
+  assert.strictEqual(inclusiveProfileMetrics.completedShiftsCount, 1, 'Caso 11: La vista inclusiva debe mostrar un turno completado');
+  console.log('✅ PASS: Caso 11 — 300 minutos exactos y exclusión de métricas oficiales');
+
   // =========================================================================
   // PRUEBAS DE SEGURIDAD Y PERSISTENCIA DE LA AUDITORÍA (REQUISITOS A - G)
   // =========================================================================

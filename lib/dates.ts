@@ -3,9 +3,20 @@ import { es } from "date-fns/locale";
 
 const EVENT_START_DATE = new Date(2026, 8, 10); // Sept 10, 2026 (Month is 0-indexed in JS Dates)
 const EVENT_END_DATE = new Date(2026, 8, 26);   // Sept 26, 2026
+export const SIMULATION_EVENT_DATE = new Date(2026, 8, 5);
+export const SIMULATION_EVENT_DATE_ISO = '2026-09-05';
+export const SIMULATION_EVENT_DAY_KEY = 'sáb 5';
+export const SIMULATION_EVENT_SHIFT_KEY = 'T1';
+
+export type EventDayKind = 'official' | 'simulation';
+export type ShiftKey = 'T1' | 'T2' | 'T3' | 'T4';
+
+export interface EventDaysOptions {
+  includeSimulation?: boolean;
+}
 
 export interface OfficialShiftTime {
-  shiftKey: string;
+  shiftKey: ShiftKey;
   id: number;
   name: string;
   startTime: string;
@@ -17,6 +28,42 @@ export interface OfficialShiftTime {
   timeLabel: string;
   shortTimeLabel: string;
   time: string; // Alias for timeLabel for backward compatibility with SHIFT_TIMES objects
+}
+
+function readEventDateParts(dayKey?: string | Date | null): { year: number; month: number; day: number } | null {
+  if (!dayKey) return null;
+
+  if (dayKey instanceof Date) {
+    return {
+      year: dayKey.getFullYear(),
+      month: dayKey.getMonth() + 1,
+      day: dayKey.getDate(),
+    };
+  }
+
+  const raw = String(dayKey).trim().toLowerCase();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split('-').map(Number);
+    return { year, month, day };
+  }
+
+  const dayNumber = Number(raw.match(/\d+/)?.[0]);
+  if (!dayNumber) return null;
+  return { year: 2026, month: 9, day: dayNumber };
+}
+
+export function isSimulationEventDay(dayKey?: string | Date | null): boolean {
+  const parts = readEventDateParts(dayKey);
+  return Boolean(parts && parts.year === 2026 && parts.month === 9 && parts.day === 5);
+}
+
+export function getEventDayKind(dayKey?: string | Date | null): EventDayKind {
+  return isSimulationEventDay(dayKey) ? 'simulation' : 'official';
+}
+
+export function isShiftAvailableForDay(dayKey: string | Date | null | undefined, shiftKey: string | null | undefined): boolean {
+  if (!isSimulationEventDay(dayKey)) return /^T[1-4]$/i.test((shiftKey || '').trim());
+  return (shiftKey || '').trim().toUpperCase() === SIMULATION_EVENT_SHIFT_KEY;
 }
 
 /**
@@ -58,6 +105,23 @@ export function getOfficialShiftTime(
   const normKey = (shiftKey || 'T1').toUpperCase().trim();
   const idNum = parseInt(normKey.replace('T', ''), 10) || 1;
   const isExtended = isExtendedShiftDay(dayKey);
+
+  if (isSimulationEventDay(dayKey) && normKey === SIMULATION_EVENT_SHIFT_KEY) {
+    return {
+      shiftKey: SIMULATION_EVENT_SHIFT_KEY,
+      id: 1,
+      name: 'Turno de simulación',
+      startTime: '9:00 AM',
+      endTime: '2:00 PM',
+      startHour: 9.0,
+      endHour: 14.0,
+      hours: 5,
+      durationMinutes: 300,
+      timeLabel: '9:00 AM - 2:00 PM',
+      shortTimeLabel: '9 AM-2 PM',
+      time: '9:00 AM - 2:00 PM',
+    };
+  }
 
   if (normKey === 'T2') {
     return {
@@ -144,6 +208,10 @@ export function getOfficialShiftTime(
 }
 
 export function getOfficialShiftTimesList(dayKey?: string | Date | null): OfficialShiftTime[] {
+  if (isSimulationEventDay(dayKey)) {
+    return [getOfficialShiftTime(dayKey, SIMULATION_EVENT_SHIFT_KEY)];
+  }
+
   return [
     getOfficialShiftTime(dayKey, 'T1'),
     getOfficialShiftTime(dayKey, 'T2'),
@@ -152,13 +220,23 @@ export function getOfficialShiftTimesList(dayKey?: string | Date | null): Offici
   ];
 }
 
+export function getAvailableShiftKeys(dayKey?: string | Date | null): ShiftKey[] {
+  return getOfficialShiftTimesList(dayKey).map(shift => shift.shiftKey);
+}
+
 // Backward compatibility export (uses default list)
 export const SHIFT_TIMES = getOfficialShiftTimesList();
 
-export function getActiveEventDays() {
+export function getActiveEventDays(options: EventDaysOptions = {}) {
   const days: Date[] = [];
-  const endDate = new Date(2026, 8, 26);
-  let currentDate = new Date(2026, 8, 10); // Clone to avoid mutating the constant
+  const { includeSimulation = false } = options;
+
+  if (includeSimulation) {
+    days.push(new Date(SIMULATION_EVENT_DATE));
+  }
+
+  const endDate = new Date(EVENT_END_DATE);
+  let currentDate = new Date(EVENT_START_DATE); // Clone to avoid mutating the constant
 
   while (currentDate <= endDate) {
     // Excluir domingos (0 en JS es domingo)
@@ -169,6 +247,10 @@ export function getActiveEventDays() {
   }
 
   return days;
+}
+
+export function getOperationalEventDays(): Date[] {
+  return getActiveEventDays({ includeSimulation: true });
 }
 
 export function isHoliday(date: Date) {

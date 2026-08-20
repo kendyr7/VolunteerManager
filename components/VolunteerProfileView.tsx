@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { getActiveEventDays, formatDateShort } from "@/lib/dates";
+import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, isSimulationEventDay } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -167,7 +167,7 @@ export function VolunteerProfileView({
 
   const shiftsByDay = externalShiftsByDay || localShiftsByDay;
 
-  const EVENT_DAYS_RAW = useMemo(() => getActiveEventDays(), []);
+  const EVENT_DAYS_RAW = useMemo(() => getOperationalEventDays(), []);
   const EVENT_DAYS = useMemo(() => {
     const defaultDays = EVENT_DAYS_RAW.map(date => ({
       date,
@@ -458,7 +458,7 @@ export function VolunteerProfileView({
       const desc = (log.description || '').toLowerCase();
       if (desc.includes('salida') || desc.includes('check-out') || desc.includes('completó') || desc.includes('ajustó hora de salida')) {
         EVENT_DAYS.forEach(d => {
-          ['T1', 'T2', 'T3', 'T4'].forEach(t => {
+          getAvailableShiftKeys(d.key).forEach(t => {
             const key = `${d.key}-${t}`;
             if (!countedKeys.has(key)) {
               if (desc.includes(d.key.toLowerCase()) && desc.includes(t.toLowerCase())) {
@@ -667,8 +667,13 @@ export function VolunteerProfileView({
   };
 
   // KPIs
-  const totalTurnos = Object.values(shiftsByDay).reduce((acc, arr) => acc + arr.length, 0);
-  const diasCubiertos = Object.values(shiftsByDay).filter(arr => arr.length > 0).length;
+  const totalTurnos = Object.entries(shiftsByDay).reduce(
+    (acc, [dayKey, shifts]) => acc + (isSimulationEventDay(dayKey) ? 0 : shifts.length),
+    0
+  );
+  const diasCubiertos = Object.entries(shiftsByDay).filter(([dayKey, shifts]) =>
+    !isSimulationEventDay(dayKey) && shifts.length > 0
+  ).length;
   const reliabilityScore = volunteer.reliability ?? 100;
   const nameParts = (volunteer.name || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`).trim().split(/\s+/).filter(Boolean);
 
@@ -1101,10 +1106,16 @@ export function VolunteerProfileView({
                       <span className="text-lg font-black text-text leading-none mt-1">{d.dateNum}</span>
                     </div>
                     <div className="h-8 w-[1px] bg-border" />
+                    {isSimulationEventDay(dayKey) && (
+                      <div className="hidden sm:flex flex-col">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">Simulación</span>
+                        <span className="text-[10px] font-bold text-text-dim">9:00 AM – 2:00 PM</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5 sm:gap-2">
-                    {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                    {getAvailableShiftKeys(dayKey).map((t) => {
                       const active = assignedList.includes(t);
                       const inCheck = isShiftCheckedIn(dayKey, t);
                       const outCheck = isShiftCheckedOut(dayKey, t);
@@ -1478,7 +1489,10 @@ export function VolunteerProfileView({
                             <button
                               key={d.key}
                               type="button"
-                              onClick={() => setTargetDayKey(d.key)}
+                              onClick={() => {
+                                setTargetDayKey(d.key);
+                                setTargetShiftKey('');
+                              }}
                               className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-xl border transition-all bg-dark3 cursor-pointer ${
                                 isSelected
                                   ? 'border-[#4d7cfe] text-[#4d7cfe] shadow-md bg-[#4d7cfe]/10'
@@ -1499,8 +1513,8 @@ export function VolunteerProfileView({
                         <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block mb-2">
                           Nuevo turno para {targetDayKey}:
                         </label>
-                        <div className="grid grid-cols-4 gap-2">
-                          {['T1', 'T2', 'T3', 'T4'].map((t) => {
+                        <div className={`grid gap-2 ${getAvailableShiftKeys(targetDayKey).length === 1 ? 'grid-cols-1' : 'grid-cols-4'}`}>
+                          {getAvailableShiftKeys(targetDayKey).map((t) => {
                             const isSameShift = sourceDayKey === targetDayKey && sourceShiftKey === t;
                             const isSelected = targetShiftKey === t;
                             const tCompleted = isVolunteerShiftCompleted(rescheduleCtx, targetDayKey, t);

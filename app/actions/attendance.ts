@@ -10,7 +10,7 @@ import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/auth";
 import { requireCapability, requireVolunteerCapability, requireVolunteerSelfOrCapability } from "@/lib/authorization";
 import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
-import { getOfficialShiftTime } from "@/lib/dates";
+import { getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay } from "@/lib/dates";
 import { AttendanceSession, validateSessionConstraints } from "@/lib/session-utils";
 import {
   saveAttendanceSession,
@@ -192,6 +192,7 @@ export async function recalculateReliability(volunteerId: string) {
   let denominator = 0; // Completed shifts (passed or checked in)
 
   for (const s of shifts) {
+    if (isSimulationEventDay(s.day_key)) continue;
     const shiftEndTime = parseShiftDateTime(s.day_key, s.shift_key);
 
     if (s.checked_in) {
@@ -977,6 +978,9 @@ export async function adjustCheckoutTimeAction({
 // 4b. Reassign a shift to a new day and shift key
 export async function reassignVolunteerShift(shiftId: string, newDayKey: string, newShiftKey: string) {
   try {
+    if (!isShiftAvailableForDay(newDayKey, newShiftKey)) {
+      return { error: 'La jornada del 5 de septiembre solo permite T1 (9:00 AM - 2:00 PM).' };
+    }
     const supabase = getAdminClient();
     const { data: existingShift } = await supabase
       .from('shifts')

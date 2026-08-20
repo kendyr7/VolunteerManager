@@ -1,8 +1,17 @@
-import { getOfficialShiftTime, isExtendedShiftDay, getOfficialShiftTimesList } from "../lib/dates";
+import {
+  getActiveEventDays,
+  getOfficialShiftTime,
+  getOfficialShiftTimesList,
+  getOperationalEventDays,
+  isShiftAvailableForDay,
+  isSimulationEventDay,
+} from "../lib/dates";
 
 console.log("=== VERIFYING GOAL 1: SINGLE AUTHORITATIVE SOURCE OF TRUTH FOR SHIFTS ===");
 
 const testCases = [
+  { dayKey: "sáb 5", shiftKey: "T1", expectedHours: 5, expectedEnd: "2:00 PM", expectedLabel: "9:00 AM - 2:00 PM" },
+  { dayKey: "2026-09-05", shiftKey: "T1", expectedHours: 5, expectedEnd: "2:00 PM", expectedLabel: "9:00 AM - 2:00 PM" },
   { dayKey: "jue 10", shiftKey: "T1", expectedHours: 5, expectedEnd: "12:00 PM", expectedLabel: "7:00 AM - 12:00 PM" },
   { dayKey: "jue 10", shiftKey: "T2", expectedHours: 4, expectedEnd: "3:00 PM", expectedLabel: "11:00 AM - 3:00 PM" },
   { dayKey: "jue 10", shiftKey: "T3", expectedHours: 4, expectedEnd: "6:00 PM", expectedLabel: "2:00 PM - 6:00 PM" },
@@ -21,6 +30,26 @@ const testCases = [
   { dayKey: "2026-09-11", shiftKey: "T4", expectedHours: 5, expectedEnd: "10:00 PM", expectedLabel: "5:00 PM - 10:00 PM" },
   { dayKey: "2026-09-14", shiftKey: "T4", expectedHours: 5, expectedEnd: "10:00 PM", expectedLabel: "5:00 PM - 10:00 PM" },
 ];
+
+if (!isSimulationEventDay('sáb 5') || !isSimulationEventDay('2026-09-05')) {
+  throw new Error('La fecha de simulación debe reconocerse en formato corto e ISO.');
+}
+
+if (!isShiftAvailableForDay('sáb 5', 'T1') || isShiftAvailableForDay('sáb 5', 'T2')) {
+  throw new Error('La simulación debe permitir únicamente T1.');
+}
+
+if (getOfficialShiftTimesList('sáb 5').map(shift => shift.shiftKey).join(',') !== 'T1') {
+  throw new Error('La simulación debe exponer un único turno.');
+}
+
+if (getActiveEventDays().some(isSimulationEventDay)) {
+  throw new Error('Las fechas analíticas oficiales deben excluir la simulación por defecto.');
+}
+
+if (!getOperationalEventDays().some(isSimulationEventDay)) {
+  throw new Error('Las fechas operativas deben incluir la simulación.');
+}
 
 let failed = 0;
 

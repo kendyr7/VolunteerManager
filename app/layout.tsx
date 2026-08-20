@@ -101,6 +101,34 @@ export default async function RootLayout({
         {children}
         <SpeedInsights />
         <Script
+          id="material-symbols-font-ready"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var root = document.documentElement;
+                var revealIcons = function() {
+                  root.classList.add('material-symbols-ready');
+                };
+
+                if (!document.fonts || !document.fonts.load) {
+                  revealIcons();
+                  return;
+                }
+
+                document.fonts
+                  .load('400 24px "Material Symbols Outlined"', 'settings')
+                  .then(function(loadedFonts) {
+                    if (loadedFonts.length > 0) revealIcons();
+                  })
+                  .catch(function() {
+                    // Keep the reserved icon spaces empty instead of exposing ligature names.
+                  });
+              })();
+            `,
+          }}
+        />
+        <Script
           id="service-worker-registration"
           strategy="afterInteractive"
           dangerouslySetInnerHTML={{

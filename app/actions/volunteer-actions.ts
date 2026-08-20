@@ -40,6 +40,7 @@ import {
   ResolvePendingImportExceptionResult,
   UpdateStatusResult,
 } from '@/lib/services/volunteer-mutation.service';
+import { isShiftAvailableForDay } from '@/lib/dates';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 1: Update volunteer profile
@@ -235,6 +236,9 @@ export async function toggleShiftAction(
   if (!volunteerId || !dayKey || !shiftKey) {
     return { success: false, error: 'Parametros incompletos para turno.' };
   }
+  if (assign && !isShiftAvailableForDay(dayKey, shiftKey)) {
+    return { success: false, error: 'El 5 de septiembre solo permite el turno de simulación T1 (9:00 AM - 2:00 PM).' };
+  }
   const session = await requireVolunteerCapability('reschedule_volunteer', volunteerId);
   const result = await VolunteerMutationService.toggleShift(volunteerId, dayKey, shiftKey, assign);
   if (!result.success) return result;
@@ -267,6 +271,12 @@ export async function saveShiftsAction(
 ): Promise<MutationResult> {
   if (!volunteerId) {
     return { success: false, error: 'volunteerId requerido.' };
+  }
+  const hasInvalidShift = Object.entries(shiftsByDay).some(([dayKey, shiftKeys]) =>
+    shiftKeys.some(shiftKey => !isShiftAvailableForDay(dayKey, shiftKey))
+  );
+  if (hasInvalidShift) {
+    return { success: false, error: 'La jornada del 5 de septiembre solo permite T1 (9:00 AM - 2:00 PM).' };
   }
   const session = await requireVolunteerCapability('reschedule_volunteer', volunteerId);
   const result = await VolunteerMutationService.saveShifts(volunteerId, shiftsByDay);

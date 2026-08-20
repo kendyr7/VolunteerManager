@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getActiveEventDays, formatDateShort } from "@/lib/dates";
+import { getOperationalEventDays, formatDateShort } from "@/lib/dates";
 import {
   fetchVolunteerShiftChangeRequestsAction,
   createShiftChangeRequestAction
@@ -66,7 +66,7 @@ export function VolunteerRequestsClient({
     return shifts.length > 0 && shifts.every(t => isVolunteerShiftCompleted(rescheduleCtx, dayKey, t));
   };
 
-  const EVENT_DAYS_RAW = getActiveEventDays();
+  const EVENT_DAYS_RAW = getOperationalEventDays();
   const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
     date,
     key: formatDateShort(date),

@@ -1,5 +1,6 @@
 import { getUnifiedShiftTimes, getUnifiedShiftWorkedMinutes, formatUnifiedDuration } from '@/lib/shift-calculations';
 import { inferShiftsForSession, calculateSessionMinutes } from '@/lib/session-utils';
+import { isSimulationEventDay } from '@/lib/dates';
 
 export interface VolunteerShiftItem {
   id: string;
@@ -53,8 +54,10 @@ export function getVolunteerProfileMetrics(
   volunteerId: string,
   shiftsData: any[] = [],
   auditLogsData: any[] = [],
-  sessionsData: any[] = []
+  sessionsData: any[] = [],
+  options: { includeSimulation?: boolean } = {}
 ): VolunteerProfileMetrics {
+  const includeSimulation = options.includeSimulation === true;
   if (!volunteerId) {
     return {
       volunteerId: '',
@@ -103,13 +106,14 @@ export function getVolunteerProfileMetrics(
     const endedAt = sess.ended_at || sess.endedAt || null;
     const status = sess.status || (endedAt ? 'completed' : 'open');
     const autoClosed = Boolean(sess.auto_closed || sess.autoClosed);
+    const countsTowardOfficialMetrics = includeSimulation || !isSimulationEventDay(dayKey);
 
     if (dayKey) {
       daysWithSessionsSet.add(dayKey.toLowerCase().trim());
     }
 
     const calc = calculateSessionMinutes(startedAt, endedAt);
-    if (status === 'completed' && calc.isClosed) {
+    if (countsTowardOfficialMetrics && status === 'completed' && calc.isClosed) {
       totalWorkedMinutes += calc.totalWorkedMinutes;
     }
 
@@ -124,7 +128,7 @@ export function getVolunteerProfileMetrics(
       relatedKeys.forEach(k => {
         if (!coveredShiftKeySet.has(`${dayKey}-${k}`)) {
           coveredShiftKeySet.add(`${dayKey}-${k}`);
-          completedShiftsCount++;
+          if (countsTowardOfficialMetrics) completedShiftsCount++;
         }
       });
     }
@@ -160,6 +164,7 @@ export function getVolunteerProfileMetrics(
 
     const normDayKey = dayKey.toLowerCase().trim();
     const hasSessionForThisDay = daysWithSessionsSet.has(normDayKey);
+    const countsTowardOfficialMetrics = includeSimulation || !isSimulationEventDay(dayKey);
 
     const key = `${dayKey}-${shiftKey}`;
     const isCheckedOut = Boolean(rec.checked_out || rec.checked_out_at || rec.status === 'completed');
@@ -170,7 +175,7 @@ export function getVolunteerProfileMetrics(
       workedMinutes = getUnifiedShiftWorkedMinutes(dayKey, shiftKey, userShifts, auditLogsData);
     }
 
-    if (!hasSessionForThisDay && isCheckedOut && !countedKeys.has(key)) {
+    if (countsTowardOfficialMetrics && !hasSessionForThisDay && isCheckedOut && !countedKeys.has(key)) {
       countedKeys.add(key);
       totalWorkedMinutes += workedMinutes;
       completedShiftsCount++;
@@ -204,7 +209,9 @@ export function getVolunteerProfileMetrics(
     kpiLabel = 'HORAS';
   }
 
-  const scheduledShiftsCount = userShifts.length;
+  const scheduledShiftsCount = userShifts.filter((shift: any) =>
+    includeSimulation || !isSimulationEventDay(shift.day_key || shift.dayKey)
+  ).length;
   const attendancePercentage = scheduledShiftsCount > 0
     ? Math.round((completedShiftsCount / scheduledShiftsCount) * 100)
     : 100;

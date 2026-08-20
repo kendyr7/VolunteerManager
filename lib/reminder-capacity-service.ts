@@ -1,4 +1,4 @@
-import { formatDateShort, getActiveEventDays } from '@/lib/dates';
+import { formatDateShort, getOperationalEventDays } from '@/lib/dates';
 import { formatE164 } from '@/lib/whatsapp';
 import {
   getAutomaticReminderCapacity,
@@ -53,7 +53,7 @@ export async function buildAndPersistReminderCapacityPlan(
   supabase: Awaited<ReturnType<typeof import('@/lib/supabase/admin').getAdminSupabase>>,
   options: { persist?: boolean } = {},
 ): Promise<PersistedReminderCapacityPlan> {
-  const eventDays = getActiveEventDays();
+  const eventDays = getOperationalEventDays();
   const eventDateByDayKey = new Map<string, string>();
   const acceptedDayKeys = new Set<string>();
 

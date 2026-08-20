@@ -15,7 +15,7 @@ import {
   getDashboardOperationalDataAction,
   type DashboardOperationalData,
 } from "@/app/actions/dashboard";
-import { getActiveEventDays, formatDateShort, SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
+import { getActiveEventDays, getAvailableShiftKeys, formatDateShort, SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { 
@@ -25,7 +25,14 @@ import {
   SelectContent, 
   SelectItem 
 } from "@/components/ui/select";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+
+type DashboardGreeting = {
+  timeOfDay: string;
+  userName: string;
+  emoji: string;
+  message: string;
+};
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -52,6 +59,7 @@ const itemVariants = {
 
 export default function CoordinatorDashboard() {
   const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
   const {
     rawVolunteers,
     committeesList,
@@ -60,15 +68,15 @@ export default function CoordinatorDashboard() {
     requirementsByCommittee,
     loading,
   } = useCoordinatorData();
-  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [dashboardAccess, setDashboardAccess] = useState<'checking' | 'allowed' | 'denied'>('checking');
+  const [includeSimulation, setIncludeSimulation] = useState(false);
 
-  const EVENT_DAYS_RAW = getActiveEventDays();
-  const EVENT_DAYS = EVENT_DAYS_RAW.map(date => ({
-    date,
-    key: formatDateShort(date),
-    label: formatDateShort(date).split(' ')[0],
-    dateNum: formatDateShort(date).split(' ')[1],
-  }));
+  const EVENT_DAYS = useMemo(() => getActiveEventDays({ includeSimulation }).map(date => ({
+      date,
+      key: formatDateShort(date),
+      label: formatDateShort(date).split(' ')[0],
+      dateNum: formatDateShort(date).split(' ')[1],
+    })), [includeSimulation]);
 
   const buildEmptyShifts = () =>
     Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
@@ -81,7 +89,7 @@ export default function CoordinatorDashboard() {
   const [chartMetric, setChartMetric] = useState<'volunteers' | 'shifts'>('volunteers');
   const [selectedHeatmapCommittee, setSelectedHeatmapCommittee] = useState<string>('todos');
   const [activeKpiInfo, setActiveKpiInfo] = useState<{ title: string; explanation: string; formula: string } | null>(null);
-  const [greeting, setGreeting] = useState<React.ReactNode>("Monitor central de operaciones para el programa de Puertas Abiertas.");
+  const [greeting, setGreeting] = useState<DashboardGreeting | null>(null);
   const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
 
   const supabase = createClient();
@@ -125,8 +133,6 @@ export default function CoordinatorDashboard() {
   const [permTick, setPermTick] = useState(0);
   const [operationalData, setOperationalData] = useState<DashboardOperationalData | null>(null);
 
-  const [mounted, setMounted] = useState(false);
-
   const loadOperationalData = useCallback(async (targetCommittee?: string) => {
     try {
       const res = await getDashboardOperationalDataAction(targetCommittee || selectedHeatmapCommittee);
@@ -143,7 +149,6 @@ export default function CoordinatorDashboard() {
   }, [selectedHeatmapCommittee, permTick, rawVolunteers.length, globalShifts, dbCheckedInMap, loadOperationalData]);
 
   useEffect(() => {
-    setMounted(true);
     const handlePermissionsChange = () => {
       const snapshot = getAuthorizationSnapshotCache();
       setCurrentRole(snapshot.role);
@@ -239,27 +244,21 @@ export default function CoordinatorDashboard() {
       ];
       const randomMsg = messages[Math.floor(Math.random() * messages.length)];
 
-      setGreeting(
-        <div className="flex flex-col gap-1">
-          <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
-            {timeOfDay}, {userName} {emoji}
-          </h1>
-          <p className="text-sm md:text-base text-text-dim font-inter font-bold">{randomMsg}</p>
-        </div>
-      );
+      setGreeting({ timeOfDay, userName, emoji, message: randomMsg });
     };
 
     const loadAuthenticatedGreeting = async () => {
       const snapshot = await syncAllPermissionsFromDatabase();
+      setDashboardAccess(canViewDashboard() ? 'allowed' : 'denied');
       await fetchUserNameAndSetGreeting(snapshot.name);
     };
 
     const handleProfileChange = (event: Event) => {
       const snapshot = (event as CustomEvent<{ name?: string }>).detail || getAuthorizationSnapshotCache();
+      setDashboardAccess(canViewDashboard() ? 'allowed' : 'denied');
       void fetchUserNameAndSetGreeting(snapshot.name);
     };
 
-    setIsAuthorized(true);
     void loadAuthenticatedGreeting();
     window.addEventListener('permissions-changed', handleProfileChange);
 
@@ -288,7 +287,7 @@ export default function CoordinatorDashboard() {
 
     EVENT_DAYS.forEach(day => {
       committeesToInclude.forEach(comm => {
-        ['T1', 'T2', 'T3', 'T4'].forEach(shiftId => {
+        getAvailableShiftKeys(day.key).forEach(shiftId => {
           const req = committeeRequirements[comm]?.[shiftId] ?? 0;
           totalRequired += req;
 
@@ -320,9 +319,11 @@ export default function CoordinatorDashboard() {
     
     let totalGlobalAssigned = 0;
     let totalGlobalCheckedIn = 0;
+    const includedDayKeys = new Set(EVENT_DAYS.map(day => day.key));
     Object.entries(globalShifts).forEach(([volId, days]) => {
       if (!relevantVolunteerIds.has(volId)) return;
       Object.entries(days).forEach(([day, shifts]) => {
+        if (!includedDayKeys.has(day)) return;
         shifts.forEach(shift => {
           totalGlobalAssigned++;
           if (dbCheckedInMap[`${volId}-${day}-${shift}`]) {
@@ -345,7 +346,7 @@ export default function CoordinatorDashboard() {
       checkedInCount: totalGlobalCheckedIn,
       totalAssigned: totalGlobalAssigned,
     };
-  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, dbCheckedInMap, selectedHeatmapCommittee]);
+  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, dbCheckedInMap, selectedHeatmapCommittee, EVENT_DAYS]);
 
   const clientCommitteeStatus = useMemo(() => {
     const isFiltered = selectedHeatmapCommittee && selectedHeatmapCommittee !== 'todos' && selectedHeatmapCommittee !== 'all';
@@ -359,7 +360,7 @@ export default function CoordinatorDashboard() {
       let totalMissing = 0;
 
       EVENT_DAYS.forEach(day => {
-        ['T1', 'T2', 'T3', 'T4'].forEach(shiftId => {
+        getAvailableShiftKeys(day.key).forEach(shiftId => {
           const req = committeeRequirements[c.name]?.[shiftId] ?? 0;
           totalReq += req;
 
@@ -389,7 +390,7 @@ export default function CoordinatorDashboard() {
         status
       };
     }).sort((a, b) => a.coverage - b.coverage);
-  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, selectedHeatmapCommittee]);
+  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, selectedHeatmapCommittee, EVENT_DAYS]);
 
   const clientCriticalShifts = useMemo(() => {
     const list: any[] = [];
@@ -400,7 +401,7 @@ export default function CoordinatorDashboard() {
 
     EVENT_DAYS.forEach(day => {
       committees.forEach(comm => {
-        ['T1', 'T2', 'T3', 'T4'].forEach(shiftId => {
+        getAvailableShiftKeys(day.key).forEach(shiftId => {
           const req = committeeRequirements[comm]?.[shiftId] ?? 0;
           if (req === 0) return;
 
@@ -430,11 +431,15 @@ export default function CoordinatorDashboard() {
       .sort((a, b) => b.missing - a.missing)
       .slice(0, 5)
       .map((item, index) => ({ id: index + 1, ...item }));
-  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, selectedHeatmapCommittee]);
+  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, selectedHeatmapCommittee, EVENT_DAYS]);
 
   const clientHeatmapMatrix = useMemo(() => {
     return EVENT_DAYS.map(day => {
-      const shiftsData = ['T1', 'T2', 'T3', 'T4'].map(shiftId => {
+      const availableShiftKeys = new Set(getAvailableShiftKeys(day.key));
+      const shiftsData = (['T1', 'T2', 'T3', 'T4'] as const).map(shiftId => {
+        if (!availableShiftKeys.has(shiftId)) {
+          return { id: shiftId, enrolled: 0, required: 0, coverage: 1 };
+        }
         let totalReq = 0;
         let totalAssigned = 0;
 
@@ -460,7 +465,7 @@ export default function CoordinatorDashboard() {
       });
       return { day: day.key, shortLabel: day.label, dayLabel: day.dateNum, shifts: shiftsData };
     });
-  }, [committeeRequirements, committeesList, activeVolunteers, globalShifts, selectedHeatmapCommittee]);
+  }, [committeeRequirements, committeesList, activeVolunteers, globalShifts, selectedHeatmapCommittee, EVENT_DAYS]);
 
   // Volunteers per event day (unique volunteers with ≥1 shift that day)
   const clientVolsPerDay = useMemo(() => {
@@ -476,7 +481,7 @@ export default function CoordinatorDashboard() {
       counts[day.key] = uniqueVols.size;
     });
     return counts;
-  }, [activeVolunteers, globalShifts]);
+  }, [activeVolunteers, globalShifts, EVENT_DAYS]);
 
   // Total shifts assigned per event day (sum of T1+T2+T3+T4 slots)
   const clientShiftsPerDay = useMemo(() => {
@@ -492,28 +497,37 @@ export default function CoordinatorDashboard() {
       counts[day.key] = total;
     });
     return counts;
-  }, [activeVolunteers, globalShifts]);
+  }, [activeVolunteers, globalShifts, EVENT_DAYS]);
 
   const clientTotalVolsWithShifts = useMemo(() => {
     const unique = new Set<string>();
+    const includedDayKeys = new Set(EVENT_DAYS.map(day => day.key));
     activeVolunteers.forEach(vol => {
       const shifts = globalShifts[vol.id];
-      if (shifts && Object.values(shifts).some(arr => arr.length > 0)) {
+      if (shifts && Object.entries(shifts).some(([dayKey, arr]) => includedDayKeys.has(dayKey) && arr.length > 0)) {
         unique.add(vol.id);
       }
     });
     return unique.size;
-  }, [activeVolunteers, globalShifts]);
+  }, [activeVolunteers, globalShifts, EVENT_DAYS]);
 
-  const globalStats = operationalData?.globalStats ?? clientGlobalStats;
-  const committeeStatus = operationalData?.committeeStatus ?? clientCommitteeStatus;
-  const criticalShifts = operationalData?.criticalShifts ?? clientCriticalShifts;
-  const heatmapMatrix = operationalData?.heatmapMatrix ?? clientHeatmapMatrix;
-  const volsPerDay = operationalData?.volsPerDay ?? clientVolsPerDay;
-  const shiftsPerDay = operationalData?.shiftsPerDay ?? clientShiftsPerDay;
-  const totalVolsWithShifts = operationalData?.totalVolsWithShifts ?? clientTotalVolsWithShifts;
+  const globalStats = includeSimulation ? clientGlobalStats : (operationalData?.globalStats ?? clientGlobalStats);
+  const committeeStatus = includeSimulation ? clientCommitteeStatus : (operationalData?.committeeStatus ?? clientCommitteeStatus);
+  const criticalShifts = includeSimulation ? clientCriticalShifts : (operationalData?.criticalShifts ?? clientCriticalShifts);
+  const heatmapMatrix = includeSimulation ? clientHeatmapMatrix : (operationalData?.heatmapMatrix ?? clientHeatmapMatrix);
+  const volsPerDay = includeSimulation ? clientVolsPerDay : (operationalData?.volsPerDay ?? clientVolsPerDay);
+  const shiftsPerDay = includeSimulation ? clientShiftsPerDay : (operationalData?.shiftsPerDay ?? clientShiftsPerDay);
+  const totalVolsWithShifts = includeSimulation ? clientTotalVolsWithShifts : (operationalData?.totalVolsWithShifts ?? clientTotalVolsWithShifts);
 
-  if (mounted && !canViewDashboard()) {
+  if (dashboardAccess === 'checking') {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center z-50" aria-label="Verificando acceso al Dashboard">
+        <AnimatedLogo isLooping className="w-16 h-16 md:w-20 md:h-20 text-text" />
+      </div>
+    );
+  }
+
+  if (dashboardAccess === 'denied') {
     return (
       <div className="w-full min-h-[65vh] flex flex-col items-center justify-center p-8 text-center">
         <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-4">
@@ -526,8 +540,6 @@ export default function CoordinatorDashboard() {
       </div>
     );
   }
-
-  if (!isAuthorized) return null;
 
   if (loading) {
     return (
@@ -542,16 +554,53 @@ export default function CoordinatorDashboard() {
       <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 pointer-events-auto shrink-0 border-b border-white/5">
         <div className="w-full flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2 relative z-10 text-text">
-            <motion.div
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.5 }}
-            >
-              {greeting}
-            </motion.div>
+            {greeting ? (
+              <motion.div
+                key={`${greeting.timeOfDay}-${greeting.userName}`}
+                className="flex flex-col gap-1"
+                aria-live="polite"
+                initial={shouldReduceMotion ? false : { opacity: 0.45, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={shouldReduceMotion
+                  ? { duration: 0 }
+                  : { duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
+                  {greeting.timeOfDay}, {greeting.userName} {greeting.emoji}
+                </h1>
+                <motion.p
+                  className="text-sm md:text-base text-text-dim font-inter font-bold"
+                  initial={shouldReduceMotion ? false : { opacity: 0.35, y: 3 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={shouldReduceMotion
+                    ? { duration: 0 }
+                    : { duration: 0.18, delay: 0.06, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  {greeting.message}
+                </motion.p>
+              </motion.div>
+            ) : (
+              <div className="flex flex-col gap-2" aria-hidden="true">
+                <div className="h-8 w-64 max-w-[70vw] rounded-md bg-dark3 animate-pulse motion-reduce:animate-none" />
+                <div className="h-4 w-48 max-w-[55vw] rounded bg-dark3/70 animate-pulse motion-reduce:animate-none" />
+              </div>
+            )}
           </div>
 
           <div className="flex flex-row items-center gap-2 sm:gap-4 shrink-0 relative z-10 w-full lg:w-auto">
+            <button
+              type="button"
+              aria-pressed={includeSimulation}
+              onClick={() => setIncludeSimulation(value => !value)}
+              className={`h-9 rounded-full border px-3 text-[11px] font-bold transition-all active:scale-[0.97] ${
+                includeSimulation
+                  ? 'border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-300'
+                  : 'border-white/10 bg-dark2 text-text-dim hover:bg-dark3 hover:text-text'
+              }`}
+              title="El panel oficial excluye el 5 de septiembre por defecto"
+            >
+              {includeSimulation ? 'Simulación incluida' : 'Incluir simulación'}
+            </button>
             <Link href="/settings" className="flex-none">
               <Button variant="outline" className="w-auto bg-dark2 hover:bg-dark3 text-text border-white/10 rounded-full shadow-lg h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5 justify-center">
                 <span className="material-symbols-outlined text-[16px]">settings</span>
@@ -770,7 +819,7 @@ export default function CoordinatorDashboard() {
             </div>
 
             <div className="hidden md:flex items-center px-2 py-1 rounded-sm border border-border bg-dark3 text-[10px] font-bold text-text-dim shrink-0">
-              10 – 26 Sep
+              {includeSimulation ? '5 – 26 Sep' : '10 – 26 Sep'}
             </div>
           </div>
         </div>
