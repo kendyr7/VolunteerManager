@@ -4,13 +4,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatE164 } from "@/lib/whatsapp";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
-import { canViewDashboard, getAuthorizationSnapshotCache, syncAllPermissionsFromDatabase } from "@/lib/permissions";
+import { canViewDashboard, canViewGlobalReports, getAuthorizationSnapshotCache, syncAllPermissionsFromDatabase } from "@/lib/permissions";
+import {
+  getDashboardOperationalDataAction,
+  type DashboardOperationalData,
+} from "@/app/actions/dashboard";
 import { getActiveEventDays, formatDateShort, SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -119,8 +123,24 @@ export default function CoordinatorDashboard() {
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [userCommittee, setUserCommittee] = useState<string>('');
   const [permTick, setPermTick] = useState(0);
+  const [operationalData, setOperationalData] = useState<DashboardOperationalData | null>(null);
 
   const [mounted, setMounted] = useState(false);
+
+  const loadOperationalData = useCallback(async (targetCommittee?: string) => {
+    try {
+      const res = await getDashboardOperationalDataAction(targetCommittee || selectedHeatmapCommittee);
+      if (res?.data) {
+        setOperationalData(res.data);
+      }
+    } catch (err) {
+      console.error("Error loading dashboard operational data:", err);
+    }
+  }, [selectedHeatmapCommittee]);
+
+  useEffect(() => {
+    void loadOperationalData(selectedHeatmapCommittee);
+  }, [selectedHeatmapCommittee, permTick, rawVolunteers.length, globalShifts, dbCheckedInMap, loadOperationalData]);
 
   useEffect(() => {
     setMounted(true);
@@ -128,11 +148,12 @@ export default function CoordinatorDashboard() {
       const snapshot = getAuthorizationSnapshotCache();
       setCurrentRole(snapshot.role);
       setUserCommittee(snapshot.committeeName || '');
-      if (snapshot.coordinatorType === 'committee' && snapshot.committeeName) {
+      if (!canViewGlobalReports() && snapshot.committeeName) {
         setSelectedHeatmapCommittee(snapshot.committeeName);
       }
       setPermTick(v => v + 1);
     };
+    handlePermissionsChange();
     window.addEventListener("storage", handlePermissionsChange);
     window.addEventListener("permissions-changed", handlePermissionsChange);
     return () => {
@@ -142,17 +163,16 @@ export default function CoordinatorDashboard() {
   }, []);
 
   useEffect(() => {
-    const role = (localStorage.getItem('mock_role') || 'Admin') as any;
-    const committee = localStorage.getItem('mock_committee') || '';
+    const snapshot = getAuthorizationSnapshotCache();
+    const role = snapshot.role;
+    const committee = snapshot.committeeName || '';
     const phone = localStorage.getItem('volunteer_phone');
 
-    setCurrentRole(role === 'Coordinador' ? 'Editor' : role === 'Voluntario' ? 'Lector' : role);
+    setCurrentRole(role);
     setUserCommittee(committee);
 
-    if (role === 'Editor' || role === 'Lector' || role === 'Coordinador' || role === 'Voluntario') {
-      if (committee) {
-        setSelectedHeatmapCommittee(committee);
-      }
+    if (!canViewGlobalReports() && committee) {
+      setSelectedHeatmapCommittee(committee);
     }
 
     const fetchUserNameAndSetGreeting = async (authenticatedProfileName?: string) => {
@@ -256,7 +276,7 @@ export default function CoordinatorDashboard() {
     return new Set(activeVolunteers.map(v => v.id));
   }, [activeVolunteers]);
 
-  const globalStats = useMemo(() => {
+  const clientGlobalStats = useMemo(() => {
     let totalRequired = 0;
     let totalAssignedInRequired = 0;
     let criticalAlerts = 0;
@@ -327,7 +347,7 @@ export default function CoordinatorDashboard() {
     };
   }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, dbCheckedInMap, selectedHeatmapCommittee]);
 
-  const committeeStatus = useMemo(() => {
+  const clientCommitteeStatus = useMemo(() => {
     const isFiltered = selectedHeatmapCommittee && selectedHeatmapCommittee !== 'todos' && selectedHeatmapCommittee !== 'all';
     const listToProcess = isFiltered
       ? committeesList.filter(c => c.name === selectedHeatmapCommittee)
@@ -357,7 +377,7 @@ export default function CoordinatorDashboard() {
       });
 
       const coverage = totalReq > 0 ? Math.round((totalAssigned / totalReq) * 100) : 100;
-      let status = "success";
+      let status: 'success' | 'warning' | 'high_risk' = "success";
       if (coverage < 60) status = "high_risk";
       else if (coverage < 85) status = "warning";
 
@@ -371,7 +391,7 @@ export default function CoordinatorDashboard() {
     }).sort((a, b) => a.coverage - b.coverage);
   }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, selectedHeatmapCommittee]);
 
-  const criticalShifts = useMemo(() => {
+  const clientCriticalShifts = useMemo(() => {
     const list: any[] = [];
     const isFiltered = selectedHeatmapCommittee && selectedHeatmapCommittee !== 'todos' && selectedHeatmapCommittee !== 'all';
     const committees = isFiltered
@@ -412,7 +432,7 @@ export default function CoordinatorDashboard() {
       .map((item, index) => ({ id: index + 1, ...item }));
   }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, selectedHeatmapCommittee]);
 
-  const heatmapMatrix = useMemo(() => {
+  const clientHeatmapMatrix = useMemo(() => {
     return EVENT_DAYS.map(day => {
       const shiftsData = ['T1', 'T2', 'T3', 'T4'].map(shiftId => {
         let totalReq = 0;
@@ -443,7 +463,7 @@ export default function CoordinatorDashboard() {
   }, [committeeRequirements, committeesList, activeVolunteers, globalShifts, selectedHeatmapCommittee]);
 
   // Volunteers per event day (unique volunteers with ≥1 shift that day)
-  const volsPerDay = useMemo(() => {
+  const clientVolsPerDay = useMemo(() => {
     const counts: Record<string, number> = {};
     EVENT_DAYS.forEach(day => {
       const uniqueVols = new Set<string>();
@@ -459,7 +479,7 @@ export default function CoordinatorDashboard() {
   }, [activeVolunteers, globalShifts]);
 
   // Total shifts assigned per event day (sum of T1+T2+T3+T4 slots)
-  const shiftsPerDay = useMemo(() => {
+  const clientShiftsPerDay = useMemo(() => {
     const counts: Record<string, number> = {};
     EVENT_DAYS.forEach(day => {
       let total = 0;
@@ -474,7 +494,7 @@ export default function CoordinatorDashboard() {
     return counts;
   }, [activeVolunteers, globalShifts]);
 
-  const totalVolsWithShifts = useMemo(() => {
+  const clientTotalVolsWithShifts = useMemo(() => {
     const unique = new Set<string>();
     activeVolunteers.forEach(vol => {
       const shifts = globalShifts[vol.id];
@@ -484,6 +504,14 @@ export default function CoordinatorDashboard() {
     });
     return unique.size;
   }, [activeVolunteers, globalShifts]);
+
+  const globalStats = operationalData?.globalStats ?? clientGlobalStats;
+  const committeeStatus = operationalData?.committeeStatus ?? clientCommitteeStatus;
+  const criticalShifts = operationalData?.criticalShifts ?? clientCriticalShifts;
+  const heatmapMatrix = operationalData?.heatmapMatrix ?? clientHeatmapMatrix;
+  const volsPerDay = operationalData?.volsPerDay ?? clientVolsPerDay;
+  const shiftsPerDay = operationalData?.shiftsPerDay ?? clientShiftsPerDay;
+  const totalVolsWithShifts = operationalData?.totalVolsWithShifts ?? clientTotalVolsWithShifts;
 
   if (mounted && !canViewDashboard()) {
     return (
@@ -869,7 +897,7 @@ export default function CoordinatorDashboard() {
           {/* Committee Filter Selector */}
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider hidden sm:inline">Comité:</span>
-            {currentRole === 'Admin' ? (
+            {canViewGlobalReports() ? (
               <Select
                 value={selectedHeatmapCommittee}
                 onValueChange={(val) => setSelectedHeatmapCommittee(val || 'todos')}
@@ -885,11 +913,13 @@ export default function CoordinatorDashboard() {
                   <SelectItem value="todos" className="text-xs font-bold">
                     Todos los comités
                   </SelectItem>
-                  {committeesList.map((comm: any) => (
-                    <SelectItem key={comm.id} value={comm.name} className="text-xs font-bold">
-                      {comm.name}
-                    </SelectItem>
-                  ))}
+                  {committeesList
+                    .filter((comm: any) => (comm.status || '').toLowerCase() !== 'archived')
+                    .map((comm: any) => (
+                      <SelectItem key={comm.id} value={comm.name} className="text-xs font-bold">
+                        {comm.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             ) : (

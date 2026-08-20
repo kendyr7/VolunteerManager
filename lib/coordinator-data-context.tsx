@@ -17,6 +17,8 @@ import {
   processShiftsData,
   computeReliabilityMap,
 } from '@/lib/coordinator-data';
+import { getAuthorizationSnapshotCache } from '@/lib/permissions';
+import { hasCapability } from '@/lib/role-permissions';
 import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
 import { useRealtimeStore } from '@/lib/store/use-realtime-store';
 import { RealtimeEventQueue } from '@/lib/services/realtime-event-queue';
@@ -52,11 +54,16 @@ const CoordinatorDataContext = createContext<CoordinatorDataContextValue | null>
 
 function getAuthScope() {
   if (typeof window === 'undefined') {
-    return { role: 'Admin', committee: '', cacheKey: 'Admin:' };
+    return { authenticated: false, canViewAll: false, committeeId: null as string | null, cacheKey: 'ssr' };
   }
-  const role = localStorage.getItem('mock_role') || 'Admin';
-  const committee = localStorage.getItem('mock_committee') || '';
-  return { role, committee, cacheKey: `${role}:${committee}` };
+  const snapshot = getAuthorizationSnapshotCache();
+  if (!snapshot.authenticated) {
+    return { authenticated: false, canViewAll: false, committeeId: null as string | null, cacheKey: 'unauth' };
+  }
+  const canViewAll = snapshot.role === 'Admin' || hasCapability(snapshot, 'view_all_volunteers');
+  const committeeId = snapshot.committeeId;
+  const cacheKey = `${snapshot.role}:${snapshot.coordinatorType || ''}:${snapshot.committeeId || ''}:${canViewAll}:${snapshot.authenticated}`;
+  return { authenticated: true, canViewAll, committeeId, cacheKey };
 }
 
 export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
@@ -159,7 +166,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
   const fetchData = useCallback(
     async (force = false) => {
-      const { role, committee, cacheKey } = getAuthScope();
+      const { authenticated, canViewAll, committeeId, cacheKey } = getAuthScope();
       const isFresh =
         !force &&
         lastCacheKeyRef.current === cacheKey &&
@@ -180,27 +187,50 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
       const promise = (async () => {
         try {
-          let commIdFilter: string | null = null;
-          if (role === 'Editor' && committee) {
-            const { data: commObj } = await supabase
+          if (!authenticated) {
+            setRawVolunteers([]);
+            setCommitteesList([]);
+            setShiftsData([]);
+            setSessionsData([]);
+            useVolunteerStore.getState().setInitialVolunteers([]);
+            useVolunteerStore.getState().setInitialShifts([]);
+            return;
+          }
+
+          if (!canViewAll && !committeeId) {
+            // Fail closed: User has no permission to view all volunteers and has no assigned committee
+            const { data: commsResData } = await supabase
               .from('committees')
-              .select('id')
-              .eq('name', committee)
-              .or('status.is.null,status.neq.archived')
-              .maybeSingle();
-            if (commObj) commIdFilter = commObj.id;
+              .select('*')
+              .or('status.is.null,status.neq.archived');
+            const activeComms = (commsResData ?? []).filter((c: any) => c.status !== 'archived');
+            setRawVolunteers([]);
+            setCommitteesList(activeComms);
+            setShiftsData([]);
+            setSessionsData([]);
+            useVolunteerStore.getState().setInitialVolunteers([]);
+            useVolunteerStore.getState().setInitialShifts([]);
+            return;
           }
 
           const { getAttendanceSessionsAction } = await import('@/app/actions/attendance');
 
-          const [volsData, commsRes, shiftsResult, reqsData, loadedSessions] =
-            await Promise.all([
-              fetchAllRows(
+          const volsQuery = canViewAll
+            ? fetchAllRows(
+                supabase,
+                'volunteers',
+                '*, committees(name)'
+              )
+            : fetchAllRows(
                 supabase,
                 'volunteers',
                 '*, committees(name)',
-                (q) => (commIdFilter ? q.eq('committee_id', commIdFilter) : q)
-              ),
+                (q) => q.eq('committee_id', committeeId!)
+              );
+
+          const [volsData, commsRes, shiftsResult, reqsData, loadedSessions] =
+            await Promise.all([
+              volsQuery,
               supabase
                 .from('committees')
                 .select('*')
@@ -216,13 +246,18 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
           const commsData = commsRes.data ?? [];
           const activeComms = commsData.filter((c: any) => c.status !== 'archived');
+          const cleanVols = volsData ?? [];
+          const allowedVolunteerIds = new Set(cleanVols.map((v: any) => v.id));
+          const cleanShifts = canViewAll
+            ? (shiftsResult ?? [])
+            : (shiftsResult ?? []).filter((s: any) => allowedVolunteerIds.has(s.volunteer_id));
 
-          setRawVolunteers(volsData ?? []);
-          useVolunteerStore.getState().setInitialVolunteers(volsData ?? []);
+          setRawVolunteers(cleanVols);
+          useVolunteerStore.getState().setInitialVolunteers(cleanVols);
           setCommitteesList(activeComms);
-          setShiftsData(shiftsResult ?? []);
+          setShiftsData(cleanShifts);
           setSessionsData(loadedSessions ?? []);
-          useVolunteerStore.getState().setInitialShifts(shiftsResult ?? []);
+          useVolunteerStore.getState().setInitialShifts(cleanShifts);
 
           const parsedReqs = parseRequirementsData(reqsData ?? [], activeComms);
           const stored = localStorage.getItem('committee_requirements');

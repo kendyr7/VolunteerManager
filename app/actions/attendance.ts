@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 import { broadcastShiftSync, broadcastSessionSync } from "@/lib/services/shift-broadcast.service";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/auth";
-import { requireCapability, requireVolunteerCapability } from "@/lib/authorization";
+import { requireCapability, requireVolunteerCapability, requireVolunteerSelfOrCapability } from "@/lib/authorization";
 import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
 import { getOfficialShiftTime } from "@/lib/dates";
 import { AttendanceSession, validateSessionConstraints } from "@/lib/session-utils";
@@ -162,26 +162,7 @@ function isCurrentTimeInShiftWindow(dayKey: string, shiftKey: string): boolean {
 
 // 1. Generate Dynamic Pass Token
 export async function generateEntryPassToken(volunteerId: string) {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('session')?.value || '';
-  const session = verifySessionToken(sessionCookie);
-
-  // Security Authorization check: User must be authenticated
-  if (!session) {
-    throw new Error("No autenticado. Debes iniciar sesión para generar un pase QR.");
-  }
-
-  const isSelf = session.userId === volunteerId;
-  const normalizedRole = (session.role || '').toLowerCase().trim();
-  const isAdmin = normalizedRole === 'admin' || normalizedRole === 'administrador';
-
-  // Authorization rule:
-  // - Volunteer can generate THEIR OWN pass (isSelf)
-  // - Admin can generate the pass of ANY volunteer (isAdmin)
-  // - Coordinator / Editor cannot generate the pass of another volunteer
-  if (!isSelf && !isAdmin) {
-    throw new Error("No tienes permiso para generar el pase QR de este voluntario. Solo administradores pueden generar pases de otros usuarios.");
-  }
+  await requireVolunteerSelfOrCapability('scan_qr_attendance', volunteerId);
 
   const payload = createEntryPassPayload(volunteerId);
 

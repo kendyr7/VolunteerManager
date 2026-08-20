@@ -10,6 +10,7 @@ import { EntryPassButton } from "@/components/EntryPassButton";
 import {
   canCorrectAttendanceTimes,
   canEditVolunteerPersonalInfo,
+  canQrCheckin,
   canRegisterMissingAttendance,
   getNormalizedRole,
 } from "@/lib/permissions";
@@ -103,7 +104,20 @@ export function VolunteerProfileView({
 }: VolunteerProfileViewProps) {
   const coordinatorData = useOptionalCoordinatorData();
   const { refresh } = coordinatorData ?? {};
+  const [permTick, setPermTick] = useState(0);
+
+  useEffect(() => {
+    const handlePermissionsChange = () => setPermTick(v => v + 1);
+    window.addEventListener("storage", handlePermissionsChange);
+    window.addEventListener("permissions-changed", handlePermissionsChange);
+    return () => {
+      window.removeEventListener("storage", handlePermissionsChange);
+      window.removeEventListener("permissions-changed", handlePermissionsChange);
+    };
+  }, []);
+
   const isAdmin = getNormalizedRole() === 'Admin';
+  const mayViewQr = canQrCheckin();
   const mayCorrectAttendance = canCorrectAttendanceTimes();
   const mayRegisterMissingAttendance = canRegisterMissingAttendance();
   const mayEditPersonalInfo = canEditVolunteerPersonalInfo(volunteer.committee_id);
@@ -871,7 +885,7 @@ export function VolunteerProfileView({
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {isAdmin && (
+            {mayViewQr && (
               <EntryPassButton
                 volunteerId={volunteer.id}
                 volunteerName={volunteer.name}

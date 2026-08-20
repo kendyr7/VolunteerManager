@@ -170,6 +170,10 @@ export function canViewVolunteers() {
   return hasCapability(currentSnapshot, 'view_volunteers');
 }
 
+export function canViewAllVolunteers() {
+  return hasCapability(currentSnapshot, 'view_all_volunteers');
+}
+
 export function canViewVolunteerProfile(targetCommitteeId?: string | null) {
   return hasCapability(currentSnapshot, 'view_volunteer_profile', targetCommitteeId);
 }
