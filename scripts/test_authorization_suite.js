@@ -21,6 +21,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { signSession } = jiti('./lib/auth');
 const { generateEntryPassToken } = jiti('./app/actions/attendance');
 const { getDashboardOperationalDataAction } = jiti('./app/actions/dashboard');
+const { getAuthorizationSnapshot } = jiti('./lib/authorization');
 const { getActiveEventDays } = jiti('./lib/dates');
 const { hasCapability, CONFIGURABLE_PERMISSION_DEFAULTS } = jiti('./lib/role-permissions');
 
@@ -134,6 +135,45 @@ async function runAuthorizationSuite() {
       `Committee global reports=${committeeGlobalReportsEnabled}. No values will be changed.\n`
   );
 
+  currentSessionToken = signSession({
+    userId: adminProfile.id,
+    userType: 'profile',
+    role: 'Admin',
+    committee: '',
+    userName: adminProfile.full_name,
+  });
+  const adminAuthorization = await getAuthorizationSnapshot();
+  assert(
+    adminAuthorization.role === 'Admin' && hasCapability(adminAuthorization, 'manage_permissions'),
+    'Real Admin profile has manage_permissions'
+  );
+
+  currentSessionToken = signSession({
+    userId: techProfile.id,
+    userType: 'profile',
+    role: 'Editor',
+    committee: techProfile.committees?.name || '',
+    userName: techProfile.full_name,
+  });
+  const technologyAuthorization = await getAuthorizationSnapshot();
+  assert(
+    technologyAuthorization.role === 'Editor' && !hasCapability(technologyAuthorization, 'manage_permissions'),
+    'Real Technology Editor does not have manage_permissions'
+  );
+
+  currentSessionToken = signSession({
+    userId: committeeProfile.id,
+    userType: 'profile',
+    role: 'Editor',
+    committee: committeeProfile.committees?.name || '',
+    userName: committeeProfile.full_name,
+  });
+  const committeeAuthorization = await getAuthorizationSnapshot();
+  assert(
+    committeeAuthorization.role === 'Editor' && !hasCapability(committeeAuthorization, 'manage_permissions'),
+    'Real Committee Editor does not have manage_permissions'
+  );
+
   currentSessionToken = null;
   assert(await qrResultMatches(volunteerOne.id, false), 'Unauthenticated QR request is rejected');
 
@@ -144,6 +184,11 @@ async function runAuthorizationSuite() {
     committee: volunteerOne.committees?.name || '',
     userName: `${volunteerOne.first_name} ${volunteerOne.last_name}`,
   });
+  const volunteerAuthorization = await getAuthorizationSnapshot();
+  assert(
+    volunteerAuthorization.role === 'Lector' && !hasCapability(volunteerAuthorization, 'manage_permissions'),
+    'Real Volunteer/Lector does not have manage_permissions'
+  );
   assert(await qrResultMatches(volunteerOne.id, true), 'Volunteer can generate their own QR pass');
   assert(await qrResultMatches(volunteerTwo.id, false), 'Volunteer cannot generate another volunteer QR pass');
 

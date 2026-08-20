@@ -22,6 +22,7 @@ import {
 import {
   CONFIGURABLE_PERMISSION_DEFAULTS,
   ConfigurablePermissionKey,
+  hasCapability,
 } from "@/lib/role-permissions";
 import { changeUserPin } from "@/app/actions/update-pin";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
@@ -111,7 +112,8 @@ const getCommitteeStyle = (committeeName: string, isSelected: boolean) => {
 export default function SettingsPage() {
   const { refresh } = useCoordinatorData();
   const { mode: mobileNavigationMode, setMode: setMobileNavigationMode } = useMobileNavigationMode();
-  const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
+  const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Lector');
+  const [canManagePermissions, setCanManagePermissions] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [committees, setCommittees] = useState<{ id: string, name: string, status?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -270,6 +272,9 @@ export default function SettingsPage() {
       if (result.success && result.snapshot) {
         setPermissionsMap(result.snapshot.permissions);
         setCurrentRole(result.snapshot.role);
+        setCanManagePermissions(hasCapability(result.snapshot, 'manage_permissions'));
+      } else {
+        setCanManagePermissions(false);
       }
     });
   }, []);
@@ -434,13 +439,6 @@ export default function SettingsPage() {
           icon: 'groups',
         },
         {
-          id: 'activity',
-          title: 'Historial de actividades',
-          description: 'Auditoría de operaciones y cambios del sistema',
-          keywords: 'logs registros eventos ediciones seguridad configuración reasignaciones',
-          icon: 'history',
-        },
-        {
           id: 'reminderCapacity',
           title: 'Capacidad de recordatorios',
           description: 'Proyección, redistribución y límite de WhatsApp',
@@ -450,8 +448,18 @@ export default function SettingsPage() {
       );
     }
 
+    if (canManagePermissions) {
+      sections.push({
+        id: 'activity',
+        title: 'Historial de actividades',
+        description: 'Auditoría de operaciones y cambios del sistema',
+        keywords: 'logs registros eventos ediciones seguridad configuración reasignaciones',
+        icon: 'history',
+      });
+    }
+
     return sections;
-  }, [currentRole, isMobile]);
+  }, [canManagePermissions, currentRole, isMobile]);
 
   const settingsSearchResults = useMemo(() => {
     const query = settingsSearch.trim();
@@ -488,18 +496,21 @@ export default function SettingsPage() {
   const [logSearchQuery, setLogSearchQuery] = useState<string>('');
 
   const fetchLogs = useCallback(async () => {
-    if (currentRole !== 'Admin') return;
+    if (!canManagePermissions) return;
     setIsLoadingLogs(true);
-    const logs = await getActivityLogs(500);
-    setActivityLogs(logs);
-    setIsLoadingLogs(false);
-  }, [currentRole]);
+    try {
+      const logs = await getActivityLogs(500);
+      setActivityLogs(logs);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  }, [canManagePermissions]);
 
   useEffect(() => {
-    if (currentRole === 'Admin') {
+    if (canManagePermissions) {
       fetchLogs();
     }
-  }, [currentRole, fetchLogs]);
+  }, [canManagePermissions, fetchLogs]);
 
   const filteredLogs = useMemo(() => {
     return activityLogs.filter(log => {
@@ -1719,7 +1730,7 @@ export default function SettingsPage() {
           )}
 
           {/* Historial de Actividades (Solo Admins) */}
-          {currentRole === 'Admin' && (
+          {canManagePermissions && (
             <div id="settings-activity" className="w-full scroll-mt-44 transition-all border-t border-border mt-2 pt-2">
               <div
                 onClick={() => isMobile && toggleSection('activity')}
