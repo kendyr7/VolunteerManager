@@ -105,6 +105,7 @@ export default function VolunteerLayout({
                   <Link
                     key={item.name}
                     href={item.href}
+                    prefetch={false}
                     title={!sidebarOpen ? item.name : undefined}
                     className={cn(
                       "group flex items-center h-[42px] rounded-md transition-all duration-200 relative",
@@ -185,6 +186,7 @@ export default function VolunteerLayout({
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={false}
                     style={sharedStyle}
                     className={cn(
                       "flex flex-col items-center justify-center py-2 rounded-full transition-all duration-200 shrink-0 active:scale-[0.95]",

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { SESSION_MAX_AGE_SECONDS, verifySessionToken, signSession } from '@/lib/auth'
+import { verifySessionToken } from '@/lib/auth'
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -93,27 +93,10 @@ export function proxy(request: NextRequest) {
     }
   }
 
-  const response = NextResponse.next()
-
-  // Renovación automática de sesión activa (Sliding Expiration Window) para usuarios en uso activo
-  if (session && (isVolunteerRoute || isCoordinatorRoute)) {
-    const refreshedToken = signSession({
-      userId: session.userId,
-      userType: session.userType,
-      role: session.role,
-      committee: session.committee
-    }, 30);
-
-    response.cookies.set('session', refreshedToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: SESSION_MAX_AGE_SECONDS,
-      path: '/',
-    });
-  }
-
-  return response
+  // La sesión activa se renueva de forma controlada mediante
+  // /api/auth/session/refresh. Evitamos firmar y escribir una cookie nueva en
+  // cada navegación y en cada solicitud especulativa del router.
+  return NextResponse.next()
 }
 
 export const config = {

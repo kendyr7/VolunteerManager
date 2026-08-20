@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
+import { getAdminSupabase } from '@/lib/supabase/admin';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function GET() {
@@ -13,7 +13,7 @@ export async function GET() {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const supabase = await createClient();
+    const supabase = await getAdminSupabase();
 
     const { data: passkeys, error } = await supabase
       .from('passkeys')

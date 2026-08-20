@@ -8,18 +8,14 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 export async function getAdminSupabase() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy';
-
-  if (serviceKey && supabaseUrl) {
-    return createSupabaseClient(supabaseUrl, serviceKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
+  if (!serviceKey || !supabaseUrl) {
+    throw new Error('Faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.');
   }
 
-  return createSupabaseClient(supabaseUrl || 'http://localhost:54321', anonKey, {
-    auth: { persistSession: false }
+  return createSupabaseClient(supabaseUrl, serviceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
   });
 }

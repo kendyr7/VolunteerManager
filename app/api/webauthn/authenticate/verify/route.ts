@@ -2,10 +2,24 @@ import { NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
 import { getAdminSupabase } from '@/lib/supabase/admin';
+import { consumeAuthRateLimit, getClientIp } from '@/lib/auth-rate-limit';
 import { SESSION_MAX_AGE_SECONDS, signSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
+    const ipLimit = await consumeAuthRateLimit({
+      scope: 'webauthn-verify-ip',
+      identifier: getClientIp(request.headers),
+      limit: 30,
+      windowSeconds: 15 * 60,
+    });
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos. Inténtalo más tarde.' },
+        { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfterSeconds) } }
+      );
+    }
+
     const body = await request.json();
     
     const cookieStore = await cookies();
@@ -105,6 +119,7 @@ export async function POST(request: Request) {
         cookieStore.set('session', sessionToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
           maxAge: SESSION_MAX_AGE_SECONDS,
           path: '/',
         });
@@ -138,6 +153,7 @@ export async function POST(request: Request) {
         cookieStore.set('session', sessionToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
           maxAge: SESSION_MAX_AGE_SECONDS,
           path: '/',
         });

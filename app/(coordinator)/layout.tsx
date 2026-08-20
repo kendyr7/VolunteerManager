@@ -290,6 +290,7 @@ function CoordinatorLayoutInner({
                   <Link
                     key={item.name}
                     href={item.href}
+                    prefetch={false}
                     title={!sidebarOpen ? item.name : undefined}
                     className={cn(
                       "group flex items-center h-[42px] rounded-md transition-all duration-200 relative",
@@ -316,6 +317,7 @@ function CoordinatorLayoutInner({
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 title={!sidebarOpen ? item.name : undefined}
                 className={cn(
                   "flex items-center rounded-sm transition-all duration-200 text-[14px] font-inter font-bold text-text hover:bg-dark3 hover:text-text",
@@ -484,6 +486,7 @@ function CoordinatorLayoutInner({
                     <Link
                       key={item.href}
                       href={item.href}
+                      prefetch={false}
                       onClick={() => setIsMobileThemeOpen(false)}
                       style={sharedStyle}
                       className={sharedClass}

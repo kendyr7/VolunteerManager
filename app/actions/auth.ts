@@ -1,8 +1,14 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { createClient } from '@/lib/supabase/server'
 import { SESSION_MAX_AGE_SECONDS, signSession } from '@/lib/auth'
+import {
+  clearAuthRateLimit,
+  consumeAuthRateLimit,
+  getServerActionClientIp,
+  rateLimitMinutes,
+} from '@/lib/auth-rate-limit'
+import { getAdminSupabase } from '@/lib/supabase/admin'
 import { formatE164 } from '@/lib/whatsapp'
 
 export type AuthState = {
@@ -41,37 +47,40 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     rawDigits.length === 8 ? `505${rawDigits}` : rawDigits
   ])).filter(Boolean);
 
-  console.log("AUTH_LOG: Received login request", { rawPhoneInput, formattedPhone, pin_length: pin?.length, selectedUserId });
-
   if (!rawPhoneInput || !pin) {
     return { error: 'Por favor, ingresa tu teléfono y PIN.' };
   }
 
-  let supabase;
-  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
-    supabase = createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-  } else {
-    supabase = await createClient();
-  }
+  const phoneRateLimitKey = formattedPhone || rawDigits || rawPhoneInput;
+  try {
+    const clientIp = await getServerActionClientIp();
+    const [phoneLimit, ipLimit] = await Promise.all([
+      consumeAuthRateLimit({
+        scope: 'login-phone',
+        identifier: phoneRateLimitKey,
+        limit: 5,
+        windowSeconds: 15 * 60,
+      }),
+      consumeAuthRateLimit({
+        scope: 'login-ip',
+        identifier: clientIp,
+        limit: 20,
+        windowSeconds: 15 * 60,
+      }),
+    ]);
 
-  // 0. Verificar Rate Limiting (Fuerza Bruta)
-  const { data: attempt } = await supabase
-    .from('login_attempts')
-    .select('*')
-    .in('phone', targetPhones)
-    .maybeSingle();
-
-  if (attempt) {
-    const now = new Date();
-    if (attempt.locked_until && new Date(attempt.locked_until) > now) {
-      const remainingMin = Math.ceil((new Date(attempt.locked_until).getTime() - now.getTime()) / 60000);
-      return { error: `Teléfono bloqueado por exceso de intentos. Inténtalo de nuevo en ${remainingMin} minutos.` };
+    const blockedLimit = !phoneLimit.allowed ? phoneLimit : !ipLimit.allowed ? ipLimit : null;
+    if (blockedLimit) {
+      return {
+        error: `Demasiados intentos de acceso. Inténtalo de nuevo en ${rateLimitMinutes(blockedLimit.retryAfterSeconds)} minutos.`,
+      };
     }
+  } catch (error) {
+    console.error('[AUTH] Rate limiter unavailable:', error);
+    return { error: 'El control de seguridad no está disponible. Inténtalo nuevamente en unos minutos.' };
   }
+
+  const supabase = await getAdminSupabase();
 
   // Helper para finalizar login autenticando un ID específico
   const authenticateSpecificUser = async (userId: string, userType: 'profile' | 'volunteer') => {
@@ -85,7 +94,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
 
       if (!profile) return null;
 
-      await supabase.from('login_attempts').delete().in('phone', targetPhones);
+      await clearAuthRateLimit('login-phone', phoneRateLimitKey);
 
       if (pin === '1234') {
         return { 
@@ -136,7 +145,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
 
       if (!volunteer) return null;
 
-      await supabase.from('login_attempts').delete().in('phone', targetPhones);
+      await clearAuthRateLimit('login-phone', phoneRateLimitKey);
 
       if (pin === '1234') {
         return { 
@@ -218,27 +227,6 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     const allCandidates = [...candidateProfiles, ...candidateVolunteers];
 
     if (allCandidates.length === 0) {
-      // Registrar intento fallido
-      if (attempt) {
-        const newCount = attempt.attempts_count + 1;
-        const lockedUntil = newCount >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
-        await supabase
-          .from('login_attempts')
-          .update({
-            attempts_count: newCount,
-            locked_until: lockedUntil,
-            last_attempt: new Date().toISOString()
-          })
-          .eq('id', attempt.id);
-      } else {
-        await supabase
-          .from('login_attempts')
-          .insert({
-            phone: formattedPhone || rawPhoneInput,
-            attempts_count: 1,
-            last_attempt: new Date().toISOString()
-          });
-      }
       return { error: 'El teléfono o PIN es incorrecto.' };
     }
 
@@ -264,28 +252,6 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
         })),
       };
     }
-  }
-
-  // Registrar Intento Fallido para Rate Limiting
-  if (attempt) {
-    const newCount = attempt.attempts_count + 1;
-    const lockedUntil = newCount >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
-    await supabase
-      .from('login_attempts')
-      .update({
-        attempts_count: newCount,
-        locked_until: lockedUntil,
-        last_attempt: new Date().toISOString()
-      })
-      .eq('id', attempt.id);
-  } else {
-    await supabase
-      .from('login_attempts')
-      .insert({
-        phone: formattedPhone || rawPhoneInput,
-        attempts_count: 1,
-        last_attempt: new Date().toISOString()
-      });
   }
 
   return { error: 'El teléfono o PIN es incorrecto.' };

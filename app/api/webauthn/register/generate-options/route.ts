@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
 import { verifySessionToken } from '@/lib/auth';
-import { createClient } from '@/lib/supabase/server';
+import { getAdminSupabase } from '@/lib/supabase/admin';
 
 export async function POST(request: Request) {
   try {
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
     // Fetch existing credentials so the authenticator won't create duplicates
     // for the SAME device, but WILL allow registering additional devices
-    const supabase = await createClient();
+    const supabase = await getAdminSupabase();
     const { data: existingPasskeys } = await supabase
       .from('passkeys')
       .select('credential_id, transports')
@@ -55,6 +55,7 @@ export async function POST(request: Request) {
     cookieStore.set('webauthn_challenge', options.challenge, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 60 * 5,
       path: '/',
     });
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
     cookieStore.set('webauthn_user_info', JSON.stringify({ userId, userType }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 60 * 5,
       path: '/',
     });

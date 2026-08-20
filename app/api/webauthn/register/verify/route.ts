@@ -1,21 +1,31 @@
 import { NextResponse } from 'next/server';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
+import { verifySessionToken } from '@/lib/auth';
+import { getAdminSupabase } from '@/lib/supabase/admin';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     
     const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session')?.value || '';
+    const session = verifySessionToken(sessionCookie);
     const expectedChallenge = cookieStore.get('webauthn_challenge')?.value;
     const userInfoCookie = cookieStore.get('webauthn_user_info')?.value;
+
+    if (!session) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
 
     if (!expectedChallenge || !userInfoCookie) {
       return NextResponse.json({ error: 'Falta el desafío de sesión' }, { status: 400 });
     }
 
     const { userId, userType } = JSON.parse(userInfoCookie);
+    if (userId !== session.userId || userType !== session.userType) {
+      return NextResponse.json({ error: 'El desafío no pertenece a la sesión activa' }, { status: 403 });
+    }
     
     // Use fixed env-var rpID — critical for cross-env compatibility
     const rpID = process.env.WEBAUTHN_RP_ID || 'localhost';
@@ -37,7 +47,7 @@ export async function POST(request: Request) {
     const { verified, registrationInfo } = verification;
 
     if (verified && registrationInfo) {
-      const supabase = await createClient();
+      const supabase = await getAdminSupabase();
       
       const { credential, credentialDeviceType, credentialBackedUp } = registrationInfo;
       const { id: credentialID, publicKey: credentialPublicKey, counter } = credential;

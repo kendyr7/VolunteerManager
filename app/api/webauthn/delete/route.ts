@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
+import { getAdminSupabase } from '@/lib/supabase/admin';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function DELETE(request: Request) {
@@ -20,7 +20,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Falta el ID de la passkey' }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = await getAdminSupabase();
 
     // First verify the passkey belongs to the authenticated user (or they're admin)
     const { data: passkey } = await supabase

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
 import { getAdminSupabase } from '@/lib/supabase/admin';
+import { consumeAuthRateLimit, getClientIp } from '@/lib/auth-rate-limit';
 import { formatE164 } from '@/lib/whatsapp';
 
 export async function POST(request: Request) {
@@ -15,6 +16,29 @@ export async function POST(request: Request) {
 
     const formattedPhone = formatE164(rawPhoneInput);
     const rawDigits = rawPhoneInput.replace(/\D/g, '');
+    const [ipLimit, phoneLimit] = await Promise.all([
+      consumeAuthRateLimit({
+        scope: 'webauthn-options-ip',
+        identifier: getClientIp(request.headers),
+        limit: 30,
+        windowSeconds: 15 * 60,
+      }),
+      consumeAuthRateLimit({
+        scope: 'webauthn-options-phone',
+        identifier: formattedPhone || rawDigits || rawPhoneInput,
+        limit: 10,
+        windowSeconds: 15 * 60,
+      }),
+    ]);
+
+    if (!ipLimit.allowed || !phoneLimit.allowed) {
+      const retryAfter = Math.max(ipLimit.retryAfterSeconds, phoneLimit.retryAfterSeconds);
+      return NextResponse.json(
+        { error: 'Demasiados intentos. Inténtalo más tarde.' },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      );
+    }
+
     const targetPhones = Array.from(new Set([
       rawPhoneInput,
       formattedPhone,
@@ -76,6 +100,7 @@ export async function POST(request: Request) {
     cookieStore.set('webauthn_auth_challenge', options.challenge, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 60 * 5,
       path: '/',
     });
@@ -83,6 +108,7 @@ export async function POST(request: Request) {
     cookieStore.set('webauthn_auth_user', JSON.stringify({ userId, userType, phone: rawPhoneInput }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 60 * 5,
       path: '/',
     });
