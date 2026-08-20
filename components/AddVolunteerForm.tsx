@@ -23,6 +23,22 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
   const [sendWelcomeMessage, setSendWelcomeMessage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const resetForm = () => {
+    setNewName('');
+    setNewPhone('');
+    setNewAge('');
+    setNewStake('');
+    setNewWard('');
+    setNewCommitteeId('');
+    setSendWelcomeMessage(false);
+    setIsSubmitting(false);
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onClose?.();
+  };
+
   const handleAddVolunteer = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -54,37 +70,48 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
     const sanitizedPhone = phoneValidation.formatted;
     setIsSubmitting(true);
 
-    const result = await createVolunteerAction({
-      firstName: first_name,
-      lastName: last_name,
-      phone: sanitizedPhone,
-      age: ageNum,
-      committeeId: newCommitteeId || null,
-      stake: newStake,
-      neighborhood: newWard,
-    });
+    try {
+      const result = await createVolunteerAction({
+        firstName: first_name,
+        lastName: last_name,
+        phone: sanitizedPhone,
+        age: ageNum,
+        committeeId: newCommitteeId || null,
+        stake: newStake,
+        neighborhood: newWard,
+      });
 
-    if (!result.success || !result.volunteer) {
-      showToast(result.error || "Error al añadir voluntario", "error");
-      setIsSubmitting(false);
-      return;
-    }
-
-    const pin = result.volunteer.pin;
-
-    if (sendWelcomeMessage) {
-      const waResult = await sendWelcomeWhatsAppAction(sanitizedPhone, first_name, pin);
-      if (!waResult.success) {
-        showToast("Voluntario añadido, pero falló el envío de WhatsApp", "info");
-      } else {
-        showToast("Voluntario añadido y credenciales enviadas");
+      if (!result.success || !result.volunteer) {
+        showToast(result.error || "Error al añadir voluntario", "error");
+        return;
       }
-    } else {
-      showToast("Voluntario añadido");
-    }
 
-    if (onSuccess) onSuccess();
-    if (onClose) onClose();
+      const pin = result.volunteer.pin;
+
+      if (sendWelcomeMessage) {
+        try {
+          const waResult = await sendWelcomeWhatsAppAction(sanitizedPhone, first_name, pin);
+          if (!waResult.success) {
+            showToast("Voluntario añadido, pero falló el envío de WhatsApp", "info");
+          } else {
+            showToast("Voluntario añadido y credenciales enviadas");
+          }
+        } catch {
+          showToast("Voluntario añadido, pero falló el envío de WhatsApp", "info");
+        }
+      } else {
+        showToast("Voluntario añadido");
+      }
+
+      resetForm();
+      onSuccess?.();
+      onClose?.();
+    } catch (error) {
+      console.error("Error al añadir voluntario:", error);
+      showToast("Error al añadir voluntario", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -143,7 +170,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
         </label>
       </div>
       <div className="p-6 border-t border-border flex gap-3">
-        <Button type="button" variant="outline" onClick={onClose} className="flex-1 rounded-full">Cancelar</Button>
+        <Button type="button" variant="outline" onClick={handleClose} className="flex-1 rounded-full">Cancelar</Button>
         <Button type="submit" disabled={isSubmitting} className="flex-1 rounded-full bg-[#4d7cfe] text-white">Añadir</Button>
       </div>
     </form>

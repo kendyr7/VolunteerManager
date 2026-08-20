@@ -240,6 +240,7 @@ export default function VolunteersPage() {
 
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+  const [addVolunteerFormVersion, setAddVolunteerFormVersion] = useState(0);
   const { drawerRef: addVolunteerDrawerRef } = useMobileDrawerNavigation({
     isOpen: isAddSheetOpen,
     onClose: () => setIsAddSheetOpen(false),
@@ -809,7 +810,10 @@ export default function VolunteersPage() {
           {canCreateVolunteer() && (
             <Button
               type="button"
-              onClick={() => setIsAddSheetOpen(true)}
+              onClick={() => {
+                setAddVolunteerFormVersion(version => version + 1);
+                setIsAddSheetOpen(true);
+              }}
               className="flex bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-[48px] px-4 sm:px-5 text-xs font-bold transition-all active:scale-[0.97] items-center gap-1.5 shrink-0"
             >
               <span className="material-symbols-outlined text-[18px]">person_add</span>
@@ -1073,6 +1077,7 @@ export default function VolunteersPage() {
             )}
 
             <AddVolunteerForm 
+              key={addVolunteerFormVersion}
               committeesList={committeesList}
               onSuccess={() => {
                 setIsAddSheetOpen(false);
