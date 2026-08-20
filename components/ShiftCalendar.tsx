@@ -1,24 +1,31 @@
 'use client'
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { recalculateReliability } from "@/app/actions/attendance";
 import { toggleShiftAction } from "@/app/actions/volunteer-actions";
 import { VolunteerProfileView, VolunteerProfileData } from "@/components/VolunteerProfileView";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
+import { getVolunteerScheduleAction } from "@/app/actions/volunteer-schedule-actions";
+import type { VolunteerScheduleShift } from "@/lib/types/volunteer-schedule";
 
-export interface VolunteerInfo extends VolunteerProfileData {}
+export type VolunteerInfo = VolunteerProfileData;
 
 interface ShiftCalendarProps {
   volunteerId: string;
   volunteerInfo?: VolunteerInfo;
-  initialShifts?: any[];
+  initialShifts?: VolunteerScheduleShift[];
 }
 
-function parseShifts(data: any[] = []) {
+function areaSlotKey(dayKey: string, shiftKey: string) {
+  return `${dayKey}:${shiftKey}`;
+}
+
+function parseShifts(data: VolunteerScheduleShift[] = []) {
   const mapped: Record<string, string[]> = {};
   const confirmed: Record<string, string[]> = {};
   const checkedOut: Record<string, string[]> = {};
+  const areas: Record<string, string | null> = {};
 
   data.forEach(s => {
     if (!mapped[s.day_key]) {
@@ -27,6 +34,7 @@ function parseShifts(data: any[] = []) {
     if (!mapped[s.day_key].includes(s.shift_key)) {
       mapped[s.day_key].push(s.shift_key);
     }
+    areas[areaSlotKey(s.day_key, s.shift_key)] = s.area_name;
 
     if (s.checked_in || s.checked_in_at || s.checked_out || s.checked_out_at) {
       if (!confirmed[s.day_key]) {
@@ -47,69 +55,38 @@ function parseShifts(data: any[] = []) {
     }
   });
 
-  return { mapped, confirmed, checkedOut };
+  return { mapped, confirmed, checkedOut, areas };
 }
 
 export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }: ShiftCalendarProps) {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const initialParsed = parseShifts(initialShifts);
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>(initialParsed.mapped);
   const [checkedInShifts, setCheckedInShifts] = useState<Record<string, string[]>>(initialParsed.confirmed);
   const [checkedOutShifts, setCheckedOutShifts] = useState<Record<string, string[]>>(initialParsed.checkedOut);
+  const [shiftAreasBySlot, setShiftAreasBySlot] = useState<Record<string, string | null>>(initialParsed.areas);
   const [loading, setLoading] = useState(!volunteerInfo && initialShifts.length === 0);
   const [isPending, startTransition] = useTransition();
-  const [volunteerData, setVolunteerData] = useState<VolunteerInfo | undefined>(volunteerInfo);
+  const volunteerData = volunteerInfo;
 
   // Load shifts for this volunteer
-  const loadShifts = async () => {
+  const loadShifts = useCallback(async () => {
     try {
-      if (!volunteerData) {
-        const { data: vol } = await supabase
-          .from('volunteers')
-          .select('*, committees(name)')
-          .eq('id', volunteerId)
-          .maybeSingle();
-
-        if (vol) {
-          const fullName = `${vol.first_name || ''} ${vol.last_name || ''}`.trim();
-          setVolunteerData({
-            id: vol.id,
-            name: fullName,
-            first_name: vol.first_name || '',
-            last_name: vol.last_name || '',
-            committee: (vol.committees as any)?.name || 'Sin comité',
-            stake: vol.stake || '',
-            ward: vol.neighborhood || '',
-            phone: vol.phone || '',
-            reliability: vol.reliability_score ?? 100,
-            age: vol.age || undefined,
-          });
-        }
-      }
-
-      const { data, error } = await supabase
-        .from('shifts')
-        .select('*')
-        .eq('volunteer_id', volunteerId);
-
-      if (error) {
-        console.error("Error loading volunteer shifts:", error);
-        return;
-      }
-
-      if (data) {
-        const { mapped, confirmed, checkedOut } = parseShifts(data);
+      const result = await getVolunteerScheduleAction(volunteerId);
+      if (result.success) {
+        const { mapped, confirmed, checkedOut, areas } = parseShifts(result.shifts);
         setShiftsByDay(mapped);
         setCheckedInShifts(confirmed);
         setCheckedOutShifts(checkedOut);
+        setShiftAreasBySlot(areas);
       }
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  };
+  }, [volunteerId]);
 
   useEffect(() => {
     loadShifts();
@@ -138,7 +115,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [volunteerId]);
+  }, [loadShifts, supabase, volunteerId]);
 
   // Toggle shift on click
   const handleToggleShift = (dayKey: string, shiftKey: string) => {
@@ -164,6 +141,11 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
             [dayKey]: current.filter(s => s !== shiftKey)
           };
         });
+        setShiftAreasBySlot((current) => {
+          const next = { ...current };
+          delete next[areaSlotKey(dayKey, shiftKey)];
+          return next;
+        });
       } else {
         setShiftsByDay(prev => {
           const current = prev[dayKey] || [];
@@ -172,6 +154,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
             [dayKey]: [...current, shiftKey]
           };
         });
+        setShiftAreasBySlot((current) => ({ ...current, [areaSlotKey(dayKey, shiftKey)]: null }));
       }
       
       // Recalculate reliability score
@@ -204,6 +187,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
         shiftsByDay={shiftsByDay}
         checkedInMap={checkedInShifts}
         checkedOutMap={checkedOutShifts}
+        shiftAreasBySlot={shiftAreasBySlot}
         onToggleShift={handleToggleShift}
       />
     </div>

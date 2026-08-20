@@ -5,12 +5,13 @@ import { createPortal } from "react-dom";
 import Image from "next/image";
 import QRCode from "react-qr-code";
 import { generateEntryPassToken } from "@/app/actions/attendance";
+import { getVolunteerScheduleAction } from "@/app/actions/volunteer-schedule-actions";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
-import { createClient } from "@/lib/supabase/client";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
+import { getOfficialShiftTime } from "@/lib/dates";
+import type { VolunteerScheduleShift } from "@/lib/types/volunteer-schedule";
 
 interface EntryPassModalProps {
   isOpen: boolean;
@@ -18,12 +19,6 @@ interface EntryPassModalProps {
   volunteerId: string;
   volunteerName: string;
   committeeName: string;
-}
-
-interface VolunteerShift {
-  id: string;
-  day_key: string;
-  shift_key: string;
 }
 
 function isCurrentTimeInShiftWindow(dayKey: string, shiftKey: string): boolean {
@@ -47,11 +42,10 @@ export function EntryPassModal({
   volunteerName,
   committeeName,
 }: EntryPassModalProps) {
-  const supabase = createClient();
   const [tokenData, setTokenData] = useState<{ id: string; ts: number; sig: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(1800);
-  const [todayShifts, setTodayShifts] = useState<VolunteerShift[]>([]);
+  const [todayShifts, setTodayShifts] = useState<VolunteerScheduleShift[]>([]);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -63,15 +57,11 @@ export function EntryPassModal({
       setTokenData({ id: res.volunteerId, ts: res.timestamp, sig: res.signature });
       setTimeLeft(1800);
 
-      const { data: shifts } = await supabase
-        .from('shifts')
-        .select('id, day_key, shift_key')
-        .eq('volunteer_id', volunteerId);
-
-      if (shifts) {
+      const schedule = await getVolunteerScheduleAction(volunteerId);
+      if (schedule.success) {
         const now = new Date();
         const todayKey = format(now, "EEE d", { locale: es }).replace('.', '').toLowerCase();
-        const filtered = shifts.filter(s => s.day_key.replace('.', '').toLowerCase() === todayKey);
+        const filtered = schedule.shifts.filter(s => s.day_key.replace('.', '').toLowerCase() === todayKey);
         setTodayShifts(filtered);
       }
     } catch (e) {
@@ -106,8 +96,6 @@ export function EntryPassModal({
   const isExpiringSoon = timeLeft <= 300;
 
   const qrValue = tokenData ? JSON.stringify(tokenData) : "";
-  const activeShift = todayShifts.find(s => isCurrentTimeInShiftWindow(s.day_key, s.shift_key));
-
   if (!mounted) return null;
 
   return createPortal(
@@ -254,7 +242,7 @@ export function EntryPassModal({
                       </p>
                     ) : (
                       (() => {
-                        const groups = new Map<string, VolunteerShift[]>();
+                        const groups = new Map<string, VolunteerScheduleShift[]>();
                         todayShifts.forEach(s => {
                           const key = s.day_key.replace('.', '').toLowerCase();
                           if (!groups.has(key)) groups.set(key, []);
@@ -283,14 +271,20 @@ export function EntryPassModal({
                                         : 'bg-white/4 border-white/5 text-slate-500'
                                     }`}
                                   >
-                                    <div className="flex items-center gap-2">
-                                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
-                                      <span className="text-xs font-bold uppercase">{s.shift_key}</span>
-                                      {isActive && (
-                                        <span className="text-[9px] font-inter font-bold bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full">
-                                          Activo
-                                        </span>
-                                      )}
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                                        <span className="text-xs font-bold uppercase">{s.shift_key}</span>
+                                        {isActive && (
+                                          <span className="text-[9px] font-inter font-bold bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full">
+                                            Activo
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="mt-1 flex items-center gap-1 truncate pl-3.5 text-[10px] font-bold text-[#7ea2ff]">
+                                        <span className="material-symbols-outlined text-[13px]" aria-hidden="true">location_on</span>
+                                        {s.area_name || 'Área pendiente'}
+                                      </span>
                                     </div>
                                     <span className="text-[10px] font-inter font-bold">{timeLabel}</span>
                                   </div>

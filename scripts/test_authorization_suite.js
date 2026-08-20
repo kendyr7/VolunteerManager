@@ -147,6 +147,14 @@ async function runAuthorizationSuite() {
     adminAuthorization.role === 'Admin' && hasCapability(adminAuthorization, 'manage_permissions'),
     'Real Admin profile has manage_permissions'
   );
+  assert(
+    hasCapability(adminAuthorization, 'manage_committee_areas', 'any-committee'),
+    'Real Admin profile can manage areas across committees'
+  );
+  assert(
+    hasCapability(adminAuthorization, 'assign_volunteer_areas', 'any-committee'),
+    'Real Admin profile can assign volunteer areas across committees'
+  );
 
   currentSessionToken = signSession({
     userId: techProfile.id,
@@ -188,6 +196,10 @@ async function runAuthorizationSuite() {
   assert(
     volunteerAuthorization.role === 'Lector' && !hasCapability(volunteerAuthorization, 'manage_permissions'),
     'Real Volunteer/Lector does not have manage_permissions'
+  );
+  assert(
+    !hasCapability(volunteerAuthorization, 'manage_committee_areas', volunteerAuthorization.committeeId),
+    'Real Volunteer/Lector cannot manage committee areas'
   );
   assert(await qrResultMatches(volunteerOne.id, true), 'Volunteer can generate their own QR pass');
   assert(await qrResultMatches(volunteerTwo.id, false), 'Volunteer cannot generate another volunteer QR pass');
@@ -310,6 +322,61 @@ async function runAuthorizationSuite() {
   assert(hasCapability(techSnapshot, 'scan_qr_attendance'), 'Technology QR capability resolves true');
   assert(hasCapability(techSnapshot, 'view_global_reports'), 'Technology global reports capability resolves true');
   assert(hasCapability(techSnapshot, 'view_all_volunteers'), 'Technology volunteer access resolves globally');
+  assert(!hasCapability(techSnapshot, 'view_area_coverage', 'committee-a'), 'Technology cannot view committee area coverage');
+  const techAreaSnapshot = {
+    ...techSnapshot,
+    committeeId: 'committee-a',
+    permissions: {
+      ...techSnapshot.permissions,
+      'role.technology.manage_area_coverage': true,
+    },
+  };
+  assert(
+    hasCapability(techAreaSnapshot, 'view_area_coverage', 'committee-a'),
+    'Technology can view area coverage for its committee when explicitly enabled'
+  );
+  assert(
+    hasCapability(techAreaSnapshot, 'assign_volunteer_areas', 'committee-a'),
+    'Technology can assign areas for its committee when explicitly enabled'
+  );
+  assert(
+    !hasCapability(techAreaSnapshot, 'manage_committee_areas', 'committee-b'),
+    'Technology cannot manage areas for another committee'
+  );
+  assert(
+    !hasCapability(techAreaSnapshot, 'manage_area_requirements'),
+    'Technology area management requires an explicit committee scope'
+  );
+
+  const committeeSnapshot = makeSnapshot({
+    coordinatorType: 'committee',
+    committeeId: 'committee-a',
+    committeeName: 'Committee A',
+  });
+  assert(
+    hasCapability(committeeSnapshot, 'view_area_coverage', 'committee-a'),
+    'Committee coordinator can view area coverage for their own committee'
+  );
+  assert(
+    hasCapability(committeeSnapshot, 'manage_committee_areas', 'committee-a'),
+    'Committee coordinator can manage areas for their own committee'
+  );
+  assert(
+    hasCapability(committeeSnapshot, 'assign_volunteer_areas', 'committee-a'),
+    'Committee coordinator can assign areas in their own committee'
+  );
+  assert(
+    !hasCapability(committeeSnapshot, 'assign_volunteer_areas', 'committee-b'),
+    'Committee coordinator cannot assign areas in another committee'
+  );
+  assert(
+    !hasCapability(committeeSnapshot, 'manage_committee_areas', 'committee-b'),
+    'Committee coordinator cannot manage areas for another committee'
+  );
+  assert(
+    !hasCapability(committeeSnapshot, 'manage_committee_areas'),
+    'Committee area mutations require an explicit committee scope'
+  );
 
   const techNoQr = makeSnapshot({
     permissions: { ...techSnapshot.permissions, 'role.technology.scan_qr_attendance': false },

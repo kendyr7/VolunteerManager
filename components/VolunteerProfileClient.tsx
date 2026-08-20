@@ -7,11 +7,12 @@ import { Toast } from "@/components/ui/toast";
 
 import { Badge } from "@/components/ui/badge";
 import { SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
+import type { VolunteerScheduleShift } from "@/lib/types/volunteer-schedule";
 
 interface VolunteerProfileClientProps {
   volunteer: any;
   initialHasPasskey: boolean;
-  initialShifts?: any[];
+  initialShifts?: VolunteerScheduleShift[];
 }
 
 export function VolunteerProfileClient({
@@ -310,6 +311,10 @@ export function VolunteerProfileClient({
                           </p>
                           <p className="text-[11px] text-text-dim font-inter mt-1">
                             {timeLabel}
+                          </p>
+                          <p className="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-[#4d7cfe]">
+                            <span className="material-symbols-outlined text-[15px]" aria-hidden="true">location_on</span>
+                            {s.area_name || 'Área pendiente'}
                           </p>
                         </div>
 

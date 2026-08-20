@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { VolunteerProfileClient } from "@/components/VolunteerProfileClient";
 import { verifySessionToken } from "@/lib/auth";
 import { getAdminSupabase } from "@/lib/supabase/admin";
+import { VolunteerScheduleService } from "@/lib/services/volunteer-schedule.service";
 
 export const metadata = {
   title: "Mi Perfil | Volunteer Manager",
@@ -27,7 +28,7 @@ export default async function VolunteerProfilePage() {
   const supabase = await getAdminSupabase();
 
   // Fetch volunteer details, passkeys, and shifts in parallel for speed
-  const [{ data: volunteer, error }, { data: passkeys }, { data: shifts }] = await Promise.all([
+  const [{ data: volunteer, error }, { data: passkeys }, shifts] = await Promise.all([
     supabase
       .from('volunteers')
       .select('*, committees(name)')
@@ -37,10 +38,7 @@ export default async function VolunteerProfilePage() {
       .from('passkeys')
       .select('id')
       .eq('user_id', volunteerId),
-    supabase
-      .from('shifts')
-      .select('*')
-      .eq('volunteer_id', volunteerId)
+    VolunteerScheduleService.getSchedule(volunteerId)
   ]);
 
   if (error || !volunteer) {
@@ -54,7 +52,7 @@ export default async function VolunteerProfilePage() {
     <VolunteerProfileClient 
       volunteer={volunteer}
       initialHasPasskey={!!hasPasskey}
-      initialShifts={shifts || []}
+      initialShifts={shifts}
     />
   );
 }

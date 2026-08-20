@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, getOfficialShiftTime, isSimulationEventDay } from "@/lib/dates";
 import { format } from "date-fns";
@@ -21,7 +22,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn, normalizeSearch } from "@/lib/utils";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
-import { canEditShifts } from "@/lib/permissions";
+import { canEditShifts, canManageOwnAreaCoverage } from "@/lib/permissions";
+import { ShiftSectionTabs } from "@/components/ShiftSectionTabs";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
@@ -159,6 +161,7 @@ export default function ShiftsPage() {
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
+  const [canAccessAreas, setCanAccessAreas] = useState(false);
   const [viewMode, setViewMode] = useState<'turnos' | 'active' | 'completed'>('active');
   const [checkoutModal, setCheckoutModal] = useState<{ isOpen: boolean; item: any | null }>({ isOpen: false, item: null });
 
@@ -308,9 +311,14 @@ export default function ShiftsPage() {
     const role = localStorage.getItem('mock_role') as any;
     const committee = localStorage.getItem('mock_committee');
     if (role) setCurrentRole(role);
+    setCanAccessAreas(canManageOwnAreaCoverage());
     if (committee && role !== 'Admin') {
       setSelectedCommittees([committee]);
     }
+
+    const refreshAreaPermission = () => setCanAccessAreas(canManageOwnAreaCoverage());
+    window.addEventListener('permissions-changed', refreshAreaPermission);
+    return () => window.removeEventListener('permissions-changed', refreshAreaPermission);
   }, []);
 
 
@@ -1764,9 +1772,9 @@ export default function ShiftsPage() {
 
       {/* Sticky Header matching image design */}
       <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto">
-        <motion.div variants={itemVariants} className="w-full flex items-center justify-between">
-          <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight">Turnos</h1>
-          <div className="flex items-center gap-2">
+        <motion.div variants={itemVariants} className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight">Turnos</h1>
             <button
               type="button"
               onClick={() => setShowCapacityColors(!showCapacityColors)}
@@ -1781,36 +1789,13 @@ export default function ShiftsPage() {
               <span className="material-symbols-outlined text-[14px]">palette</span>
               <span className="w-6 text-center">{showCapacityColors ? "ON" : "OFF"}</span>
             </button>
-
-            <div className="flex bg-gray-200 dark:bg-dark3 rounded-full p-1 border border-black/5 dark:border-white/10">
-              <button
-                onClick={() => setViewMode('active')}
-                className={cn(
-                  "px-3.5 py-1.5 rounded-full text-[10px] transition-all flex items-center gap-1.5 font-inter font-bold",
-                  viewMode === 'active'
-                    ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
-                    : "text-text-dim hover:text-text"
-                )}
-              >
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                En Turno ({totalActiveCount})
-              </button>
-              <button
-                onClick={() => setViewMode('turnos')}
-                className={cn(
-                  "px-3.5 py-1.5 rounded-full text-[10px] transition-all font-inter font-bold",
-                  viewMode === 'turnos'
-                    ? "bg-white text-black shadow-sm dark:bg-white dark:text-black font-extrabold"
-                    : "text-text-dim hover:text-text"
-                )}
-              >
-                Programación
-              </button>
-            </div>
           </div>
+          <ShiftSectionTabs
+            current={viewMode === 'active' ? 'active' : 'schedule'}
+            activeCount={totalActiveCount}
+            showAreas={canAccessAreas}
+            onSelect={(section) => setViewMode(section === 'active' ? 'active' : 'turnos')}
+          />
         </motion.div>
 
         {/* Search Input matching image */}

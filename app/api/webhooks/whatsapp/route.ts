@@ -76,11 +76,20 @@ type VolunteerRecord = {
 type ShiftRecord = {
   day_key: string;
   shift_key: string;
+  area_id?: string | null;
+  committee_areas?: { name?: string | null } | Array<{ name?: string | null }> | null;
   checked_in?: boolean | null;
   checked_in_at?: string | null;
   checked_out?: boolean | null;
   checked_out_at?: string | null;
 };
+
+function shiftAreaName(shift: ShiftRecord): string | null {
+  const area = Array.isArray(shift.committee_areas)
+    ? shift.committee_areas[0]
+    : shift.committee_areas;
+  return area?.name || null;
+}
 
 type ScopedAction = {
   volunteerId: string;
@@ -158,7 +167,7 @@ function sortShifts(shifts: ShiftRecord[]): ShiftRecord[] {
 
 function formatShiftLine(shift: ShiftRecord): string {
   const official = getOfficialShiftTime(shift.day_key, shift.shift_key);
-  return `• *${shift.day_key}* · ${official.name} (${official.timeLabel})`;
+  return `• *${shift.day_key}* · ${official.name} (${official.timeLabel})\n  📍 ${shiftAreaName(shift) || 'Área pendiente'}`;
 }
 
 function getVolunteerRecord(value: unknown): VolunteerRecord | null {
@@ -575,7 +584,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
 
       const { data: userShifts } = await supabase
         .from('shifts')
-        .select('*')
+        .select('day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at, area_id, committee_areas(name)')
         .eq('volunteer_id', targetVolId);
 
       if (!userShifts || userShifts.length === 0) {
@@ -597,7 +606,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
           const shiftInfo = getOfficialShiftTime(selectedDayKey, shift.shift_key);
           await sendWhatsAppInteractiveButtons({
             to: rawFrom,
-            bodyText: `${firstName}, vas a confirmar:\n\n*${selectedDayKey}* · ${shiftInfo.name}\n${shiftInfo.timeLabel}`,
+            bodyText: `${firstName}, vas a confirmar:\n\n*${selectedDayKey}* · ${shiftInfo.name}\n${shiftInfo.timeLabel}\n📍 ${shiftAreaName(shift) || 'Área pendiente'}`,
             buttons: [{
               id: encodeAction(targetVolId, 'confirm_shift', shift.day_key, shift.shift_key),
               title: 'Sí, confirmar',
@@ -633,7 +642,8 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
         const dayKey = parts[2];
         const shiftKey = parts[3];
 
-        if (!assignedShifts.some(shift => shift.day_key === dayKey && shift.shift_key === shiftKey)) {
+        const selectedShift = assignedShifts.find(shift => shift.day_key === dayKey && shift.shift_key === shiftKey);
+        if (!selectedShift) {
           await sendWhatsAppText({
             to: rawFrom,
             text: `${firstName}, ese turno ya no aparece entre tus asignaciones. Abre nuevamente “Confirmar asistencia” para ver la información actualizada.`
@@ -699,7 +709,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
         });
         await sendWhatsAppText({
           to: rawFrom,
-          text: `Gracias, ${firstName}. Confirmamos tu asistencia para *${dayKey}*, ${shiftInfo.name} (${shiftInfo.timeLabel}). ✅`
+          text: `Gracias, ${firstName}. Confirmamos tu asistencia para *${dayKey}*, ${shiftInfo.name} (${shiftInfo.timeLabel}).\n📍 ${shiftAreaName(selectedShift) || 'Área pendiente'} ✅`
         });
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
@@ -715,7 +725,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
           const shiftInfo = getOfficialShiftTime(dayKey, shift.shift_key);
           await sendWhatsAppInteractiveButtons({
             to: rawFrom,
-            bodyText: `${firstName}, vas a confirmar:\n\n*${dayKey}* · ${shiftInfo.name}\n${shiftInfo.timeLabel}`,
+            bodyText: `${firstName}, vas a confirmar:\n\n*${dayKey}* · ${shiftInfo.name}\n${shiftInfo.timeLabel}\n📍 ${shiftAreaName(shift) || 'Área pendiente'}`,
             buttons: [{
               id: encodeAction(targetVolId, 'confirm_shift', shift.day_key, shift.shift_key),
               title: 'Sí, confirmar',
@@ -795,7 +805,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
 
       const { data: userShifts } = await supabase
         .from('shifts')
-        .select('*')
+        .select('day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at, area_id, committee_areas(name)')
         .eq('volunteer_id', targetVolId)
         .order('day_key', { ascending: true });
 

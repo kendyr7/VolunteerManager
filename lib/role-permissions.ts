@@ -14,6 +14,7 @@ export type ConfigurablePermissionKey =
   | 'role.technology.scan_qr_attendance'
   | 'role.technology.create_volunteers'
   | 'role.technology.import_volunteers'
+  | 'role.technology.manage_area_coverage'
   | 'role.committee.view_notices'
   | 'role.committee.view_requests'
   | 'role.committee.view_global_reports';
@@ -35,6 +36,10 @@ export type Capability =
   | 'view_requests'
   | 'view_reports'
   | 'view_global_reports'
+  | 'view_area_coverage'
+  | 'manage_committee_areas'
+  | 'assign_volunteer_areas'
+  | 'manage_area_requirements'
   | 'manage_platform_users'
   | 'manage_permissions'
   | 'manage_committees';
@@ -64,6 +69,7 @@ export const CONFIGURABLE_PERMISSION_DEFAULTS: Record<ConfigurablePermissionKey,
   'role.technology.scan_qr_attendance': true,
   'role.technology.create_volunteers': true,
   'role.technology.import_volunteers': true,
+  'role.technology.manage_area_coverage': false,
   'role.committee.view_notices': true,
   'role.committee.view_requests': true,
   'role.committee.view_global_reports': false,
@@ -86,6 +92,7 @@ export const CONFIGURABLE_PERMISSION_LABELS: Record<ConfigurablePermissionKey, s
   'role.technology.scan_qr_attendance': 'Escanear QR y registrar entrada o salida',
   'role.technology.create_volunteers': 'Crear voluntarios',
   'role.technology.import_volunteers': 'Importar voluntarios',
+  'role.technology.manage_area_coverage': 'Gestionar áreas y cobertura',
   'role.committee.view_notices': 'Ver y enviar avisos',
   'role.committee.view_requests': 'Ver y gestionar solicitudes',
   'role.committee.view_global_reports': 'Ver reportes globales',
@@ -169,6 +176,13 @@ export function hasCapability(
       case 'view_global_reports':
       case 'view_reports':
         return snapshot.permissions['role.technology.view_global_reports'];
+      case 'view_area_coverage':
+      case 'manage_committee_areas':
+      case 'assign_volunteer_areas':
+      case 'manage_area_requirements':
+        return Boolean(targetCommitteeId)
+          && targetCommitteeId === snapshot.committeeId
+          && snapshot.permissions['role.technology.manage_area_coverage'];
       case 'archive_volunteer':
       case 'manage_platform_users':
       case 'manage_permissions':
@@ -179,6 +193,7 @@ export function hasCapability(
 
   if (snapshot.coordinatorType === 'committee') {
     const isOwnCommittee = !targetCommitteeId || targetCommitteeId === snapshot.committeeId;
+    const isExplicitOwnCommittee = Boolean(targetCommitteeId) && targetCommitteeId === snapshot.committeeId;
     switch (capability) {
       case 'view_dashboard':
       case 'view_volunteers':
@@ -193,6 +208,11 @@ export function hasCapability(
         return snapshot.permissions['role.committee.view_requests'];
       case 'view_global_reports':
         return snapshot.permissions['role.committee.view_global_reports'];
+      case 'view_area_coverage':
+      case 'manage_committee_areas':
+      case 'assign_volunteer_areas':
+      case 'manage_area_requirements':
+        return isExplicitOwnCommittee;
       case 'view_all_volunteers':
       case 'edit_volunteer_personal_info':
       case 'scan_qr_attendance':

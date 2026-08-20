@@ -64,6 +64,7 @@ export interface VolunteerProfileViewProps {
   shiftsByDay?: Record<string, string[]>;
   checkedInMap?: Record<string, boolean> | Record<string, string[]>;
   checkedOutMap?: Record<string, boolean> | Record<string, string[]>;
+  shiftAreasBySlot?: Record<string, string | null>;
 
   // Handlers
   onToggleShift?: (dayKey: string, shiftKey: string) => void;
@@ -92,6 +93,7 @@ export function VolunteerProfileView({
   shiftsByDay: externalShiftsByDay,
   checkedInMap: externalCheckedInMap,
   checkedOutMap: externalCheckedOutMap,
+  shiftAreasBySlot,
   onToggleShift: externalOnToggleShift,
   isEditingShifts = false,
   canEditShifts = true,
@@ -1094,10 +1096,11 @@ export function VolunteerProfileView({
               return (
                 <div
                   key={dayKey}
-                  className="relative bg-dark2 border border-border rounded-xl p-3 sm:p-4 flex items-center justify-between shadow-sm transition-all"
+                  className="relative overflow-hidden rounded-xl border border-border bg-dark2 shadow-sm transition-all"
                 >
                   <div className={`absolute left-0 top-0 bottom-0 w-2 ${cardBg} opacity-90 rounded-l-xl`} />
 
+                  <div className="flex items-center justify-between p-3 sm:p-4">
                   <div className="flex items-center gap-3 pl-2">
                     <div className="flex flex-col items-center justify-center min-w-[36px]">
                       <span className="font-inter font-black text-xs uppercase tracking-widest text-text-dim leading-none">
@@ -1141,13 +1144,17 @@ export function VolunteerProfileView({
                       }
 
                       const times = getShiftTimesFormatted(dayKey, t);
-                      const titleText = outCheck
+                      const baseTitleText = outCheck
                         ? `Turno ${t} Completado | Entrada: ${times.startTime} · Salida: ${times.endTime}`
                         : inCheck
                         ? `Turno ${t} en servicio (Check-in activo)`
                         : active
                         ? `Turno ${t} Programado`
                         : `Turno ${t} Disponible`;
+                      const areaName = shiftAreasBySlot?.[`${dayKey}:${t}`] || null;
+                      const titleText = active
+                        ? `${baseTitleText} · Área: ${areaName || 'pendiente'}`
+                        : baseTitleText;
 
                       const tooltipKey = `${dayKey}-${t}`;
                       const isTooltipOpen = activeShiftTooltipKey === tooltipKey;
@@ -1233,6 +1240,27 @@ export function VolunteerProfileView({
                       );
                     })}
                   </div>
+                  </div>
+
+                  {mode === 'volunteer' && assignedList.length > 0 && (
+                    <div className="ml-2 flex flex-wrap gap-2 border-t border-border bg-dark3/45 px-3 py-2.5 sm:px-4">
+                      {assignedList.map((shiftKey) => {
+                        const areaName = shiftAreasBySlot?.[`${dayKey}:${shiftKey}`] || null;
+                        return (
+                          <span
+                            key={shiftKey}
+                            className={cn(
+                              'inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold',
+                              areaName ? 'bg-[#4d7cfe]/15 text-[#4d7cfe]' : 'bg-dark2 text-text-dim'
+                            )}
+                          >
+                            <span className="material-symbols-outlined text-[15px]" aria-hidden="true">location_on</span>
+                            {shiftKey} · {areaName || 'Área pendiente'}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}

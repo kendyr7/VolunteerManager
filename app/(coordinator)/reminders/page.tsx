@@ -42,6 +42,7 @@ import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
+import { EventDayCards, EventShiftCard } from "@/components/EventDayCards";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -1214,59 +1215,19 @@ export default function RemindersPage() {
                 className={cn("p-4 md:p-5 flex-col gap-4 md:gap-5 overflow-hidden", "flex", (isMobile && isScrolled) ? "absolute top-full left-[-1px] right-[-1px] bg-dark2/95 backdrop-blur-xl border border-border border-t-0 rounded-b-md shadow-2xl z-40" : "")}
               >
 
-          {/* FILA 1: FECHA */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-text-dim tracking-widest uppercase">FECHA</span>
-            </div>
-            <div className="grid grid-cols-5 sm:grid-cols-8 md:flex md:flex-wrap w-full gap-2">
-              {EVENT_DAYS.map((day, index) => {
-                const dayCounts = shiftCounts[day.key] || { T1: 0, T2: 0, T3: 0, T4: 0 };
-                const totalVolunteersOnDay = Object.values(dayCounts).reduce((acc, count) => acc + count, 0);
-                const isSelected = selectedDayKey === day.key;
-                const dayAbbr = day.label.substring(0, 3); // e.g. 'jue', 'vie', 'sáb'
-
-                const bgColors = [
-                  'bg-[#10a562]',
-                  'bg-[#4aa9df]',
-                  'bg-[#f1c130]',
-                  'bg-[#d54134]',
-                  'bg-[#981e32]',
-                  'bg-[#2c44c2]',
-                  'bg-[#f1c130]',
-                  'bg-[#ed1b24]'
-                ];
-                const cardBg = bgColors[index % bgColors.length];
-
-                return (
-                  <button
-                    key={day.key}
-                    onClick={() => {
-                      if (selectedDayKey === day.key) {
-                        setSelectedDayKey("");
-                        setSelectedShiftId("");
-                      } else {
-                        setSelectedDayKey(day.key);
-                        setSelectedShiftId("");
-                      }
-                    }}
-                    className={`relative overflow-hidden shrink-0 flex flex-col items-center justify-center gap-1 p-2 md:px-4 md:py-2.5 rounded-lg md:rounded-sm border transition-all md:w-auto md:flex-1 w-full bg-dark3 ${isSelected
-                      ? 'border-text text-text shadow-sm scale-105 z-10'
-                      : 'border-border text-text-dim opacity-80 hover:opacity-100 hover:scale-[1.02]'
-                      }`}
-                  >
-                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${cardBg} opacity-90`} />
-                    <span className={`font-inter font-bold text-[10px] md:text-[9px] uppercase tracking-widest ${isSelected ? 'text-text' : 'text-text-dim'}`}>
-                      {dayAbbr}
-                    </span>
-                    <span className="text-base md:text-sm font-black leading-none drop-shadow-sm">{day.dateNum}</span>
-                    <div className={`w-1.5 h-1.5 rounded-full absolute top-1.5 right-1.5 md:static md:mt-1 ${totalVolunteersOnDay > 0 ? 'bg-[#10a562] shadow-[0_0_6px_rgba(16,165,98,0.6)]' : 'bg-neutral-300 dark:bg-neutral-700'
-                      }`} />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <EventDayCards
+            days={EVENT_DAYS}
+            selectedDayKey={selectedDayKey}
+            allowClear
+            getDayCount={(dayKey) => {
+              const counts = shiftCounts[dayKey] || { T1: 0, T2: 0, T3: 0, T4: 0 };
+              return Object.values(counts).reduce((total, count) => total + count, 0);
+            }}
+            onDayChange={(dayKey) => {
+              setSelectedDayKey(dayKey);
+              setSelectedShiftId("");
+            }}
+          />
 
           {/* Separador y FILA 2: TURNOS solo si no está el selector rápido visible */}
           <AnimatePresence initial={false}>
@@ -1352,8 +1313,11 @@ export default function RemindersPage() {
                     const shiftTimeLabel = getOfficialShiftTime(selectedDayKey, t).timeLabel;
 
                     return (
-                      <button
+                      <EventShiftCard
                         key={t}
+                        shiftKey={t}
+                        count={count}
+                        selected={Boolean(isSelected)}
                         disabled={!selectedDayKey}
                         onClick={() => {
                           if (selectedDayKey) {
@@ -1365,14 +1329,9 @@ export default function RemindersPage() {
                           }
                         }}
                         title={!selectedDayKey ? "Por favor selecciona una fecha primero" : `Seleccionar ${shiftTimeLabel}`}
-                        className={`shrink-0 flex items-center justify-center gap-1.5 px-2 md:px-4.5 py-2.5 rounded-sm border text-xs transition-all w-full md:w-auto ${buttonClass}`}
-                      >
-                        <span className="font-inter font-bold">{t}</span>
-                        <div className="w-[1px] h-3 bg-current opacity-20" />
-                        <span className={`font-inter font-bold ${countTextClass}`}>
-                          {count}
-                        </span>
-                      </button>
+                        className={buttonClass}
+                        countClassName={countTextClass}
+                      />
                     );
                   })}
                 </div>

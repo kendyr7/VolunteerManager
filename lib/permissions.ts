@@ -206,6 +206,10 @@ export function canArchiveVolunteer() {
   return hasCapability(currentSnapshot, 'archive_volunteer');
 }
 
+export function canManageOwnAreaCoverage() {
+  return hasCapability(currentSnapshot, 'view_area_coverage', currentSnapshot.committeeId);
+}
+
 export function canManageUsers() {
   return hasCapability(currentSnapshot, 'manage_platform_users');
 }

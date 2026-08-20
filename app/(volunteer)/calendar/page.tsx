@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { ShiftCalendar, VolunteerInfo } from "@/components/ShiftCalendar";
 import { verifySessionToken } from "@/lib/auth";
+import { VolunteerScheduleService } from "@/lib/services/volunteer-schedule.service";
 
 export const metadata = {
   title: "Mi Calendario | Volunteer Manager",
@@ -27,16 +28,13 @@ export default async function CalendarPage() {
     )
     : await createClient();
 
-  const [{ data: volunteer, error }, { data: initialShifts }] = await Promise.all([
+  const [{ data: volunteer, error }, initialShifts] = await Promise.all([
     supabase
       .from('volunteers')
       .select('*, committees(name)')
       .eq('id', volunteerId)
       .maybeSingle(),
-    supabase
-      .from('shifts')
-      .select('*')
-      .eq('volunteer_id', volunteerId)
+    VolunteerScheduleService.getSchedule(volunteerId)
   ]);
 
   if (error || !volunteer) {
@@ -73,7 +71,7 @@ export default async function CalendarPage() {
 
       {/* Main Content - Full 100% Width */}
       <main className="w-full px-4 sm:px-6 lg:px-8 mt-4 flex-1">
-        <ShiftCalendar volunteerId={volunteerId} volunteerInfo={volunteerInfo} initialShifts={initialShifts || []} />
+        <ShiftCalendar volunteerId={volunteerId} volunteerInfo={volunteerInfo} initialShifts={initialShifts} />
       </main>
     </div>
   );
