@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -86,11 +86,19 @@ export default function CoordinatorDashboard() {
   }, [requirementsByCommittee]);
 
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
+  const [hoveredHeatmapDay, setHoveredHeatmapDay] = useState<string | null>(null);
   const [chartMetric, setChartMetric] = useState<'volunteers' | 'shifts'>('volunteers');
   const [selectedHeatmapCommittee, setSelectedHeatmapCommittee] = useState<string>('todos');
+  const [isHeatmapFullscreen, setIsHeatmapFullscreen] = useState<boolean>(false);
+  const [autoRotateInterval, setAutoRotateInterval] = useState<number>(0); // 0 = OFF, 5, 10, 15, 30
+  const [rotateProgress, setRotateProgress] = useState<number>(0);
   const [activeKpiInfo, setActiveKpiInfo] = useState<{ title: string; explanation: string; formula: string } | null>(null);
   const [greeting, setGreeting] = useState<DashboardGreeting | null>(null);
   const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
+  const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
+  const [userCommittee, setUserCommittee] = useState<string>('');
+  const [permTick, setPermTick] = useState(0);
+  const [operationalData, setOperationalData] = useState<DashboardOperationalData | null>(null);
 
   const supabase = createClient();
 
@@ -106,7 +114,143 @@ export default function CoordinatorDashboard() {
     [rawVolunteers]
   );
 
+  const availableHeatmapCommittees = useMemo(() => {
+    const active = committeesList
+      .filter((comm: any) => (comm.status || '').toLowerCase() !== 'archived')
+      .map((comm: any) => comm.name);
+    return ['todos', ...active];
+  }, [committeesList]);
 
+  const currentCommitteeIndex = useMemo(() => {
+    const idx = availableHeatmapCommittees.indexOf(selectedHeatmapCommittee);
+    return idx >= 0 ? idx : 0;
+  }, [availableHeatmapCommittees, selectedHeatmapCommittee]);
+
+  const handlePrevCommittee = useCallback(() => {
+    if (!canViewGlobalReports()) return;
+    const newIndex = (currentCommitteeIndex - 1 + availableHeatmapCommittees.length) % availableHeatmapCommittees.length;
+    setSelectedHeatmapCommittee(availableHeatmapCommittees[newIndex]);
+  }, [currentCommitteeIndex, availableHeatmapCommittees]);
+
+  const handleNextCommittee = useCallback(() => {
+    if (!canViewGlobalReports()) return;
+    const newIndex = (currentCommitteeIndex + 1) % availableHeatmapCommittees.length;
+    setSelectedHeatmapCommittee(availableHeatmapCommittees[newIndex]);
+  }, [currentCommitteeIndex, availableHeatmapCommittees]);
+
+  const ROTATE_OPTIONS = useMemo(() => [0, 30, 60, 300], []);
+
+  const getAutoRotateLabel = useCallback((seconds: number) => {
+    if (seconds === 0) return 'OFF';
+    if (seconds === 30) return '30 seg';
+    if (seconds === 60) return '1 min';
+    if (seconds === 300) return '5 min';
+    return `${seconds}s`;
+  }, []);
+
+  const cycleAutoRotate = useCallback(() => {
+    setAutoRotateInterval(curr => {
+      const curIdx = ROTATE_OPTIONS.indexOf(curr);
+      const nextIdx = (curIdx + 1) % ROTATE_OPTIONS.length;
+      const nextVal = ROTATE_OPTIONS[nextIdx];
+      setRotateProgress(nextVal);
+      return nextVal;
+    });
+  }, [ROTATE_OPTIONS]);
+
+  useEffect(() => {
+    if (!isHeatmapFullscreen || autoRotateInterval <= 0 || !canViewGlobalReports()) {
+      setRotateProgress(0);
+      return;
+    }
+
+    setRotateProgress(autoRotateInterval);
+    const timer = setInterval(() => {
+      setRotateProgress(prev => {
+        if (prev <= 1) {
+          handleNextCommittee();
+          return autoRotateInterval;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isHeatmapFullscreen, autoRotateInterval, handleNextCommittee]);
+
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+
+    // Minimum swipe distance threshold (35px) and ensure horizontal intent
+    if (Math.abs(deltaX) > 35 && Math.abs(deltaX) > Math.abs(deltaY) * 1.15) {
+      if (deltaX > 0) {
+        // Swiped right -> Previous committee
+        handlePrevCommittee();
+      } else {
+        // Swiped left -> Next committee
+        handleNextCommittee();
+      }
+    }
+
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+  }, [handlePrevCommittee, handleNextCommittee]);
+
+  const toggleHeatmapFullscreen = useCallback(() => {
+    setIsHeatmapFullscreen(prev => {
+      const nextState = !prev;
+      if (nextState) {
+        try {
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen?.().catch(() => {});
+          }
+        } catch {}
+      } else {
+        try {
+          if (document.fullscreenElement) {
+            document.exitFullscreen?.().catch(() => {});
+          }
+        } catch {}
+      }
+      return nextState;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isHeatmapFullscreen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrevCommittee();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleNextCommittee();
+      } else if (e.key === 'Escape') {
+        setIsHeatmapFullscreen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isHeatmapFullscreen, handlePrevCommittee, handleNextCommittee]);
 
   useEffect(() => {
     const loadConfirmations = () => {
@@ -127,11 +271,6 @@ export default function CoordinatorDashboard() {
       window.removeEventListener("focus", loadConfirmations);
     };
   }, []);
-
-  const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
-  const [userCommittee, setUserCommittee] = useState<string>('');
-  const [permTick, setPermTick] = useState(0);
-  const [operationalData, setOperationalData] = useState<DashboardOperationalData | null>(null);
 
   const loadOperationalData = useCallback(async (targetCommittee?: string) => {
     try {
@@ -511,13 +650,14 @@ export default function CoordinatorDashboard() {
     return unique.size;
   }, [activeVolunteers, globalShifts, EVENT_DAYS]);
 
-  const globalStats = includeSimulation ? clientGlobalStats : (operationalData?.globalStats ?? clientGlobalStats);
-  const committeeStatus = includeSimulation ? clientCommitteeStatus : (operationalData?.committeeStatus ?? clientCommitteeStatus);
-  const criticalShifts = includeSimulation ? clientCriticalShifts : (operationalData?.criticalShifts ?? clientCriticalShifts);
-  const heatmapMatrix = includeSimulation ? clientHeatmapMatrix : (operationalData?.heatmapMatrix ?? clientHeatmapMatrix);
-  const volsPerDay = includeSimulation ? clientVolsPerDay : (operationalData?.volsPerDay ?? clientVolsPerDay);
-  const shiftsPerDay = includeSimulation ? clientShiftsPerDay : (operationalData?.shiftsPerDay ?? clientShiftsPerDay);
-  const totalVolsWithShifts = includeSimulation ? clientTotalVolsWithShifts : (operationalData?.totalVolsWithShifts ?? clientTotalVolsWithShifts);
+  const isOperationalSynced = !includeSimulation && operationalData && operationalData.effectiveCommitteeScope === (selectedHeatmapCommittee || 'todos');
+  const globalStats = isOperationalSynced ? operationalData.globalStats : clientGlobalStats;
+  const committeeStatus = isOperationalSynced ? operationalData.committeeStatus : clientCommitteeStatus;
+  const criticalShifts = isOperationalSynced ? operationalData.criticalShifts : clientCriticalShifts;
+  const heatmapMatrix = isOperationalSynced ? operationalData.heatmapMatrix : clientHeatmapMatrix;
+  const volsPerDay = isOperationalSynced ? operationalData.volsPerDay : clientVolsPerDay;
+  const shiftsPerDay = isOperationalSynced ? operationalData.shiftsPerDay : clientShiftsPerDay;
+  const totalVolsWithShifts = isOperationalSynced ? operationalData.totalVolsWithShifts : clientTotalVolsWithShifts;
 
   if (dashboardAccess === 'checking') {
     return (
@@ -938,12 +1078,12 @@ export default function CoordinatorDashboard() {
       <motion.div variants={itemVariants} className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/[0.02]">
         {/* Header */}
         <div className="px-5 sm:px-8 py-4 border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
+<div>
             <h3 className="text-text tracking-tight leading-none text-sm font-bold">Mapa de Calor Operativo</h3>
             <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-widest mt-0.5">Cobertura por Día y Turno</p>
           </div>
 
-          {/* Committee Filter Selector */}
+          {/* Committee Filter Selector & Fullscreen Toggle */}
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider hidden sm:inline">Comité:</span>
             {canViewGlobalReports() ? (
@@ -977,6 +1117,16 @@ export default function CoordinatorDashboard() {
                 <span>{selectedHeatmapCommittee || userCommittee || 'Mi Comité'}</span>
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={toggleHeatmapFullscreen}
+              className="h-8 w-8 rounded-lg bg-dark3 border border-border text-text-dim hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors shrink-0"
+              title="Pantalla Completa (Modo Proyección TV)"
+              aria-label="Pantalla completa"
+            >
+              <span className="material-symbols-outlined text-[18px]">fullscreen</span>
+            </button>
           </div>
         </div>
 
@@ -984,11 +1134,23 @@ export default function CoordinatorDashboard() {
         <div className="overflow-x-auto w-full">
           <div className="min-w-full flex">
             <div className="w-16 sm:w-20 shrink-0 bg-dark3 border-r border-border flex flex-col pt-8">
-              {heatmapMatrix.map((dayData) => (
-                <div key={dayData.day} className="flex-1 min-h-[60px] flex items-center justify-center border-b border-border last:border-0 px-1 text-center">
-                  <span className="text-[10px] sm:text-xs font-bold text-text-dim leading-none">{dayData.shortLabel} {dayData.dayLabel}</span>
-                </div>
-              ))}
+              {heatmapMatrix.map((dayData) => {
+                const isHovered = hoveredHeatmapDay === dayData.day;
+                return (
+                  <div
+                    key={dayData.day}
+                    onMouseEnter={() => setHoveredHeatmapDay(dayData.day)}
+                    onMouseLeave={() => setHoveredHeatmapDay(null)}
+                    className={`flex-1 min-h-[60px] flex items-center justify-center border-b border-border last:border-0 px-1 text-center transition-colors duration-150 cursor-pointer ${
+                      isHovered ? 'bg-[#4d7cfe]/15' : ''
+                    }`}
+                  >
+                    <span className={`text-[10px] sm:text-xs font-bold leading-none transition-colors duration-150 ${isHovered ? 'text-[#4d7cfe]' : 'text-text-dim'}`}>
+                      {dayData.shortLabel} {dayData.dayLabel}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
             <div className="flex-1 grid grid-cols-4">
               {['T1', 'T2', 'T3', 'T4'].map((shiftId, shiftIdx) => (
@@ -998,15 +1160,20 @@ export default function CoordinatorDashboard() {
                   </div>
                   {heatmapMatrix.map((dayData) => {
                     const shift = dayData.shifts[shiftIdx];
+                    const isHovered = hoveredHeatmapDay === dayData.day;
                     return (
                       <div
                         key={dayData.day}
-                        className="flex-1 min-h-[60px] flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-1 transition-all duration-300"
+                        onMouseEnter={() => setHoveredHeatmapDay(dayData.day)}
+                        onMouseLeave={() => setHoveredHeatmapDay(null)}
+                        className={`flex-1 min-h-[60px] flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-1 transition-all duration-150 cursor-pointer ${
+                          isHovered ? 'brightness-125 saturate-125' : ''
+                        }`}
                         style={{
-                          backgroundColor: shift.required === 0 ? 'var(--dark3)' :
-                            shift.coverage >= 1 ? 'rgba(20, 184, 166, 0.15)' :
-                              shift.coverage >= 0.7 ? 'rgba(251, 191, 36, 0.15)' :
-                                'rgba(248, 113, 113, 0.15)'
+                          backgroundColor: shift.required === 0 ? (isHovered ? 'var(--dark2)' : 'var(--dark3)') :
+                            shift.coverage >= 1 ? (isHovered ? 'rgba(20, 184, 166, 0.28)' : 'rgba(20, 184, 166, 0.15)') :
+                              shift.coverage >= 0.7 ? (isHovered ? 'rgba(251, 191, 36, 0.28)' : 'rgba(251, 191, 36, 0.15)') :
+                                (isHovered ? 'rgba(248, 113, 113, 0.28)' : 'rgba(248, 113, 113, 0.15)')
                         }}
                       >
                         {shift.required > 0 ? (
@@ -1042,6 +1209,208 @@ export default function CoordinatorDashboard() {
           </div>
         </div>
       </motion.div>
+
+      {/* Heatmap Fullscreen TV / Mobile / Desktop Projection View */}
+      <AnimatePresence>
+        {isHeatmapFullscreen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className="fixed inset-0 z-[99999] bg-dark text-text flex flex-col p-2 sm:p-4 md:p-6 w-screen h-screen overflow-hidden select-none"
+          >
+            {/* Top Bar - Centered Committee Focus without Heatmap Title */}
+            <div className="shrink-0 flex items-center justify-between gap-2 sm:gap-4 pb-2 sm:pb-3 border-b border-border">
+              {/* Left spacer for perfect centering on desktop/tablet */}
+              <div className="hidden md:flex items-center w-24 sm:w-32 shrink-0">
+                <span className="text-[10px] sm:text-xs font-bold text-text-dim uppercase tracking-wider">
+                  Proyección
+                </span>
+              </div>
+
+              {/* Center: Prominent Committee Name & Selector with Navigation Arrows */}
+              <div className="flex items-center gap-1.5 sm:gap-3 flex-1 justify-center max-w-xl mx-auto min-w-0">
+                {canViewGlobalReports() && (
+                  <button
+                    type="button"
+                    onClick={handlePrevCommittee}
+                    className="h-8 w-8 sm:h-10 sm:w-10 md:h-11 md:w-11 rounded-xl bg-dark2 border border-border text-text hover:bg-dark3 hover:border-primary/40 flex items-center justify-center transition-all active:scale-95 shadow-sm group shrink-0"
+                    title="Comité anterior (Flecha Izquierda ◀)"
+                    aria-label="Comité anterior"
+                  >
+                    <span className="material-symbols-outlined text-[20px] sm:text-[24px] md:text-[26px] group-hover:-translate-x-0.5 transition-transform">chevron_left</span>
+                  </button>
+                )}
+
+                <div className="px-3 sm:px-6 py-1 sm:py-2 rounded-xl bg-dark2 border border-border shadow-sm flex flex-col items-center justify-center flex-1 max-w-[380px] sm:max-w-[440px] min-w-0">
+                  <span className="text-xs sm:text-base md:text-xl font-black text-text tracking-tight text-center truncate w-full">
+                    {selectedHeatmapCommittee === 'todos' || selectedHeatmapCommittee === 'all'
+                      ? 'Todos los comités'
+                      : selectedHeatmapCommittee}
+                  </span>
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px] md:text-xs font-bold text-[#4d7cfe] tracking-wider uppercase mt-0.5">
+                    {canViewGlobalReports() ? (
+                      <>
+                        <span>{currentCommitteeIndex + 1} / {availableHeatmapCommittees.length}</span>
+                        {autoRotateInterval > 0 && (
+                          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-extrabold bg-emerald-500/10 px-1 py-0.2 rounded">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Auto: {rotateProgress}s
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span>Tu Comité</span>
+                    )}
+                  </div>
+                </div>
+
+                {canViewGlobalReports() && (
+                  <button
+                    type="button"
+                    onClick={handleNextCommittee}
+                    className="h-8 w-8 sm:h-10 sm:w-10 md:h-11 md:w-11 rounded-xl bg-dark2 border border-border text-text hover:bg-dark3 hover:border-primary/40 flex items-center justify-center transition-all active:scale-95 shadow-sm group shrink-0"
+                    title="Comité siguiente (Flecha Derecha ▶)"
+                    aria-label="Comité siguiente"
+                  >
+                    <span className="material-symbols-outlined text-[20px] sm:text-[24px] md:text-[26px] group-hover:translate-x-0.5 transition-transform">chevron_right</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Right: Auto-Rotate Timer, Legend & Exit Fullscreen Button */}
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                {canViewGlobalReports() && (
+                  <button
+                    type="button"
+                    onClick={cycleAutoRotate}
+                    className={`h-8 sm:h-10 px-2 sm:px-3 rounded-xl border text-[10px] sm:text-xs font-bold flex items-center gap-1 transition-all shadow-sm ${
+                      autoRotateInterval > 0
+                        ? 'bg-[#4d7cfe]/10 border-[#4d7cfe]/40 text-[#4d7cfe]'
+                        : 'bg-dark2 border-border text-text-dim hover:text-text hover:bg-dark3'
+                    }`}
+                    title="Cambiar temporizador de rotación automática (OFF / 30 seg / 1 min / 5 min)"
+                  >
+                    <span className={`material-symbols-outlined text-[16px] sm:text-[18px] ${autoRotateInterval > 0 ? 'animate-spin' : ''}`}>sync</span>
+                    <span className="hidden sm:inline">Auto:</span>
+                    <span>{getAutoRotateLabel(autoRotateInterval)}</span>
+                  </button>
+                )}
+
+                <div className="hidden lg:flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl bg-dark2 border border-border">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2.5 h-2.5 rounded-xs bg-red-500/20 border border-red-500/40" />
+                    <span className="text-[10px] font-bold text-text-dim uppercase">Crítico</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2.5 h-2.5 rounded-xs bg-amber-500/20 border border-amber-500/40" />
+                    <span className="text-[10px] font-bold text-text-dim uppercase">Riesgo</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2.5 h-2.5 rounded-xs bg-emerald-500/20 border border-emerald-500/40" />
+                    <span className="text-[10px] font-bold text-text-dim uppercase">Óptimo</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={toggleHeatmapFullscreen}
+                  className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-dark2 border border-border text-text-dim hover:text-red hover:bg-red-500/10 hover:border-red/30 flex items-center justify-center transition-all active:scale-95 shadow-sm shrink-0"
+                  title="Salir de pantalla completa (Esc)"
+                  aria-label="Salir de pantalla completa"
+                >
+                  <span className="material-symbols-outlined text-[18px] sm:text-[20px]">close_fullscreen</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Heatmap Grid Container - Fits 100% Height and Width without scroll */}
+            <div className="flex-1 min-h-0 min-w-0 w-full flex border border-border bg-dark2 overflow-hidden mt-1.5 sm:mt-3">
+              {/* Day Labels Column */}
+              <div className="w-14 sm:w-20 md:w-28 shrink-0 bg-dark3 border-r border-border flex flex-col pt-7 sm:pt-8 md:pt-9">
+                {heatmapMatrix.map((dayData) => {
+                  const isHovered = hoveredHeatmapDay === dayData.day;
+                  return (
+                    <div
+                      key={dayData.day}
+                      onMouseEnter={() => setHoveredHeatmapDay(dayData.day)}
+                      onMouseLeave={() => setHoveredHeatmapDay(null)}
+                      className={`flex-1 min-h-0 flex items-center justify-center border-b border-border last:border-0 px-1 text-center transition-colors duration-150 cursor-pointer ${
+                        isHovered ? 'bg-[#4d7cfe]/15' : ''
+                      }`}
+                    >
+                      <span className={`text-[10px] sm:text-xs md:text-sm font-bold leading-none transition-colors duration-150 ${isHovered ? 'text-[#4d7cfe]' : 'text-text-dim'}`}>
+                        {dayData.shortLabel} {dayData.dayLabel}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 4 Shift Columns */}
+              <div className="flex-1 min-h-0 grid grid-cols-4">
+                {['T1', 'T2', 'T3', 'T4'].map((shiftId, shiftIdx) => (
+                  <div key={shiftId} className="flex flex-col border-r border-border last:border-0 min-w-0 h-full">
+                    <div className="h-7 sm:h-8 md:h-9 flex flex-col items-center justify-center bg-dark3 border-b border-border shrink-0">
+                      <span className="text-[11px] sm:text-xs md:text-sm font-bold text-text">{shiftId}</span>
+                    </div>
+                    {heatmapMatrix.map((dayData) => {
+                      const shift = dayData.shifts[shiftIdx];
+                      const isHovered = hoveredHeatmapDay === dayData.day;
+                      return (
+                        <div
+                          key={dayData.day}
+                          onMouseEnter={() => setHoveredHeatmapDay(dayData.day)}
+                          onMouseLeave={() => setHoveredHeatmapDay(null)}
+                          className={`flex-1 min-h-0 flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-0.5 sm:p-1 transition-all duration-150 cursor-pointer ${
+                            isHovered ? 'brightness-125 saturate-125' : ''
+                          }`}
+                          style={{
+                            backgroundColor: shift.required === 0 ? (isHovered ? 'var(--dark2)' : 'var(--dark3)') :
+                              shift.coverage >= 1 ? (isHovered ? 'rgba(20, 184, 166, 0.28)' : 'rgba(20, 184, 166, 0.15)') :
+                                shift.coverage >= 0.7 ? (isHovered ? 'rgba(251, 191, 36, 0.28)' : 'rgba(251, 191, 36, 0.15)') :
+                                  (isHovered ? 'rgba(248, 113, 113, 0.28)' : 'rgba(248, 113, 113, 0.15)')
+                          }}
+                        >
+                          {shift.required > 0 ? (
+                            <>
+                              <span className="text-[11px] sm:text-xs md:text-sm font-inter font-bold text-text leading-tight">
+                                {Math.round(shift.coverage * 100)}%
+                              </span>
+                              <span className="text-[9px] sm:text-[10px] md:text-xs font-inter font-bold text-text-dim mt-0.5">
+                                {shift.assigned}/{shift.required}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[10px] sm:text-xs text-muted font-bold">-</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Bottom Bar: Quick Help & Status */}
+            <div className="shrink-0 pt-1.5 sm:pt-2 flex items-center justify-between text-[9px] sm:text-xs text-text-dim font-bold">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="material-symbols-outlined text-[14px] sm:text-[16px] text-[#4d7cfe]">swipe</span>
+                <span className="hidden sm:inline">Desliza o usa ◀ / ▶ para cambiar de comité • Esc para salir</span>
+                <span className="sm:hidden">Desliza o usa ◀ / ▶</span>
+              </div>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span>Días: {heatmapMatrix.length}</span>
+                <span className="text-border">•</span>
+                <span className="text-[#4d7cfe] font-extrabold truncate">VolunteerManager</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* KPI Explanation Modal */}
       <AnimatePresence>
