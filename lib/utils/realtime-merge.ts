@@ -5,6 +5,7 @@ export const NULLABLE_FIELDS = new Set([
   'checked_out_by',
   'notes',
   'reason',
+  'area_id',
   'updated_by',
   'deleted_at'
 ]);

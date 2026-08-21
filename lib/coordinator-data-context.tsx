@@ -25,6 +25,7 @@ import { RealtimeEventQueue } from '@/lib/services/realtime-event-queue';
 import { SupabaseReconnectManager } from '@/lib/services/supabase-reconnect-manager';
 import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
+import { withShiftAreaName } from '@/lib/shift-area';
 
 const STALE_TIME_MS = 60_000;
 
@@ -235,7 +236,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
                 .from('committees')
                 .select('*')
                 .or('status.is.null,status.neq.archived'),
-              fetchAllRows(supabase, 'shifts', '*'),
+              fetchAllRows(supabase, 'shifts', '*, committee_areas(name)'),
               fetchAllRows(
                 supabase,
                 'committee_shift_requirements',
@@ -248,9 +249,10 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           const activeComms = commsData.filter((c: any) => c.status !== 'archived');
           const cleanVols = volsData ?? [];
           const allowedVolunteerIds = new Set(cleanVols.map((v: any) => v.id));
-          const cleanShifts = canViewAll
+          const scopedShifts = canViewAll
             ? (shiftsResult ?? [])
             : (shiftsResult ?? []).filter((s: any) => allowedVolunteerIds.has(s.volunteer_id));
+          const cleanShifts = scopedShifts.map(withShiftAreaName);
 
           setRawVolunteers(cleanVols);
           useVolunteerStore.getState().setInitialVolunteers(cleanVols);
@@ -325,6 +327,13 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           const newRec = payload.new as any;
           const oldRec = payload.old as any;
 
+          const storedShift = newRec?.id
+            ? useVolunteerStore.getState().shiftsMap.get(newRec.id)
+            : null;
+          const areaChanged = payload.eventType === 'UPDATE'
+            && newRec
+            && newRec.area_id !== storedShift?.area_id;
+
           realtimeDebugLogger.addLog({
             traceId,
             stage: 'REALTIME_RECEIVED',
@@ -340,6 +349,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           } else if (payload.eventType && payload.new) {
             eventQueueRef.current?.enqueue(payload.eventType as any, payload.new, 'shifts', traceId);
           }
+          if (areaChanged) void fetchData(true);
         }
       )
       .on(

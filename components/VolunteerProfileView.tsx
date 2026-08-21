@@ -1086,6 +1086,10 @@ export function VolunteerProfileView({
               const assignedListFromProps = shiftsByDay[dayKey] || [];
               const assignedListFromDb = dbShiftRecords.filter(r => r.day_key === dayKey).map(r => r.shift_key);
               const assignedList = Array.from(new Set([...assignedListFromProps, ...assignedListFromDb]));
+              const assignedAreas = assignedList.flatMap((shiftKey) => {
+                const areaName = shiftAreasBySlot?.[`${dayKey}:${shiftKey}`] || null;
+                return areaName ? [{ shiftKey, areaName }] : [];
+              });
               const dayAbbr = d.label.substring(0, 3);
               const bgColors = [
                 'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
@@ -1152,8 +1156,8 @@ export function VolunteerProfileView({
                         ? `Turno ${t} Programado`
                         : `Turno ${t} Disponible`;
                       const areaName = shiftAreasBySlot?.[`${dayKey}:${t}`] || null;
-                      const titleText = active
-                        ? `${baseTitleText} · Área: ${areaName || 'pendiente'}`
+                      const titleText = active && areaName
+                        ? `${baseTitleText} · Área: ${areaName}`
                         : baseTitleText;
 
                       const tooltipKey = `${dayKey}-${t}`;
@@ -1242,23 +1246,17 @@ export function VolunteerProfileView({
                   </div>
                   </div>
 
-                  {mode === 'volunteer' && assignedList.length > 0 && (
+                  {assignedAreas.length > 0 && (
                     <div className="ml-2 flex flex-wrap gap-2 border-t border-border bg-dark3/45 px-3 py-2.5 sm:px-4">
-                      {assignedList.map((shiftKey) => {
-                        const areaName = shiftAreasBySlot?.[`${dayKey}:${shiftKey}`] || null;
-                        return (
-                          <span
-                            key={shiftKey}
-                            className={cn(
-                              'inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold',
-                              areaName ? 'bg-[#4d7cfe]/15 text-[#4d7cfe]' : 'bg-dark2 text-text-dim'
-                            )}
-                          >
-                            <span className="material-symbols-outlined text-[15px]" aria-hidden="true">location_on</span>
-                            {shiftKey} · {areaName || 'Área pendiente'}
-                          </span>
-                        );
-                      })}
+                      {assignedAreas.map(({ shiftKey, areaName }) => (
+                        <span
+                          key={shiftKey}
+                          className="inline-flex min-h-7 items-center gap-1.5 rounded-full bg-[#4d7cfe]/15 px-2.5 py-1 text-[11px] font-bold text-[#4d7cfe]"
+                        >
+                          <span className="material-symbols-outlined text-[15px]" aria-hidden="true">location_on</span>
+                          {shiftKey} · {areaName}
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>

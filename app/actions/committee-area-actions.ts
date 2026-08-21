@@ -12,6 +12,7 @@ import {
   CommitteeAreaInput,
   CommitteeAreaService,
 } from '@/lib/services/committee-area.service';
+import { CommitteeAreaQueryService } from '@/lib/services/committee-area-query.service';
 
 function actorFrom(sessionUser: Awaited<ReturnType<typeof requireCapability>>) {
   return {
@@ -24,6 +25,7 @@ function actorFrom(sessionUser: Awaited<ReturnType<typeof requireCapability>>) {
 function revalidateAreaManagement() {
   revalidatePath('/shifts');
   revalidatePath('/shifts/areas');
+  revalidatePath('/areas');
 }
 
 async function requireAreaCapability(areaId: string, capability: Capability) {
@@ -82,4 +84,8 @@ export async function assignVolunteerAreasAction(shiftIds: string[], areaId: str
   const result = await CommitteeAreaService.assignShiftAreas(scope, areaId, actorFrom(sessionUser));
   if (result.success) revalidateAreaManagement();
   return result;
+}
+
+export async function getCommitteeAreaManagementDataAction(committeeSlugOrId?: string) {
+  return await CommitteeAreaQueryService.getManagementData(committeeSlugOrId);
 }

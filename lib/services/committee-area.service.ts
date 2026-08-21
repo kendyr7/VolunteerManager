@@ -360,15 +360,6 @@ export class CommitteeAreaService {
         .in('id', previousAreaIds);
       for (const previousArea of previousAreas || []) previousAreaNames.set(previousArea.id, previousArea.name);
     }
-    const { data, error } = await supabase
-      .from('shifts')
-      .update({ area_id: normalizedAreaId })
-      .in('id', changedAssignments.map((assignment) => assignment.id))
-      .select('id');
-    if (error || !data || data.length !== changedAssignments.length) {
-      return { success: false, error: errorMessage(error, 'No se pudieron actualizar todas las asignaciones') };
-    }
-
     const auditRows = changedAssignments.map((assignment) => {
       const previousAreaName = assignment.areaId
         ? previousAreaNames.get(assignment.areaId) || 'Área anterior'
@@ -398,8 +389,14 @@ export class CommitteeAreaService {
         target_id: assignment.volunteerId,
       };
     });
-    const { error: auditError } = await supabase.from('activity_logs').insert(auditRows);
-    if (auditError) console.error('[CommitteeAreaService] Could not write assignment audit logs:', auditError.message);
+    const { data, error } = await supabase.rpc('assign_shift_areas_with_audit', {
+      p_shift_ids: changedAssignments.map((assignment) => assignment.id),
+      p_area_id: normalizedAreaId,
+      p_audit_rows: auditRows,
+    });
+    if (error || data !== changedAssignments.length) {
+      return { success: false, error: errorMessage(error, 'No se pudieron actualizar todas las asignaciones') };
+    }
 
     return { success: true, assignedCount: changedAssignments.length };
   }

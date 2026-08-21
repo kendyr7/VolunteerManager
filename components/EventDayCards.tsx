@@ -8,23 +8,15 @@ export interface EventDayCardOption {
   dateNum: string;
 }
 
-const ACCENT_COLORS = [
-  'bg-[#10a562]',
-  'bg-[#4aa9df]',
-  'bg-[#f1c130]',
-  'bg-[#d54134]',
-  'bg-[#981e32]',
-  'bg-[#2c44c2]',
-  'bg-[#f1c130]',
-  'bg-[#ed1b24]',
-];
-
 export function EventDayCards({
   days,
   selectedDayKey,
   onDayChange,
   getDayCount,
   allowClear = false,
+  showAllOption = false,
+  allLabel = 'Todas',
+  allKey = '__all__',
   label = 'Fecha',
 }: {
   days: EventDayCardOption[];
@@ -32,15 +24,40 @@ export function EventDayCards({
   onDayChange: (dayKey: string) => void;
   getDayCount?: (dayKey: string) => number;
   allowClear?: boolean;
+  showAllOption?: boolean;
+  allLabel?: string;
+  allKey?: string;
   label?: string;
 }) {
+  const isAllSelected = selectedDayKey === allKey;
+
   return (
-    <div className="space-y-2">
-      <span className="block text-[10px] font-bold uppercase tracking-widest text-text-dim">{label}</span>
-      <div className="grid w-full grid-cols-4 gap-2 sm:grid-cols-8">
-        {days.map((day, index) => {
+    <div className="space-y-1.5">
+      {label && <span className="block text-[10px] font-bold uppercase tracking-widest text-text-dim">{label}</span>}
+      <div className={cn("grid w-full gap-1.5", showAllOption ? "grid-cols-5 sm:grid-cols-9" : "grid-cols-4 sm:grid-cols-8")}>
+        {showAllOption && (
+          <button
+            type="button"
+            onClick={() => onDayChange(allKey)}
+            aria-pressed={isAllSelected}
+            aria-label={allLabel}
+            className={cn(
+              'relative flex w-full min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-md border px-1.5 py-1.5 font-inter transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] cursor-pointer',
+              isAllSelected
+                ? 'z-10 border-text bg-dark text-text shadow-sm'
+                : 'border-border bg-dark3 text-text-dim hover:text-text hover:border-text-dim/60'
+            )}
+          >
+            <span className={cn('text-[9px] font-bold uppercase tracking-wider', isAllSelected ? 'text-text' : 'text-text-dim')}>
+              Días
+            </span>
+            <span className="text-xs font-bold leading-none">{allLabel}</span>
+          </button>
+        )}
+
+        {days.map((day) => {
           const selected = selectedDayKey === day.key;
-          const count = getDayCount?.(day.key) || 0;
+          const count = getDayCount?.(day.key) ?? 0;
 
           return (
             <button
@@ -50,24 +67,16 @@ export function EventDayCards({
               aria-pressed={selected}
               aria-label={`${day.label} ${day.dateNum}${count > 0 ? `, ${count} programados` : ''}`}
               className={cn(
-                'relative flex w-full min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-lg border bg-dark3 p-2 text-text-dim transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] md:rounded-sm md:px-3 md:py-2.5',
+                'relative flex w-full min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-md border px-1.5 py-1.5 font-inter transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] cursor-pointer',
                 selected
-                  ? 'z-10 scale-105 border-text text-text shadow-sm'
-                  : 'border-border opacity-80 hover:scale-[1.02] hover:opacity-100'
+                  ? 'z-10 border-text bg-dark text-text shadow-sm'
+                  : 'border-border bg-dark3 text-text-dim hover:text-text hover:border-text-dim/60'
               )}
             >
-              <span className={cn('absolute inset-y-0 left-0 w-1.5 opacity-90', ACCENT_COLORS[index % ACCENT_COLORS.length])} />
-              <span className={cn('font-inter text-[10px] font-bold uppercase tracking-widest md:text-[9px]', selected ? 'text-text' : 'text-text-dim')}>
+              <span className={cn('text-[9px] font-bold uppercase tracking-wider', selected ? 'text-text' : 'text-text-dim')}>
                 {day.label.substring(0, 3)}
               </span>
-              <span className="text-base font-black leading-none drop-shadow-sm md:text-sm">{day.dateNum}</span>
-              <span
-                aria-hidden="true"
-                className={cn(
-                  'absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full md:static md:mt-1',
-                  count > 0 ? 'bg-[#10a562] shadow-[0_0_6px_rgba(16,165,98,0.6)]' : 'bg-neutral-300 dark:bg-neutral-700'
-                )}
-              />
+              <span className="text-sm font-black leading-none">{day.dateNum}</span>
             </button>
           );
         })}

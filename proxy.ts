@@ -50,6 +50,7 @@ export function proxy(request: NextRequest) {
     pathname.startsWith('/dashboard') || 
     pathname.startsWith('/volunteers') || 
     pathname.startsWith('/shifts') || 
+    pathname.startsWith('/areas') ||
     pathname.startsWith('/check-in') || 
     pathname.startsWith('/reports') || 
     pathname.startsWith('/reminders') || 
@@ -108,6 +109,7 @@ export const config = {
     '/dashboard',
     '/volunteers',
     '/shifts',
+    '/areas',
     '/check-in',
     '/reports',
     '/reminders',

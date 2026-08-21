@@ -22,7 +22,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn, normalizeSearch } from "@/lib/utils";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
-import { canEditShifts, canManageOwnAreaCoverage } from "@/lib/permissions";
+import { canEditShifts } from "@/lib/permissions";
 import { ShiftSectionTabs } from "@/components/ShiftSectionTabs";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
@@ -146,6 +146,10 @@ export default function ShiftsPage() {
   const searchParams = useSearchParams();
   const requestedSearch = searchParams.get('search')?.trim() || '';
   const requestedView = searchParams.get('view') || '';
+  const requestedCommittee = searchParams.get('committee') || undefined;
+  const requestedArea = searchParams.get('area') || null;
+  const requestedArchived = searchParams.get('archived') === '1';
+  const requestedSubView = searchParams.get('subview') as 'areas' | 'assignments' | 'coverage' | null;
   const removeUrlSearch = useRemoveSearchParam();
   const EVENT_DAYS_RAW = getOperationalEventDays();
   const EVENT_DAYS_DEFAULT = useMemo(() => EVENT_DAYS_RAW.map(date => ({
@@ -161,8 +165,7 @@ export default function ShiftsPage() {
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
-  const [canAccessAreas, setCanAccessAreas] = useState(false);
-  const [viewMode, setViewMode] = useState<'turnos' | 'active' | 'completed'>('active');
+  const [viewMode, setViewMode] = useState<'turnos' | 'active' | 'completed'>('turnos');
   const [checkoutModal, setCheckoutModal] = useState<{ isOpen: boolean; item: any | null }>({ isOpen: false, item: null });
 
   // Reassign State
@@ -180,9 +183,10 @@ export default function ShiftsPage() {
     }
     if (requestedView === 'turnos' || requestedView === 'active' || requestedView === 'completed') {
       setViewMode(requestedView);
+    } else {
+      setViewMode('turnos');
     }
   }, [requestedSearch, requestedView, setAppliedSearch, setInputValue]);
-
   const supabase = createClient();
 
   // ── Shared context cache (no per-page fetch) ──────────────────────────────
@@ -311,14 +315,9 @@ export default function ShiftsPage() {
     const role = localStorage.getItem('mock_role') as any;
     const committee = localStorage.getItem('mock_committee');
     if (role) setCurrentRole(role);
-    setCanAccessAreas(canManageOwnAreaCoverage());
     if (committee && role !== 'Admin') {
       setSelectedCommittees([committee]);
     }
-
-    const refreshAreaPermission = () => setCanAccessAreas(canManageOwnAreaCoverage());
-    window.addEventListener('permissions-changed', refreshAreaPermission);
-    return () => window.removeEventListener('permissions-changed', refreshAreaPermission);
   }, []);
 
 
@@ -511,24 +510,10 @@ export default function ShiftsPage() {
 
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>(buildEmptyShifts);
 
-  const toggleShift = (day: string, turno: string) => {
-    if (!isEditingShifts && currentRole !== 'Lector') return;
-    setShiftsByDay(prev => {
-      const current = prev[day] ?? [];
-      return {
-        ...prev,
-        [day]: current.includes(turno)
-          ? current.filter(t => t !== turno)
-          : [...current, turno],
-      };
-    });
-  };
-
-  // Helper for filtering a single volunteer (used by multiple logic points)
   const matchesFilters = useCallback((v: VolunteerType, searchStr: string, comms: string[], stakes: string[], wards: string[], role: string) => {
     // Role-based isolation
     const userCommittee = localStorage.getItem('mock_committee');
-    if (role === 'Editor' && v.committee !== userCommittee) return false;
+    if (role === 'Editor' && userCommittee && normalizeSearch(v.committee) !== normalizeSearch(userCommittee)) return false;
 
     const searchTerms = searchStr.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
     const normName = normalizeSearch(v.name);
@@ -545,7 +530,7 @@ export default function ShiftsPage() {
       normWard.includes(term)
     );
 
-    const matchesCommittee = comms.length === 0 || comms.includes(v.committee);
+    const matchesCommittee = comms.length === 0 || comms.some(c => normalizeSearch(c) === normCommittee);
     const matchesStake = stakes.length === 0 || stakes.includes(v.stake);
     const matchesWard = wards.length === 0 || wards.includes(v.ward);
 
@@ -1160,7 +1145,8 @@ export default function ShiftsPage() {
       return null;
     }
 
-    const isOpen = !!expanded[key];
+    const isSearchActive = appliedSearch.trim() !== '';
+    const isOpen = !!expanded[key] || isSearchActive;
 
     const dayIndex = EVENT_DAYS.findIndex(d => d.key === key);
     const bgColors = [
@@ -1770,16 +1756,17 @@ export default function ShiftsPage() {
       className="w-full mx-auto pb-32 md:pb-12"
     >
 
-      {/* Sticky Header matching image design */}
-      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 mb-4 pointer-events-auto">
-        <motion.div variants={itemVariants} className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center justify-between gap-3">
-            <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight">Turnos</h1>
+      {/* Sticky Header matching unified design */}
+      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-3.5 mb-4 pointer-events-auto border-b border-border">
+        <motion.div variants={itemVariants} className="flex w-full items-center justify-between gap-2.5 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <h1 className="text-[24px] sm:text-3xl font-black text-text tracking-tight">Turnos</h1>
+
             <button
               type="button"
               onClick={() => setShowCapacityColors(!showCapacityColors)}
               className={cn(
-                "w-[60px] h-7 rounded-full text-[10px] transition-all flex items-center justify-center gap-1 font-inter font-bold border shrink-0 cursor-pointer active:scale-95",
+                "h-8 rounded-full text-[10px] px-2.5 transition-all flex items-center justify-center gap-1 font-inter font-bold border shrink-0 cursor-pointer active:scale-95",
                 showCapacityColors
                   ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30 shadow-sm"
                   : "bg-dark3 text-text-dim border-border hover:text-text"
@@ -1787,18 +1774,23 @@ export default function ShiftsPage() {
               title={showCapacityColors ? "Ocultar colores de capacidad" : "Mostrar colores de capacidad"}
             >
               <span className="material-symbols-outlined text-[14px]">palette</span>
-              <span className="w-6 text-center">{showCapacityColors ? "ON" : "OFF"}</span>
+              <span className="text-center">{showCapacityColors ? "ON" : "OFF"}</span>
             </button>
           </div>
+
           <ShiftSectionTabs
             current={viewMode === 'active' ? 'active' : 'schedule'}
             activeCount={totalActiveCount}
-            showAreas={canAccessAreas}
-            onSelect={(section) => setViewMode(section === 'active' ? 'active' : 'turnos')}
+            onSelect={(section) => {
+              const nextMode = section === 'active' ? 'active' : 'turnos';
+              setViewMode(nextMode);
+              const newUrl = nextMode === 'active' ? '/shifts?view=active' : '/shifts';
+              window.history.replaceState(null, '', newUrl);
+            }}
           />
         </motion.div>
 
-        {/* Search Input matching image */}
+        {/* Search Input */}
         <motion.div variants={itemVariants} className="w-full relative z-10">
           <SmartSearchBar
             value={inputValue}
@@ -1834,18 +1826,26 @@ export default function ShiftsPage() {
         mode="coordinator"
       />
 
-      {/* Lista de días (layout unificado para Programación y En Turno) */}
-      <div className="flex flex-col gap-2 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
-        {EVENT_DAYS.map(d => {
-          const card = renderDayCard(d);
-          return card ? (
-            <motion.div key={d.key} variants={itemVariants} className="w-full">
-              {card}
-            </motion.div>
-          ) : null;
-        })}
-      </div>
-
+      {/* Lista de días con transición suave */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={`shifts-view-${viewMode}-${selectedCommittees.join('-')}`}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="flex flex-col gap-2 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8"
+        >
+          {EVENT_DAYS.map(d => {
+            const card = renderDayCard(d);
+            return card ? (
+              <div key={d.key} className="w-full">
+                {card}
+              </div>
+            ) : null;
+          })}
+        </motion.div>
+      </AnimatePresence>
       <Toast
         message={toast.message}
         type={toast.type}

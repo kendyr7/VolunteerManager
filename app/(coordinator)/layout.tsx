@@ -34,6 +34,7 @@ import {
   canImportData,
   canManageUsers,
   canViewRequests,
+  canManageOwnAreaCoverage,
   getAuthorizationSnapshotCache,
   syncAllPermissionsFromDatabase
 } from "@/lib/permissions";
@@ -89,6 +90,7 @@ function CoordinatorLayoutInner({
     const routeAllowed = (() => {
       if (pathname.startsWith('/users')) return canManageUsers();
       if (pathname.startsWith('/settings/phone')) return canManageUsers();
+      if (pathname.startsWith('/areas')) return canManageOwnAreaCoverage();
       if (pathname.startsWith('/check-in')) return canQrCheckin();
       if (pathname.startsWith('/import')) return canImportData();
       if (pathname.startsWith('/reports')) return canViewReports();
@@ -153,6 +155,7 @@ function CoordinatorLayoutInner({
     { name: "Dashboard", href: "/dashboard", icon: "space_dashboard", roles: ['Admin', 'Editor'] },
     { name: "Voluntarios", href: "/volunteers", icon: "group", roles: ['Admin', 'Editor', 'Lector'] },
     { name: currentRole === 'Lector' ? "Mi Perfil" : "Turnos", href: "/shifts", icon: currentRole === 'Lector' ? "person" : "checklist", roles: ['Admin', 'Editor', 'Lector'] },
+    { name: "Áreas", href: "/areas", icon: "location_on", roles: ['Admin', 'Editor'] },
     { name: "Escanear QR", href: "/check-in", icon: "qr_code_scanner", roles: ['Admin', 'Editor'] },
     { name: "Solicitudes", href: "/replacements", icon: "published_with_changes", roles: ['Admin', 'Editor'] },
     { name: "Avisos", href: "/reminders", icon: "campaign", roles: ['Admin', 'Editor'] },
@@ -171,6 +174,7 @@ function CoordinatorLayoutInner({
     if (item.href === '/dashboard' && !canViewDashboard()) return false;
     if (currentRole === 'Editor') {
       if (item.href === '/volunteers' && !canViewVolunteers()) return false;
+      if (item.href === '/areas' && !canManageOwnAreaCoverage()) return false;
       if (item.href === '/check-in' && !canQrCheckin()) return false;
       if (item.href === '/reminders' && !canSendWhatsappMessages()) return false;
       if (item.href === '/replacements' && !canViewRequests()) return false;
@@ -426,6 +430,7 @@ function CoordinatorLayoutInner({
                     "/dashboard": { activeClass: "bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/40 shadow-[0_0_14px_rgba(77,124,254,0.2)]", iconClass: "text-[#4d7cfe]" },
                     "/volunteers": { activeClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 shadow-[0_0_14px_rgba(16,185,129,0.2)]", iconClass: "text-emerald-600 dark:text-emerald-400" },
                     "/shifts": { activeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/40 shadow-[0_0_14px_rgba(245,158,11,0.2)]", iconClass: "text-amber-600 dark:text-amber-400" },
+                    "/areas": { activeClass: "bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/40 shadow-[0_0_14px_rgba(20,184,166,0.2)]", iconClass: "text-teal-600 dark:text-teal-400" },
                     "/check-in": { activeClass: "bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/40 shadow-[0_0_14px_rgba(236,72,153,0.2)]", iconClass: "text-pink-600 dark:text-pink-400" },
                     "/reminders": { activeClass: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/40 shadow-[0_0_14px_rgba(139,92,246,0.2)]", iconClass: "text-purple-600 dark:text-purple-400" },
                     "/replacements": { activeClass: "bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/40 shadow-[0_0_14px_rgba(20,184,166,0.2)]", iconClass: "text-teal-600 dark:text-teal-400" },

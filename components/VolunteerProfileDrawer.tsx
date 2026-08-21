@@ -17,6 +17,7 @@ import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
 import { updateVolunteerAction, toggleShiftAction } from '@/app/actions/volunteer-actions';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 import { useMobileDrawerNavigation } from '@/lib/use-mobile-drawer-navigation';
+import { getShiftAreaName } from '@/lib/shift-area';
 
 
 export interface VolunteerProfileDrawerProps {
@@ -194,6 +195,21 @@ export function VolunteerProfileDrawer({
     return result;
   }, [activeVolunteer, hasStoreEntry, storeShifts, globalShifts, shiftsData]);
 
+  const shiftAreasBySlot = useMemo(() => {
+    if (!activeVolunteer) return {};
+    const source = hasStoreEntry
+      ? (storeShifts || [])
+      : shiftsData.filter((shift) => shift.volunteer_id === activeVolunteer.id);
+    const areas: Record<string, string | null> = {};
+
+    for (const shift of source) {
+      const areaName = getShiftAreaName(shift);
+      if (areaName) areas[`${shift.day_key}:${shift.shift_key}`] = areaName;
+    }
+
+    return areas;
+  }, [activeVolunteer, hasStoreEntry, shiftsData, storeShifts]);
+
   const prevVolunteerIdRef = useRef<string | null>(null);
 
   // Reset drawer state when volunteer changes
@@ -370,6 +386,7 @@ export function VolunteerProfileDrawer({
                     shiftsByDay={shiftsByDay}
                     checkedInMap={checkedInMap}
                     checkedOutMap={checkedOutMap}
+                    shiftAreasBySlot={shiftAreasBySlot}
                     onToggleShift={handleToggleShift}
                     isEditingShifts={isEditingShifts}
                     canEditShifts={canEditShifts()}

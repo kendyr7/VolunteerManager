@@ -1,21 +1,20 @@
 'use client';
 
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
-type ShiftSection = 'active' | 'schedule' | 'areas';
+export type ShiftSection = 'active' | 'schedule';
 
 export function ShiftSectionTabs({
   current,
   activeCount,
-  showAreas = true,
   onSelect,
   className,
 }: {
   current: ShiftSection;
   activeCount?: number;
-  showAreas?: boolean;
-  onSelect?: (section: Exclude<ShiftSection, 'areas'>) => void;
+  onSelect?: (section: ShiftSection) => void;
   className?: string;
 }) {
   const items: Array<{
@@ -36,22 +35,13 @@ export function ShiftSectionTabs({
       mobileLabel: 'Programación',
       desktopLabel: 'Programación',
     },
-    ...(showAreas
-      ? [{
-          key: 'areas' as const,
-          href: '/shifts/areas',
-          mobileLabel: 'Áreas',
-          desktopLabel: 'Áreas y cobertura',
-        }]
-      : []),
   ];
 
   return (
     <nav
       aria-label="Secciones de turnos"
       className={cn(
-        'grid w-full rounded-full border border-black/5 bg-gray-200 p-1 dark:border-white/10 dark:bg-dark3 sm:flex sm:w-auto',
-        showAreas ? 'grid-cols-3' : 'grid-cols-2',
+        'relative flex shrink-0 rounded-full border border-black/5 bg-gray-200 p-1 dark:border-white/10 dark:bg-dark3 w-auto',
         className
       )}
     >
@@ -59,29 +49,39 @@ export function ShiftSectionTabs({
         const selected = current === item.key;
         const content = (
           <>
-            {item.key === 'active' && (
-              <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75 motion-reduce:animate-none" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-              </span>
+            {selected && (
+              <motion.div
+                layoutId="shift-main-tab-pill"
+                className="absolute inset-0 rounded-full bg-white shadow-sm dark:bg-white"
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              />
             )}
-            <span className="sm:hidden">{item.mobileLabel}</span>
-            <span className="hidden sm:inline">{item.desktopLabel}</span>
+            <span className="relative z-10 flex items-center justify-center gap-1.5">
+              {item.key === 'active' && (
+                <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75 motion-reduce:animate-none" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+              )}
+              <span className="sm:hidden">{item.mobileLabel}</span>
+              <span className="hidden sm:inline">{item.desktopLabel}</span>
+            </span>
           </>
         );
+
         const itemClassName = cn(
-          'flex min-h-8 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 font-inter text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] sm:px-3.5',
+          'relative flex min-h-8 min-w-0 items-center justify-center rounded-full px-2.5 font-inter text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] sm:px-3.5 cursor-pointer',
           selected
-            ? 'bg-white font-extrabold text-black shadow-sm dark:bg-white dark:text-black'
+            ? 'font-extrabold text-black dark:text-black'
             : 'text-text-dim hover:text-text'
         );
 
-        if (item.key !== 'areas' && onSelect) {
+        if (onSelect) {
           return (
             <button
               key={item.key}
               type="button"
-              onClick={() => onSelect(item.key as 'active' | 'schedule')}
+              onClick={() => onSelect(item.key)}
               aria-pressed={selected}
               className={itemClassName}
             >
