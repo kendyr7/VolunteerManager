@@ -31,9 +31,15 @@ export default async function AreasPage({
   const requestedAreaId = params.area || null;
   const initiallyShowArchived = params.archived === '1';
   const initialView = parseAreaView(params.view);
+  const visibleAreas = data.areas.filter((area) => initiallyShowArchived || area.status === 'active');
+  const resolvedAreaId = visibleAreas.find((area) => area.id === requestedAreaId)?.id
+    || visibleAreas.find((area) => area.status === 'active')?.id
+    || visibleAreas[0]?.id
+    || 'none';
 
   return (
     <CommitteeAreasClient
+      key={`${data.selectedCommittee.id}:${resolvedAreaId}`}
       data={data}
       requestedAreaId={requestedAreaId}
       initiallyShowArchived={initiallyShowArchived}

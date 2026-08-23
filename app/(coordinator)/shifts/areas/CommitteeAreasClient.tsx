@@ -18,7 +18,6 @@ import { Toast } from '@/components/ui/toast';
 import { SmartSearchBar } from '@/components/SmartSearchBar';
 import { EventDayCards, EventShiftCard } from '@/components/EventDayCards';
 import { VolunteerProfileDrawer } from '@/components/VolunteerProfileDrawer';
-import { Badge } from '@/components/ui/badge';
 import type {
   AreaManagementData,
   AreaManagementItem,
@@ -170,7 +169,6 @@ function AreaRequirementsEditor({
   busy: boolean;
   onChange: (dayKey: string, shiftKey: ShiftKey, value: number) => void;
 }) {
-  const ALL_SHIFTS: ShiftKey[] = ['T1', 'T2', 'T3', 'T4'];
   const [quickFill, setQuickFill] = useState<Record<ShiftKey, number>>({ T1: 0, T2: 0, T3: 0, T4: 0 });
 
   const totalRequirements = data.eventDays.reduce(
@@ -665,7 +663,7 @@ function AssignmentPanel({
           </div>
 
           {/* Mobile View (Phones) */}
-          <div className="divide-y divide-border/40 md:hidden font-inter">
+          <div className="divide-y divide-border/40 font-inter md:hidden">
             {filteredAssignments.map((assignment) => {
               const area = assignment.areaId ? areasById.get(assignment.areaId) : null;
               const isSelected = selectedIds.has(assignment.id);
@@ -674,31 +672,33 @@ function AssignmentPanel({
                 <div
                   key={assignment.id}
                   className={cn(
-                    'flex items-center justify-between gap-3 p-3 transition-colors',
+                    'grid grid-cols-[auto_minmax(0,1fr)_minmax(116px,42%)] items-center gap-2.5 px-3 py-2.5 transition-colors',
                     isSelected && 'bg-[#4d7cfe]/10'
                   )}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <label className="flex min-h-11 cursor-pointer items-center justify-center">
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleSelection(assignment.id)}
                       aria-label={`Seleccionar a ${assignment.volunteer!.name}`}
-                      className="h-4 w-4 shrink-0 rounded border-border accent-[#4d7cfe]"
+                      className="h-5 w-5 shrink-0 rounded border-border accent-[#4d7cfe]"
                     />
-                    <div className="min-w-0">
-                      <button
-                        type="button"
-                        onClick={() => setProfileVolunteerId(assignment.volunteerId)}
-                        className="block font-bold text-xs text-text truncate text-left"
-                      >
-                        {assignment.volunteer!.name}
-                      </button>
-                      <span className="text-[10px] font-bold text-text-dim">
-                        {assignment.volunteer!.age ? `${assignment.volunteer!.age} años` : 'Edad no reg.'}
-                      </span>
-                    </div>
-                  </div>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setProfileVolunteerId(assignment.volunteerId)}
+                    className="flex min-h-11 min-w-0 flex-col justify-center text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] focus-visible:ring-offset-2 focus-visible:ring-offset-dark2"
+                    aria-label={`Abrir perfil de ${assignment.volunteer!.name}`}
+                  >
+                    <span className="line-clamp-2 text-xs font-bold leading-4 text-text">
+                      {assignment.volunteer!.name}
+                    </span>
+                    <span className="mt-0.5 text-[10px] font-bold leading-4 text-text-dim">
+                      {assignment.volunteer!.age ? `${assignment.volunteer!.age} años` : 'Edad no registrada'}
+                    </span>
+                  </button>
 
                   <Select
                     disabled={busy}
@@ -711,12 +711,15 @@ function AssignmentPanel({
                       if (!success) setAreaOverrides(previousOverrides);
                     }}
                   >
-                    <SelectTrigger className={cn(
-                      'h-7 rounded-lg px-2 text-[11px] font-bold border transition-colors max-w-[150px] shrink-0',
-                      area
-                        ? 'border-[#4d7cfe]/30 bg-[#4d7cfe]/10 text-[#4d7cfe]'
-                        : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-                    )}>
+                    <SelectTrigger
+                      aria-label={`Área asignada a ${assignment.volunteer!.name}`}
+                      className={cn(
+                        'h-11 min-w-0 max-w-none rounded-lg border px-2.5 text-[11px] font-bold transition-colors',
+                        area
+                          ? 'border-[#4d7cfe]/30 bg-[#4d7cfe]/10 text-[#4d7cfe]'
+                          : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                      )}
+                    >
                       <SelectValue>
                         {area ? (
                           <span className="truncate">{area.name}</span>
@@ -753,9 +756,9 @@ function AssignmentPanel({
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:w-auto">
               <Select value={validTargetAreaId} onValueChange={(value) => value && setTargetAreaId(value)}>
-                <SelectTrigger className="h-8 rounded-lg bg-dark3 border-border px-3 text-xs font-bold min-w-[160px]">
+                <SelectTrigger aria-label="Área para asignación en lote" className="h-11 min-w-0 rounded-lg border-border bg-dark3 px-3 text-xs font-bold sm:h-8 sm:min-w-[160px]">
                   <SelectValue>
                     {validTargetAreaId === '__none__' ? 'Sin área' : areasById.get(validTargetAreaId)?.name || 'Selecciona un área'}
                   </SelectValue>
@@ -776,7 +779,7 @@ function AssignmentPanel({
                 type="button"
                 onClick={applyArea}
                 disabled={selectedIds.size === 0 || busy}
-                className="h-8 rounded-lg px-3.5 font-inter font-bold text-xs bg-[#4d7cfe] hover:bg-[#3b6ae0] text-white disabled:opacity-40 cursor-pointer transition-all active:scale-95"
+                className="h-11 rounded-lg bg-[#4d7cfe] px-3.5 font-inter text-xs font-bold text-white transition-all hover:bg-[#3b6ae0] active:scale-95 disabled:opacity-40 sm:h-8"
               >
                 {busy ? 'Aplicando…' : `Asignar a ${selectedIds.size || ''}`}
               </Button>
@@ -864,7 +867,6 @@ function HeatmapCell({
 }
 
 function CoveragePanel({ data, onManageAreas }: { data: AreaManagementData; onManageAreas: () => void }) {
-  const ALL_SHIFTS: ShiftKey[] = ['T1', 'T2', 'T3', 'T4'];
   const activeAreas = data.areas.filter((area) => area.status === 'active');
   const [selectedAreaId, setSelectedAreaId] = useState<string>('__all__');
 
@@ -905,7 +907,7 @@ function CoveragePanel({ data, onManageAreas }: { data: AreaManagementData; onMa
         dayRequired,
       };
     });
-  }, [data, targetAreaIds, ALL_SHIFTS]);
+  }, [data, targetAreaIds]);
 
   const totalAssigned = matrixData.reduce((sum, d) => sum + d.dayAssigned, 0);
   const totalRequired = matrixData.reduce((sum, d) => sum + d.dayRequired, 0);
@@ -937,7 +939,7 @@ function CoveragePanel({ data, onManageAreas }: { data: AreaManagementData; onMa
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <span className="text-xs font-bold text-text shrink-0">Filtrar por Área:</span>
             <Select value={selectedAreaId} onValueChange={(val) => val && setSelectedAreaId(val)}>
-              <SelectTrigger className="h-9 w-full sm:w-[240px] bg-dark3 border-border text-xs font-bold text-text rounded-lg">
+              <SelectTrigger className="h-11 w-full rounded-lg border-border bg-dark3 text-xs font-bold text-text sm:h-9 sm:w-[240px]">
                 <SelectValue placeholder="Todas las áreas">
                   {selectedAreaId === '__all__' ? `Todas las áreas (${activeAreas.length})` : selectedAreaObj?.name}
                 </SelectValue>
@@ -1268,7 +1270,7 @@ export function CommitteeAreasClient({
             value={data.selectedCommittee.slug}
             onValueChange={(committeeSlug) => committeeSlug && refreshTo(null, { committeeSlug, archived: false })}
           >
-            <SelectTrigger id="committee-area-selector" className="h-8 rounded-full bg-dark3 px-3 text-xs font-bold border-border">
+            <SelectTrigger id="committee-area-selector" className="h-11 rounded-full border-border bg-dark3 px-3 text-xs font-bold sm:h-8">
               <SelectValue>
                 {() => data.selectedCommittee.name}
               </SelectValue>
@@ -1328,7 +1330,7 @@ export function CommitteeAreasClient({
                       if (areaId) refreshTo(areaId);
                     }}
                   >
-                    <SelectTrigger className="h-9 w-full sm:w-[260px] bg-dark3 border-border text-xs font-bold text-text rounded-lg">
+                    <SelectTrigger className="h-11 w-full rounded-lg border-border bg-dark3 text-xs font-bold text-text sm:h-9 sm:w-[260px]">
                       <SelectValue placeholder="Selecciona un área">
                         {selectedArea?.name || 'Selecciona un área'}
                       </SelectValue>
@@ -1344,14 +1346,14 @@ export function CommitteeAreasClient({
                 </div>
 
                 {/* Action buttons */}
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex flex-wrap items-center gap-2">
                   {selectedArea && selectedArea.status === 'active' && (
                     <>
                       <button
                         type="button"
                         onClick={() => { setShowEdit(true); setShowCreate(false); }}
                         disabled={busy}
-                        className="px-3 py-1.5 rounded-full font-inter font-bold text-xs bg-dark3 hover:bg-white/10 text-text border border-border transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
+                        className="flex h-11 flex-1 basis-[calc(50%-0.25rem)] items-center justify-center gap-1.5 rounded-full border border-border bg-dark3 px-3 font-inter text-xs font-bold text-text shadow-sm transition-all hover:bg-white/10 active:scale-95 disabled:opacity-50 sm:h-8 sm:flex-none sm:basis-auto"
                       >
                         <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]" aria-hidden="true">edit</span>
                         <span>Editar</span>
@@ -1360,7 +1362,7 @@ export function CommitteeAreasClient({
                         type="button"
                         onClick={handleArchive}
                         disabled={busy}
-                        className="px-3 py-1.5 rounded-full font-inter font-bold text-xs bg-dark3 hover:bg-white/10 text-text-dim hover:text-text border border-border transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
+                        className="flex h-11 flex-1 basis-[calc(50%-0.25rem)] items-center justify-center gap-1.5 rounded-full border border-border bg-dark3 px-3 font-inter text-xs font-bold text-text-dim shadow-sm transition-all hover:bg-white/10 hover:text-text active:scale-95 disabled:opacity-50 sm:h-8 sm:flex-none sm:basis-auto"
                       >
                         <span className="material-symbols-outlined text-[15px] text-text-dim" aria-hidden="true">archive</span>
                         <span>Archivar</span>
@@ -1372,14 +1374,14 @@ export function CommitteeAreasClient({
                       type="button"
                       onClick={handleRestore}
                       disabled={busy}
-                      className="px-3 py-1.5 rounded-full font-inter font-bold text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
+                      className="flex h-11 flex-1 basis-[calc(50%-0.25rem)] items-center justify-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/20 px-3 font-inter text-xs font-bold text-emerald-300 shadow-sm transition-all hover:bg-emerald-500/30 active:scale-95 disabled:opacity-50 sm:h-8 sm:flex-none sm:basis-auto"
                     >
                       <span className="material-symbols-outlined text-[15px]" aria-hidden="true">unarchive</span>
                       <span>Restaurar</span>
                     </button>
                   )}
                   {archivedCount > 0 && (
-                    <label className="flex h-9 cursor-pointer items-center gap-2 rounded-full border border-border bg-dark3 px-3 text-xs font-bold text-text-dim hover:text-text transition-colors">
+                    <label className="flex h-11 flex-1 basis-[calc(50%-0.25rem)] cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-dark3 px-3 text-xs font-bold text-text-dim transition-colors hover:text-text sm:h-9 sm:flex-none sm:basis-auto">
                       <input
                         type="checkbox"
                         checked={showArchived}
@@ -1397,7 +1399,7 @@ export function CommitteeAreasClient({
                     type="button"
                     onClick={() => { setShowCreate(true); setShowEdit(false); }}
                     disabled={showCreate || busy}
-                    className="btn-action h-9 rounded-full px-3.5 font-inter text-xs text-white shadow-sm cursor-pointer"
+                    className="btn-action h-11 flex-1 basis-[calc(50%-0.25rem)] rounded-full px-3.5 font-inter text-xs text-white shadow-sm sm:h-9 sm:flex-none sm:basis-auto"
                   >
                     <span className="material-symbols-outlined text-[16px]" aria-hidden="true">add</span>
                     <span>Nueva área</span>
@@ -1406,10 +1408,14 @@ export function CommitteeAreasClient({
               </div>
 
               {selectedArea && (
-                <div className="flex items-center gap-2 pt-1 text-xs text-text-dim">
-                  <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">info</span>
-                  <span className="truncate">{selectedArea.description || 'Configura la meta de voluntarios requeridos por día y turno.'}</span>
-                  <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-2 text-xs text-text-dim">
+                    <span className="material-symbols-outlined mt-0.5 shrink-0 text-[15px] text-[#4d7cfe]" aria-hidden="true">info</span>
+                    <p className="max-w-[70ch] text-pretty leading-5 [overflow-wrap:anywhere]">
+                      {selectedArea.description || 'Configura la meta de voluntarios requeridos por día y turno.'}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto sm:shrink-0 sm:justify-end">
                     <div className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[#4d7cfe]/30 bg-[#4d7cfe]/10 px-3 text-xs font-bold text-[#4d7cfe] leading-none">
                       <span className="tabular-nums font-extrabold">{selectedArea.assignedCount}</span> asignados
                     </div>
@@ -1536,7 +1542,7 @@ export function CommitteeAreasClient({
                   }}
                   aria-pressed={selected}
                   className={cn(
-                    'relative flex min-h-8 min-w-0 items-center justify-center rounded-full px-3 font-inter text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] sm:px-4 cursor-pointer',
+                    'relative flex min-h-9 min-w-0 items-center justify-center rounded-full px-3 font-inter text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] sm:min-h-8 sm:px-4 cursor-pointer',
                     selected ? 'font-extrabold text-black dark:text-black' : 'text-text-dim hover:text-text'
                   )}
                 >
