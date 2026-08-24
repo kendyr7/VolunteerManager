@@ -31,6 +31,7 @@ import {
   closeWhatsAppConversation,
   touchWhatsAppConversation,
 } from '@/lib/services/whatsapp-conversation-store';
+import { getShiftAreaDetails } from '@/lib/shift-area';
 
 export const runtime = 'nodejs';
 
@@ -70,6 +71,7 @@ type VolunteerRecord = {
   phone?: string | null;
   status?: string | null;
   committee_id?: string | null;
+  pin?: string | null;
   committees?: { name?: string | null } | Array<{ name?: string | null }> | null;
 };
 
@@ -77,18 +79,31 @@ type ShiftRecord = {
   day_key: string;
   shift_key: string;
   area_id?: string | null;
-  committee_areas?: { name?: string | null } | Array<{ name?: string | null }> | null;
+  committee_areas?:
+    | { name?: string | null; description?: string | null }
+    | Array<{ name?: string | null; description?: string | null }>
+    | null;
   checked_in?: boolean | null;
   checked_in_at?: string | null;
   checked_out?: boolean | null;
   checked_out_at?: string | null;
 };
 
-function shiftAreaName(shift: ShiftRecord): string | null {
-  const area = Array.isArray(shift.committee_areas)
-    ? shift.committee_areas[0]
-    : shift.committee_areas;
-  return area?.name || null;
+function compactWhatsAppText(value: string, maxLength = 280): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length <= maxLength
+    ? normalized
+    : `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function formatShiftAreaDetails(shift: ShiftRecord, includeDescription = false): string {
+  const area = getShiftAreaDetails(shift);
+  if (!area) return '📍 Sin área asignada';
+
+  const description = includeDescription && area.description
+    ? `\n${compactWhatsAppText(area.description)}`
+    : '';
+  return `📍 *${area.name}*${description}`;
 }
 
 type ScopedAction = {
@@ -158,6 +173,15 @@ function volunteerFullName(volunteer: VolunteerRecord): string {
   return `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || 'Voluntario';
 }
 
+function phoneMatchesSender(phone: string | null | undefined, senderDigits: string): boolean {
+  const volunteerDigits = (phone || '').replace(/\D/g, '');
+  if (!volunteerDigits || !senderDigits) return false;
+  if (volunteerDigits === senderDigits) return true;
+  if (volunteerDigits.length === 8) return senderDigits === `505${volunteerDigits}`;
+  if (senderDigits.length === 8) return volunteerDigits === `505${senderDigits}`;
+  return false;
+}
+
 function sortShifts(shifts: ShiftRecord[]): ShiftRecord[] {
   return [...shifts].sort((a, b) => {
     const dateComparison = parseDayKeyToDateStr(a.day_key).localeCompare(parseDayKeyToDateStr(b.day_key));
@@ -167,7 +191,7 @@ function sortShifts(shifts: ShiftRecord[]): ShiftRecord[] {
 
 function formatShiftLine(shift: ShiftRecord): string {
   const official = getOfficialShiftTime(shift.day_key, shift.shift_key);
-  return `• *${shift.day_key}* · ${official.name} (${official.timeLabel})\n  📍 ${shiftAreaName(shift) || 'Área pendiente'}`;
+  return `• *${shift.day_key}* · ${official.name} (${official.timeLabel})\n  ${formatShiftAreaDetails(shift)}`;
 }
 
 function getVolunteerRecord(value: unknown): VolunteerRecord | null {
@@ -181,6 +205,32 @@ function getVolunteerCommitteeName(volunteer: VolunteerRecord): string {
     ? volunteer.committees[0]
     : volunteer.committees;
   return committee?.name || 'Servicio';
+}
+
+async function sendVolunteerProfileSelection(to: string, volunteers: VolunteerRecord[]) {
+  const profileRows = volunteers.slice(0, 10).map(volunteer => ({
+    id: encodeAction(volunteer.id, 'home'),
+    title: volunteerFullName(volunteer),
+    description: `Comité: ${getVolunteerCommitteeName(volunteer)}`,
+  }));
+  const profileResult = await sendWhatsAppInteractiveList({
+    to,
+    headerText: 'Selecciona una persona',
+    bodyText: 'Este número está asociado a varios voluntarios. Selecciona el perfil con el que deseas continuar.',
+    buttonText: 'Elegir persona',
+    sections: [{ title: 'Perfiles disponibles', rows: profileRows }],
+  });
+
+  if (profileResult.success) return true;
+
+  const profileList = volunteers
+    .map((volunteer, index) => `${index + 1}. ${volunteerFullName(volunteer)}`)
+    .join('\n');
+  await sendWhatsAppText({
+    to,
+    text: `Este número está asociado a varios voluntarios:\n\n${profileList}\n\nResponde únicamente con el número del perfil con el que deseas continuar.`,
+  });
+  return false;
 }
 
 function isValidMetaSignature(rawBody: string, signature: string | null, appSecret: string): boolean {
@@ -392,14 +442,10 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       const { data: volunteers } = await supabase
         .from('volunteers')
         .select('id, first_name, last_name, phone, status, committee_id, committees(name)')
-        .neq('status', 'archived');
+        .or('status.is.null,status.neq.archived');
 
-      const matchedVols = ((volunteers || []) as VolunteerRecord[]).filter(v => {
-        if (!v.phone) return false;
-        const vDigits = v.phone.replace(/\D/g, '');
-        if (!vDigits || !senderDigits) return false;
-        return senderDigits.endsWith(vDigits.slice(-8)) || vDigits.endsWith(senderDigits.slice(-8));
-      });
+      const matchedVols = ((volunteers || []) as VolunteerRecord[])
+        .filter(volunteer => phoneMatchesSender(volunteer.phone, senderDigits));
 
       const selectedByAction = scopedAction
         ? matchedVols.find(volunteer => volunteer.id === scopedAction.volunteerId)
@@ -431,29 +477,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
           committeeName = getVolunteerCommitteeName(selectedVol);
           selectedSharedProfileByNumber = true;
         } else {
-          // Desambiguar: Enviar menú de selección de perfil vía WhatsApp
-          const profileRows = matchedVols.slice(0, 10).map(v => ({
-            id: encodeAction(v.id, 'home'),
-            title: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
-            description: `Comité: ${getVolunteerCommitteeName(v)}`,
-          }));
-          const profileResult = await sendWhatsAppInteractiveList({
-            to: rawFrom,
-            headerText: 'Selecciona una persona',
-            bodyText: 'Este número está asociado a varios voluntarios. ¿De quién deseas consultar o gestionar los turnos?',
-            buttonText: 'Elegir persona',
-            sections: [{ title: 'Perfiles asociados', rows: profileRows }],
-          });
-
-          if (profileResult.success) {
-            return NextResponse.json({ status: 'success' }, { status: 200 });
-          }
-
-          const profileList = matchedVols.map((v, i) => `${i + 1}. ${v.first_name} ${v.last_name || ''}`).join('\n');
-          await sendWhatsAppText({
-            to: rawFrom,
-            text: `Este número está asociado a varios voluntarios:\n\n${profileList}\n\nResponde únicamente con el número de la persona que deseas consultar.`
-          });
+          await sendVolunteerProfileSelection(rawFrom, matchedVols);
           return NextResponse.json({ status: 'success' }, { status: 200 });
         }
       }
@@ -469,10 +493,13 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
     } else if (scopedAction) {
       const [arg1 = '', arg2 = '', arg3 = '', arg4 = '', arg5 = ''] = scopedAction.args;
       if (scopedAction.action === 'confirm') interactiveId = 'menu_confirm_shift';
+      else if (scopedAction.action === 'forgot_pin') interactiveId = 'menu_forgot_pin';
+      else if (scopedAction.action === 'send_pin') interactiveId = 'send_pin';
       else if (scopedAction.action === 'confirm_page') interactiveId = `confirm_page_${arg1}`;
       else if (scopedAction.action === 'confirm_day') interactiveId = `confirm_date_${arg1}`;
       else if (scopedAction.action === 'confirm_shift') interactiveId = `confirm_shift_${arg1}_${arg2}`;
       else if (scopedAction.action === 'view') interactiveId = 'menu_view_shifts';
+      else if (scopedAction.action === 'areas') interactiveId = 'menu_view_areas';
       else if (scopedAction.action === 'reschedule') interactiveId = 'menu_reschedule';
       else if (scopedAction.action === 'reschedule_source_page') interactiveId = `reschedule_source_page_${arg1}`;
       else if (scopedAction.action === 'reschedule_from') interactiveId = `reschedule_from_${arg1}_${arg2}`;
@@ -482,6 +509,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       else if (scopedAction.action === 'reschedule_reason') interactiveId = `reschedule_reason_${arg1}__${arg2}__${arg3}__${arg4}__${arg5}`;
       else if (scopedAction.action === 'contact') interactiveId = 'menu_contact_coordinator';
       else if (scopedAction.action === 'qr') interactiveId = 'menu_generate_qr';
+      else if (scopedAction.action === 'switch_profile') interactiveId = 'menu_switch_profile';
       else if (scopedAction.action === 'end') interactiveId = 'menu_end_session';
     } else if (messageType === 'interactive') {
       const interactive = message.interactive;
@@ -494,22 +522,180 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       interactiveId = message.button?.payload || message.button?.text || '';
     } else if (messageType === 'text' && !selectedSharedProfileByNumber) {
       const textContent = (message.text?.body || '').trim().toLowerCase();
-      if (textContent === '1' || textContent.includes('confirmar mi turno') || textContent === 'confirmar') {
+      if (textContent === '1' || textContent.includes('olvide mi pin') || textContent.includes('olvidé mi pin') || textContent === 'pin') {
+        interactiveId = 'menu_forgot_pin';
+      } else if (textContent === '2' || textContent.includes('confirmar mi turno') || textContent === 'confirmar') {
         interactiveId = 'menu_confirm_shift';
-      } else if (textContent === '2' || textContent.includes('ver mis turnos') || textContent.includes('mis turnos')) {
+      } else if (textContent === '3' || textContent.includes('ver mis turnos') || textContent.includes('mis turnos')) {
         interactiveId = 'menu_view_shifts';
-      } else if (textContent === '3' || textContent.includes('solicitar cambio') || textContent.includes('reagendar')) {
+      } else if (textContent.includes('mis areas') || textContent.includes('mis áreas') || textContent === 'areas' || textContent === 'áreas') {
+        interactiveId = 'menu_view_areas';
+      } else if (textContent === '4' || textContent.includes('solicitar cambio') || textContent.includes('reagendar')) {
         interactiveId = 'menu_reschedule';
-      } else if (textContent === '4' || textContent.includes('contactar coordinador') || textContent.includes('coordinador')) {
+      } else if (textContent === '5' || textContent.includes('contactar coordinador') || textContent.includes('coordinador')) {
         interactiveId = 'menu_contact_coordinator';
-      } else if (textContent === '5' || textContent.includes('codigo qr') || textContent.includes('código qr') || textContent === 'qr') {
+      } else if (textContent === '6' || textContent.includes('codigo qr') || textContent.includes('código qr') || textContent === 'qr') {
         interactiveId = 'menu_generate_qr';
-      } else if (textContent === '6' || textContent.includes('finalizar conversacion') || textContent.includes('finalizar conversación')) {
+      } else if (textContent === '7' || textContent.includes('cambiar perfil') || textContent.includes('elegir perfil')) {
+        interactiveId = 'menu_switch_profile';
+      } else if (textContent === '8' || textContent.includes('finalizar conversacion') || textContent.includes('finalizar conversación')) {
         interactiveId = 'menu_end_session';
       }
     }
 
     // 2. Process Actions
+    if (interactiveId === 'menu_forgot_pin') {
+      if (!targetVolId) {
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: 'No encontramos un perfil activo asociado a este número. Solicita ayuda a tu coordinador.'
+        });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      const recoveryPrompt = await sendWhatsAppInteractiveButtons({
+        to: rawFrom,
+        headerText: 'Recuperación de PIN',
+        bodyText: `Vas a recibir el PIN de *${selectedVolunteerName}* en este mismo número de WhatsApp registrado. ¿Deseas continuar?`,
+        footerText: 'No compartas tu PIN con otras personas.',
+        buttons: [
+          { id: encodeAction(targetVolId, 'send_pin'), title: 'Enviar mi PIN' },
+          { id: encodeAction(targetVolId, 'home'), title: 'Cancelar' },
+        ],
+      });
+
+      if (!recoveryPrompt.success) {
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: `${firstName}, responde *PIN* para volver a intentar la recuperación o abre el menú principal.`
+        });
+      }
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
+    if (interactiveId === 'send_pin') {
+      if (!targetVolId) {
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: 'No pudimos validar la recuperación de forma segura. Solicita ayuda a tu coordinador.'
+        });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      const [targetRecoveryResult, phoneOwnersResult] = await Promise.all([
+        supabase
+          .from('volunteers')
+          .select('id, first_name, last_name, phone, pin, status')
+          .eq('id', targetVolId)
+          .or('status.is.null,status.neq.archived')
+          .maybeSingle(),
+        supabase
+          .from('volunteers')
+          .select('id, phone, status')
+          .or('status.is.null,status.neq.archived'),
+      ]);
+      const senderProfiles = ((phoneOwnersResult.data || []) as VolunteerRecord[])
+        .filter(volunteer => phoneMatchesSender(volunteer.phone, senderDigits));
+      const targetRecoveryVolunteer = targetRecoveryResult.data as VolunteerRecord | null;
+      const selectedProfileBelongsToSender = senderProfiles.some(profile => profile.id === targetVolId);
+      const recoveryVolunteer = selectedProfileBelongsToSender
+        && targetRecoveryVolunteer
+        && phoneMatchesSender(targetRecoveryVolunteer.phone, senderDigits)
+        ? targetRecoveryVolunteer
+        : null;
+
+      if (targetRecoveryResult.error || phoneOwnersResult.error || !recoveryVolunteer?.pin) {
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: 'No pudimos validar la recuperación para el perfil seleccionado. Vuelve al menú y elige nuevamente la persona.'
+        });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      const recoveryWindowStart = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      const { data: recentRecovery, error: recoveryRateLimitError } = await supabase
+        .from('activity_logs')
+        .select('id')
+        .eq('target_id', recoveryVolunteer.id)
+        .eq('action_type', 'Seguridad')
+        .ilike('details', '%"operation":"whatsapp_pin_recovery"%')
+        .gte('created_at', recoveryWindowStart)
+        .limit(1);
+
+      if (recoveryRateLimitError) {
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: 'No pudimos verificar el límite de seguridad en este momento. Inténtalo más tarde.'
+        });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+      if (recentRecovery && recentRecovery.length > 0) {
+        await sendWhatsAppInteractiveButtons({
+          to: rawFrom,
+          bodyText: `El PIN de *${volunteerFullName(recoveryVolunteer)}* ya fue enviado recientemente. Por seguridad, espera 15 minutos antes de solicitarlo otra vez.`,
+          buttons: [{ id: encodeAction(recoveryVolunteer.id, 'home'), title: 'Volver al menú' }],
+        });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      let pinDelivery = await sendWhatsAppInteractiveButtons({
+        to: rawFrom,
+        headerText: 'Tu PIN de acceso',
+        bodyText: `El PIN de *${volunteerFullName(recoveryVolunteer)}* es *${recoveryVolunteer.pin}*.\n\nÚsalo para iniciar sesión y no lo compartas con nadie.`,
+        footerText: 'Este mensaje se envió únicamente al número registrado.',
+        buttons: [
+          { id: encodeAction(recoveryVolunteer.id, 'view'), title: 'Consultar turnos' },
+          { id: encodeAction(recoveryVolunteer.id, 'end'), title: 'Finalizar' },
+        ],
+      });
+      if (!pinDelivery.success) {
+        pinDelivery = await sendWhatsAppText({
+          to: rawFrom,
+          text: `El PIN de *${volunteerFullName(recoveryVolunteer)}* es *${recoveryVolunteer.pin}*.\n\nÚsalo para iniciar sesión y no lo compartas con nadie.`
+        });
+      }
+
+      if (pinDelivery.success) {
+        await writeWhatsAppVolunteerAudit(supabase, {
+          volunteerId: recoveryVolunteer.id,
+          volunteerName: volunteerFullName(recoveryVolunteer),
+          actionType: 'Seguridad',
+          description: 'Recuperó su PIN de acceso por WhatsApp',
+          wamid,
+          context: {
+            channel: 'WhatsApp',
+            operation: 'whatsapp_pin_recovery',
+          },
+        });
+      }
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
+    if (interactiveId === 'menu_switch_profile') {
+      const { data: volunteers, error: profilesError } = await supabase
+        .from('volunteers')
+        .select('id, first_name, last_name, phone, status, committee_id, committees(name)')
+        .or('status.is.null,status.neq.archived');
+      const senderProfiles = ((volunteers || []) as VolunteerRecord[])
+        .filter(volunteer => phoneMatchesSender(volunteer.phone, senderDigits));
+
+      if (profilesError || senderProfiles.length === 0) {
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: 'No pudimos consultar los perfiles asociados a este número. Inténtalo nuevamente.',
+        });
+      } else if (senderProfiles.length === 1) {
+        await sendWhatsAppInteractiveButtons({
+          to: rawFrom,
+          bodyText: `Este número solo tiene un perfil activo: *${volunteerFullName(senderProfiles[0])}*.`,
+          buttons: [{ id: encodeAction(senderProfiles[0].id, 'home'), title: 'Volver al menú' }],
+        });
+      } else {
+        await sendVolunteerProfileSelection(rawFrom, senderProfiles);
+      }
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
     if (interactiveId === 'menu_end_session') {
       try {
         await closeWhatsAppConversation(supabase, senderDigits, 'user_requested');
@@ -577,14 +763,14 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       if (!targetVolId) {
         await sendWhatsAppText({
           to: rawFrom,
-          text: `Hola. No encontramos tu número de teléfono registrado como voluntario activo. Por favor contacta al administrador.`
+          text: `Hola. No encontramos tu número de teléfono registrado como voluntario activo. Por favor, contacta al administrador.`
         });
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
 
       const { data: userShifts } = await supabase
         .from('shifts')
-        .select('day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at, area_id, committee_areas(name)')
+        .select('day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at, area_id, committee_areas(name, description)')
         .eq('volunteer_id', targetVolId);
 
       if (!userShifts || userShifts.length === 0) {
@@ -606,7 +792,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
           const shiftInfo = getOfficialShiftTime(selectedDayKey, shift.shift_key);
           await sendWhatsAppInteractiveButtons({
             to: rawFrom,
-            bodyText: `${firstName}, vas a confirmar:\n\n*${selectedDayKey}* · ${shiftInfo.name}\n${shiftInfo.timeLabel}\n📍 ${shiftAreaName(shift) || 'Área pendiente'}`,
+            bodyText: `${firstName}, vas a confirmar:\n\n*${selectedDayKey}* · ${shiftInfo.name}\n${shiftInfo.timeLabel}\n${formatShiftAreaDetails(shift, true)}`,
             buttons: [{
               id: encodeAction(targetVolId, 'confirm_shift', shift.day_key, shift.shift_key),
               title: 'Sí, confirmar',
@@ -621,7 +807,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
 
           const btnRes = await sendWhatsAppInteractiveList({
             to: rawFrom,
-            bodyText: `¿Qué turno deseas confirmar para la fecha *${selectedDayKey}*?`,
+            bodyText: `¿Qué turno deseas confirmar para *${selectedDayKey}*?`,
             buttonText: 'Elegir turno',
             sections: [{ title: 'Turnos asignados', rows }],
           });
@@ -630,7 +816,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
             const optionsText = dayShifts.map(s => `• ${s.shift_key}`).join('\n');
             await sendWhatsAppText({
               to: rawFrom,
-              text: `¿Qué turno deseas confirmar para el *${selectedDayKey}*?\n\n${optionsText}`
+              text: `¿Qué turno deseas confirmar para *${selectedDayKey}*?\n\n${optionsText}`
             });
           }
         }
@@ -707,9 +893,13 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
             shiftHours: shiftInfo.timeLabel,
           },
         });
-        await sendWhatsAppText({
+        await sendWhatsAppInteractiveButtons({
           to: rawFrom,
-          text: `Gracias, ${firstName}. Confirmamos tu asistencia para *${dayKey}*, ${shiftInfo.name} (${shiftInfo.timeLabel}).\n📍 ${shiftAreaName(selectedShift) || 'Área pendiente'} ✅`
+          bodyText: `Gracias, ${firstName}. Confirmamos tu asistencia para *${dayKey}*, ${shiftInfo.name} (${shiftInfo.timeLabel}).\n${formatShiftAreaDetails(selectedShift)} ✅`,
+          buttons: [
+            { id: encodeAction(targetVolId, 'view'), title: 'Consultar turnos' },
+            { id: encodeAction(targetVolId, 'home'), title: 'Volver al menú' },
+          ],
         });
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
@@ -725,7 +915,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
           const shiftInfo = getOfficialShiftTime(dayKey, shift.shift_key);
           await sendWhatsAppInteractiveButtons({
             to: rawFrom,
-            bodyText: `${firstName}, vas a confirmar:\n\n*${dayKey}* · ${shiftInfo.name}\n${shiftInfo.timeLabel}\n📍 ${shiftAreaName(shift) || 'Área pendiente'}`,
+            bodyText: `${firstName}, vas a confirmar:\n\n*${dayKey}* · ${shiftInfo.name}\n${shiftInfo.timeLabel}\n${formatShiftAreaDetails(shift, true)}`,
             buttons: [{
               id: encodeAction(targetVolId, 'confirm_shift', shift.day_key, shift.shift_key),
               title: 'Sí, confirmar',
@@ -775,9 +965,9 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
 
         const listRes = await sendWhatsAppInteractiveList({
           to: rawFrom,
-          headerText: "Confirmación de Turno",
+          headerText: "Confirmación de turno",
           bodyText: `Hola ${firstName}, por favor selecciona la fecha que deseas confirmar:`,
-          buttonText: "Seleccionar Fecha",
+          buttonText: "Seleccionar fecha",
           sections: [{ title: `Fechas ${confirmPage + 1}/${confirmTotalPages}`, rows }]
         });
 
@@ -785,11 +975,87 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
           const textDays = uniqueDays.map(d => `• ${d}`).join('\n');
           await sendWhatsAppText({
             to: rawFrom,
-            text: `Hola ${firstName}, por favor escribe cuál fecha deseas confirmar:\n\n${textDays}`
+            text: `Hola ${firstName}, por favor, escribe qué fecha deseas confirmar:\n\n${textDays}`
           });
         }
       }
 
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
+    if (interactiveId === 'menu_view_areas') {
+      if (!targetVolId) {
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: 'No encontramos un perfil activo asociado a este número.'
+        });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      const { data: userShifts } = await supabase
+        .from('shifts')
+        .select('day_key, shift_key, area_id, committee_areas(name, description)')
+        .eq('volunteer_id', targetVolId)
+        .order('day_key', { ascending: true });
+      const shifts = (userShifts || []) as ShiftRecord[];
+      const uniqueAreas = new Map<string, { name: string; description: string | null }>();
+      let shiftsWithoutArea = 0;
+
+      for (const shift of shifts) {
+        const area = getShiftAreaDetails(shift);
+        if (!area) {
+          shiftsWithoutArea += 1;
+          continue;
+        }
+        uniqueAreas.set(area.name.toLocaleLowerCase('es'), area);
+      }
+
+      if (uniqueAreas.size === 0) {
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: shifts.length > 0
+            ? `${firstName}, tus turnos todavía no tienen un área específica asignada.`
+            : `${firstName}, actualmente no tienes turnos de servicio asignados.`
+        });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      let text = `📍 *Áreas de servicio de ${firstName}*`;
+      for (const area of uniqueAreas.values()) {
+        const description = area.description
+          ? compactWhatsAppText(area.description)
+          : 'Esta área no tiene una descripción registrada.';
+        const block = `\n\n*${area.name}*\n${description}`;
+        if (text.length + block.length > 3800) {
+          text += '\n\nHay más información disponible en tu perfil de voluntario.';
+          break;
+        }
+        text += block;
+      }
+      if (shiftsWithoutArea > 0) {
+        text += `\n\n⚠️ ${shiftsWithoutArea} ${shiftsWithoutArea === 1 ? 'turno aún no tiene' : 'turnos aún no tienen'} área asignada.`;
+      }
+
+      if (text.length <= 950) {
+        await sendWhatsAppInteractiveButtons({
+          to: rawFrom,
+          bodyText: text,
+          buttons: [
+            { id: encodeAction(targetVolId, 'view'), title: 'Consultar turnos' },
+            { id: encodeAction(targetVolId, 'home'), title: 'Volver al menú' },
+          ],
+        });
+      } else {
+        await sendWhatsAppText({ to: rawFrom, text });
+        await sendWhatsAppInteractiveButtons({
+          to: rawFrom,
+          bodyText: '¿Qué deseas hacer ahora?',
+          buttons: [
+            { id: encodeAction(targetVolId, 'view'), title: 'Consultar turnos' },
+            { id: encodeAction(targetVolId, 'home'), title: 'Volver al menú' },
+          ],
+        });
+      }
       return NextResponse.json({ status: 'success' }, { status: 200 });
     }
 
@@ -805,7 +1071,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
 
       const { data: userShifts } = await supabase
         .from('shifts')
-        .select('day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at, area_id, committee_areas(name)')
+        .select('day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at, area_id, committee_areas(name, description)')
         .eq('volunteer_id', targetVolId)
         .order('day_key', { ascending: true });
 
@@ -827,12 +1093,13 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
         bodyText: text,
         buttons: [
           { id: encodeAction(targetVolId, 'confirm'), title: 'Confirmar turno' },
-          { id: encodeAction(targetVolId, 'reschedule'), title: 'Solicitar cambio' }
+          { id: encodeAction(targetVolId, 'reschedule'), title: 'Solicitar cambio' },
+          { id: encodeAction(targetVolId, 'areas'), title: 'Ver mis áreas' }
         ]
       });
 
       if (!btnRes.success) {
-        text += `\n\nResponde *1* para confirmar un turno o *3* para solicitar cambio.`;
+        text += `\n\nResponde *2* para confirmar, *4* para solicitar cambio o escribe *áreas* para ver sus descripciones.`;
         await sendWhatsAppText({ to: rawFrom, text });
       }
 
@@ -930,9 +1197,13 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
             reason,
           },
         });
-        await sendWhatsAppText({
+        await sendWhatsAppInteractiveButtons({
           to: rawFrom,
-          text: `Listo, ${firstName}. Enviamos tu solicitud:\n\n*Actual:* ${currDay} · ${currShift}\n*Solicitado:* ${reqDay} · ${reqShift}\n*Motivo:* ${reason}\n\nLa solicitud quedó en revisión, igual que si la hubieras enviado desde tu portal. ✅`
+          bodyText: `Listo, ${firstName}. Enviamos tu solicitud:\n\n*Actual:* ${currDay} · ${currShift}\n*Solicitado:* ${reqDay} · ${reqShift}\n*Motivo:* ${reason}\n\nLa solicitud quedó en revisión. ✅`,
+          buttons: [
+            { id: encodeAction(targetVolId, 'view'), title: 'Consultar turnos' },
+            { id: encodeAction(targetVolId, 'home'), title: 'Volver al menú' },
+          ],
         });
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
@@ -1086,10 +1357,10 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
 
       const listRes = await sendWhatsAppInteractiveList({
         to: rawFrom,
-        headerText: "Cambio de Turno",
+        headerText: "Cambio de turno",
         bodyText: `${firstName}, ¿cuál de tus turnos deseas cambiar?`,
-        buttonText: "Seleccionar Turno",
-        sections: [{ title: "Tus Turnos Actuales", rows }]
+        buttonText: "Seleccionar turno",
+        sections: [{ title: "Tus turnos actuales", rows }]
       });
 
       if (!listRes.success) {
@@ -1219,9 +1490,13 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
               shiftHours: shiftInfo.timeLabel,
             },
           });
-          await sendWhatsAppText({
+          await sendWhatsAppInteractiveButtons({
             to: rawFrom,
-            text: `Gracias, ${firstName}. Confirmamos tu asistencia para *${reminder.day_key}*, ${shiftInfo.name} (${shiftInfo.timeLabel}). ✅`
+            bodyText: `Gracias, ${firstName}. Confirmamos tu asistencia para *${reminder.day_key}*, ${shiftInfo.name} (${shiftInfo.timeLabel}). ✅`,
+            buttons: [
+              { id: encodeAction(targetVolId, 'view'), title: 'Consultar turnos' },
+              { id: encodeAction(targetVolId, 'home'), title: 'Volver al menú' },
+            ],
           });
           return NextResponse.json({ status: 'success' }, { status: 200 });
         }
@@ -1251,8 +1526,13 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       buttonText: 'Mostrar menú',
       sections: [
         {
-          title: "Menú Principal",
+          title: "Menú principal",
           rows: [
+            {
+              id: encodeAction(targetVolId, 'forgot_pin'),
+              title: 'Olvidé mi PIN',
+              description: 'Recíbelo en este mismo número registrado'
+            },
             {
               id: encodeAction(targetVolId, 'confirm'),
               title: 'Confirmar asistencia',
@@ -1262,6 +1542,11 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
               id: encodeAction(targetVolId, 'view'),
               title: 'Consultar mis turnos',
               description: 'Mira tus fechas y horarios actuales'
+            },
+            {
+              id: encodeAction(targetVolId, 'areas'),
+              title: 'Consultar mis áreas',
+              description: 'Lee la descripción de tus áreas asignadas'
             },
             {
               id: encodeAction(targetVolId, 'reschedule'),
@@ -1279,6 +1564,11 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
               description: 'Recibe la imagen de tu pase de entrada'
             },
             {
+              id: encodeAction(targetVolId, 'switch_profile'),
+              title: 'Cambiar de perfil',
+              description: 'Elige otra persona asociada al número'
+            },
+            {
               id: encodeAction(targetVolId, 'end'),
               title: 'Finalizar conversación',
               description: 'Cierra esta atención por WhatsApp'
@@ -1292,7 +1582,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       console.warn("Main Interactive List failed, sending plain text fallback:", mainListRes.error);
       await sendWhatsAppText({
         to: rawFrom,
-        text: `Hola ${firstName}, ¿cómo podemos ayudarte el día de hoy?\n\n1. Confirmar asistencia\n2. Consultar mis turnos\n3. Solicitar un cambio\n4. Contactar a mi coordinador\n5. Generar mi código QR\n6. Finalizar conversación`
+        text: `Hola ${firstName}, ¿cómo podemos ayudarte el día de hoy?\n\n1. Olvidé mi PIN\n2. Confirmar asistencia\n3. Consultar mis turnos\n4. Solicitar un cambio\n5. Contactar a mi coordinador\n6. Generar mi código QR\n7. Cambiar de perfil\n8. Finalizar conversación\n\nTambién puedes escribir *áreas* para consultar sus descripciones.`
       });
     }
 

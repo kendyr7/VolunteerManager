@@ -13,6 +13,7 @@ import { es } from 'date-fns/locale';
 import { buildAndPersistReminderCapacityPlan } from '@/lib/reminder-capacity-service';
 import type { ReminderCapacityDay } from '@/lib/reminder-capacity-planner';
 import type { PersistedReminderCapacityPlan } from '@/lib/reminder-capacity-service';
+import { getShiftAreaName } from '@/lib/shift-area';
 
 export type ReminderDeliveryLog = {
   volunteer_id: string;
@@ -195,6 +196,21 @@ export async function sendShiftReminderAction({
       return { success: false, error: "Teléfono inválido" };
     }
 
+    const { data: assignedShift, error: assignedShiftError } = await supabase
+      .from('shifts')
+      .select('area_id, committee_areas(name)')
+      .eq('volunteer_id', volunteerId)
+      .eq('day_key', dayKey)
+      .eq('shift_key', shiftKey)
+      .maybeSingle();
+    if (assignedShiftError) {
+      return { success: false, error: 'No se pudo comprobar la asignación del turno.' };
+    }
+    if (!assignedShift) {
+      return { success: false, error: 'Este turno ya no está asignado al voluntario.' };
+    }
+    const areaName = getShiftAreaName(assignedShift);
+
     let attemptNumber = 1;
     if (mode === 'retry') {
       let retryQuery = supabase
@@ -247,7 +263,8 @@ export async function sendShiftReminderAction({
       committeeName,
       shiftName,
       shiftHours,
-      shiftDate
+      shiftDate,
+      areaName,
     });
 
     if (!result.success) {
@@ -312,6 +329,8 @@ export async function sendShiftReminderAction({
         shiftName,
         shiftHours,
         shiftDate,
+        areaName,
+        areaStatus: areaName ? 'assigned' : 'pending',
         messageId: result.messageId || null,
         retry: mode === 'retry',
         attemptNumber,

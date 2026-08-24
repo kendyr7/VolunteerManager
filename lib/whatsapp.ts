@@ -123,7 +123,12 @@ export function generateReminderMessage(
   shiftName: string, 
   timeStr: string, 
   committeeName: string, 
-  isHoliday?: boolean
+  isHoliday?: boolean,
+  areaName?: string | null
 ): string {
-  return `Querido(a) hermano(a) *${name}*, le recordamos su turno de servicio como voluntario del comite de *${committeeName}*.\n\n*${shiftName} _(${timeStr})_*\n*${dateStr}*\n\nAgradecemos su apoyo.`;
+  const serviceAssignment = areaName
+    ? `${committeeName} · Área: ${areaName}`
+    : `${committeeName} · Sin área asignada`;
+
+  return `Querido(a) hermano(a) *${name}*, le recordamos su turno de servicio como voluntario del comité de *${serviceAssignment}*.\n\n*${shiftName} _(${timeStr})_*\n*${dateStr}*\n\nAgradecemos su apoyo.`;
 }

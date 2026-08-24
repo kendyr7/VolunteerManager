@@ -25,7 +25,7 @@ import { RealtimeEventQueue } from '@/lib/services/realtime-event-queue';
 import { SupabaseReconnectManager } from '@/lib/services/supabase-reconnect-manager';
 import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
-import { withShiftAreaName } from '@/lib/shift-area';
+import { withShiftAreaDetails } from '@/lib/shift-area';
 
 const STALE_TIME_MS = 60_000;
 
@@ -236,7 +236,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
                 .from('committees')
                 .select('*')
                 .or('status.is.null,status.neq.archived'),
-              fetchAllRows(supabase, 'shifts', '*, committee_areas(name)'),
+              fetchAllRows(supabase, 'shifts', '*, committee_areas(name, description)'),
               fetchAllRows(
                 supabase,
                 'committee_shift_requirements',
@@ -252,7 +252,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           const scopedShifts = canViewAll
             ? (shiftsResult ?? [])
             : (shiftsResult ?? []).filter((s: any) => allowedVolunteerIds.has(s.volunteer_id));
-          const cleanShifts = scopedShifts.map(withShiftAreaName);
+          const cleanShifts = scopedShifts.map(withShiftAreaDetails);
 
           setRawVolunteers(cleanVols);
           useVolunteerStore.getState().setInitialVolunteers(cleanVols);

@@ -43,6 +43,7 @@ import { HighlightText } from "@/components/HighlightText";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 import { EventDayCards, EventShiftCard } from "@/components/EventDayCards";
+import { getShiftAreaDetails } from "@/lib/shift-area";
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -177,6 +178,7 @@ export default function RemindersPage() {
     checkedInMap: contextCheckedInMap,
     checkedOutMap: contextCheckedOutMap,
     shiftCounts: contextShiftCounts,
+    shiftsData,
     loading,
     refresh,
   } = useCoordinatorData();
@@ -596,13 +598,23 @@ export default function RemindersPage() {
     ? format(selectedDayObj.date, "EEEE d 'de' MMMM", { locale: es })
     : "";
 
+  const selectedAreaByVolunteer = useMemo(() => {
+    const result = new Map<string, string | null>();
+    for (const shift of shiftsData) {
+      if (shift.day_key !== selectedDayKey || shift.shift_key !== selectedShiftId) continue;
+      result.set(shift.volunteer_id, getShiftAreaDetails(shift)?.name || null);
+    }
+    return result;
+  }, [selectedDayKey, selectedShiftId, shiftsData]);
+
   const previewMessage = generateReminderMessage(
     "[Nombre del Voluntario]",
     dateStr ? dateStr.charAt(0).toUpperCase() + dateStr.slice(1) : "",
     selectedShiftDetails?.name || "",
     selectedShiftDetails?.time || "",
     selectedCommittees.length === 1 ? selectedCommittees[0] : "Seguridad",
-    isSelectedHoliday
+    isSelectedHoliday,
+    "[Área asignada o Sin área asignada]"
   );
 
   const handleStatusChange = (volId: string, status: string) => {
@@ -1470,7 +1482,8 @@ export default function RemindersPage() {
                                 selectedShiftDetails?.name || "",
                                 selectedShiftDetails?.time || "",
                                 vol.committee,
-                                isSelectedHoliday
+                                isSelectedHoliday,
+                                selectedAreaByVolunteer.get(vol.id) || null
                               );
 
                               return (
@@ -1580,7 +1593,8 @@ export default function RemindersPage() {
                                       selectedShiftDetails?.name || "",
                                       selectedShiftDetails?.time || "",
                                       vol.committee,
-                                      isSelectedHoliday
+                                      isSelectedHoliday,
+                                      selectedAreaByVolunteer.get(vol.id) || null
                                     );
                                     const link = generateWaMeLink(vol.phone, msg);
 
@@ -1781,7 +1795,7 @@ export default function RemindersPage() {
                   <span className="material-symbols-outlined text-[18px] text-[#4d7cfe] shrink-0 mt-0.5">verified</span>
                   <span>
                     Plantilla oficial aprobada por Meta: <strong className="text-text">recordatorio_turno_comite</strong>.
-                    Los datos de nombre, fecha, horario y comité se completan dinámicamente para cada voluntario.
+                    Los datos de nombre, fecha, horario, comité y estado del área se completan dinámicamente para cada voluntario.
                   </span>
                 </div>
               </div>

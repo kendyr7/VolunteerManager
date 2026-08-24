@@ -17,7 +17,7 @@ import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
 import { updateVolunteerAction, toggleShiftAction } from '@/app/actions/volunteer-actions';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 import { useMobileDrawerNavigation } from '@/lib/use-mobile-drawer-navigation';
-import { getShiftAreaName } from '@/lib/shift-area';
+import { getShiftAreaDetails, type ShiftAreaDetails } from '@/lib/shift-area';
 
 
 export interface VolunteerProfileDrawerProps {
@@ -200,11 +200,11 @@ export function VolunteerProfileDrawer({
     const source = hasStoreEntry
       ? (storeShifts || [])
       : shiftsData.filter((shift) => shift.volunteer_id === activeVolunteer.id);
-    const areas: Record<string, string | null> = {};
+    const areas: Record<string, ShiftAreaDetails | null> = {};
 
     for (const shift of source) {
-      const areaName = getShiftAreaName(shift);
-      if (areaName) areas[`${shift.day_key}:${shift.shift_key}`] = areaName;
+      const area = getShiftAreaDetails(shift);
+      if (area) areas[`${shift.day_key}:${shift.shift_key}`] = area;
     }
 
     return areas;

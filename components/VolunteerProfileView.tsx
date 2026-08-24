@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { Dialog } from '@base-ui/react/dialog';
+import { Popover } from '@base-ui/react/popover';
 import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, isSimulationEventDay } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -41,6 +43,7 @@ import {
 import { getVolunteerProfileMetrics } from "@/lib/services/volunteer-profile.service";
 import { AdminSessionCorrectionModal } from "./AdminSessionCorrectionModal";
 import { AdminCreateSessionModal } from "./AdminCreateSessionModal";
+import type { ShiftAreaDetails } from "@/lib/shift-area";
 
 export interface VolunteerProfileData {
   id: string;
@@ -64,7 +67,7 @@ export interface VolunteerProfileViewProps {
   shiftsByDay?: Record<string, string[]>;
   checkedInMap?: Record<string, boolean> | Record<string, string[]>;
   checkedOutMap?: Record<string, boolean> | Record<string, string[]>;
-  shiftAreasBySlot?: Record<string, string | null>;
+  shiftAreasBySlot?: Record<string, ShiftAreaDetails | null>;
 
   // Handlers
   onToggleShift?: (dayKey: string, shiftKey: string) => void;
@@ -82,6 +85,101 @@ export interface VolunteerProfileViewProps {
 
   // Custom Action Buttons override
   customActions?: React.ReactNode;
+}
+
+const areaChipClassName = "inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full bg-[#4d7cfe]/15 px-3 py-1 text-[11px] font-bold text-[#4d7cfe] transition-colors hover:bg-[#4d7cfe]/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] focus-visible:ring-offset-2 focus-visible:ring-offset-dark2 sm:min-h-8";
+
+function AreaChipLabel({ shiftKey, areaName }: { shiftKey: string; areaName: string }) {
+  return (
+    <>
+      <span className="material-symbols-outlined text-[15px]" aria-hidden="true">location_on</span>
+      <span>{shiftKey} · {areaName}</span>
+      <span className="material-symbols-outlined text-[14px] opacity-70" aria-hidden="true">info</span>
+    </>
+  );
+}
+
+function AssignedAreaChip({ shiftKey, area }: { shiftKey: string; area: ShiftAreaDetails }) {
+  const description = area.description || 'Esta área no tiene una descripción registrada.';
+  const accessibleLabel = `Ver descripción del área ${area.name} para el turno ${shiftKey}`;
+
+  return (
+    <>
+      <Dialog.Root>
+        <Dialog.Trigger
+          aria-label={accessibleLabel}
+          className={cn(areaChipClassName, 'sm:hidden')}
+        >
+          <AreaChipLabel shiftKey={shiftKey} areaName={area.name} />
+        </Dialog.Trigger>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-[300] bg-black/50 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none sm:hidden" />
+          <Dialog.Popup className="fixed inset-x-0 bottom-0 z-[301] w-full rounded-t-2xl border border-border bg-dark2 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-5 text-text transition duration-200 ease-out data-ending-style:translate-y-3 data-ending-style:opacity-0 data-starting-style:translate-y-3 data-starting-style:opacity-0 motion-reduce:transition-none sm:hidden">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="mb-2 inline-flex min-h-8 items-center gap-1.5 rounded-full bg-[#4d7cfe]/15 px-3 text-[11px] font-bold text-[#4d7cfe]">
+                  <span className="material-symbols-outlined text-[15px]" aria-hidden="true">location_on</span>
+                  Turno {shiftKey}
+                </div>
+                <Dialog.Title className="text-lg font-black leading-tight text-text">
+                  {area.name}
+                </Dialog.Title>
+              </div>
+              <Dialog.Close
+                aria-label="Cerrar descripción del área"
+                className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-dark3 text-text-dim transition-colors hover:bg-dark hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe]"
+              >
+                <span className="material-symbols-outlined text-[20px]" aria-hidden="true">close</span>
+              </Dialog.Close>
+            </div>
+            <Dialog.Description className="whitespace-pre-wrap text-sm font-medium leading-6 text-text-dim">
+              {description}
+            </Dialog.Description>
+            <Dialog.Close className="mt-6 inline-flex h-11 w-full cursor-pointer items-center justify-center rounded-lg bg-[#4d7cfe] px-5 text-sm font-bold text-white transition-colors hover:bg-[#3b66e0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] focus-visible:ring-offset-2 focus-visible:ring-offset-dark2">
+              Entendido
+            </Dialog.Close>
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Popover.Root>
+        <Popover.Trigger
+          aria-label={accessibleLabel}
+          className={cn(areaChipClassName, 'hidden sm:inline-flex')}
+        >
+          <AreaChipLabel shiftKey={shiftKey} areaName={area.name} />
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Positioner side="top" align="start" sideOffset={8} collisionPadding={16} className="z-[301]">
+            <Popover.Popup className="w-[min(340px,calc(100vw-2rem))] origin-[var(--transform-origin)] rounded-xl border border-border bg-dark2 p-4 text-text shadow-md transition duration-150 data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none">
+              <div className="flex items-start gap-3">
+                <span className="material-symbols-outlined mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#4d7cfe]/15 text-[18px] text-[#4d7cfe]" aria-hidden="true">location_on</span>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-start justify-between gap-3">
+                    <div>
+                      <Popover.Title className="text-sm font-extrabold leading-5 text-text">
+                        {area.name}
+                      </Popover.Title>
+                      <span className="text-[11px] font-bold text-[#4d7cfe]">Turno {shiftKey}</span>
+                    </div>
+                    <Popover.Close
+                      aria-label="Cerrar descripción del área"
+                      className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg text-text-dim transition-colors hover:bg-dark3 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe]"
+                    >
+                      <span className="material-symbols-outlined text-[17px]" aria-hidden="true">close</span>
+                    </Popover.Close>
+                  </div>
+                  <Popover.Description className="whitespace-pre-wrap text-xs font-medium leading-5 text-text-dim">
+                    {description}
+                  </Popover.Description>
+                </div>
+              </div>
+            </Popover.Popup>
+          </Popover.Positioner>
+        </Popover.Portal>
+      </Popover.Root>
+    </>
+  );
 }
 
 const volunteerAuditLogsCache = new Map<string, any[]>();
@@ -1087,8 +1185,8 @@ export function VolunteerProfileView({
               const assignedListFromDb = dbShiftRecords.filter(r => r.day_key === dayKey).map(r => r.shift_key);
               const assignedList = Array.from(new Set([...assignedListFromProps, ...assignedListFromDb]));
               const assignedAreas = assignedList.flatMap((shiftKey) => {
-                const areaName = shiftAreasBySlot?.[`${dayKey}:${shiftKey}`] || null;
-                return areaName ? [{ shiftKey, areaName }] : [];
+                const area = shiftAreasBySlot?.[`${dayKey}:${shiftKey}`] || null;
+                return area ? [{ shiftKey, area }] : [];
               });
               const dayAbbr = d.label.substring(0, 3);
               const bgColors = [
@@ -1155,9 +1253,9 @@ export function VolunteerProfileView({
                         : active
                         ? `Turno ${t} Programado`
                         : `Turno ${t} Disponible`;
-                      const areaName = shiftAreasBySlot?.[`${dayKey}:${t}`] || null;
-                      const titleText = active && areaName
-                        ? `${baseTitleText} · Área: ${areaName}`
+                      const area = shiftAreasBySlot?.[`${dayKey}:${t}`] || null;
+                      const titleText = active && area
+                        ? `${baseTitleText} · Área: ${area.name}`
                         : baseTitleText;
 
                       const tooltipKey = `${dayKey}-${t}`;
@@ -1248,14 +1346,12 @@ export function VolunteerProfileView({
 
                   {assignedAreas.length > 0 && (
                     <div className="ml-2 flex flex-wrap gap-2 border-t border-border bg-dark3/45 px-3 py-2.5 sm:px-4">
-                      {assignedAreas.map(({ shiftKey, areaName }) => (
-                        <span
+                      {assignedAreas.map(({ shiftKey, area }) => (
+                        <AssignedAreaChip
                           key={shiftKey}
-                          className="inline-flex min-h-7 items-center gap-1.5 rounded-full bg-[#4d7cfe]/15 px-2.5 py-1 text-[11px] font-bold text-[#4d7cfe]"
-                        >
-                          <span className="material-symbols-outlined text-[15px]" aria-hidden="true">location_on</span>
-                          {shiftKey} · {areaName}
-                        </span>
+                          shiftKey={shiftKey}
+                          area={area}
+                        />
                       ))}
                     </div>
                   )}
@@ -1669,6 +1765,7 @@ export function VolunteerProfileView({
           </div>
         </div>
       )}
+
     </div>
   );
 }

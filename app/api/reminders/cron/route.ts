@@ -8,6 +8,7 @@ import { getOfficialShiftTime } from '@/lib/dates';
 import { buildAndPersistReminderCapacityPlan } from '@/lib/reminder-capacity-service';
 import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
 import type { ReminderPlanAssignment } from '@/lib/reminder-capacity-planner';
+import { getShiftAreaName } from '@/lib/shift-area';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -30,6 +31,14 @@ type RecentReminderRow = {
   status: string;
   delivery_status: string | null;
   sent_at: string;
+};
+
+type ShiftAreaRow = {
+  volunteer_id: string;
+  day_key: string;
+  shift_key: string;
+  area_id: string | null;
+  committee_areas: { name?: string | null } | Array<{ name?: string | null }> | null;
 };
 
 function isAuthorizedCronRequest(request: NextRequest): boolean {
@@ -172,6 +181,21 @@ export async function GET(request: NextRequest) {
     query => query.or('status.is.null,status.neq.archived'),
   );
   const volunteers = new Map(activeVolunteers.map(volunteer => [volunteer.id, volunteer]));
+  const selectedVolunteerIds = Array.from(new Set(selectedAssignments.map(item => item.volunteerId)));
+  const selectedShiftAreas = selectedVolunteerIds.length > 0
+    ? await fetchAllRowsStrict<ShiftAreaRow>(
+        supabase,
+        'shifts',
+        'volunteer_id, day_key, shift_key, area_id, committee_areas(name)',
+        query => query.in('volunteer_id', selectedVolunteerIds),
+      )
+    : [];
+  const areaNameByShift = new Map(
+    selectedShiftAreas.map(shift => [
+      `${shift.volunteer_id}:${shift.day_key}:${shift.shift_key}`,
+      getShiftAreaName(shift),
+    ]),
+  );
   const rollingWindowStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const recentRows = await fetchAllRowsStrict<RecentReminderRow>(
     supabase,
@@ -308,6 +332,9 @@ export async function GET(request: NextRequest) {
       const fullName = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || 'Hermano(a)';
       const officialShift = getOfficialShiftTime(assignment.eventDate, assignment.shiftKey);
       const shiftDate = format(new Date(`${assignment.eventDate}T12:00:00.000Z`), "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
+      const areaName = areaNameByShift.get(
+        `${assignment.volunteerId}:${assignment.dayKey}:${assignment.shiftKey}`,
+      ) || null;
       const result = await sendShiftReminderTemplate({
         to: recipientPhone,
         volunteerName: fullName,
@@ -315,6 +342,7 @@ export async function GET(request: NextRequest) {
         shiftName: officialShift.name,
         shiftHours: officialShift.timeLabel,
         shiftDate,
+        areaName,
       });
       const completedAt = new Date().toISOString();
       const capacityError = isWhatsAppCapacityError(result);

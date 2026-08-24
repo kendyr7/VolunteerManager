@@ -607,6 +607,9 @@ export async function sendVolunteerWelcomeTemplate(options: {
  * {{3}} = Shift Name (e.g. "Turno 1")
  * {{4}} = Shift Hours (e.g. "7:00 AM - 12:00 PM")
  * {{5}} = Shift Date (e.g. "10 de Septiembre del 2026")
+ *
+ * Area status is appended to {{2}} so the existing Meta-approved template
+ * remains compatible without adding a sixth parameter.
  */
 export async function sendShiftReminderTemplate(options: {
   to: string;
@@ -615,7 +618,12 @@ export async function sendShiftReminderTemplate(options: {
   shiftName: string;
   shiftHours: string;
   shiftDate: string;
+  areaName?: string | null;
 }): Promise<WhatsAppSendResult> {
+  const serviceAssignment = options.areaName
+    ? `${options.committeeName} · Área: ${options.areaName}`
+    : `${options.committeeName} · Sin área asignada`;
+
   return sendWhatsAppTemplate({
     to: options.to,
     templateName: 'recordatorio_turno_comite',
@@ -625,7 +633,7 @@ export async function sendShiftReminderTemplate(options: {
         type: 'body',
         parameters: [
           { type: 'text', text: options.volunteerName },
-          { type: 'text', text: options.committeeName },
+          { type: 'text', text: serviceAssignment },
           { type: 'text', text: options.shiftName },
           { type: 'text', text: options.shiftHours },
           { type: 'text', text: options.shiftDate }

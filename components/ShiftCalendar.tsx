@@ -8,6 +8,7 @@ import { VolunteerProfileView, VolunteerProfileData } from "@/components/Volunte
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { getVolunteerScheduleAction } from "@/app/actions/volunteer-schedule-actions";
 import type { VolunteerScheduleShift } from "@/lib/types/volunteer-schedule";
+import type { ShiftAreaDetails } from "@/lib/shift-area";
 
 export type VolunteerInfo = VolunteerProfileData;
 
@@ -25,7 +26,7 @@ function parseShifts(data: VolunteerScheduleShift[] = []) {
   const mapped: Record<string, string[]> = {};
   const confirmed: Record<string, string[]> = {};
   const checkedOut: Record<string, string[]> = {};
-  const areas: Record<string, string | null> = {};
+  const areas: Record<string, ShiftAreaDetails | null> = {};
 
   data.forEach(s => {
     if (!mapped[s.day_key]) {
@@ -34,7 +35,9 @@ function parseShifts(data: VolunteerScheduleShift[] = []) {
     if (!mapped[s.day_key].includes(s.shift_key)) {
       mapped[s.day_key].push(s.shift_key);
     }
-    areas[areaSlotKey(s.day_key, s.shift_key)] = s.area_name;
+    areas[areaSlotKey(s.day_key, s.shift_key)] = s.area_name
+      ? { name: s.area_name, description: s.area_description }
+      : null;
 
     if (s.checked_in || s.checked_in_at || s.checked_out || s.checked_out_at) {
       if (!confirmed[s.day_key]) {
@@ -65,7 +68,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>(initialParsed.mapped);
   const [checkedInShifts, setCheckedInShifts] = useState<Record<string, string[]>>(initialParsed.confirmed);
   const [checkedOutShifts, setCheckedOutShifts] = useState<Record<string, string[]>>(initialParsed.checkedOut);
-  const [shiftAreasBySlot, setShiftAreasBySlot] = useState<Record<string, string | null>>(initialParsed.areas);
+  const [shiftAreasBySlot, setShiftAreasBySlot] = useState<Record<string, ShiftAreaDetails | null>>(initialParsed.areas);
   const [loading, setLoading] = useState(!volunteerInfo && initialShifts.length === 0);
   const [isPending, startTransition] = useTransition();
   const volunteerData = volunteerInfo;

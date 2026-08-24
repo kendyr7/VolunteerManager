@@ -13,7 +13,10 @@ interface VolunteerScheduleRow {
   checked_out: boolean | null;
   checked_out_at: string | null;
   area_id: string | null;
-  committee_areas: { name: string } | Array<{ name: string }> | null;
+  committee_areas:
+    | { name: string; description: string | null }
+    | Array<{ name: string; description: string | null }>
+    | null;
 }
 
 export interface VolunteerScheduleScope {
@@ -25,6 +28,11 @@ export interface VolunteerScheduleScope {
 function relationName(value: VolunteerScheduleRow['committee_areas']): string | null {
   if (Array.isArray(value)) return value[0]?.name || null;
   return value?.name || null;
+}
+
+function relationDescription(value: VolunteerScheduleRow['committee_areas']): string | null {
+  if (Array.isArray(value)) return value[0]?.description || null;
+  return value?.description || null;
 }
 
 export class VolunteerScheduleService {
@@ -44,7 +52,7 @@ export class VolunteerScheduleService {
     const supabase = await getAdminSupabase();
     const { data, error } = await supabase
       .from('shifts')
-      .select('id, volunteer_id, day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at, area_id, committee_areas(name)')
+      .select('id, volunteer_id, day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at, area_id, committee_areas(name, description)')
       .eq('volunteer_id', volunteerId)
       .order('day_key')
       .order('shift_key');
@@ -61,6 +69,7 @@ export class VolunteerScheduleService {
       checked_out_at: shift.checked_out_at,
       area_id: shift.area_id,
       area_name: relationName(shift.committee_areas),
+      area_description: relationDescription(shift.committee_areas),
     }));
   }
 }
