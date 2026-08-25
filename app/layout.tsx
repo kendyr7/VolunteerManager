@@ -66,7 +66,6 @@ export const metadata: Metadata = {
   },
 };
 
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AutoLogout } from "@/components/AutoLogout";
 import { TokenProvider } from "@/components/TokenProvider";
 import { UnofficialSiteBanner } from "@/components/UnofficialSiteBanner";
@@ -99,7 +98,6 @@ export default async function RootLayout({
         <AutoLogout />
         <UnofficialSiteBanner initialAcknowledged={hasAcknowledgedUnofficialSite} />
         {children}
-        <SpeedInsights />
         <Script
           id="material-symbols-font-ready"
           strategy="afterInteractive"

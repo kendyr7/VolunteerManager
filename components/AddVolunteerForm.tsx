@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { validatePhone8Digits } from "@/lib/whatsapp";
 import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
 import { createVolunteerAction } from "@/app/actions/volunteer-actions";
+import { SharedPhoneWarning } from "@/components/SharedPhoneWarning";
 
 interface AddVolunteerFormProps {
   committeesList?: { id: string; name: string }[];
@@ -22,6 +23,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
   const [newCommitteeId, setNewCommitteeId] = useState('');
   const [sendWelcomeMessage, setSendWelcomeMessage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [phoneConflicts, setPhoneConflicts] = useState<string[]>([]);
 
   const resetForm = () => {
     setNewName('');
@@ -31,6 +33,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
     setNewWard('');
     setNewCommitteeId('');
     setSendWelcomeMessage(false);
+    setPhoneConflicts([]);
     setIsSubmitting(false);
   };
 
@@ -39,8 +42,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
     onClose?.();
   };
 
-  const handleAddVolunteer = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitVolunteer = async (allowSharedPhone = false) => {
 
     const parts = newName.trim().split(/\s+/);
     const first_name = parts[0] || '';
@@ -79,9 +81,14 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
         committeeId: newCommitteeId || null,
         stake: newStake,
         neighborhood: newWard,
+        allowSharedPhone,
       });
 
       if (!result.success || !result.volunteer) {
+        if (result.reason === 'phone_conflict' && result.conflictingVolunteers?.length) {
+          setPhoneConflicts(result.conflictingVolunteers.map(volunteer => volunteer.name));
+          return;
+        }
         showToast(result.error || "Error al añadir voluntario", "error");
         return;
       }
@@ -100,7 +107,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
           showToast("Voluntario añadido, pero falló el envío de WhatsApp", "info");
         }
       } else {
-        showToast("Voluntario añadido");
+        showToast(allowSharedPhone ? "Voluntario añadido con teléfono compartido" : "Voluntario añadido");
       }
 
       resetForm();
@@ -114,6 +121,11 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
     }
   };
 
+  const handleAddVolunteer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitVolunteer(false);
+  };
+
   return (
     <form onSubmit={handleAddVolunteer} className="flex flex-col h-full">
       <div data-mobile-drawer-scroll className="flex-1 overflow-y-auto px-6 py-4 space-y-6 overscroll-contain">
@@ -124,7 +136,19 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
               <label className="block text-xs font-extrabold text-text">Celular</label>
-              <Input required type="tel" maxLength={8} className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. 88888888" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
+              <Input
+                required
+                type="tel"
+                inputMode="numeric"
+                maxLength={8}
+                className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold"
+                placeholder="Ej. 88888888"
+                value={newPhone}
+                onChange={(e) => {
+                  setNewPhone(e.target.value.replace(/\D/g, '').slice(0, 8));
+                  setPhoneConflicts([]);
+                }}
+              />
           </div>
           <div className="space-y-2">
               <label className="block text-xs font-extrabold text-text">Edad</label>
@@ -143,6 +167,15 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
               />
           </div>
         </div>
+        {phoneConflicts.length > 0 && (
+          <SharedPhoneWarning
+            phone={newPhone}
+            names={phoneConflicts}
+            isConfirming={isSubmitting}
+            onDismiss={() => setPhoneConflicts([])}
+            onConfirm={() => void submitVolunteer(true)}
+          />
+        )}
         <div className="space-y-2">
             <label className="block text-xs font-extrabold text-text">Estaca</label>
             <Input required className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Managua Sur" value={newStake} onChange={(e) => setNewStake(e.target.value)} />
@@ -169,7 +202,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
             <span className="text-xs font-bold text-text">Enviar credenciales por WhatsApp</span>
         </label>
       </div>
-      <div className="p-6 border-t border-border flex gap-3">
+      <div className="grid grid-cols-2 gap-3 border-t border-border p-4 sm:p-6">
         <Button type="button" variant="outline" onClick={handleClose} className="flex-1 rounded-full">Cancelar</Button>
         <Button type="submit" disabled={isSubmitting} className="flex-1 rounded-full bg-[#4d7cfe] text-white">Añadir</Button>
       </div>

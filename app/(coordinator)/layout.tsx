@@ -9,6 +9,7 @@ import Image from "next/image";
 import { SearchProvider, useSearch } from "@/lib/search-context";
 import { CoordinatorDataProvider } from "@/lib/coordinator-data-context";
 import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
+import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MobileThemeMenu } from "@/components/mobile-theme-menu";
 import { useThemePreference } from "@/lib/use-theme-preference";
 import { useMobileNavigationMode } from "@/lib/use-mobile-navigation-mode";
@@ -224,6 +225,19 @@ function CoordinatorLayoutInner({
       resizeObserver.disconnect();
     };
   }, [checkNavScroll, allMobileNavItems.length, isCommandMode]);
+
+  if (!mounted) {
+    return (
+      <div
+        className="flex h-screen items-center justify-center bg-dark text-text"
+        role="status"
+        aria-label="Verificando acceso"
+        aria-live="polite"
+      >
+        <AnimatedLogo isLooping className="h-16 w-16 md:h-20 md:w-20" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-dark flex flex-col font-sans text-text overflow-hidden">

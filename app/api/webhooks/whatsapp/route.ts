@@ -32,6 +32,16 @@ import {
   touchWhatsAppConversation,
 } from '@/lib/services/whatsapp-conversation-store';
 import { getShiftAreaDetails } from '@/lib/shift-area';
+import {
+  CONFIGURABLE_PERMISSION_DEFAULTS,
+  CONFIGURABLE_PERMISSION_KEYS,
+  hasCapability,
+  normalizeAppRole,
+  normalizeCoordinatorType,
+  roleDisplayName,
+  type AuthorizationSnapshot,
+  type ConfigurablePermissionKey,
+} from '@/lib/role-permissions';
 
 export const runtime = 'nodejs';
 
@@ -75,6 +85,26 @@ type VolunteerRecord = {
   committees?: { name?: string | null } | Array<{ name?: string | null }> | null;
 };
 
+type UserProfileRecord = {
+  id: string;
+  full_name?: string | null;
+  phone?: string | null;
+  status?: string | null;
+  role?: string | null;
+  coordinator_type?: string | null;
+  committee_id?: string | null;
+  committees?: { name?: string | null } | Array<{ name?: string | null }> | null;
+};
+
+type ScopedVolunteerRelation =
+  | { committee_id?: string | null }
+  | Array<{ committee_id?: string | null }>
+  | null;
+
+type UserScopedRecord = {
+  volunteers?: ScopedVolunteerRelation;
+};
+
 type ShiftRecord = {
   day_key: string;
   shift_key: string;
@@ -104,6 +134,29 @@ function formatShiftAreaDetails(shift: ShiftRecord, includeDescription = false):
     ? `\n${compactWhatsAppText(area.description)}`
     : '';
   return `📍 *${area.name}*${description}`;
+}
+
+function formatWhatsAppAssignmentDate(dayKey: string): string {
+  const dateStr = parseDayKeyToDateStr(dayKey);
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day, 12));
+  const parts = new Intl.DateTimeFormat('es-NI', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find(part => part.type === type)?.value || '';
+  const label = `${value('weekday')} ${value('day')} de ${value('month')}`.trim();
+  return label.charAt(0).toLocaleUpperCase('es') + label.slice(1);
+}
+
+function formatWhatsAppAssignmentTime(dayKey: string, shiftKey: string): string {
+  return getOfficialShiftTime(dayKey, shiftKey).timeLabel
+    .replace(/\s+-\s+/g, '–')
+    .replace(/\bAM\b/g, 'a. m.')
+    .replace(/\bPM\b/g, 'p. m.');
 }
 
 type ScopedAction = {
@@ -207,30 +260,231 @@ function getVolunteerCommitteeName(volunteer: VolunteerRecord): string {
   return committee?.name || 'Servicio';
 }
 
-async function sendVolunteerProfileSelection(to: string, volunteers: VolunteerRecord[]) {
-  const profileRows = volunteers.slice(0, 10).map(volunteer => ({
-    id: encodeAction(volunteer.id, 'home'),
-    title: volunteerFullName(volunteer),
-    description: `Comité: ${getVolunteerCommitteeName(volunteer)}`,
-  }));
+function getUserCommitteeName(profile: UserProfileRecord): string | null {
+  const committee = Array.isArray(profile.committees)
+    ? profile.committees[0]
+    : profile.committees;
+  return committee?.name || null;
+}
+
+function getUserRoleLabel(profile: UserProfileRecord): string {
+  const role = normalizeAppRole(profile.role);
+  const coordinatorType = role === 'Editor'
+    ? (normalizeCoordinatorType(profile.coordinator_type) || 'committee')
+    : null;
+  return roleDisplayName({ role, coordinatorType });
+}
+
+function buildIdentityOptions(users: UserProfileRecord[], volunteers: VolunteerRecord[]) {
+  return [
+    ...users.map(profile => {
+      const committee = getUserCommitteeName(profile);
+      const role = getUserRoleLabel(profile);
+      return {
+        id: encodeAction(profile.id, 'user_home'),
+        title: profile.full_name?.trim() || 'Usuario',
+        description: committee ? `${role} · ${committee}` : `${role} · Acceso general`,
+      };
+    }),
+    ...volunteers.map(volunteer => ({
+      id: encodeAction(volunteer.id, 'home'),
+      title: volunteerFullName(volunteer),
+      description: `Voluntario · ${getVolunteerCommitteeName(volunteer)}`,
+    })),
+  ];
+}
+
+async function sendIdentitySelection(
+  to: string,
+  users: UserProfileRecord[],
+  volunteers: VolunteerRecord[],
+) {
+  const options = buildIdentityOptions(users, volunteers);
   const profileResult = await sendWhatsAppInteractiveList({
     to,
-    headerText: 'Selecciona una persona',
-    bodyText: 'Este número está asociado a varios voluntarios. Selecciona el perfil con el que deseas continuar.',
-    buttonText: 'Elegir persona',
-    sections: [{ title: 'Perfiles disponibles', rows: profileRows }],
+    headerText: 'Selecciona un perfil',
+    bodyText: users.length > 0 && volunteers.length > 0
+      ? 'Este número tiene acceso como usuario del sistema y como voluntario. ¿Con cuál perfil deseas consultar?'
+      : 'Este número está asociado a varios perfiles. Selecciona con cuál deseas continuar.',
+    buttonText: 'Elegir perfil',
+    sections: [{ title: 'Perfiles disponibles', rows: options.slice(0, 10) }],
   });
 
   if (profileResult.success) return true;
 
-  const profileList = volunteers
-    .map((volunteer, index) => `${index + 1}. ${volunteerFullName(volunteer)}`)
+  const profileList = options
+    .map((option, index) => `${index + 1}. ${option.title} — ${option.description}`)
     .join('\n');
   await sendWhatsAppText({
     to,
-    text: `Este número está asociado a varios voluntarios:\n\n${profileList}\n\nResponde únicamente con el número del perfil con el que deseas continuar.`,
+    text: `Este número está asociado a varios perfiles:\n\n${profileList}\n\nResponde únicamente con el número del perfil con el que deseas continuar.`,
   });
   return false;
+}
+
+function getPortalBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL
+    || process.env.VERCEL_PROJECT_PRODUCTION_URL
+    || process.env.VERCEL_URL
+    || 'http://localhost:3000';
+  const withProtocol = configured.startsWith('http://') || configured.startsWith('https://')
+    ? configured
+    : `https://${configured}`;
+  return withProtocol.replace(/\/$/, '');
+}
+
+function portalUrl(path: string): string {
+  return `${getPortalBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+async function loadWhatsAppUserAuthorization(
+  supabase: ReturnType<typeof getAdminClient>,
+  profile: UserProfileRecord,
+): Promise<AuthorizationSnapshot> {
+  const permissions = { ...CONFIGURABLE_PERMISSION_DEFAULTS };
+  const { data: settings, error } = await supabase
+    .from('system_settings')
+    .select('key, value')
+    .in('key', CONFIGURABLE_PERMISSION_KEYS);
+
+  if (error) {
+    console.error('[WHATSAPP WEBHOOK] Could not load configured role permissions.', error.message);
+  } else {
+    for (const setting of settings || []) {
+      if (CONFIGURABLE_PERMISSION_KEYS.includes(setting.key as ConfigurablePermissionKey)) {
+        permissions[setting.key as ConfigurablePermissionKey] = setting.value === 'true';
+      }
+    }
+  }
+
+  const role = normalizeAppRole(profile.role);
+  const coordinatorType = role === 'Editor'
+    ? (normalizeCoordinatorType(profile.coordinator_type) || 'committee')
+    : null;
+  return {
+    authenticated: true,
+    userId: profile.id,
+    userType: 'profile',
+    name: profile.full_name?.trim() || 'Usuario',
+    role,
+    coordinatorType,
+    committeeId: profile.committee_id || null,
+    committeeName: getUserCommitteeName(profile),
+    permissions,
+  };
+}
+
+function scopedRecordCommitteeId(record: UserScopedRecord): string | null {
+  const volunteer = Array.isArray(record.volunteers)
+    ? record.volunteers[0]
+    : record.volunteers;
+  return volunteer?.committee_id || null;
+}
+
+function canReadScopedRecord(record: UserScopedRecord, authorization: AuthorizationSnapshot): boolean {
+  return hasCapability(authorization, 'view_all_volunteers')
+    || scopedRecordCommitteeId(record) === authorization.committeeId;
+}
+
+function getUserConsultationOptions(authorization: AuthorizationSnapshot) {
+  const options: Array<{
+    action: string;
+    interactiveId: string;
+    title: string;
+    description: string;
+  }> = [];
+
+  if (hasCapability(authorization, 'view_dashboard')) {
+    options.push({
+      action: 'user_summary',
+      interactiveId: 'menu_user_summary',
+      title: 'Resumen',
+      description: 'Programación, áreas y pendientes',
+    });
+  }
+  if (hasCapability(authorization, 'view_volunteers')) {
+    options.push({
+      action: 'user_schedule',
+      interactiveId: 'menu_user_schedule',
+      title: 'Programación',
+      description: 'Totales por fecha y turno',
+    });
+  }
+  if (hasCapability(authorization, 'view_area_coverage', authorization.committeeId)) {
+    options.push({
+      action: 'user_coverage',
+      interactiveId: 'menu_user_coverage',
+      title: 'Cobertura por áreas',
+      description: 'Asignados frente al requerimiento',
+    });
+  }
+  if (hasCapability(authorization, 'view_notices')) {
+    options.push({
+      action: 'user_notices',
+      interactiveId: 'menu_user_notices',
+      title: 'Estado de avisos',
+      description: 'Entregas, lecturas y errores',
+    });
+  }
+  if (hasCapability(authorization, 'view_requests')) {
+    options.push({
+      action: 'user_requests',
+      interactiveId: 'menu_user_requests',
+      title: 'Solicitudes',
+      description: 'Consulta solicitudes pendientes',
+    });
+  }
+
+  options.push(
+    {
+      action: 'user_portal',
+      interactiveId: 'menu_user_portal',
+      title: 'Abrir el portal',
+      description: 'Enlaces para gestionar desde la app',
+    },
+    {
+      action: 'user_switch_context',
+      interactiveId: 'menu_switch_context',
+      title: 'Cambiar de perfil',
+      description: 'Consulta como usuario o voluntario',
+    },
+    {
+      action: 'user_end',
+      interactiveId: 'menu_end_session',
+      title: 'Finalizar conversación',
+      description: 'Cierra esta consulta por WhatsApp',
+    },
+  );
+  return options;
+}
+
+async function sendUserConsultationResult(
+  to: string,
+  profileId: string,
+  bodyText: string,
+): Promise<void> {
+  if (bodyText.length <= 950) {
+    const result = await sendWhatsAppInteractiveButtons({
+      to,
+      bodyText,
+      footerText: 'Consulta informativa. Los cambios se realizan desde el portal.',
+      buttons: [
+        { id: encodeAction(profileId, 'user_home'), title: 'Volver al menú' },
+        { id: encodeAction(profileId, 'user_portal'), title: 'Abrir el portal' },
+      ],
+    });
+    if (result.success) return;
+  }
+
+  await sendWhatsAppText({ to, text: bodyText });
+  await sendWhatsAppInteractiveButtons({
+    to,
+    bodyText: '¿Qué deseas consultar ahora?',
+    buttons: [
+      { id: encodeAction(profileId, 'user_home'), title: 'Volver al menú' },
+      { id: encodeAction(profileId, 'user_portal'), title: 'Abrir el portal' },
+    ],
+  });
 }
 
 function isValidMetaSignature(rawBody: string, signature: string | null, appSecret: string): boolean {
@@ -411,13 +665,15 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
 
     if (restartedConversation) scopedAction = null;
 
-    // 1. Identify Volunteer / User in database
+    // 1. Identify the volunteer or platform-user context associated with the sender.
     let targetVolId: string | null = null;
     let firstName = 'Voluntario(a)';
     let selectedVolunteerName = 'Voluntario';
     let selectedCommitteeId: string | null = null;
     let committeeName = 'Servicio';
-    let selectedSharedProfileByNumber = false;
+    let selectedUserProfile: UserProfileRecord | null = null;
+    let selectedUserAuthorization: AuthorizationSnapshot | null = null;
+    let selectedContextByNumber = false;
 
     if (contextMsgId) {
       const { data: matchedLog } = await supabase
@@ -439,48 +695,106 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
     }
 
     if (!targetVolId) {
-      const { data: volunteers } = await supabase
-        .from('volunteers')
-        .select('id, first_name, last_name, phone, status, committee_id, committees(name)')
-        .or('status.is.null,status.neq.archived');
+      const [volunteersResult, usersResult] = await Promise.all([
+        supabase
+          .from('volunteers')
+          .select('id, first_name, last_name, phone, status, committee_id, committees(name)')
+          .or('status.is.null,status.neq.archived'),
+        supabase
+          .from('profiles')
+          .select('id, full_name, phone, role, coordinator_type, committee_id, status, committees(name)')
+          .or('status.is.null,status.eq.active'),
+      ]);
 
-      const matchedVols = ((volunteers || []) as VolunteerRecord[])
+      if (volunteersResult.error) {
+        console.error('[WHATSAPP WEBHOOK] Could not load volunteer identities.', volunteersResult.error.message);
+      }
+      if (usersResult.error) {
+        console.error('[WHATSAPP WEBHOOK] Could not load platform-user identities.', usersResult.error.message);
+      }
+
+      const matchedVols = ((volunteersResult.data || []) as VolunteerRecord[])
         .filter(volunteer => phoneMatchesSender(volunteer.phone, senderDigits));
+      const matchedUsers = ((usersResult.data || []) as UserProfileRecord[])
+        .filter(profile => phoneMatchesSender(profile.phone, senderDigits));
+      const isUserAction = Boolean(scopedAction?.action.startsWith('user_'));
 
-      const selectedByAction = scopedAction
-        ? matchedVols.find(volunteer => volunteer.id === scopedAction.volunteerId)
-        : null;
+      if (scopedAction) {
+        const selectedByAction = isUserAction
+          ? matchedUsers.find(profile => profile.id === scopedAction?.volunteerId)
+          : matchedVols.find(volunteer => volunteer.id === scopedAction?.volunteerId);
 
-      if (selectedByAction) {
-        targetVolId = selectedByAction.id;
-        firstName = firstGivenName(selectedByAction.first_name);
-        selectedVolunteerName = volunteerFullName(selectedByAction);
-        selectedCommitteeId = selectedByAction.committee_id || null;
-        committeeName = getVolunteerCommitteeName(selectedByAction);
-      } else if (matchedVols.length === 1) {
-        targetVolId = matchedVols[0].id;
-        firstName = firstGivenName(matchedVols[0].first_name);
-        selectedVolunteerName = volunteerFullName(matchedVols[0]);
-        selectedCommitteeId = matchedVols[0].committee_id || null;
-        committeeName = getVolunteerCommitteeName(matchedVols[0]);
-      } else if (matchedVols.length > 1) {
-        // Verificar si el mensaje de texto es un número de opción (1, 2, 3...)
+        if (selectedByAction) {
+          if (isUserAction) {
+            const profile = selectedByAction as UserProfileRecord;
+            selectedUserProfile = profile;
+            firstName = firstGivenName(profile.full_name);
+            selectedCommitteeId = profile.committee_id || null;
+            committeeName = getUserCommitteeName(profile) || 'Acceso general';
+          } else {
+            const volunteer = selectedByAction as VolunteerRecord;
+            targetVolId = volunteer.id;
+            firstName = firstGivenName(volunteer.first_name);
+            selectedVolunteerName = volunteerFullName(volunteer);
+            selectedCommitteeId = volunteer.committee_id || null;
+            committeeName = getVolunteerCommitteeName(volunteer);
+          }
+        } else {
+          await sendWhatsAppText({
+            to: rawFrom,
+            text: 'El perfil seleccionado ya no está activo o no pertenece a este número. Vuelve a iniciar la consulta.',
+          });
+          return NextResponse.json({ status: 'success' }, { status: 200 });
+        }
+      } else {
+        const identityCount = matchedUsers.length + matchedVols.length;
+        if (identityCount === 1 && matchedUsers.length === 1) {
+          const profile = matchedUsers[0];
+          selectedUserProfile = profile;
+          firstName = firstGivenName(profile.full_name);
+          selectedCommitteeId = profile.committee_id || null;
+          committeeName = getUserCommitteeName(profile) || 'Acceso general';
+        } else if (identityCount === 1 && matchedVols.length === 1) {
+          const volunteer = matchedVols[0];
+          targetVolId = volunteer.id;
+          firstName = firstGivenName(volunteer.first_name);
+          selectedVolunteerName = volunteerFullName(volunteer);
+          selectedCommitteeId = volunteer.committee_id || null;
+          committeeName = getVolunteerCommitteeName(volunteer);
+        } else if (identityCount > 1) {
+          // Numeric fallback uses the same order as the interactive identity list.
+          const identities = [
+            ...matchedUsers.map(profile => ({ type: 'user' as const, profile })),
+            ...matchedVols.map(volunteer => ({ type: 'volunteer' as const, volunteer })),
+          ];
         const rawText = (message.text?.body || '').trim();
         const selectedIndex = parseInt(rawText, 10) - 1;
 
-        if (!isNaN(selectedIndex) && selectedIndex >= 0 && selectedIndex < matchedVols.length) {
-          const selectedVol = matchedVols[selectedIndex];
-          targetVolId = selectedVol.id;
-          firstName = firstGivenName(selectedVol.first_name);
-          selectedVolunteerName = volunteerFullName(selectedVol);
-          selectedCommitteeId = selectedVol.committee_id || null;
-          committeeName = getVolunteerCommitteeName(selectedVol);
-          selectedSharedProfileByNumber = true;
+          if (!isNaN(selectedIndex) && selectedIndex >= 0 && selectedIndex < identities.length) {
+            const identity = identities[selectedIndex];
+            if (identity.type === 'user') {
+              selectedUserProfile = identity.profile;
+              firstName = firstGivenName(identity.profile.full_name);
+              selectedCommitteeId = identity.profile.committee_id || null;
+              committeeName = getUserCommitteeName(identity.profile) || 'Acceso general';
+            } else {
+              targetVolId = identity.volunteer.id;
+              firstName = firstGivenName(identity.volunteer.first_name);
+              selectedVolunteerName = volunteerFullName(identity.volunteer);
+              selectedCommitteeId = identity.volunteer.committee_id || null;
+              committeeName = getVolunteerCommitteeName(identity.volunteer);
+            }
+            selectedContextByNumber = true;
         } else {
-          await sendVolunteerProfileSelection(rawFrom, matchedVols);
+            await sendIdentitySelection(rawFrom, matchedUsers, matchedVols);
           return NextResponse.json({ status: 'success' }, { status: 200 });
         }
       }
+      }
+    }
+
+    if (selectedUserProfile) {
+      selectedUserAuthorization = await loadWhatsAppUserAuthorization(supabase, selectedUserProfile);
     }
 
     // Extract payload IDs or typed numbers
@@ -492,7 +806,16 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       interactiveId = '';
     } else if (scopedAction) {
       const [arg1 = '', arg2 = '', arg3 = '', arg4 = '', arg5 = ''] = scopedAction.args;
-      if (scopedAction.action === 'confirm') interactiveId = 'menu_confirm_shift';
+      if (scopedAction.action === 'user_home') interactiveId = 'menu_user_home';
+      else if (scopedAction.action === 'user_summary') interactiveId = 'menu_user_summary';
+      else if (scopedAction.action === 'user_schedule') interactiveId = 'menu_user_schedule';
+      else if (scopedAction.action === 'user_coverage') interactiveId = 'menu_user_coverage';
+      else if (scopedAction.action === 'user_notices') interactiveId = 'menu_user_notices';
+      else if (scopedAction.action === 'user_requests') interactiveId = 'menu_user_requests';
+      else if (scopedAction.action === 'user_portal') interactiveId = 'menu_user_portal';
+      else if (scopedAction.action === 'user_switch_context') interactiveId = 'menu_switch_context';
+      else if (scopedAction.action === 'user_end') interactiveId = 'menu_end_session';
+      else if (scopedAction.action === 'confirm') interactiveId = 'menu_confirm_shift';
       else if (scopedAction.action === 'forgot_pin') interactiveId = 'menu_forgot_pin';
       else if (scopedAction.action === 'send_pin') interactiveId = 'send_pin';
       else if (scopedAction.action === 'confirm_page') interactiveId = `confirm_page_${arg1}`;
@@ -509,7 +832,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       else if (scopedAction.action === 'reschedule_reason') interactiveId = `reschedule_reason_${arg1}__${arg2}__${arg3}__${arg4}__${arg5}`;
       else if (scopedAction.action === 'contact') interactiveId = 'menu_contact_coordinator';
       else if (scopedAction.action === 'qr') interactiveId = 'menu_generate_qr';
-      else if (scopedAction.action === 'switch_profile') interactiveId = 'menu_switch_profile';
+      else if (scopedAction.action === 'switch_profile') interactiveId = 'menu_switch_context';
       else if (scopedAction.action === 'end') interactiveId = 'menu_end_session';
     } else if (messageType === 'interactive') {
       const interactive = message.interactive;
@@ -520,9 +843,22 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       }
     } else if (messageType === 'button') {
       interactiveId = message.button?.payload || message.button?.text || '';
-    } else if (messageType === 'text' && !selectedSharedProfileByNumber) {
+    } else if (messageType === 'text' && !selectedContextByNumber) {
       const textContent = (message.text?.body || '').trim().toLowerCase();
-      if (textContent === '1' || textContent.includes('olvide mi pin') || textContent.includes('olvidé mi pin') || textContent === 'pin') {
+      if (selectedUserAuthorization) {
+        const consultationOptions = getUserConsultationOptions(selectedUserAuthorization);
+        const numericOption = /^\d+$/.test(textContent)
+          ? consultationOptions[Number(textContent) - 1]
+          : null;
+        if (numericOption) interactiveId = numericOption.interactiveId;
+        else if (textContent.includes('resumen')) interactiveId = 'menu_user_summary';
+        else if (textContent.includes('programacion') || textContent.includes('programación')) interactiveId = 'menu_user_schedule';
+        else if (textContent.includes('cobertura') || textContent.includes('areas') || textContent.includes('áreas')) interactiveId = 'menu_user_coverage';
+        else if (textContent.includes('avisos')) interactiveId = 'menu_user_notices';
+        else if (textContent.includes('solicitudes')) interactiveId = 'menu_user_requests';
+        else if (textContent.includes('portal') || textContent.includes('aplicacion') || textContent.includes('aplicación')) interactiveId = 'menu_user_portal';
+        else if (textContent.includes('cambiar perfil')) interactiveId = 'menu_switch_context';
+      } else if (textContent === '1' || textContent.includes('olvide mi pin') || textContent.includes('olvidé mi pin') || textContent === 'pin') {
         interactiveId = 'menu_forgot_pin';
       } else if (textContent === '2' || textContent.includes('confirmar mi turno') || textContent === 'confirmar') {
         interactiveId = 'menu_confirm_shift';
@@ -537,13 +873,310 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       } else if (textContent === '6' || textContent.includes('codigo qr') || textContent.includes('código qr') || textContent === 'qr') {
         interactiveId = 'menu_generate_qr';
       } else if (textContent === '7' || textContent.includes('cambiar perfil') || textContent.includes('elegir perfil')) {
-        interactiveId = 'menu_switch_profile';
+        interactiveId = 'menu_switch_context';
       } else if (textContent === '8' || textContent.includes('finalizar conversacion') || textContent.includes('finalizar conversación')) {
         interactiveId = 'menu_end_session';
       }
     }
 
     // 2. Process Actions
+    const requiresUserContext = interactiveId.startsWith('menu_user_');
+    if (requiresUserContext && (!selectedUserProfile || !selectedUserAuthorization)) {
+      await sendWhatsAppText({
+        to: rawFrom,
+        text: 'No pudimos validar tu perfil de usuario para esta consulta. Vuelve a seleccionar el perfil.',
+      });
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
+    if (interactiveId === 'menu_user_summary' && selectedUserProfile && selectedUserAuthorization) {
+      if (!hasCapability(selectedUserAuthorization, 'view_dashboard')) {
+        await sendWhatsAppText({ to: rawFrom, text: 'Este perfil no tiene permiso para consultar el resumen.' });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      const [volunteersResult, shiftsResult, requestsResult, remindersResult] = await Promise.all([
+        supabase
+          .from('volunteers')
+          .select('id, committee_id, status')
+          .or('status.is.null,status.neq.archived'),
+        supabase
+          .from('shifts')
+          .select('volunteer_id, day_key, shift_key, area_id, checked_in, checked_in_at, volunteers(committee_id)'),
+        supabase
+          .from('shift_change_requests')
+          .select('id, status, volunteers(committee_id)'),
+        supabase
+          .from('reminder_logs')
+          .select('volunteer_id, day_key, shift_key, status, sent_at, volunteers(committee_id)')
+          .order('sent_at', { ascending: false })
+          .limit(5000),
+      ]);
+      const queryError = volunteersResult.error || shiftsResult.error || requestsResult.error || remindersResult.error;
+      if (queryError) throw new Error(`Unable to load WhatsApp user summary: ${queryError.message}`);
+
+      const globalScope = hasCapability(selectedUserAuthorization, 'view_all_volunteers');
+      const activeVolunteers = (volunteersResult.data || []).filter(volunteer =>
+        globalScope || volunteer.committee_id === selectedUserAuthorization?.committeeId
+      );
+      const shifts = ((shiftsResult.data || []) as Array<UserScopedRecord & {
+        volunteer_id: string;
+        day_key: string;
+        shift_key: string;
+        area_id?: string | null;
+        checked_in?: boolean | null;
+        checked_in_at?: string | null;
+      }>).filter(shift => canReadScopedRecord(shift, selectedUserAuthorization));
+      const requests = ((requestsResult.data || []) as Array<UserScopedRecord & { status?: string | null }>)
+        .filter(request => canReadScopedRecord(request, selectedUserAuthorization));
+      const reminders = ((remindersResult.data || []) as Array<UserScopedRecord & {
+        volunteer_id: string;
+        day_key: string;
+        shift_key: string;
+        status?: string | null;
+      }>).filter(reminder => canReadScopedRecord(reminder, selectedUserAuthorization));
+      const latestReminderByShift = new Map<string, string>();
+      for (const reminder of reminders) {
+        const key = `${reminder.volunteer_id}|${reminder.day_key}|${reminder.shift_key}`;
+        if (!latestReminderByShift.has(key)) latestReminderByShift.set(key, reminder.status || '');
+      }
+
+      const scopeLabel = globalScope
+        ? 'Alcance global'
+        : selectedUserAuthorization.committeeName || 'Comité asignado';
+      const text = [
+        `📊 *Resumen · ${scopeLabel}*`,
+        `Consultando como *${roleDisplayName(selectedUserAuthorization)}*`,
+        '',
+        `• Voluntarios activos: *${activeVolunteers.length}*`,
+        `• Turnos programados: *${shifts.length}*`,
+        `• Confirmaciones recibidas: *${[...latestReminderByShift.values()].filter(status => status === 'confirmado').length}*`,
+        `• Registros de entrada: *${shifts.filter(shift => shift.checked_in || shift.checked_in_at).length}*`,
+        `• Turnos sin área: *${shifts.filter(shift => !shift.area_id).length}*`,
+        `• Solicitudes pendientes: *${requests.filter(request => request.status === 'pending').length}*`,
+        '',
+        `Para realizar cambios: ${portalUrl('/dashboard')}`,
+      ].join('\n');
+      await sendUserConsultationResult(rawFrom, selectedUserProfile.id, text);
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
+    if (interactiveId === 'menu_user_schedule' && selectedUserProfile && selectedUserAuthorization) {
+      if (!hasCapability(selectedUserAuthorization, 'view_volunteers')) {
+        await sendWhatsAppText({ to: rawFrom, text: 'Este perfil no tiene permiso para consultar la programación.' });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      const [shiftsResult, remindersResult] = await Promise.all([
+        supabase
+          .from('shifts')
+          .select('volunteer_id, day_key, shift_key, checked_in, checked_in_at, volunteers(committee_id)'),
+        supabase
+          .from('reminder_logs')
+          .select('volunteer_id, day_key, shift_key, status, sent_at, volunteers(committee_id)')
+          .order('sent_at', { ascending: false })
+          .limit(5000),
+      ]);
+      const queryError = shiftsResult.error || remindersResult.error;
+      if (queryError) throw new Error(`Unable to load WhatsApp schedule summary: ${queryError.message}`);
+
+      const shifts = ((shiftsResult.data || []) as Array<UserScopedRecord & {
+        volunteer_id: string;
+        day_key: string;
+        shift_key: string;
+        checked_in?: boolean | null;
+        checked_in_at?: string | null;
+      }>).filter(shift => canReadScopedRecord(shift, selectedUserAuthorization));
+      const reminders = ((remindersResult.data || []) as Array<UserScopedRecord & {
+        volunteer_id: string;
+        day_key: string;
+        shift_key: string;
+        status?: string | null;
+      }>).filter(reminder => canReadScopedRecord(reminder, selectedUserAuthorization));
+      const confirmedKeys = new Set<string>();
+      const seenReminderKeys = new Set<string>();
+      for (const reminder of reminders) {
+        const key = `${reminder.volunteer_id}|${reminder.day_key}|${reminder.shift_key}`;
+        if (seenReminderKeys.has(key)) continue;
+        seenReminderKeys.add(key);
+        if (reminder.status === 'confirmado') confirmedKeys.add(key);
+      }
+
+      const groups = new Map<string, { scheduled: number; confirmed: number; checkedIn: number }>();
+      for (const shift of shifts) {
+        const groupKey = `${shift.day_key}|${shift.shift_key}`;
+        const current = groups.get(groupKey) || { scheduled: 0, confirmed: 0, checkedIn: 0 };
+        current.scheduled += 1;
+        if (confirmedKeys.has(`${shift.volunteer_id}|${shift.day_key}|${shift.shift_key}`)) current.confirmed += 1;
+        if (shift.checked_in || shift.checked_in_at) current.checkedIn += 1;
+        groups.set(groupKey, current);
+      }
+
+      const dayGroups = new Map<string, Array<{ shiftKey: string; scheduled: number; confirmed: number; checkedIn: number }>>();
+      for (const [groupKey, counts] of [...groups.entries()].sort(([a], [b]) => {
+        const [aDay, aShift] = a.split('|');
+        const [bDay, bShift] = b.split('|');
+        return parseDayKeyToDateStr(aDay).localeCompare(parseDayKeyToDateStr(bDay)) || aShift.localeCompare(bShift);
+      })) {
+        const [dayKey, shiftKey] = groupKey.split('|');
+        const day = dayGroups.get(dayKey) || [];
+        day.push({ shiftKey, ...counts });
+        dayGroups.set(dayKey, day);
+      }
+
+      let text = `📅 *Programación · ${hasCapability(selectedUserAuthorization, 'view_all_volunteers') ? 'Alcance global' : selectedUserAuthorization.committeeName || 'Comité'}*`;
+      for (const [dayKey, dayShifts] of dayGroups) {
+        text += `\n\n*${formatWhatsAppAssignmentDate(dayKey)}*`;
+        for (const shift of dayShifts) {
+          text += `\n   *${shift.shiftKey}* · ${shift.scheduled} programados · ${shift.confirmed} confirmados · ${shift.checkedIn} presentes`;
+        }
+        if (text.length > 3400) {
+          text += '\n\nConsulta el resto de la programación en el portal.';
+          break;
+        }
+      }
+      if (groups.size === 0) text += '\n\nNo hay turnos programados dentro de este alcance.';
+      text += `\n\nVer programación: ${portalUrl('/shifts')}`;
+      await sendUserConsultationResult(rawFrom, selectedUserProfile.id, text);
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
+    if (interactiveId === 'menu_user_coverage' && selectedUserProfile && selectedUserAuthorization) {
+      if (!hasCapability(selectedUserAuthorization, 'view_area_coverage', selectedUserAuthorization.committeeId)) {
+        await sendWhatsAppText({ to: rawFrom, text: 'Este perfil no tiene permiso para consultar la cobertura por áreas.' });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      const [areasResult, requirementsResult, shiftsResult] = await Promise.all([
+        supabase
+          .from('committee_areas')
+          .select('id, committee_id, name, status, committees(name)')
+          .eq('status', 'active')
+          .order('sort_order'),
+        supabase.from('area_shift_requirements').select('area_id, required_count'),
+        supabase.from('shifts').select('area_id, volunteers(committee_id)'),
+      ]);
+      const queryError = areasResult.error || requirementsResult.error || shiftsResult.error;
+      if (queryError) throw new Error(`Unable to load WhatsApp area coverage: ${queryError.message}`);
+
+      const globalScope = selectedUserAuthorization.role === 'Admin';
+      const areas = (areasResult.data || []).filter(area =>
+        globalScope || area.committee_id === selectedUserAuthorization?.committeeId
+      );
+      const areaIds = new Set(areas.map(area => area.id));
+      const requirements = (requirementsResult.data || []).filter(requirement => areaIds.has(requirement.area_id));
+      const assignedShifts = ((shiftsResult.data || []) as Array<UserScopedRecord & { area_id?: string | null }>)
+        .filter(shift => shift.area_id && areaIds.has(shift.area_id) && canReadScopedRecord(shift, selectedUserAuthorization));
+      const requiredByArea = new Map<string, number>();
+      const assignedByArea = new Map<string, number>();
+      for (const requirement of requirements) {
+        requiredByArea.set(
+          requirement.area_id,
+          (requiredByArea.get(requirement.area_id) || 0) + Number(requirement.required_count || 0),
+        );
+      }
+      for (const shift of assignedShifts) {
+        if (!shift.area_id) continue;
+        assignedByArea.set(shift.area_id, (assignedByArea.get(shift.area_id) || 0) + 1);
+      }
+
+      const coverageRows = areas.map(area => {
+        const committeeRelation = Array.isArray(area.committees) ? area.committees[0] : area.committees;
+        const required = requiredByArea.get(area.id) || 0;
+        const assigned = assignedByArea.get(area.id) || 0;
+        return {
+          label: globalScope && committeeRelation?.name ? `${committeeRelation.name} · ${area.name}` : area.name,
+          required,
+          assigned,
+          deficit: Math.max(required - assigned, 0),
+        };
+      }).sort((a, b) => b.deficit - a.deficit || a.label.localeCompare(b.label, 'es'));
+
+      let text = `📍 *Cobertura acumulada por áreas*\n${globalScope ? 'Alcance global' : selectedUserAuthorization.committeeName || 'Comité asignado'}`;
+      for (const row of coverageRows.slice(0, 20)) {
+        const status = row.deficit > 0 ? ` · faltan *${row.deficit}*` : ' · cobertura completa';
+        text += `\n\n*${row.label}*\n   ${row.assigned}/${row.required} asignados${status}`;
+      }
+      if (coverageRows.length === 0) text += '\n\nNo hay áreas activas dentro de este alcance.';
+      if (coverageRows.length > 20) text += '\n\nHay más áreas disponibles en el portal.';
+      text += `\n\nVer cobertura detallada: ${portalUrl('/areas?view=coverage')}`;
+      await sendUserConsultationResult(rawFrom, selectedUserProfile.id, text);
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
+    if (interactiveId === 'menu_user_notices' && selectedUserProfile && selectedUserAuthorization) {
+      if (!hasCapability(selectedUserAuthorization, 'view_notices')) {
+        await sendWhatsAppText({ to: rawFrom, text: 'Este perfil no tiene permiso para consultar avisos.' });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      const { data, error } = await supabase
+        .from('reminder_logs')
+        .select('status, delivery_status, volunteers(committee_id)')
+        .order('sent_at', { ascending: false })
+        .limit(1000);
+      if (error) throw new Error(`Unable to load WhatsApp notice status: ${error.message}`);
+      const logs = ((data || []) as Array<UserScopedRecord & { status?: string | null; delivery_status?: string | null }>)
+        .filter(log => canReadScopedRecord(log, selectedUserAuthorization));
+      const text = [
+        `📣 *Estado de avisos*`,
+        hasCapability(selectedUserAuthorization, 'view_all_volunteers') ? 'Alcance global' : selectedUserAuthorization.committeeName || 'Comité asignado',
+        '',
+        `• Registros consultados: *${logs.length}*`,
+        `• Leídos: *${logs.filter(log => log.delivery_status === 'read').length}*`,
+        `• Entregados: *${logs.filter(log => log.delivery_status === 'delivered').length}*`,
+        `• En proceso: *${logs.filter(log => ['pending', 'sent'].includes(log.delivery_status || '')).length}*`,
+        `• Fallidos: *${logs.filter(log => log.delivery_status === 'failed' || log.status === 'error').length}*`,
+        `• Confirmaciones: *${logs.filter(log => log.status === 'confirmado').length}*`,
+        '',
+        `Abrir Avisos: ${portalUrl('/reminders')}`,
+      ].join('\n');
+      await sendUserConsultationResult(rawFrom, selectedUserProfile.id, text);
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
+    if (interactiveId === 'menu_user_requests' && selectedUserProfile && selectedUserAuthorization) {
+      if (!hasCapability(selectedUserAuthorization, 'view_requests')) {
+        await sendWhatsAppText({ to: rawFrom, text: 'Este perfil no tiene permiso para consultar solicitudes.' });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
+      }
+
+      const { data, error } = await supabase
+        .from('shift_change_requests')
+        .select('status, created_at, volunteers(committee_id)')
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(`Unable to load WhatsApp request summary: ${error.message}`);
+      const requests = ((data || []) as Array<UserScopedRecord & { status?: string | null }>)
+        .filter(request => canReadScopedRecord(request, selectedUserAuthorization));
+      const text = [
+        `🔄 *Solicitudes de cambio*`,
+        hasCapability(selectedUserAuthorization, 'view_all_volunteers') ? 'Alcance global' : selectedUserAuthorization.committeeName || 'Comité asignado',
+        '',
+        `• Pendientes: *${requests.filter(request => request.status === 'pending').length}*`,
+        `• Aprobadas: *${requests.filter(request => request.status === 'approved').length}*`,
+        `• Rechazadas: *${requests.filter(request => request.status === 'rejected').length}*`,
+        '',
+        'Para revisar o responder solicitudes, abre el portal:',
+        portalUrl('/requests'),
+      ].join('\n');
+      await sendUserConsultationResult(rawFrom, selectedUserProfile.id, text);
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
+    if (interactiveId === 'menu_user_portal' && selectedUserProfile && selectedUserAuthorization) {
+      const links = [`• Inicio: ${portalUrl('/dashboard')}`];
+      if (hasCapability(selectedUserAuthorization, 'view_volunteers')) links.push(`• Programación: ${portalUrl('/shifts')}`);
+      if (hasCapability(selectedUserAuthorization, 'view_area_coverage', selectedUserAuthorization.committeeId)) links.push(`• Áreas: ${portalUrl('/areas')}`);
+      if (hasCapability(selectedUserAuthorization, 'view_notices')) links.push(`• Avisos: ${portalUrl('/reminders')}`);
+      if (hasCapability(selectedUserAuthorization, 'view_requests')) links.push(`• Solicitudes: ${portalUrl('/requests')}`);
+      await sendUserConsultationResult(
+        rawFrom,
+        selectedUserProfile.id,
+        `🔗 *Abrir el portal*\n\n${links.join('\n\n')}\n\nInicia sesión para realizar cualquier cambio.`,
+      );
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
     if (interactiveId === 'menu_forgot_pin') {
       if (!targetVolId) {
         await sendWhatsAppText({
@@ -671,27 +1304,42 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       return NextResponse.json({ status: 'success' }, { status: 200 });
     }
 
-    if (interactiveId === 'menu_switch_profile') {
-      const { data: volunteers, error: profilesError } = await supabase
-        .from('volunteers')
-        .select('id, first_name, last_name, phone, status, committee_id, committees(name)')
-        .or('status.is.null,status.neq.archived');
-      const senderProfiles = ((volunteers || []) as VolunteerRecord[])
+    if (interactiveId === 'menu_switch_context') {
+      const [volunteersResult, usersResult] = await Promise.all([
+        supabase
+          .from('volunteers')
+          .select('id, first_name, last_name, phone, status, committee_id, committees(name)')
+          .or('status.is.null,status.neq.archived'),
+        supabase
+          .from('profiles')
+          .select('id, full_name, phone, role, coordinator_type, committee_id, status, committees(name)')
+          .or('status.is.null,status.eq.active'),
+      ]);
+      const senderVolunteers = ((volunteersResult.data || []) as VolunteerRecord[])
         .filter(volunteer => phoneMatchesSender(volunteer.phone, senderDigits));
+      const senderUsers = ((usersResult.data || []) as UserProfileRecord[])
+        .filter(profile => phoneMatchesSender(profile.phone, senderDigits));
+      const identityCount = senderUsers.length + senderVolunteers.length;
 
-      if (profilesError || senderProfiles.length === 0) {
+      if (volunteersResult.error || usersResult.error || identityCount === 0) {
         await sendWhatsAppText({
           to: rawFrom,
           text: 'No pudimos consultar los perfiles asociados a este número. Inténtalo nuevamente.',
         });
-      } else if (senderProfiles.length === 1) {
+      } else if (identityCount === 1 && senderUsers.length === 1) {
         await sendWhatsAppInteractiveButtons({
           to: rawFrom,
-          bodyText: `Este número solo tiene un perfil activo: *${volunteerFullName(senderProfiles[0])}*.`,
-          buttons: [{ id: encodeAction(senderProfiles[0].id, 'home'), title: 'Volver al menú' }],
+          bodyText: `Este número solo tiene un perfil activo: *${senderUsers[0].full_name || 'Usuario'}* · ${getUserRoleLabel(senderUsers[0])}.`,
+          buttons: [{ id: encodeAction(senderUsers[0].id, 'user_home'), title: 'Volver al menú' }],
+        });
+      } else if (identityCount === 1 && senderVolunteers.length === 1) {
+        await sendWhatsAppInteractiveButtons({
+          to: rawFrom,
+          bodyText: `Este número solo tiene un perfil activo: *${volunteerFullName(senderVolunteers[0])}* · Voluntario.`,
+          buttons: [{ id: encodeAction(senderVolunteers[0].id, 'home'), title: 'Volver al menú' }],
         });
       } else {
-        await sendVolunteerProfileSelection(rawFrom, senderProfiles);
+        await sendIdentitySelection(rawFrom, senderUsers, senderVolunteers);
       }
       return NextResponse.json({ status: 'success' }, { status: 200 });
     }
@@ -707,7 +1355,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       }
       await sendWhatsAppText({
         to: rawFrom,
-        text: `Gracias${targetVolId ? `, ${firstName}` : ''}. Hemos finalizado esta atención. Cuando necesites algo más, vuelve a escribirnos. 👋`,
+        text: `Gracias${targetVolId || selectedUserProfile ? `, ${firstName}` : ''}. Hemos finalizado esta atención. Cuando necesites algo más, vuelve a escribirnos. 👋`,
       });
       return NextResponse.json({ status: 'success', conversation: 'closed' }, { status: 200 });
     }
@@ -998,19 +1646,33 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
         .eq('volunteer_id', targetVolId)
         .order('day_key', { ascending: true });
       const shifts = (userShifts || []) as ShiftRecord[];
-      const uniqueAreas = new Map<string, { name: string; description: string | null }>();
-      let shiftsWithoutArea = 0;
+      const areaSchedules = new Map<string, {
+        name: string;
+        description: string | null;
+        days: Map<string, ShiftRecord[]>;
+      }>();
 
-      for (const shift of shifts) {
+      for (const shift of sortShifts(shifts)) {
         const area = getShiftAreaDetails(shift);
-        if (!area) {
-          shiftsWithoutArea += 1;
-          continue;
+        if (!area) continue;
+
+        const areaKey = shift.area_id || area.name.toLocaleLowerCase('es');
+        let areaSchedule = areaSchedules.get(areaKey);
+        if (!areaSchedule) {
+          areaSchedule = {
+            name: area.name,
+            description: area.description,
+            days: new Map<string, ShiftRecord[]>(),
+          };
+          areaSchedules.set(areaKey, areaSchedule);
         }
-        uniqueAreas.set(area.name.toLocaleLowerCase('es'), area);
+
+        const dayShifts = areaSchedule.days.get(shift.day_key) || [];
+        dayShifts.push(shift);
+        areaSchedule.days.set(shift.day_key, dayShifts);
       }
 
-      if (uniqueAreas.size === 0) {
+      if (areaSchedules.size === 0) {
         await sendWhatsAppText({
           to: rawFrom,
           text: shifts.length > 0
@@ -1021,19 +1683,24 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       }
 
       let text = `📍 *Áreas de servicio de ${firstName}*`;
-      for (const area of uniqueAreas.values()) {
+      for (const area of areaSchedules.values()) {
         const description = area.description
           ? compactWhatsAppText(area.description)
           : 'Esta área no tiene una descripción registrada.';
-        const block = `\n\n*${area.name}*\n${description}`;
+        let block = `\n\n*${area.name}*\n_${description}_\n\n*Tus asignaciones:*`;
+
+        for (const [dayKey, dayShifts] of area.days) {
+          const shiftLines = dayShifts
+            .map(shift => `   *${shift.shift_key.toUpperCase()}* · ${formatWhatsAppAssignmentTime(shift.day_key, shift.shift_key)}`)
+            .join('\n');
+          block += `\n\n📅 *${formatWhatsAppAssignmentDate(dayKey)}*\n${shiftLines}`;
+        }
+
         if (text.length + block.length > 3800) {
           text += '\n\nHay más información disponible en tu perfil de voluntario.';
           break;
         }
         text += block;
-      }
-      if (shiftsWithoutArea > 0) {
-        text += `\n\n⚠️ ${shiftsWithoutArea} ${shiftsWithoutArea === 1 ? 'turno aún no tiene' : 'turnos aún no tienen'} área asignada.`;
       }
 
       if (text.length <= 950) {
@@ -1510,7 +2177,41 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       return NextResponse.json({ status: 'success' }, { status: 200 });
     }
 
-    // 4. Default Fallback: Send Main Interactive Options Menu (or text menu fallback)
+    // 4. Default fallback: platform users receive a read-only consultation menu.
+    if (selectedUserProfile && selectedUserAuthorization) {
+      const consultationOptions = getUserConsultationOptions(selectedUserAuthorization);
+      const roleLabel = roleDisplayName(selectedUserAuthorization);
+      const scopeLabel = selectedUserAuthorization.role === 'Admin'
+        ? 'Acceso global'
+        : selectedUserAuthorization.committeeName || 'Sin comité asignado';
+      const userMenuResult = await sendWhatsAppInteractiveList({
+        to: rawFrom,
+        headerText: 'Consultas del sistema',
+        bodyText: `Hola ${firstName}. Estás consultando como *${roleLabel}* · ${scopeLabel}. Este menú es únicamente informativo.`,
+        buttonText: 'Mostrar consultas',
+        sections: [{
+          title: 'Consultas disponibles',
+          rows: consultationOptions.map(option => ({
+            id: encodeAction(selectedUserProfile.id, option.action),
+            title: option.title,
+            description: option.description,
+          })),
+        }],
+      });
+
+      if (!userMenuResult.success) {
+        const textMenu = consultationOptions
+          .map((option, index) => `${index + 1}. ${option.title}`)
+          .join('\n');
+        await sendWhatsAppText({
+          to: rawFrom,
+          text: `Hola ${firstName}. Estás consultando como *${roleLabel}* · ${scopeLabel}.\n\n${textMenu}\n\nEste menú es únicamente informativo; cualquier cambio se realiza desde el portal.`,
+        });
+      }
+      return NextResponse.json({ status: 'success' }, { status: 200 });
+    }
+
+    // 5. Volunteer fallback: send the personal interactive options menu.
     if (!targetVolId) {
       await sendWhatsAppText({
         to: rawFrom,
@@ -1566,7 +2267,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
             {
               id: encodeAction(targetVolId, 'switch_profile'),
               title: 'Cambiar de perfil',
-              description: 'Elige otra persona asociada al número'
+              description: 'Elige otro rol o perfil asociado'
             },
             {
               id: encodeAction(targetVolId, 'end'),

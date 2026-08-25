@@ -18,6 +18,7 @@ import { updateVolunteerAction, toggleShiftAction } from '@/app/actions/voluntee
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 import { useMobileDrawerNavigation } from '@/lib/use-mobile-drawer-navigation';
 import { getShiftAreaDetails, type ShiftAreaDetails } from '@/lib/shift-area';
+import { SharedPhoneWarning } from '@/components/SharedPhoneWarning';
 
 
 export interface VolunteerProfileDrawerProps {
@@ -50,6 +51,7 @@ export function VolunteerProfileDrawer({
   const [editAge, setEditAge] = useState('');
   const [editCommitteeId, setEditCommitteeId] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [phoneConflicts, setPhoneConflicts] = useState<string[]>([]);
   const { drawerRef, scrollAreaRef } = useMobileDrawerNavigation({
     isOpen,
     onClose,
@@ -233,6 +235,7 @@ export function VolunteerProfileDrawer({
         setEditFirstName(fn);
         setEditLastName(ln);
         setEditPhone(activeVolunteer.phone || '');
+        setPhoneConflicts([]);
         setEditStake(activeVolunteer.stake || '');
         setEditWard(activeVolunteer.ward || '');
         setEditAge(activeVolunteer.age ? String(activeVolunteer.age) : '');
@@ -265,8 +268,7 @@ export function VolunteerProfileDrawer({
     }
   };
 
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveProfile = async (allowSharedPhone = false) => {
     if (!activeVolunteer) return;
 
     const trimmedFirstName = editFirstName.trim();
@@ -315,16 +317,27 @@ export function VolunteerProfileDrawer({
       neighborhood: trimmedWard || null,
       committeeId:  commObj ? commObj.id : (editCommitteeId || null),
       age:          ageNum,
+      allowSharedPhone,
     });
 
     setIsSavingProfile(false);
 
     if (!result.success) {
+      if (result.reason === 'phone_conflict' && result.conflictingVolunteers?.length) {
+        setPhoneConflicts(result.conflictingVolunteers.map(volunteer => volunteer.name));
+        return;
+      }
       showToast(result.error || 'Error al guardar cambios del perfil', 'error');
     } else {
-      showToast('Perfil de voluntario actualizado correctamente');
+      showToast(allowSharedPhone ? 'Perfil actualizado con teléfono compartido' : 'Perfil de voluntario actualizado correctamente');
+      setPhoneConflicts([]);
       setDrawerMode('view');
     }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await saveProfile(false);
   };
 
   return (
@@ -441,13 +454,28 @@ export function VolunteerProfileDrawer({
                         Teléfono (Celular WhatsApp):
                       </label>
                       <input
-                        type="text"
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={8}
                         required
                         value={editPhone}
-                        onChange={e => setEditPhone(e.target.value)}
+                        onChange={e => {
+                          setEditPhone(e.target.value.replace(/\D/g, '').slice(0, 8));
+                          setPhoneConflicts([]);
+                        }}
                         className="w-full bg-dark3 border border-border text-text text-xs p-3 rounded-xl focus:outline-none focus:border-[#4d7cfe]"
                       />
                     </div>
+
+                    {phoneConflicts.length > 0 && (
+                      <SharedPhoneWarning
+                        phone={editPhone}
+                        names={phoneConflicts}
+                        isConfirming={isSavingProfile}
+                        onDismiss={() => setPhoneConflicts([])}
+                        onConfirm={() => void saveProfile(true)}
+                      />
+                    )}
 
                     <div>
                       <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block mb-1">

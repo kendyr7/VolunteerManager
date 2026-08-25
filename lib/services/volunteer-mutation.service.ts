@@ -40,6 +40,7 @@ export interface UpdateProfilePayload {
   neighborhood?: string | null;
   committeeId?: string | null;
   age?: number | null;
+  allowSharedPhone?: boolean;
 }
 
 export interface CreateVolunteerPayload {
@@ -51,6 +52,12 @@ export interface CreateVolunteerPayload {
   committeeId?: string | null;
   age?: number | null;
   pin?: string | null;
+  allowSharedPhone?: boolean;
+}
+
+export interface PhoneConflictVolunteer {
+  id: string;
+  name: string;
 }
 
 export interface BulkImportItemPayload {
@@ -71,6 +78,8 @@ export interface MutationResult {
   success: boolean;
   skipped?: boolean;  // true when diff was empty — no update, no audit
   error?: string;
+  reason?: 'phone_conflict' | 'not_found' | 'error';
+  conflictingVolunteers?: PhoneConflictVolunteer[];
 }
 
 export interface UpdateVolunteerStatusRequest {
@@ -80,7 +89,6 @@ export interface UpdateVolunteerStatusRequest {
 }
 
 export interface UpdateStatusResult extends MutationResult {
-  reason?: 'phone_conflict' | 'not_found' | 'error';
   conflictingVolunteer?: {
     id: string;
     name: string;
@@ -209,9 +217,28 @@ export class VolunteerMutationService {
     neighborhood: string;
     committee_id: string | null;
   } | null> {
-    if (!phoneInput) return null;
+    const matches = await this.findActivePhoneConflicts(supabase, phoneInput, excludeVolunteerId);
+    return matches[0] || null;
+  }
+
+  private static async findActivePhoneConflicts(
+    supabase: Awaited<ReturnType<typeof getAdminSupabase>>,
+    phoneInput: string,
+    excludeVolunteerId?: string
+  ): Promise<Array<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    phone: string;
+    stake: string;
+    neighborhood: string;
+    committee_id: string | null;
+    is_shared_phone: boolean;
+    shared_phone_owner_id: string | null;
+  }>> {
+    if (!phoneInput) return [];
     const local8 = getLocal8Digits(phoneInput);
-    if (!local8 || local8.length !== 8) return null;
+    if (!local8 || local8.length !== 8) return [];
 
     const targetVariants = Array.from(new Set([
       phoneInput.trim(),
@@ -222,7 +249,7 @@ export class VolunteerMutationService {
 
     let query = supabase
       .from('volunteers')
-      .select('id, first_name, last_name, phone, stake, neighborhood, committee_id')
+      .select('id, first_name, last_name, phone, stake, neighborhood, committee_id, is_shared_phone, shared_phone_owner_id')
       .in('phone', targetVariants)
       .neq('status', 'archived');
 
@@ -231,14 +258,12 @@ export class VolunteerMutationService {
     }
 
     const { data: matches } = await query;
-    if (!matches || matches.length === 0) return null;
+    if (!matches || matches.length === 0) return [];
 
-    const conflict = matches.find(v => {
+    return matches.filter(v => {
       if (excludeVolunteerId && v.id === excludeVolunteerId) return false;
       return getLocal8Digits(v.phone) === local8;
     });
-
-    return conflict || null;
   }
 
   private static async queueImportException(
@@ -308,7 +333,8 @@ export class VolunteerMutationService {
 
   private static async persistVolunteer(
     supabase: Awaited<ReturnType<typeof getAdminSupabase>>,
-    payload: CreateVolunteerPayload
+    payload: CreateVolunteerPayload,
+    sharedPhone?: { ownerId: string; reason: string; authorizedBy: string }
   ): Promise<{ data: any | null; error: any | null }> {
     const pin = payload.pin || String(Math.floor(1000 + Math.random() * 9000));
     const phoneNormalized = normalizePhoneE164(payload.phone);
@@ -325,6 +351,11 @@ export class VolunteerMutationService {
         age:          payload.age ?? null,
         pin,
         status:       'active',
+        is_shared_phone: Boolean(sharedPhone),
+        shared_phone_owner_id: sharedPhone?.ownerId ?? null,
+        shared_phone_reason: sharedPhone?.reason ?? null,
+        shared_phone_authorized_by: sharedPhone?.authorizedBy ?? null,
+        shared_phone_authorized_at: sharedPhone ? new Date().toISOString() : null,
       })
       .select()
       .single();
@@ -352,7 +383,7 @@ export class VolunteerMutationService {
       // 1. Read the current state from DB
       const { data: previous, error: fetchError } = await supabase
         .from('volunteers')
-        .select('first_name, last_name, phone, stake, neighborhood, committee_id, age')
+        .select('first_name, last_name, phone, stake, neighborhood, committee_id, age, is_shared_phone, shared_phone_owner_id, shared_phone_reason, shared_phone_authorized_by, shared_phone_authorized_at')
         .eq('id', volunteerId)
         .maybeSingle();
 
@@ -367,12 +398,44 @@ export class VolunteerMutationService {
         return { success: false, error: 'El número de teléfono debe tener exactamente 8 dígitos.' };
       }
 
-      if (getLocal8Digits(previous.phone) !== getLocal8Digits(payload.phone)) {
-        const conflict = await this.findActivePhoneConflict(supabase, payload.phone, volunteerId);
-        if (conflict) {
+      const phoneChanged = getLocal8Digits(previous.phone) !== getLocal8Digits(payload.phone);
+      let sharedPhoneUpdate: Record<string, unknown> = {};
+      if (phoneChanged) {
+        const conflicts = await this.findActivePhoneConflicts(supabase, payload.phone, volunteerId);
+        if (conflicts.length > 0 && !payload.allowSharedPhone) {
           return {
             success: false,
-            error: `Este número de teléfono ya está asociado a otro voluntario activo ("${conflict.first_name} ${conflict.last_name || ''}".trim()).`,
+            reason: 'phone_conflict',
+            error: 'Este número de teléfono ya está compartido por otros voluntarios activos.',
+            conflictingVolunteers: conflicts.map(conflict => ({
+              id: conflict.id,
+              name: `${conflict.first_name || ''} ${conflict.last_name || ''}`.trim(),
+            })),
+          };
+        }
+
+        if (conflicts.length > 0) {
+          if (actor.role !== 'Administrador') {
+            return { success: false, error: 'Solo un administrador puede autorizar un número compartido.' };
+          }
+          const owner = conflicts.find(conflict => !conflict.is_shared_phone);
+          if (!owner) {
+            return { success: false, error: 'No se encontró un titular activo para este número compartido.' };
+          }
+          sharedPhoneUpdate = {
+            is_shared_phone: true,
+            shared_phone_owner_id: owner.id,
+            shared_phone_reason: 'Número compartido confirmado al editar el perfil',
+            shared_phone_authorized_by: actor.name,
+            shared_phone_authorized_at: new Date().toISOString(),
+          };
+        } else {
+          sharedPhoneUpdate = {
+            is_shared_phone: false,
+            shared_phone_owner_id: null,
+            shared_phone_reason: null,
+            shared_phone_authorized_by: null,
+            shared_phone_authorized_at: null,
           };
         }
       }
@@ -433,6 +496,7 @@ export class VolunteerMutationService {
           neighborhood: payload.neighborhood ?? null,
           committee_id: payload.committeeId ?? null,
           age:          payload.age ?? null,
+          ...sharedPhoneUpdate,
         })
         .eq('id', volunteerId)
         .select('*')
@@ -508,16 +572,37 @@ export class VolunteerMutationService {
       }
 
       // 2. Canonical conflict check against active volunteers
-      const existing = await this.findActivePhoneConflict(supabase, payload.phone);
+      const conflicts = await this.findActivePhoneConflicts(supabase, payload.phone);
 
-      if (existing) {
+      if (conflicts.length > 0 && !payload.allowSharedPhone) {
         return {
           success: false,
-          error: `Este número de teléfono ya está asociado a otro voluntario activo ("${existing.first_name} ${existing.last_name || ''}".trim()).`,
+          reason: 'phone_conflict',
+          error: 'Este número de teléfono ya está compartido por otros voluntarios activos.',
+          conflictingVolunteers: conflicts.map(conflict => ({
+            id: conflict.id,
+            name: `${conflict.first_name || ''} ${conflict.last_name || ''}`.trim(),
+          })),
         };
       }
 
-      const { data: inserted, error: insertError } = await this.persistVolunteer(supabase, payload);
+      let sharedPhone: { ownerId: string; reason: string; authorizedBy: string } | undefined;
+      if (conflicts.length > 0) {
+        if (actor.role !== 'Administrador') {
+          return { success: false, error: 'Solo un administrador puede autorizar un número compartido.' };
+        }
+        const owner = conflicts.find(conflict => !conflict.is_shared_phone);
+        if (!owner) {
+          return { success: false, error: 'No se encontró un titular activo para este número compartido.' };
+        }
+        sharedPhone = {
+          ownerId: owner.id,
+          reason: 'Número compartido confirmado al crear el voluntario',
+          authorizedBy: actor.name,
+        };
+      }
+
+      const { data: inserted, error: insertError } = await this.persistVolunteer(supabase, payload, sharedPhone);
 
       if (insertError || !inserted) {
         console.error('[VolunteerMutationService.createVolunteer] DB insert failed:', insertError);
@@ -536,6 +621,7 @@ export class VolunteerMutationService {
           phone: inserted.phone,
           committee: committeeName || 'Sin comité',
           age: inserted.age,
+          sharedPhoneOwnerId: sharedPhone?.ownerId ?? null,
         },
       });
 
@@ -1542,7 +1628,7 @@ export class VolunteerMutationService {
             return {
               success: false,
               reason: 'phone_conflict',
-              error: `El teléfono ${normPhone} ya pertenece a otro voluntario activo ("${conflict.first_name} ${conflict.last_name || ''}".trim()).`,
+              error: `El teléfono ${normPhone} ya pertenece a otro voluntario activo (${`${conflict.first_name || ''} ${conflict.last_name || ''}`.trim()}).`,
             };
           }
         }
