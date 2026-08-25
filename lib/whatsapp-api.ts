@@ -2,6 +2,17 @@
  * Meta WhatsApp Cloud API Helper Functions
  */
 
+import {
+  buildInteractiveFallbackText,
+  limitWhatsAppText,
+  planWhatsAppInteractiveBody,
+  prepareWhatsAppButtons,
+  prepareWhatsAppListSections,
+  WHATSAPP_MESSAGE_LIMITS,
+  whatsappTextLength,
+} from './whatsapp-interactive-safety';
+import { formatE164, validatePhone8Digits } from './whatsapp';
+
 export interface WhatsAppTemplateComponent {
   type: 'header' | 'body' | 'button';
   sub_type?: 'quick_reply' | 'url';
@@ -20,9 +31,28 @@ export type WhatsAppSendResult = {
   errorCode?: string;
   errorDetails?: string;
   httpStatus?: number;
+  fallbackUsed?: boolean;
+  degradedReason?: 'interactive_body_split' | 'interactive_body_truncated' | 'interactive_api_rejected';
 };
 
-import { formatE164, validatePhone8Digits } from './whatsapp';
+type MetaErrorPayload = {
+  error?: {
+    message?: string;
+    code?: string | number;
+    error_data?: { details?: string };
+    error_user_msg?: string;
+  };
+};
+
+function metaErrorDetails(data: MetaErrorPayload, fallback: string, httpStatus: number): WhatsAppSendResult {
+  return {
+    success: false,
+    error: data?.error?.message || fallback,
+    errorCode: data?.error?.code ? String(data.error.code) : undefined,
+    errorDetails: data?.error?.error_data?.details || data?.error?.error_user_msg,
+    httpStatus,
+  };
+}
 
 export { formatE164, validatePhone8Digits };
 
@@ -217,7 +247,7 @@ export function isWhatsAppCapacityError(result: WhatsAppSendResult): boolean {
 export async function sendWhatsAppText(options: {
   to: string;
   text: string;
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+}): Promise<WhatsAppSendResult> {
   if (!isWhatsAppEnabled()) {
     console.log("⏸️ WhatsApp message skipped: sending is PAUSED via WHATSAPP_ENABLED=false");
     return { success: false, error: "WhatsApp messaging is temporarily paused by configuration." };
@@ -231,6 +261,11 @@ export async function sendWhatsAppText(options: {
 
   const recipientPhone = formatE164Phone(options.to);
   const url = getMessagesUrl(phoneNumberId);
+  const safeText = limitWhatsAppText(
+    options.text,
+    WHATSAPP_MESSAGE_LIMITS.textBody,
+    'Mensaje no disponible.',
+  );
 
   try {
     const res = await fetch(url, {
@@ -244,7 +279,7 @@ export async function sendWhatsAppText(options: {
         recipient_type: 'individual',
         to: recipientPhone,
         type: 'text',
-        text: { body: options.text }
+        text: { body: safeText }
       })
     });
 
@@ -354,62 +389,12 @@ export async function sendWhatsAppInteractiveButton(options: {
   bodyText: string;
   buttonText: string;
   buttonPayload: string;
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!isWhatsAppEnabled()) {
-    console.log("⏸️ WhatsApp message skipped: sending is PAUSED via WHATSAPP_ENABLED=false");
-    return { success: false, error: "WhatsApp messaging is temporarily paused by configuration." };
-  }
-
-  const { token, phoneNumberId } = getMetaCredentials();
-
-  if (!token || !phoneNumberId) {
-    return { success: false, error: "Missing WhatsApp Credentials" };
-  }
-
-  const recipientPhone = formatE164Phone(options.to);
-  const url = getMessagesUrl(phoneNumberId);
-
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: recipientPhone,
-        type: 'interactive',
-        interactive: {
-          type: 'button',
-          body: { text: options.bodyText },
-          action: {
-            buttons: [
-              {
-                type: 'reply',
-                reply: {
-                  id: options.buttonPayload,
-                  title: options.buttonText
-                }
-              }
-            ]
-          }
-        }
-      })
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      console.error("Meta WhatsApp Interactive Error:", data);
-      return { success: false, error: data.error?.message || "Error enviando botón interactivo" };
-    }
-
-    return { success: true, messageId: data.messages?.[0]?.id };
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
+}): Promise<WhatsAppSendResult> {
+  return sendWhatsAppInteractiveButtons({
+    to: options.to,
+    bodyText: options.bodyText,
+    buttons: [{ id: options.buttonPayload, title: options.buttonText }],
+  });
 }
 
 /**
@@ -421,7 +406,7 @@ export async function sendWhatsAppInteractiveButtons(options: {
   buttons: Array<{ id: string; title: string }>;
   headerText?: string;
   footerText?: string;
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+}): Promise<WhatsAppSendResult> {
   if (!isWhatsAppEnabled()) {
     console.log("⏸️ WhatsApp message skipped: sending is PAUSED via WHATSAPP_ENABLED=false");
     return { success: false, error: "WhatsApp messaging is temporarily paused by configuration." };
@@ -435,26 +420,53 @@ export async function sendWhatsAppInteractiveButtons(options: {
 
   const recipientPhone = formatE164Phone(options.to);
   const url = getMessagesUrl(phoneNumberId);
+  const bodyPlan = planWhatsAppInteractiveBody(options.bodyText);
+  const buttons = prepareWhatsAppButtons(options.buttons);
+  let supplementalDelivered = false;
+
+  if (bodyPlan.supplementalText) {
+    const supplementalResult = await sendWhatsAppText({
+      to: options.to,
+      text: bodyPlan.supplementalText,
+    });
+    supplementalDelivered = supplementalResult.success;
+  }
+
+  if (buttons.length === 0) {
+    return sendWhatsAppText({
+      to: options.to,
+      text: limitWhatsAppText(options.bodyText, WHATSAPP_MESSAGE_LIMITS.textBody, 'Escribe tu solicitud para continuar.'),
+    });
+  }
 
   const interactiveObj: any = {
     type: 'button',
-    body: { text: options.bodyText },
+    body: {
+      text: bodyPlan.supplementalText && !supplementalDelivered
+        ? limitWhatsAppText(options.bodyText, WHATSAPP_MESSAGE_LIMITS.interactiveBody, 'Selecciona una opción para continuar.')
+        : bodyPlan.bodyText,
+    },
     action: {
-      buttons: options.buttons.slice(0, 3).map(b => ({
+      buttons: buttons.map(b => ({
         type: 'reply',
         reply: {
           id: b.id,
-          title: b.title.slice(0, 20) // Meta limit: 20 chars
+          title: b.title,
         }
       }))
     }
   };
 
   if (options.headerText) {
-    interactiveObj.header = { type: 'text', text: options.headerText };
+    interactiveObj.header = {
+      type: 'text',
+      text: limitWhatsAppText(options.headerText, WHATSAPP_MESSAGE_LIMITS.interactiveHeader),
+    };
   }
   if (options.footerText) {
-    interactiveObj.footer = { text: options.footerText };
+    interactiveObj.footer = {
+      text: limitWhatsAppText(options.footerText, WHATSAPP_MESSAGE_LIMITS.interactiveFooter),
+    };
   }
 
   try {
@@ -476,11 +488,44 @@ export async function sendWhatsAppInteractiveButtons(options: {
     const data = await res.json();
 
     if (!res.ok) {
-      console.error("Meta WhatsApp Buttons Error:", data);
-      return { success: false, error: data.error?.message || "Error enviando botones interactivos" };
+      const metaError = metaErrorDetails(data, 'Error enviando botones interactivos', res.status);
+      console.error('Meta WhatsApp Buttons Error:', {
+        error: data.error,
+        bodyLength: whatsappTextLength(options.bodyText),
+        preparedBodyLength: whatsappTextLength(interactiveObj.body.text),
+        buttonCount: buttons.length,
+      });
+      const fallbackResult = await sendWhatsAppText({
+        to: options.to,
+        text: buildInteractiveFallbackText(
+          supplementalDelivered
+            ? 'No pudimos mostrar los botones interactivos.'
+            : options.bodyText,
+          buttons.map(button => button.title),
+        ),
+      });
+      if (fallbackResult.success) {
+        return {
+          ...fallbackResult,
+          fallbackUsed: true,
+          degradedReason: 'interactive_api_rejected',
+        };
+      }
+      return metaError;
     }
 
-    return { success: true, messageId: data.messages?.[0]?.id };
+    return {
+      success: true,
+      messageId: data.messages?.[0]?.id,
+      ...(bodyPlan.supplementalText
+        ? {
+            fallbackUsed: true,
+            degradedReason: supplementalDelivered
+              ? 'interactive_body_split' as const
+              : 'interactive_body_truncated' as const,
+          }
+        : {}),
+    };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
@@ -503,7 +548,7 @@ export async function sendWhatsAppInteractiveList(options: {
       description?: string;
     }>;
   }>;
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+}): Promise<WhatsAppSendResult> {
   if (!isWhatsAppEnabled()) {
     console.log("⏸️ WhatsApp message skipped: sending is PAUSED via WHATSAPP_ENABLED=false");
     return { success: false, error: "WhatsApp messaging is temporarily paused by configuration." };
@@ -517,28 +562,59 @@ export async function sendWhatsAppInteractiveList(options: {
 
   const recipientPhone = formatE164Phone(options.to);
   const url = getMessagesUrl(phoneNumberId);
+  const bodyPlan = planWhatsAppInteractiveBody(options.bodyText);
+  const sections = prepareWhatsAppListSections(options.sections);
+  let supplementalDelivered = false;
+
+  if (bodyPlan.supplementalText) {
+    const supplementalResult = await sendWhatsAppText({
+      to: options.to,
+      text: bodyPlan.supplementalText,
+    });
+    supplementalDelivered = supplementalResult.success;
+  }
+
+  if (sections.length === 0) {
+    return sendWhatsAppText({
+      to: options.to,
+      text: limitWhatsAppText(options.bodyText, WHATSAPP_MESSAGE_LIMITS.textBody, 'Escribe tu solicitud para continuar.'),
+    });
+  }
 
   const interactiveObj: any = {
     type: 'list',
-    body: { text: options.bodyText },
+    body: {
+      text: bodyPlan.supplementalText && !supplementalDelivered
+        ? limitWhatsAppText(options.bodyText, WHATSAPP_MESSAGE_LIMITS.interactiveBody, 'Selecciona una opción para continuar.')
+        : bodyPlan.bodyText,
+    },
     action: {
-      button: (options.buttonText || 'Ver Opciones').slice(0, 20),
-      sections: options.sections.map(s => ({
-        title: s.title.slice(0, 24),
-        rows: s.rows.slice(0, 10).map(r => ({
+      button: limitWhatsAppText(
+        options.buttonText || 'Ver Opciones',
+        WHATSAPP_MESSAGE_LIMITS.listButtonTitle,
+        'Ver opciones',
+      ),
+      sections: sections.map(s => ({
+        title: s.title,
+        rows: s.rows.map(r => ({
           id: r.id,
-          title: r.title.slice(0, 24),
-          description: r.description ? r.description.slice(0, 72) : undefined
+          title: r.title,
+          description: r.description,
         }))
       }))
     }
   };
 
   if (options.headerText) {
-    interactiveObj.header = { type: 'text', text: options.headerText };
+    interactiveObj.header = {
+      type: 'text',
+      text: limitWhatsAppText(options.headerText, WHATSAPP_MESSAGE_LIMITS.interactiveHeader),
+    };
   }
   if (options.footerText) {
-    interactiveObj.footer = { text: options.footerText };
+    interactiveObj.footer = {
+      text: limitWhatsAppText(options.footerText, WHATSAPP_MESSAGE_LIMITS.interactiveFooter),
+    };
   }
 
   try {
@@ -560,11 +636,45 @@ export async function sendWhatsAppInteractiveList(options: {
     const data = await res.json();
 
     if (!res.ok) {
-      console.error("Meta WhatsApp List Error:", data);
-      return { success: false, error: data.error?.message || "Error enviando lista interactiva" };
+      const metaError = metaErrorDetails(data, 'Error enviando lista interactiva', res.status);
+      console.error('Meta WhatsApp List Error:', {
+        error: data.error,
+        bodyLength: whatsappTextLength(options.bodyText),
+        preparedBodyLength: whatsappTextLength(interactiveObj.body.text),
+        sectionCount: sections.length,
+        rowCount: sections.reduce((total, section) => total + section.rows.length, 0),
+      });
+      const fallbackResult = await sendWhatsAppText({
+        to: options.to,
+        text: buildInteractiveFallbackText(
+          supplementalDelivered
+            ? 'No pudimos mostrar la lista interactiva.'
+            : options.bodyText,
+          sections.flatMap(section => section.rows.map(row => row.title)),
+        ),
+      });
+      if (fallbackResult.success) {
+        return {
+          ...fallbackResult,
+          fallbackUsed: true,
+          degradedReason: 'interactive_api_rejected',
+        };
+      }
+      return metaError;
     }
 
-    return { success: true, messageId: data.messages?.[0]?.id };
+    return {
+      success: true,
+      messageId: data.messages?.[0]?.id,
+      ...(bodyPlan.supplementalText
+        ? {
+            fallbackUsed: true,
+            degradedReason: supplementalDelivered
+              ? 'interactive_body_split' as const
+              : 'interactive_body_truncated' as const,
+          }
+        : {}),
+    };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
