@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -43,3 +44,10 @@ next-env.d.ts
 
 # Local Codex MCP configuration contains machine-specific paths
 /.codex/config.toml
+
+# Local/generated agent workspaces and build artifacts
+/.codex-spreadsheet-work/
+/outputs/
+
+# One-off local verification scripts
+/scripts/test_settings_authorization.js
