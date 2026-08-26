@@ -209,6 +209,27 @@ export default function CoordinatorDashboard() {
     touchStartYRef.current = null;
   }, [handlePrevCommittee, handleNextCommittee]);
 
+  const openHeatmapFullscreen = useCallback(() => {
+    setIsHeatmapFullscreen(true);
+    try {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().catch(() => {});
+      }
+    } catch {}
+  }, []);
+
+  const closeHeatmapFullscreen = useCallback(() => {
+    setIsHeatmapFullscreen(false);
+    try {
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+      }
+    } catch {}
+    if (typeof window !== 'undefined' && window.location.search.includes('view=heatmap-fullscreen')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
   const toggleHeatmapFullscreen = useCallback(() => {
     setIsHeatmapFullscreen(prev => {
       const nextState = !prev;
@@ -224,25 +245,32 @@ export default function CoordinatorDashboard() {
             document.exitFullscreen?.().catch(() => {});
           }
         } catch {}
+        if (typeof window !== 'undefined' && window.location.search.includes('view=heatmap-fullscreen')) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
       }
       return nextState;
     });
   }, []);
 
   useEffect(() => {
-    if (requestedView !== 'heatmap-fullscreen' || heatmapDeepLinkHandledRef.current) return;
-    heatmapDeepLinkHandledRef.current = true;
-    window.history.replaceState(null, '', '/dashboard');
-    const frame = window.requestAnimationFrame(() => {
-      setIsHeatmapFullscreen(true);
-      try {
-        if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen?.().catch(() => {});
-        }
-      } catch {}
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [requestedView]);
+    if (requestedView === 'heatmap-fullscreen') {
+      const frame = window.requestAnimationFrame(() => {
+        openHeatmapFullscreen();
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+  }, [requestedView, openHeatmapFullscreen]);
+
+  useEffect(() => {
+    const handleOpenFullscreen = () => {
+      openHeatmapFullscreen();
+    };
+    window.addEventListener('open-heatmap-fullscreen', handleOpenFullscreen);
+    return () => {
+      window.removeEventListener('open-heatmap-fullscreen', handleOpenFullscreen);
+    };
+  }, [openHeatmapFullscreen]);
 
   useEffect(() => {
     if (!isHeatmapFullscreen) return;
@@ -255,7 +283,7 @@ export default function CoordinatorDashboard() {
         e.preventDefault();
         handleNextCommittee();
       } else if (e.key === 'Escape') {
-        setIsHeatmapFullscreen(false);
+        closeHeatmapFullscreen();
       }
     };
 
@@ -268,7 +296,7 @@ export default function CoordinatorDashboard() {
       window.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = originalOverflow;
     };
-  }, [isHeatmapFullscreen, handlePrevCommittee, handleNextCommittee]);
+  }, [isHeatmapFullscreen, handlePrevCommittee, handleNextCommittee, closeHeatmapFullscreen]);
 
   useEffect(() => {
     const loadConfirmations = () => {
@@ -1335,7 +1363,7 @@ export default function CoordinatorDashboard() {
 
                 <button
                   type="button"
-                  onClick={toggleHeatmapFullscreen}
+                  onClick={closeHeatmapFullscreen}
                   className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-dark2 border border-border text-text-dim hover:text-red hover:bg-red-500/10 hover:border-red/30 flex items-center justify-center transition-all active:scale-95 shadow-sm shrink-0"
                   title="Salir de pantalla completa (Esc)"
                   aria-label="Salir de pantalla completa"

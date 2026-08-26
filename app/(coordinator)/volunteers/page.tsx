@@ -219,6 +219,24 @@ export default function VolunteersPage() {
   const [selectedVolunteers, setSelectedVolunteers] = useState<Set<string>>(new Set());
   const [isBulkCredentialsModalOpen, setIsBulkCredentialsModalOpen] = useState(false);
 
+  // Hide global mobile nav/QuickWheel search button when selection mode is active
+  useEffect(() => {
+    const isSelectionActive = selectedVolunteers.size > 0;
+    window.dispatchEvent(
+      new CustomEvent('hide-mobile-bottom-nav', {
+        detail: { hidden: isSelectionActive },
+      })
+    );
+
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent('hide-mobile-bottom-nav', {
+          detail: { hidden: false },
+        })
+      );
+    };
+  }, [selectedVolunteers.size]);
+
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -1374,7 +1392,10 @@ export default function VolunteersPage() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-xl bg-white/95 dark:bg-[#141517]/95 border border-slate-200 dark:border-white/15 backdrop-blur-xl rounded-full shadow-[0_12px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.6)] px-4 py-2.5 flex items-center justify-between gap-3 text-sm"
+            className="fixed left-1/2 -translate-x-1/2 z-[80] w-[92%] max-w-xl bg-white/95 dark:bg-[#141517]/95 border border-slate-200 dark:border-white/15 backdrop-blur-xl rounded-full shadow-[0_12px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.6)] px-4 py-2.5 flex items-center justify-between gap-3 text-sm"
+            style={{
+              bottom: 'max(1.25rem, env(safe-area-inset-bottom))',
+            }}
           >
             <div className="flex items-center gap-2.5 min-w-0 pl-1">
               <Badge className="bg-[#25D366] text-black font-black text-xs px-2.5 py-0.5 rounded-full shadow-sm">
@@ -1391,7 +1412,7 @@ export default function VolunteersPage() {
                 onClick={handleClearSelection}
                 className="text-xs font-bold text-slate-500 hover:text-slate-900 dark:text-text-dim dark:hover:text-white px-2.5 py-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
               >
-                Limpiar
+                Cancelar
               </button>
 
               {canSendWhatsappMessages() && (

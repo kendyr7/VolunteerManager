@@ -13,6 +13,7 @@ import {
   canManageUsers,
   canQrCheckin,
   canSendWhatsappMessages,
+  canViewDashboard,
   canViewRequests,
   canViewReports,
   canViewVolunteerProfile,
@@ -107,6 +108,16 @@ const ACTIONS: Array<CommandItem & { allowed: () => boolean }> = [
     href: '/reminders',
     searchText: 'avisos recordatorios whatsapp mensajes enviar',
     allowed: canSendWhatsappMessages,
+  },
+  {
+    id: 'action-heatmap-fullscreen',
+    type: 'action',
+    title: 'Mapa de calor (Pantalla completa)',
+    subtitle: 'Ver proyección de cobertura de turnos en tiempo real',
+    icon: 'grid_view',
+    href: '/dashboard?view=heatmap-fullscreen',
+    searchText: 'mapa de calor cobertura turnos fullscreen pantalla completa proyeccion tv dashboard',
+    allowed: canViewDashboard,
   },
   {
     id: 'action-review-requests',
@@ -431,6 +442,9 @@ export function GlobalCommandPalette({
 
     if (item.href) {
       closePalette();
+      if (item.href.includes('view=heatmap-fullscreen')) {
+        window.dispatchEvent(new CustomEvent('open-heatmap-fullscreen'));
+      }
       router.push(item.href);
     }
   }, [closePalette, router]);
@@ -443,6 +457,9 @@ export function GlobalCommandPalette({
     }
     if (destination.href) {
       closePalette();
+      if (destination.href.includes('view=heatmap-fullscreen')) {
+        window.dispatchEvent(new CustomEvent('open-heatmap-fullscreen'));
+      }
       router.push(destination.href);
     }
   }, [closePalette, router]);

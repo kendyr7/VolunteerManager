@@ -29,17 +29,18 @@ interface MobileQuickWheelProps {
   items: MobileQuickWheelItem[];
   onSearch: () => void;
   onSelect: (item: MobileQuickWheelAction) => void;
+  hidden?: boolean;
 }
 
 type OpenOrigin = 'gesture' | 'keyboard';
 
-const HOLD_DELAY_MS = 340;
-const SUBMENU_DELAY_MS = 300;
+const HOLD_DELAY_MS = 280;
+const SUBMENU_DELAY_MS = 140;
 const HOLD_MOVE_TOLERANCE = 18;
-const SELECTION_RADIUS = 48;
-const SUBMENU_COLLAPSE_RADIUS = 122;
-const SUBMENU_SELECTION_RADIUS = 146;
-const WHEEL_RADIUS = 112;
+const SELECTION_RADIUS = 36;
+const SUBMENU_COLLAPSE_RADIUS = 60;
+const SUBMENU_SELECTION_RADIUS = 135;
+const WHEEL_RADIUS = 93;
 const WHEEL_INNER_RADIUS = 42;
 const WHEEL_OUTER_RADIUS = 144;
 const WHEEL_VIEWBOX_SIZE = 292;
@@ -48,12 +49,12 @@ const ARC_START_DEGREES = -160;
 const ARC_END_DEGREES = -20;
 const ARC_EDGE_START_DEGREES = -176;
 const ARC_EDGE_END_DEGREES = -4;
-const SUBMENU_POSITION_RADIUS = 163;
-const SUBMENU_INNER_RADIUS = 142;
-const SUBMENU_OUTER_RADIUS = 184;
-const SUBMENU_VIEWBOX_SIZE = 400;
+const SUBMENU_POSITION_RADIUS = 172;
+const SUBMENU_INNER_RADIUS = 144;
+const SUBMENU_OUTER_RADIUS = 200;
+const SUBMENU_VIEWBOX_SIZE = 420;
 const SUBMENU_CENTER = SUBMENU_VIEWBOX_SIZE / 2;
-const SUBMENU_ANGLE_STEP = 28;
+const SUBMENU_ANGLE_STEP = 30;
 
 function wheelAngle(index: number, itemCount: number) {
   if (itemCount <= 1) return -90;
@@ -186,7 +187,8 @@ function selectedSubmenuIndexFromPointer(
   const pointerAngle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
   const firstSegment = submenuSegmentBounds(0, itemCount, parentAngle);
   const lastSegment = submenuSegmentBounds(itemCount - 1, itemCount, parentAngle);
-  if (pointerAngle < firstSegment.start - 8 || pointerAngle > lastSegment.end + 8) {
+  const anglePadding = 24;
+  if (pointerAngle < firstSegment.start - anglePadding || pointerAngle > lastSegment.end + anglePadding) {
     return null;
   }
 
@@ -208,7 +210,23 @@ function vibrate(pattern: number | number[]) {
   }
 }
 
-export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheelProps) {
+export function MobileQuickWheel({ items, onSearch, onSelect, hidden = false }: MobileQuickWheelProps) {
+  const [eventHidden, setEventHidden] = useState(false);
+
+  useEffect(() => {
+    const handleVisibilityChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ hidden?: boolean }>;
+      setEventHidden(Boolean(customEvent.detail?.hidden));
+    };
+    window.addEventListener('hide-mobile-quick-wheel', handleVisibilityChange);
+    window.addEventListener('hide-mobile-bottom-nav', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('hide-mobile-quick-wheel', handleVisibilityChange);
+      window.removeEventListener('hide-mobile-bottom-nav', handleVisibilityChange);
+    };
+  }, []);
+
+  const isGloballyHidden = hidden || eventHidden;
   const shouldReduceMotion = useReducedMotion();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -428,40 +446,12 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
     pointer.latestY = event.clientY;
 
     if (isOpenRef.current) {
-      const expandedParent = expandedParentIndexRef.current;
-      if (expandedParent !== null) {
-        const distanceFromOrigin = Math.hypot(
-          event.clientX - pointer.wheelOriginX,
-          event.clientY - pointer.wheelOriginY,
-        );
+      const distanceFromOrigin = Math.hypot(
+        event.clientX - pointer.wheelOriginX,
+        event.clientY - pointer.wheelOriginY,
+      );
 
-        if (distanceFromOrigin < SUBMENU_COLLAPSE_RADIUS) {
-          collapseSubmenu();
-          updateActiveIndex(selectedIndexFromPointer(
-            event.clientX,
-            event.clientY,
-            pointer.pressX,
-            pointer.pressY,
-            pointer.wheelOriginX,
-            pointer.wheelOriginY,
-            items.length,
-          ), true);
-          return;
-        }
-
-        const actions = items[expandedParent]?.actions || [];
-        updateActiveSubmenuIndex(selectedSubmenuIndexFromPointer(
-          event.clientX,
-          event.clientY,
-          pointer.wheelOriginX,
-          pointer.wheelOriginY,
-          wheelAngle(expandedParent, items.length),
-          actions.length,
-        ));
-        return;
-      }
-
-      updateActiveIndex(selectedIndexFromPointer(
+      const nearestMainIndex = selectedIndexFromPointer(
         event.clientX,
         event.clientY,
         pointer.pressX,
@@ -469,7 +459,56 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
         pointer.wheelOriginX,
         pointer.wheelOriginY,
         items.length,
-      ), true);
+      );
+
+      const expandedParent = expandedParentIndexRef.current;
+
+      // If user pulled finger back near the center, collapse open submenu and clear selection
+      if (distanceFromOrigin < SUBMENU_COLLAPSE_RADIUS) {
+        if (expandedParent !== null) collapseSubmenu();
+        updateActiveIndex(null);
+        return;
+      }
+
+      // If a submenu is currently expanded:
+      if (expandedParent !== null) {
+        const actions = items[expandedParent]?.actions || [];
+        const parentAngle = wheelAngle(expandedParent, items.length);
+        const subIndex = selectedSubmenuIndexFromPointer(
+          event.clientX,
+          event.clientY,
+          pointer.wheelOriginX,
+          pointer.wheelOriginY,
+          parentAngle,
+          actions.length,
+        );
+
+        if (subIndex !== null) {
+          // Finger is in the outer submenu ring
+          updateActiveSubmenuIndex(subIndex);
+          return;
+        }
+
+        // Finger is not in the outer submenu fan:
+        updateActiveSubmenuIndex(null);
+
+        // If user moved to a different main item angle in the inner wheel
+        if (nearestMainIndex !== null && nearestMainIndex !== expandedParent) {
+          collapseSubmenu();
+          updateActiveIndex(nearestMainIndex, true);
+          return;
+        }
+
+        // Still hovering near the parent item
+        if (nearestMainIndex === expandedParent) {
+          updateActiveIndex(expandedParent, false);
+          return;
+        }
+        return;
+      }
+
+      // Normal wheel selection when no submenu is expanded
+      updateActiveIndex(nearestMainIndex, true);
       return;
     }
 
@@ -559,20 +598,23 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
     ? null
     : positionedSubmenuItems[activeSubmenuIndex];
   const displayedItem = activeSubmenuItem || activeItem;
-  const displayedTitle = activeSubmenuItem && activeItem
-    ? `${activeItem.name} · ${activeSubmenuItem.name}`
-    : expandedParentIndex !== null && activeItem
-      ? `Más opciones de ${activeItem.name}`
-      : displayedItem?.name || 'Elige un acceso';
-  const displayedInstruction = activeSubmenuItem
-    ? 'Suelta para abrir'
-    : expandedParentIndex !== null
-      ? `Desliza más lejos · Suelta aquí para abrir ${activeItem?.name || 'la sección'}`
-      : activeItem?.actions?.length
-        ? 'Mantén esta dirección para ver más opciones'
-        : activeItem
-          ? 'Suelta para abrir'
-          : 'Desliza hacia una opción y suelta';
+
+  let displayedTitle = 'Accesos Rápidos';
+  let displayedInstruction = 'Desliza hacia arriba en abanico y suelta';
+
+  if (activeSubmenuItem && activeItem) {
+    displayedTitle = `${activeItem.name} › ${activeSubmenuItem.name}`;
+    displayedInstruction = '✨ Suelta el dedo para abrir esta opción';
+  } else if (expandedParentIndex !== null && activeItem) {
+    displayedTitle = `${activeItem.name} (Submenú abierto)`;
+    displayedInstruction = `⬆️ Desliza más hacia afuera para elegir subopción · Suelta aquí para ${activeItem.name}`;
+  } else if (activeItem?.actions?.length) {
+    displayedTitle = activeItem.name;
+    displayedInstruction = '⬆️ Mantén aquí para ver subopciones · Suelta para abrir';
+  } else if (activeItem) {
+    displayedTitle = activeItem.name;
+    displayedInstruction = 'Suelta el dedo para abrir';
+  }
   const instantMotion = shouldReduceMotion || openOrigin === 'keyboard';
   const entranceDuration = instantMotion ? 0 : 0.18;
 
@@ -582,11 +624,11 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
         {isOpen && (
           <motion.div
             key="quick-wheel-backdrop"
-            className="fixed inset-0 z-50 bg-[#020617]/60 backdrop-blur-[2px] lg:hidden"
+            className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md lg:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: instantMotion ? 0 : 0.14 }}
+            transition={{ duration: instantMotion ? 0 : 0.16 }}
             onPointerDown={(event) => {
               if (event.target === event.currentTarget) closeWheel(true);
             }}
@@ -607,9 +649,9 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
               left: '50%',
               bottom: 'calc(max(1rem, env(safe-area-inset-bottom)) + 29px)',
             }}
-            initial={{ opacity: 0, transform: 'translateX(-50%) scale(0.94)' }}
+            initial={{ opacity: 0, transform: 'translateX(-50%) scale(0.92)' }}
             animate={{ opacity: 1, transform: 'translateX(-50%) scale(1)' }}
-            exit={{ opacity: 0, transform: 'translateX(-50%) scale(0.97)' }}
+            exit={{ opacity: 0, transform: 'translateX(-50%) scale(0.95)' }}
             transition={{ duration: entranceDuration, ease: [0.23, 1, 0.32, 1] }}
             onKeyDown={handleMenuKeyDown}
           >
@@ -618,53 +660,64 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
                 <motion.div
                   key={`submenu-${expandedParentIndex}`}
                   aria-hidden="true"
-                  className="pointer-events-none absolute left-1/2 top-1/2 h-[400px] w-[400px] overflow-visible"
-                  initial={{ opacity: 0, transform: 'translate(-50%, -50%) scale(0.96)' }}
+                  className="pointer-events-none absolute left-1/2 top-1/2 h-[420px] w-[420px] overflow-visible"
+                  initial={{ opacity: 0, transform: 'translate(-50%, -50%) scale(0.94)' }}
                   animate={{ opacity: 1, transform: 'translate(-50%, -50%) scale(1)' }}
-                  exit={{ opacity: 0, transform: 'translate(-50%, -50%) scale(0.98)' }}
+                  exit={{ opacity: 0, transform: 'translate(-50%, -50%) scale(0.97)' }}
                   transition={{ duration: instantMotion ? 0 : 0.16, ease: [0.23, 1, 0.32, 1] }}
                 >
                   <svg
                     viewBox={`0 0 ${SUBMENU_VIEWBOX_SIZE} ${SUBMENU_VIEWBOX_SIZE}`}
                     className="h-full w-full overflow-visible"
                   >
-                  <path
-                    d={submenuBackgroundPath}
-                    fill="#162033"
-                    stroke="rgba(255,255,255,0.16)"
-                    strokeWidth="1.5"
-                  />
+                    <defs>
+                      <linearGradient id="submenu-bg-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#1e293b" />
+                        <stop offset="100%" stopColor="#0f172a" />
+                      </linearGradient>
+                      <linearGradient id="submenu-active-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#38bdf8" />
+                        <stop offset="100%" stopColor="#2563eb" />
+                      </linearGradient>
+                    </defs>
 
-                  {activeSubmenuIndex !== null && positionedSubmenuItems[activeSubmenuIndex] && (
                     <path
-                      d={arcSegmentPath(
-                        positionedSubmenuItems[activeSubmenuIndex].segment.start,
-                        positionedSubmenuItems[activeSubmenuIndex].segment.end,
-                        SUBMENU_INNER_RADIUS,
-                        SUBMENU_OUTER_RADIUS,
-                        SUBMENU_CENTER,
-                      )}
-                      fill="#6f95ff"
-                      stroke="rgba(255,255,255,0.42)"
-                      strokeWidth="1"
+                      d={submenuBackgroundPath}
+                      fill="url(#submenu-bg-grad)"
+                      stroke="rgba(255,255,255,0.18)"
+                      strokeWidth="1.5"
                     />
-                  )}
 
-                  {positionedSubmenuItems.slice(1).map((item) => {
-                    const inner = polarPoint(item.segment.start, SUBMENU_INNER_RADIUS, SUBMENU_CENTER);
-                    const outer = polarPoint(item.segment.start, SUBMENU_OUTER_RADIUS, SUBMENU_CENTER);
-                    return (
-                      <line
-                        key={`${item.href || item.command || item.name}-divider`}
-                        x1={inner.x}
-                        y1={inner.y}
-                        x2={outer.x}
-                        y2={outer.y}
-                        stroke="rgba(255,255,255,0.12)"
-                        strokeWidth="1"
+                    {activeSubmenuIndex !== null && positionedSubmenuItems[activeSubmenuIndex] && (
+                      <path
+                        d={arcSegmentPath(
+                          positionedSubmenuItems[activeSubmenuIndex].segment.start,
+                          positionedSubmenuItems[activeSubmenuIndex].segment.end,
+                          SUBMENU_INNER_RADIUS,
+                          SUBMENU_OUTER_RADIUS,
+                          SUBMENU_CENTER,
+                        )}
+                        fill="url(#submenu-active-grad)"
+                        stroke="rgba(255,255,255,0.5)"
+                        strokeWidth="1.5"
                       />
-                    );
-                  })}
+                    )}
+
+                    {positionedSubmenuItems.slice(1).map((item) => {
+                      const inner = polarPoint(item.segment.start, SUBMENU_INNER_RADIUS, SUBMENU_CENTER);
+                      const outer = polarPoint(item.segment.start, SUBMENU_OUTER_RADIUS, SUBMENU_CENTER);
+                      return (
+                        <line
+                          key={`${item.href || item.command || item.name}-divider`}
+                          x1={inner.x}
+                          y1={inner.y}
+                          x2={outer.x}
+                          y2={outer.y}
+                          stroke="rgba(255,255,255,0.12)"
+                          strokeWidth="1"
+                        />
+                      );
+                    })}
                   </svg>
                 </motion.div>
               )}
@@ -675,7 +728,7 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
               className="pointer-events-none absolute left-1/2 top-1/2 h-[292px] w-[292px] overflow-visible"
               initial={{ transform: 'translate(-50%, -50%)' }}
               animate={{
-                opacity: expandedParentIndex === null ? 1 : 0.78,
+                opacity: expandedParentIndex === null ? 1 : 0.82,
                 transform: `translate(-50%, -50%) scale(${expandedParentIndex === null ? 1 : 0.985})`,
               }}
               transition={{ duration: instantMotion ? 0 : 0.16, ease: [0.23, 1, 0.32, 1] }}
@@ -684,16 +737,49 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
                 viewBox={`0 0 ${WHEEL_VIEWBOX_SIZE} ${WHEEL_VIEWBOX_SIZE}`}
                 className="h-full w-full overflow-visible"
               >
+                <defs>
+                  <radialGradient id="wheel-bg-grad" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#1e293b" />
+                    <stop offset="80%" stopColor="#0f172a" />
+                    <stop offset="100%" stopColor="#090d16" />
+                  </radialGradient>
+                  <linearGradient id="wheel-active-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#60a5fa" />
+                    <stop offset="100%" stopColor="#2563eb" />
+                  </linearGradient>
+                </defs>
+
+                {/* Center Pivot Hub */}
                 <circle
                   cx={WHEEL_CENTER}
                   cy={WHEEL_CENTER}
                   r={WHEEL_INNER_RADIUS + 1}
-                  fill="#101827"
+                  fill="#090d16"
+                  stroke="rgba(255,255,255,0.08)"
+                  strokeWidth="1"
                 />
+                <circle
+                  cx={WHEEL_CENTER}
+                  cy={WHEEL_CENTER}
+                  r={WHEEL_INNER_RADIUS - 6}
+                  fill="none"
+                  stroke="rgba(77,124,254,0.3)"
+                  strokeWidth="1"
+                  strokeDasharray="3 3"
+                />
+                <circle
+                  cx={WHEEL_CENTER}
+                  cy={WHEEL_CENTER}
+                  r={3.5}
+                  fill="#60a5fa"
+                  opacity="0.8"
+                />
+
+                {/* Outer Wheel Arc */}
                 <path
                   d={wheelBackgroundPath}
-                  fill="#101827"
-                  stroke="rgba(255,255,255,0.15)"
+                  fill="url(#wheel-bg-grad)"
+                  stroke="rgba(255,255,255,0.18)"
                   strokeWidth="1.5"
                 />
 
@@ -703,9 +789,9 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
                       positionedItems[activeIndex].segment.start,
                       positionedItems[activeIndex].segment.end,
                     )}
-                    fill={expandedParentIndex === null ? '#4d7cfe' : '#315fd6'}
-                    stroke="rgba(255,255,255,0.4)"
-                    strokeWidth="1"
+                    fill="url(#wheel-active-grad)"
+                    stroke="rgba(255,255,255,0.5)"
+                    strokeWidth="1.5"
                   />
                 )}
 
@@ -719,7 +805,7 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
                       y1={inner.y}
                       x2={outer.x}
                       y2={outer.y}
-                      stroke="rgba(255,255,255,0.11)"
+                      stroke="rgba(255,255,255,0.1)"
                       strokeWidth="1"
                     />
                   );
@@ -727,21 +813,23 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
               </svg>
             </motion.div>
 
+            {/* Floating Top HUD Guidance Pill */}
             <div
               aria-live="polite"
-              className="pointer-events-none absolute left-1/2 w-[min(19rem,calc(100vw-2rem))] text-center"
-              style={{ transform: `translate(-50%, ${expandedParentIndex === null ? -234 : -270}px)` }}
+              className="pointer-events-none absolute left-1/2 w-[min(21rem,calc(100vw-2rem))] text-center"
+              style={{ transform: `translate(-50%, ${expandedParentIndex === null ? -236 : -280}px)` }}
             >
-              <div className="rounded-xl bg-[#172033] px-4 py-3 text-white shadow-[0_4px_8px_rgba(2,6,23,0.38)] outline outline-1 outline-white/10">
-                <p className="truncate text-[15px] font-bold leading-5 tracking-[-0.01em]">
+              <div className="rounded-3xl bg-[#090d16]/90 backdrop-blur-2xl px-5 py-3.5 text-white shadow-[0_20px_50px_rgba(0,0,0,0.6)] border border-white/15 flex flex-col items-center gap-1 transition-all">
+                <p className="truncate text-sm font-black tracking-tight text-white max-w-full">
                   {displayedTitle}
                 </p>
-                <p className="mt-1 text-sm font-medium leading-[1.35] text-[#cbd5e1] text-pretty">
+                <p className="text-[11px] font-bold tracking-wide text-[#38bdf8]">
                   {displayedInstruction}
                 </p>
               </div>
             </div>
 
+            {/* Level 1 Main Wheel Buttons */}
             {positionedItems.map((item, index) => {
               const isActive = activeIndex === index;
               const isExpandedParent = expandedParentIndex === index;
@@ -758,15 +846,15 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
                   onClick={() => executeTarget(item)}
                   onFocus={() => updateActiveIndex(index)}
                   className={cn(
-                    'absolute left-1/2 top-1/2 flex h-12 w-12 items-center justify-center rounded-xl outline-none',
+                    'absolute left-1/2 top-1/2 flex h-12 w-12 items-center justify-center rounded-2xl outline-none transition-all duration-150',
                     isActive
-                      ? 'text-white'
-                      : 'text-[#c4cfdd]',
+                      ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.75)]'
+                      : 'text-[#94a3b8]',
                   )}
                   initial={{ opacity: 0, transform: `${baseTransform} scale(0.92)` }}
                   animate={{
-                    opacity: expandedParentIndex === null || isExpandedParent ? 1 : 0.32,
-                    transform: `${baseTransform} scale(${isActive ? 1.08 : 1})`,
+                    opacity: expandedParentIndex === null || isExpandedParent ? 1 : 0.35,
+                    transform: `${baseTransform} scale(${isActive ? 1.15 : 1})`,
                   }}
                   exit={{ opacity: 0, transform: `${baseTransform} scale(0.96)` }}
                   transition={instantMotion
@@ -776,7 +864,7 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
                         transform: { type: 'spring', stiffness: 620, damping: 42, mass: 0.7 },
                       }}
                 >
-                  <span className="material-symbols-outlined text-[23px]" aria-hidden="true">
+                  <span className="material-symbols-outlined text-[24px] leading-none select-none flex items-center justify-center" aria-hidden="true">
                     {item.icon}
                   </span>
                   <span className="sr-only">{item.name}</span>
@@ -784,6 +872,7 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
               );
             })}
 
+            {/* Level 2 Submenu Buttons */}
             {positionedSubmenuItems.map((item, index) => {
               const isActive = activeSubmenuIndex === index;
               const baseTransform = `translate3d(calc(-50% + ${item.x}px), calc(-50% + ${item.y}px), 0)`;
@@ -797,13 +886,15 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
                   onClick={() => executeTarget(item)}
                   onFocus={() => updateActiveSubmenuIndex(index)}
                   className={cn(
-                    'absolute left-1/2 top-1/2 flex h-11 w-11 items-center justify-center rounded-xl outline-none',
-                    isActive ? 'text-white' : 'text-[#dbe4f0]',
+                    'absolute left-1/2 top-1/2 flex h-11 w-11 items-center justify-center rounded-2xl outline-none transition-all duration-150',
+                    isActive
+                      ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.75)]'
+                      : 'text-[#94a3b8]',
                   )}
                   initial={{ opacity: 0, transform: `${baseTransform} scale(0.94)` }}
                   animate={{
                     opacity: 1,
-                    transform: `${baseTransform} scale(${isActive ? 1.1 : 1})`,
+                    transform: `${baseTransform} scale(${isActive ? 1.15 : 1})`,
                   }}
                   exit={{ opacity: 0, transform: `${baseTransform} scale(0.97)` }}
                   transition={instantMotion
@@ -813,7 +904,7 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
                         transform: { type: 'spring', stiffness: 620, damping: 42, mass: 0.7 },
                       }}
                 >
-                  <span className="material-symbols-outlined text-[22px]" aria-hidden="true">
+                  <span className="material-symbols-outlined text-[22px] leading-none select-none flex items-center justify-center" aria-hidden="true">
                     {item.icon}
                   </span>
                   <span className="sr-only">{item.name}</span>
@@ -824,49 +915,58 @@ export function MobileQuickWheel({ items, onSearch, onSelect }: MobileQuickWheel
         )}
       </AnimatePresence>
 
-      <div
-        className="fixed left-1/2 z-[70] h-[58px] w-[58px] -translate-x-1/2 overflow-hidden rounded-full bg-[#4d7cfe] text-white shadow-[0_4px_8px_rgba(49,95,214,0.28)] lg:hidden"
-        style={{
-          bottom: 'max(1rem, env(safe-area-inset-bottom))',
-          WebkitTouchCallout: 'none',
-        }}
-      >
-        <button
-          ref={triggerRef}
-          type="button"
-          aria-label="Buscar. Mantén presionado para mostrar accesos rápidos"
-          aria-describedby="mobile-quick-wheel-hint"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerCancel}
-          onContextMenu={(event) => event.preventDefault()}
-          onClick={(event) => {
-            if (event.detail === 0) onSearch();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowUp') {
-              event.preventDefault();
-              openWheel('keyboard');
-            }
-          }}
-          className={cn(
-            'relative flex h-full w-full touch-none select-none items-center justify-center overflow-hidden rounded-full',
-            'bg-[#4d7cfe] text-white outline-none transition-transform duration-150 active:scale-[0.97]',
-            'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/90',
-            isOpen && 'bg-[#315fd6]',
-          )}
-        >
-          <span
-            aria-hidden="true"
-            className={cn(
-              'absolute inset-0 origin-left bg-white/16 transition-transform ease-linear',
-              isPressing ? 'scale-x-100 duration-[340ms]' : 'scale-x-0 duration-150',
-            )}
-          />
-          <span className="material-symbols-outlined relative text-[24px]" aria-hidden="true">search</span>
-        </button>
-      </div>
+      <AnimatePresence>
+        {!isGloballyHidden && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 20 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="fixed left-1/2 z-[70] h-[58px] w-[58px] -translate-x-1/2 rounded-full lg:hidden"
+            style={{
+              bottom: 'max(1rem, env(safe-area-inset-bottom))',
+              WebkitTouchCallout: 'none',
+            }}
+          >
+            <button
+              ref={triggerRef}
+              type="button"
+              aria-label="Buscar. Mantén presionado para mostrar accesos rápidos"
+              aria-describedby="mobile-quick-wheel-hint"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
+              onContextMenu={(event) => event.preventDefault()}
+              onClick={(event) => {
+                if (event.detail === 0) onSearch();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  openWheel('keyboard');
+                }
+              }}
+              className={cn(
+                'relative flex h-full w-full touch-none select-none items-center justify-center overflow-hidden rounded-full',
+                'bg-gradient-to-tr from-[#2563eb] to-[#3b82f6] text-white outline-none transition-all duration-150 active:scale-[0.95]',
+                'border border-white/25 shadow-[0_8px_24px_rgba(37,99,235,0.45)]',
+                'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/90',
+                isOpen && 'from-[#1d4ed8] to-[#2563eb] shadow-[0_0_28px_rgba(59,130,246,0.6)] scale-[1.04]',
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'absolute inset-0 origin-left bg-white/20 transition-transform ease-linear',
+                  isPressing ? 'scale-x-100 duration-[280ms]' : 'scale-x-0 duration-150',
+                )}
+              />
+              <span className="material-symbols-outlined relative text-[25px] font-bold" aria-hidden="true">search</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <span id="mobile-quick-wheel-hint" className="sr-only">
         Toca para buscar. Mantén presionado, desliza hacia un acceso y suelta para abrirlo. Con teclado, presiona flecha arriba para mostrar los accesos.

@@ -79,9 +79,23 @@ function CoordinatorLayoutInner({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isMobileThemeOpen, setIsMobileThemeOpen] = useState(false);
+  const [isMobileNavHidden, setIsMobileNavHidden] = useState(false);
   const { searchTerm, setSearchTerm } = useSearch();
   const navScrollRef = useRef<HTMLDivElement>(null);
   const [navPage, setNavPage] = useState(0);
+
+  useEffect(() => {
+    const handleVisibility = (event: Event) => {
+      const customEvent = event as CustomEvent<{ hidden?: boolean }>;
+      setIsMobileNavHidden(Boolean(customEvent.detail?.hidden));
+    };
+    window.addEventListener('hide-mobile-bottom-nav', handleVisibility);
+    window.addEventListener('hide-mobile-quick-wheel', handleVisibility);
+    return () => {
+      window.removeEventListener('hide-mobile-bottom-nav', handleVisibility);
+      window.removeEventListener('hide-mobile-quick-wheel', handleVisibility);
+    };
+  }, []);
 
   const { preference, resolvedTheme, setPreference, toggleTheme } = useThemePreference();
   const { isCommandMode } = useMobileNavigationMode();
@@ -455,17 +469,24 @@ function CoordinatorLayoutInner({
       {isCommandMode ? (
         <MobileQuickWheel
           items={quickWheelItems}
+          hidden={isMobileNavHidden}
           onSearch={openGlobalSearch}
           onSelect={(item) => {
             if (item.command === 'toggle-theme') {
               toggleTheme();
               return;
             }
-            if (item.href) router.push(item.href);
+            if (item.href) {
+              if (item.href.includes('view=heatmap-fullscreen')) {
+                window.dispatchEvent(new CustomEvent('open-heatmap-fullscreen'));
+              }
+              router.push(item.href);
+            }
           }}
         />
       ) : (
-        <div className="fixed bottom-6 left-0 right-0 z-50 px-4 lg:hidden">
+        !isMobileNavHidden && (
+          <div className="fixed bottom-6 left-0 right-0 z-50 px-4 lg:hidden animate-in fade-in duration-200">
           <MobileThemeMenu
             open={isMobileThemeOpen}
             preference={preference}
@@ -613,7 +634,8 @@ function CoordinatorLayoutInner({
             )}
           </div>
         </div>
-      )}
+      )
+    )}
 
       <GlobalCommandPalette
         open={isGlobalSearchOpen}
