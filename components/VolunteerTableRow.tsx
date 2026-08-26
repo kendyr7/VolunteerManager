@@ -44,6 +44,10 @@ interface VolunteerTableRowProps {
   canEditProfile?: boolean;
   canResetPin?: boolean;
   canArchive?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (vol: VolunteerType) => void;
+  canSendCredentials?: boolean;
+  onSendCredentials?: (vol: VolunteerType) => void;
 }
 
 export const VolunteerTableRow = React.memo(function VolunteerTableRow({
@@ -56,6 +60,10 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
   canEditProfile = true,
   canResetPin = true,
   canArchive = true,
+  isSelected = false,
+  onToggleSelect,
+  canSendCredentials = true,
+  onSendCredentials,
 }: VolunteerTableRowProps) {
   const [isHighlighted, setIsHighlighted] = useState(false);
 
@@ -77,10 +85,33 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
       id={id}
       className={cn(
         "flex items-center w-full px-5 py-3.5 hover:bg-white/[0.02] border-b border-white/5 transition-all duration-300 group cursor-pointer text-sm",
+        isSelected && "bg-white/[0.04]",
         isHighlighted && "bg-amber-500/10 border-amber-500/30"
       )}
       onClick={() => onEditClick(vol)}
     >
+      {onToggleSelect && (
+        <div 
+          className="pr-3 flex items-center shrink-0" 
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect(vol);
+          }}
+        >
+          <div className={cn(
+            "w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center transition-all cursor-pointer select-none",
+            isSelected 
+              ? "bg-[#25D366] border-[#25D366] text-black shadow-sm" 
+              : "border-slate-400 dark:border-white/30 hover:border-slate-600 dark:hover:border-white/60 bg-white dark:bg-white/[0.04]"
+          )}>
+            {isSelected && (
+              <svg className="w-3 h-3 text-black stroke-[3.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+            )}
+          </div>
+        </div>
+      )}
       <div className="flex-[2.5] min-w-[200px] pr-4">
         <p className={cn(USER_TABLE_STYLES.name, "flex items-center gap-2 flex-wrap")}>
           <HighlightText text={vol.name} term={appliedSearch} />
@@ -119,7 +150,17 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
           </div>
         )}
       </div>
-      <div className="w-32 flex items-center justify-center gap-1 shrink-0">
+      <div className="w-36 flex items-center justify-center gap-1 shrink-0">
+        {canSendCredentials && onSendCredentials && (
+          <button
+            type="button"
+            className="h-8 w-8 rounded-lg flex items-center justify-center text-[#25D366]/80 hover:bg-[#25D366]/15 hover:text-[#25D366] transition-all active:scale-90 cursor-pointer"
+            title="Enviar credenciales por WhatsApp (Meta)"
+            onClick={(e) => { e.stopPropagation(); onSendCredentials(vol); }}
+          >
+            <span className="material-symbols-outlined text-[18px]">send_to_mobile</span>
+          </button>
+        )}
         {canEditProfile && <button
           type="button"
           className="h-8 w-8 rounded-lg flex items-center justify-center text-text-dim hover:bg-white/10 hover:text-text transition-all active:scale-90 cursor-pointer"
@@ -160,9 +201,11 @@ export const VolunteerTableRow = React.memo(function VolunteerTableRow({
     prevProps.vol.shifts === nextProps.vol.shifts &&
     prevProps.vol.status === nextProps.vol.status &&
     prevProps.vol.computedReliability === nextProps.vol.computedReliability &&
-    prevProps.appliedSearch === nextProps.appliedSearch
-    && prevProps.canEditProfile === nextProps.canEditProfile
-    && prevProps.canResetPin === nextProps.canResetPin
-    && prevProps.canArchive === nextProps.canArchive
+    prevProps.appliedSearch === nextProps.appliedSearch &&
+    prevProps.canEditProfile === nextProps.canEditProfile &&
+    prevProps.canResetPin === nextProps.canResetPin &&
+    prevProps.canArchive === nextProps.canArchive &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.canSendCredentials === nextProps.canSendCredentials
   );
 });

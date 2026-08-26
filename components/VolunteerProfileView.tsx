@@ -1765,7 +1765,6 @@ export function VolunteerProfileView({
           </div>
         </div>
       )}
-
     </div>
   );
 }

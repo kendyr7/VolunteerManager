@@ -25,6 +25,7 @@ import {
   canCreateVolunteer,
   canEditShifts,
   canEditVolunteerPersonalInfo,
+  canSendWhatsappMessages,
   canViewVolunteers,
   getAuthorizationSnapshotCache,
 } from "@/lib/permissions";
@@ -37,10 +38,11 @@ import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { formatE164, validatePhone8Digits, getLocal8Digits } from "@/lib/whatsapp";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
-import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
+import { sendWelcomeWhatsAppAction, sendVolunteerCredentialsAction } from "@/app/actions/whatsapp";
 import { VolunteerProfileView } from "@/components/VolunteerProfileView";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 import { VolunteerTableRow } from "@/components/VolunteerTableRow";
+import { BulkSendCredentialsModal } from "@/components/BulkSendCredentialsModal";
 import { VolunteerSearchService } from "@/lib/services/volunteer-search.service";
 import { filterVolunteerIds } from "@/lib/services/volunteer-filter.service";
 import { groupVolunteersAlphabetically } from "@/lib/services/volunteer-grouping.service";
@@ -212,6 +214,10 @@ export default function VolunteersPage() {
     type: 'success',
     isVisible: false
   });
+
+  // Bulk Selection & Credentials state
+  const [selectedVolunteers, setSelectedVolunteers] = useState<Set<string>>(new Set());
+  const [isBulkCredentialsModalOpen, setIsBulkCredentialsModalOpen] = useState(false);
 
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -721,6 +727,83 @@ export default function VolunteersPage() {
     return groupVolunteersAlphabetically(sortedFilteredVolunteers);
   }, [sortedFilteredVolunteers]);
 
+  const selectedVolunteerItems = useMemo(() => {
+    return Array.from(selectedVolunteers)
+      .map(id => volunteers.find(v => v.id === id))
+      .filter((v): v is VolunteerType => !!v)
+      .map(v => ({
+        id: v.id,
+        name: v.name,
+        phone: v.phone,
+        committee: v.committee,
+        status: v.status,
+      }));
+  }, [selectedVolunteers, volunteers]);
+
+  const handleToggleSelect = useCallback((vol: VolunteerType) => {
+    setSelectedVolunteers(prev => {
+      const next = new Set(prev);
+      if (next.has(vol.id)) {
+        next.delete(vol.id);
+      } else {
+        next.add(vol.id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectAllVisible = useCallback(() => {
+    const visibleIds = sortedFilteredVolunteers.map(v => v.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedVolunteers.has(id));
+
+    setSelectedVolunteers(prev => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visibleIds.forEach(id => next.delete(id));
+      } else {
+        visibleIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  }, [sortedFilteredVolunteers, selectedVolunteers]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedVolunteers(new Set());
+  }, []);
+
+  const handleSingleSendCredentials = useCallback(async (vol: VolunteerType) => {
+    if (!canSendWhatsappMessages()) {
+      showToast("No tienes permiso para enviar mensajes de WhatsApp", "error");
+      return;
+    }
+    if (!vol.phone) {
+      showToast("El voluntario no tiene teléfono registrado", "error");
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Enviar Credenciales por WhatsApp',
+      message: `¿Deseas enviar las credenciales de acceso por WhatsApp a ${vol.name} (${vol.phone})? Se enviará la plantilla oficial con su PIN.`,
+      confirmText: 'Enviar WhatsApp',
+      type: 'primary',
+      onConfirm: async () => {
+        showToast(`Enviando WhatsApp a ${vol.name}...`, 'info');
+        const res = await sendVolunteerCredentialsAction({
+          volunteerId: vol.id,
+        });
+
+        if (res.success) {
+          showToast(`✅ ¡Credenciales enviadas a ${vol.name}!`);
+          if (refresh) refresh(true);
+        } else {
+          showToast(`❌ Error de WhatsApp: ${res.error}`, 'error');
+        }
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      },
+    });
+  }, [refresh]);
+
   if (loading) {
     return (
       <div className="absolute inset-0 flex items-center justify-center z-50">
@@ -827,6 +910,34 @@ export default function VolunteersPage() {
                 <div className="w-full max-h-[calc(100dvh-250px)] overflow-auto overscroll-contain bg-dark2">
                   {/* Encabezado Fijo de Tabla con Ordenamiento */}
                   <div className="flex items-center w-full px-5 py-3.5 bg-dark3 sticky top-0 z-20 text-[10px] font-bold text-text-dim uppercase tracking-wider border-b border-border/70 select-none">
+                    {canSendWhatsappMessages() && (
+                      <div 
+                        className="pr-3 flex items-center shrink-0 cursor-pointer"
+                        onClick={handleSelectAllVisible}
+                        title={sortedFilteredVolunteers.length > 0 && sortedFilteredVolunteers.every(v => selectedVolunteers.has(v.id)) ? "Deseleccionar visibles" : "Seleccionar visibles"}
+                      >
+                        <div className={cn(
+                          "w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center transition-all select-none",
+                          sortedFilteredVolunteers.length > 0 && sortedFilteredVolunteers.every(v => selectedVolunteers.has(v.id))
+                            ? "bg-[#25D366] border-[#25D366] text-black shadow-sm" 
+                            : sortedFilteredVolunteers.some(v => selectedVolunteers.has(v.id))
+                              ? "bg-[#25D366]/40 border-[#25D366] text-black"
+                              : "border-slate-400 dark:border-white/30 hover:border-slate-600 dark:hover:border-white/60 bg-white dark:bg-white/[0.04]"
+                        )}>
+                          {sortedFilteredVolunteers.length > 0 && sortedFilteredVolunteers.every(v => selectedVolunteers.has(v.id)) && (
+                            <svg className="w-3 h-3 text-black stroke-[3.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
+                          )}
+                          {sortedFilteredVolunteers.length > 0 && !sortedFilteredVolunteers.every(v => selectedVolunteers.has(v.id)) && sortedFilteredVolunteers.some(v => selectedVolunteers.has(v.id)) && (
+                            <svg className="w-3 h-3 text-black stroke-[3.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => handleSort('name')}
@@ -917,7 +1028,7 @@ export default function VolunteersPage() {
                       </span>
                     </button>
 
-                    <div className="w-28 text-center shrink-0">Acciones</div>
+                    <div className="w-36 text-center shrink-0">Acciones</div>
                   </div>
 
                   {/* Cuerpo de la Tabla */}
@@ -944,6 +1055,10 @@ export default function VolunteersPage() {
                             canEditProfile={canEditVolunteerPersonalInfo(vol.committee_id)}
                             canResetPin={canEditVolunteerPersonalInfo(vol.committee_id)}
                             canArchive={canArchiveVolunteer()}
+                            isSelected={selectedVolunteers.has(vol.id)}
+                            onToggleSelect={canSendWhatsappMessages() ? handleToggleSelect : undefined}
+                            canSendCredentials={canSendWhatsappMessages()}
+                            onSendCredentials={handleSingleSendCredentials}
                           />
                         );
                       });
@@ -994,6 +1109,10 @@ export default function VolunteersPage() {
                           swipeLeftText={vol.status === 'archived' ? 'Desarchivar' : 'Archivar'}
                           swipeLeftColorClass="text-red"
                           swipeLeftBgColor="rgba(254, 77, 151, 0.2)"
+
+                          isSelected={selectedVolunteers.has(vol.id)}
+                          onToggleSelect={canSendWhatsappMessages() ? () => handleToggleSelect(vol) : undefined}
+                          selectionModeActive={selectedVolunteers.size > 0}
 
                           badges={
                             <>
@@ -1246,6 +1365,60 @@ export default function VolunteersPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Sticky Bottom Floating Bulk Actions Bar */}
+      <AnimatePresence>
+        {selectedVolunteers.size > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-xl bg-white/95 dark:bg-[#141517]/95 border border-slate-200 dark:border-white/15 backdrop-blur-xl rounded-full shadow-[0_12px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.6)] px-4 py-2.5 flex items-center justify-between gap-3 text-sm"
+          >
+            <div className="flex items-center gap-2.5 min-w-0 pl-1">
+              <Badge className="bg-[#25D366] text-black font-black text-xs px-2.5 py-0.5 rounded-full shadow-sm">
+                {selectedVolunteers.size}
+              </Badge>
+              <span className="font-bold text-slate-800 dark:text-white text-xs truncate hidden sm:inline">
+                {selectedVolunteers.size === 1 ? 'voluntario seleccionado' : 'voluntarios seleccionados'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleClearSelection}
+                className="text-xs font-bold text-slate-500 hover:text-slate-900 dark:text-text-dim dark:hover:text-white px-2.5 py-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                Limpiar
+              </button>
+
+              {canSendWhatsappMessages() && (
+                <Button
+                  type="button"
+                  onClick={() => setIsBulkCredentialsModalOpen(true)}
+                  className="h-9 px-4 rounded-full bg-[#25D366] hover:bg-[#1ebd5a] text-black font-extrabold text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[17px]">mark_chat_read</span>
+                  <span>Enviar WhatsApp</span>
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <BulkSendCredentialsModal
+        isOpen={isBulkCredentialsModalOpen}
+        onClose={() => setIsBulkCredentialsModalOpen(false)}
+        selectedVolunteers={selectedVolunteerItems}
+        onComplete={(sent, failed) => {
+          setSelectedVolunteers(new Set());
+          if (refresh) refresh(true);
+          showToast(`✅ Proceso finalizado: ${sent} credenciales enviadas${failed > 0 ? `, ${failed} fallidos` : ''}.`, failed > 0 ? 'info' : 'success');
+        }}
+      />
 
       <RealtimeDebugOverlay />
     </motion.div>

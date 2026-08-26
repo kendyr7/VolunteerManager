@@ -149,10 +149,16 @@ export const SwipeableMobileCard: React.FC<SwipeableMobileCardProps> = React.mem
             onToggleSelect();
           }}>
             <div className={cn(
-              "w-5 h-5 rounded-full border flex items-center justify-center transition-all",
-              isSelected ? "bg-[#4d7cfe] border-[#4d7cfe] text-white" : "border-white/20 bg-dark3"
+              "w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center transition-all cursor-pointer select-none",
+              isSelected 
+                ? "bg-[#25D366] border-[#25D366] text-black shadow-sm" 
+                : "border-slate-400 dark:border-white/30 bg-white dark:bg-dark3 hover:border-slate-600 dark:hover:border-white/60"
             )}>
-              {isSelected && <span className="material-symbols-outlined text-[14px] font-bold">check</span>}
+              {isSelected && (
+                <svg className="w-3.5 h-3.5 text-black stroke-[3.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              )}
             </div>
           </div>
         )}

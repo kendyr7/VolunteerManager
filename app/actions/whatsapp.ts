@@ -92,7 +92,18 @@ export async function getReminderDeliveryLogsAction() {
 
 export async function sendWelcomeWhatsAppAction(phone: string, name: string, pin: string) {
   try {
-    await requireCapability('manage_platform_users');
+    const { getAuthorizationSnapshot } = await import('@/lib/authorization');
+    const authorization = await getAuthorizationSnapshot();
+    if (
+      !authorization.authenticated ||
+      (!hasCapability(authorization, 'manage_platform_users') &&
+       !hasCapability(authorization, 'view_notices') &&
+       !hasCapability(authorization, 'create_volunteer') &&
+       !hasCapability(authorization, 'import_volunteers'))
+    ) {
+      return { success: false, error: "No tienes permiso para enviar credenciales por WhatsApp." };
+    }
+
     const formattedPhone = formatE164(phone);
     if (!formattedPhone) {
       return { success: false, error: "Teléfono inválido" };
@@ -113,6 +124,218 @@ export async function sendWelcomeWhatsAppAction(phone: string, name: string, pin
   } catch (err: unknown) {
     console.error("Error en sendWelcomeWhatsAppAction:", err);
     return { success: false, error: "Error interno del servidor" };
+  }
+}
+
+export async function sendVolunteerCredentialsAction({
+  volunteerId,
+  forcePinReset = false,
+}: {
+  volunteerId: string;
+  forcePinReset?: boolean;
+}) {
+  try {
+    const authorization = await requireCapability('view_notices');
+    const supabase = await getAdminSupabase();
+
+    const { data: volunteer, error: volunteerError } = await supabase
+      .from('volunteers')
+      .select('id, first_name, last_name, phone, pin, committee_id, status, committees(name)')
+      .eq('id', volunteerId)
+      .maybeSingle();
+
+    if (volunteerError || !volunteer || volunteer.status === 'archived') {
+      return { success: false, error: 'No se encontró un voluntario activo.' };
+    }
+
+    if (
+      !hasCapability(authorization, 'view_all_volunteers') &&
+      authorization.committeeId !== volunteer.committee_id
+    ) {
+      return { success: false, error: 'Solo puedes enviar credenciales a voluntarios de tu comité.' };
+    }
+
+    const volunteerName = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || volunteer.first_name || 'Voluntario';
+    const formattedPhone = formatE164(volunteer.phone || '');
+    if (!formattedPhone) {
+      return { success: false, error: 'El voluntario no tiene un número de teléfono válido registrado.' };
+    }
+
+    let pin = volunteer.pin;
+    if (!pin || forcePinReset) {
+      pin = String(Math.floor(1000 + Math.random() * 9000));
+      const { error: updatePinError } = await supabase
+        .from('volunteers')
+        .update({ pin, updated_at: new Date().toISOString() })
+        .eq('id', volunteerId);
+
+      if (updatePinError) {
+        console.error('Error actualizando PIN para voluntario:', updatePinError.message);
+        return { success: false, error: 'No se pudo generar el PIN de acceso.' };
+      }
+    }
+
+    const { sendVolunteerWelcomeTemplate } = await import('@/lib/whatsapp-api');
+    const result = await sendVolunteerWelcomeTemplate({
+      to: formattedPhone,
+      name: volunteer.first_name || volunteerName,
+      pin,
+    });
+
+    if (!result.success) {
+      console.error('Error enviando credenciales por WhatsApp:', result.error);
+      return { success: false, error: result.error || 'Meta rechazó el envío del mensaje.' };
+    }
+
+    const auditCreated = await createActivityLog({
+      userName: authorization.name,
+      userRole: authorization.role,
+      actionType: 'Aviso',
+      description: `Envió credenciales por WhatsApp a ${volunteerName}`,
+      details: JSON.stringify({
+        volunteerId,
+        volunteerName,
+        phone: formattedPhone,
+        messageId: result.messageId || null,
+        forcePinReset,
+      }),
+      targetId: volunteerId,
+    });
+
+    return {
+      success: true,
+      messageId: result.messageId,
+      auditWarning: auditCreated ? undefined : 'El mensaje se envió, pero no se pudo registrar en la auditoría.',
+    };
+  } catch (err: unknown) {
+    console.error('Excepción en sendVolunteerCredentialsAction:', err);
+    return { success: false, error: getErrorMessage(err, 'Error interno al enviar credenciales') };
+  }
+}
+
+export async function sendBulkVolunteerCredentialsAction({
+  volunteerIds,
+  forcePinReset = false,
+}: {
+  volunteerIds: string[];
+  forcePinReset?: boolean;
+}) {
+  try {
+    const authorization = await requireCapability('view_notices');
+    if (!Array.isArray(volunteerIds) || volunteerIds.length === 0) {
+      return { success: false, error: 'No se seleccionaron voluntarios.' };
+    }
+
+    const supabase = await getAdminSupabase();
+
+    let query = supabase
+      .from('volunteers')
+      .select('id, first_name, last_name, phone, pin, committee_id, status, committees(name)')
+      .in('id', volunteerIds)
+      .neq('status', 'archived');
+
+    if (!hasCapability(authorization, 'view_all_volunteers')) {
+      query = query.eq('committee_id', authorization.committeeId!);
+    }
+
+    const { data: volunteers, error: volsError } = await query;
+    if (volsError || !volunteers) {
+      return { success: false, error: 'No se pudieron cargar los voluntarios seleccionados.' };
+    }
+
+    const { sendVolunteerWelcomeTemplate } = await import('@/lib/whatsapp-api');
+    const results: Array<{
+      id: string;
+      name: string;
+      phone: string;
+      success: boolean;
+      error?: string;
+      messageId?: string;
+    }> = [];
+
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const vol of volunteers) {
+      const volunteerName = `${vol.first_name || ''} ${vol.last_name || ''}`.trim() || vol.first_name || 'Voluntario';
+      const formattedPhone = formatE164(vol.phone || '');
+
+      if (!formattedPhone) {
+        failedCount++;
+        results.push({
+          id: vol.id,
+          name: volunteerName,
+          phone: vol.phone || '',
+          success: false,
+          error: 'Teléfono inválido o ausente',
+        });
+        continue;
+      }
+
+      let pin = vol.pin;
+      if (!pin || forcePinReset) {
+        pin = String(Math.floor(1000 + Math.random() * 9000));
+        await supabase
+          .from('volunteers')
+          .update({ pin, updated_at: new Date().toISOString() })
+          .eq('id', vol.id);
+      }
+
+      const sendResult = await sendVolunteerWelcomeTemplate({
+        to: formattedPhone,
+        name: vol.first_name || volunteerName,
+        pin,
+      });
+
+      if (sendResult.success) {
+        sentCount++;
+        results.push({
+          id: vol.id,
+          name: volunteerName,
+          phone: formattedPhone,
+          success: true,
+          messageId: sendResult.messageId,
+        });
+
+        createActivityLog({
+          userName: authorization.name,
+          userRole: authorization.role,
+          actionType: 'Aviso',
+          description: `Envió credenciales en lote por WhatsApp a ${volunteerName}`,
+          details: JSON.stringify({
+            volunteerId: vol.id,
+            volunteerName,
+            phone: formattedPhone,
+            messageId: sendResult.messageId || null,
+          }),
+          targetId: vol.id,
+        }).catch(err => console.error('Error logging bulk credential send audit:', err));
+      } else {
+        failedCount++;
+        results.push({
+          id: vol.id,
+          name: volunteerName,
+          phone: formattedPhone,
+          success: false,
+          error: sendResult.error || 'Rechazado por WhatsApp',
+        });
+      }
+
+      if (volunteers.length > 1) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+    }
+
+    return {
+      success: true,
+      total: volunteers.length,
+      sentCount,
+      failedCount,
+      results,
+    };
+  } catch (err: unknown) {
+    console.error('Excepción en sendBulkVolunteerCredentialsAction:', err);
+    return { success: false, error: getErrorMessage(err, 'Error interno al enviar credenciales en lote') };
   }
 }
 
