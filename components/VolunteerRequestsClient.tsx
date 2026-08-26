@@ -17,6 +17,7 @@ import {
 } from "@/lib/use-volunteer-reschedule-context";
 import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
 import { ShiftChangeReasonSelector } from "@/components/ShiftChangeReasonSelector";
+import { VolunteerTutorials } from "@/components/VolunteerTutorials";
 
 type VolunteerRequestSortField = 'status' | 'currentShift' | 'requestedShift' | 'reason' | 'date';
 
@@ -35,6 +36,7 @@ export function VolunteerRequestsClient({
   const [loading, setLoading] = useState(false);
   const [sortField, setSortField] = useState<VolunteerRequestSortField>('date');
   const [sortDirection, setSortDirection] = useState<TableSortDirection>('desc');
+  const [tutorialsOpen, setTutorialsOpen] = useState(false);
 
   // Modal State
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
@@ -182,32 +184,46 @@ export function VolunteerRequestsClient({
 
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8 space-y-6 pb-32 lg:pb-8">
-      {/* Header with Title, (?) Helper Badge, and + Nueva Solicitud button */}
+      {/* Header with tutorials and new request actions */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-black text-text tracking-tight">
-              Mis Solicitudes
-            </h1>
-            <div className="relative group flex items-center cursor-help">
-              <span className="w-5 h-5 rounded-full bg-dark3 border border-border text-text-dim text-xs font-bold flex items-center justify-center group-hover:bg-[#4d7cfe]/20 group-hover:text-[#4d7cfe] group-hover:border-[#4d7cfe]/40 transition-all">
-                ?
-              </span>
-              <div className="absolute left-0 sm:left-1/2 sm:-translate-x-1/2 top-full mt-2 hidden group-hover:flex flex-col z-50 w-64 p-2.5 bg-dark2 border border-border text-text text-xs rounded-xl shadow-2xl backdrop-blur-xl font-medium pointer-events-none">
-                Consulta el estado de tus solicitudes de reagendamiento de turno y envía nuevas peticiones.
-              </div>
-            </div>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-text tracking-tight">
+            Mis Solicitudes
+          </h1>
+          <p className="mt-1 text-xs text-text-dim">Consulta tus solicitudes o pide un cambio de turno.</p>
         </div>
 
-        <Button
-          onClick={() => setIsRescheduleModalOpen(true)}
-          className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white font-extrabold text-xs rounded-full h-10 px-5 shadow-lg active:scale-95 transition-all flex items-center gap-2"
-        >
-          <span className="material-symbols-outlined text-[18px]">add_task</span>
-          <span>Reagendar turno</span>
-        </Button>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setTutorialsOpen(open => !open)}
+            aria-expanded={tutorialsOpen}
+            aria-controls="volunteer-tutorials-title"
+            className="h-10 flex-1 rounded-full border-border bg-dark2 px-4 text-xs font-extrabold text-text hover:bg-dark3 sm:flex-none"
+          >
+            <span className="material-symbols-outlined mr-2 text-[18px] text-[#4d7cfe]">school</span>
+            Tutoriales
+          </Button>
+          <Button
+            onClick={() => setIsRescheduleModalOpen(true)}
+            className="h-10 flex-1 rounded-full bg-[#4d7cfe] px-5 text-xs font-extrabold text-white transition-all hover:bg-[#3b66e0] active:scale-95 sm:flex-none"
+          >
+            <span className="material-symbols-outlined mr-2 text-[18px]">add_task</span>
+            <span>Reagendar turno</span>
+          </Button>
+        </div>
       </div>
+
+      {tutorialsOpen && (
+        <VolunteerTutorials
+          onClose={() => setTutorialsOpen(false)}
+          onStartRequest={() => {
+            setTutorialsOpen(false);
+            setIsRescheduleModalOpen(true);
+          }}
+        />
+      )}
 
       {/* Requests Content Area */}
       {loading ? (

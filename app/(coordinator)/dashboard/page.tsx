@@ -25,6 +25,8 @@ import {
   SelectItem 
 } from "@/components/ui/select";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { DashboardDistributionChart, type DistributionItem } from "@/components/DashboardDistributionChart";
 
 type DashboardGreeting = {
   timeOfDay: string;
@@ -76,6 +78,7 @@ export default function CoordinatorDashboard() {
   const {
     rawVolunteers,
     committeesList,
+    shiftsData,
     globalShifts,
     checkedInMap: dbCheckedInMap,
     requirementsByCommittee,
@@ -103,6 +106,9 @@ export default function CoordinatorDashboard() {
   const [hoveredHeatmapDay, setHoveredHeatmapDay] = useState<string | null>(null);
   const [chartMetric, setChartMetric] = useState<'volunteers' | 'shifts'>('volunteers');
   const [selectedHeatmapCommittee, setSelectedHeatmapCommittee] = useState<string>('todos');
+  const [distributionView, setDistributionView] = useState<'list' | 'chart'>('list');
+  const [distributionMetric, setDistributionMetric] = useState<'volunteers' | 'shifts'>('volunteers');
+  const [committeeAreas, setCommitteeAreas] = useState<Array<{ id: string; committee_id: string; name: string; description?: string | null; sort_order?: number }>>([]);
   const [isHeatmapFullscreen, setIsHeatmapFullscreen] = useState<boolean>(false);
   const [autoRotateInterval, setAutoRotateInterval] = useState<number>(0); // 0 = OFF, 5, 10, 15, 30
   const [rotateProgress, setRotateProgress] = useState<number>(0);
@@ -115,6 +121,26 @@ export default function CoordinatorDashboard() {
   const [operationalData, setOperationalData] = useState<DashboardOperationalData | null>(null);
 
   const supabase = createClient();
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadAreas = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('committee_areas')
+          .select('id, committee_id, name, description, sort_order')
+          .eq('status', 'active')
+          .order('sort_order', { ascending: true });
+        if (!error && data && isMounted) {
+          setCommitteeAreas(data);
+        }
+      } catch (err) {
+        console.error('Error fetching committee areas for dashboard:', err);
+      }
+    };
+    loadAreas();
+    return () => { isMounted = false; };
+  }, [supabase]);
 
   const volunteers = useMemo(
     () =>
@@ -816,6 +842,124 @@ export default function CoordinatorDashboard() {
     ? EVENT_DAYS.find(day => day.key === selectedChartDay) || null
     : null;
 
+  const isScopedToSingleCommittee = useMemo(() => {
+    if (!canViewGlobalReports()) return true;
+    return Boolean(
+      selectedHeatmapCommittee &&
+      selectedHeatmapCommittee !== 'todos' &&
+      selectedHeatmapCommittee !== 'all'
+    );
+  }, [selectedHeatmapCommittee]);
+
+  const targetCommitteeName = useMemo(() => {
+    if (isScopedToSingleCommittee) {
+      if (selectedHeatmapCommittee && selectedHeatmapCommittee !== 'todos' && selectedHeatmapCommittee !== 'all') {
+        return selectedHeatmapCommittee;
+      }
+      return userCommittee || committeesList[0]?.name || '';
+    }
+    return null;
+  }, [isScopedToSingleCommittee, selectedHeatmapCommittee, userCommittee, committeesList]);
+
+  const targetCommitteeObj = useMemo(() => {
+    if (!targetCommitteeName) return null;
+    return committeesList.find(c => c.name === targetCommitteeName) || null;
+  }, [targetCommitteeName, committeesList]);
+
+  const distributionItems = useMemo<DistributionItem[]>(() => {
+    if (!isScopedToSingleCommittee) {
+      // Global View: Breakdown by Committee
+      return committeesList.map((comm) => {
+        const commVols = activeVolunteers.filter((v: any) => v.committee === comm.name);
+        const volCount = commVols.length;
+        let shiftCount = 0;
+        commVols.forEach((v: any) => {
+          const s = globalShifts[v.id];
+          if (s) {
+            Object.values(s).forEach((arr) => { shiftCount += arr.length; });
+          }
+        });
+
+        return {
+          id: comm.id,
+          name: comm.name,
+          count: distributionMetric === 'volunteers' ? volCount : shiftCount,
+          secondaryCount: distributionMetric === 'volunteers' ? shiftCount : volCount,
+          description: `${commVols.length} voluntarios · ${shiftCount} turnos`,
+        };
+      });
+    }
+
+    // Scoped View: Breakdown by Areas for this specific committee
+    if (!targetCommitteeObj) return [];
+    const committeeId = targetCommitteeObj.id;
+    const areasOfCommittee = committeeAreas.filter(a => a.committee_id === committeeId);
+
+    if (areasOfCommittee.length === 0) {
+      return [];
+    }
+
+    const commVolunteers = activeVolunteers.filter((v: any) => v.committee === targetCommitteeName);
+    const commVolIds = new Set(commVolunteers.map(v => v.id));
+
+    const areaAssignedVolIds = new Set<string>();
+    const items: DistributionItem[] = [];
+
+    areasOfCommittee.forEach((area) => {
+      const areaVolunteers = new Set<string>();
+      let areaShifts = 0;
+
+      (shiftsData || []).forEach((shift: any) => {
+        if (!commVolIds.has(shift.volunteer_id)) return;
+        if (shift.area_id === area.id || shift.area_name === area.name) {
+          areaVolunteers.add(shift.volunteer_id);
+          areaAssignedVolIds.add(shift.volunteer_id);
+          areaShifts++;
+        }
+      });
+
+      items.push({
+        id: area.id,
+        name: area.name,
+        count: distributionMetric === 'volunteers' ? areaVolunteers.size : areaShifts,
+        secondaryCount: distributionMetric === 'volunteers' ? areaShifts : areaVolunteers.size,
+        description: area.description || `${areaVolunteers.size} voluntarios asignados`,
+      });
+    });
+
+    // Calculate volunteers in this committee without assigned area
+    const unassignedVolunteers = commVolunteers.filter(v => !areaAssignedVolIds.has(v.id));
+    let unassignedShifts = 0;
+    (shiftsData || []).forEach((shift: any) => {
+      if (commVolIds.has(shift.volunteer_id) && !shift.area_id) {
+        unassignedShifts++;
+      }
+    });
+
+    if (unassignedVolunteers.length > 0 || unassignedShifts > 0) {
+      items.push({
+        id: 'unassigned',
+        name: 'Sin área asignada',
+        count: distributionMetric === 'volunteers' ? unassignedVolunteers.length : unassignedShifts,
+        secondaryCount: distributionMetric === 'volunteers' ? unassignedShifts : unassignedVolunteers.length,
+        color: '#64748b',
+        description: 'Voluntarios sin asignación de área',
+      });
+    }
+
+    return items;
+  }, [
+    isScopedToSingleCommittee,
+    committeesList,
+    activeVolunteers,
+    globalShifts,
+    shiftsData,
+    targetCommitteeObj,
+    targetCommitteeName,
+    committeeAreas,
+    distributionMetric
+  ]);
+
   if (dashboardAccess === 'checking') {
     return (
       <div className="absolute inset-0 flex items-center justify-center z-50" aria-label="Verificando acceso al Dashboard">
@@ -1234,38 +1378,116 @@ export default function CoordinatorDashboard() {
         </div>
       </motion.section>
 
-      {/* Cobertura por Comité — edge to edge */}
+      {/* Cobertura por Comité & Distribución en Donut / Pie Chart — edge to edge */}
       <motion.div variants={itemVariants} className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/[0.02] mb-8">
-        <div className="px-5 sm:px-8 py-4 border-b border-white/5">
-          <h3 className="text-text tracking-tight leading-none text-sm font-bold">Cobertura por Comité</h3>
-          <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-widest mt-0.5">Porcentaje de requerimientos asignados</p>
+        <div className="px-5 sm:px-8 py-4 border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-text tracking-tight leading-none text-sm font-bold">
+              {distributionView === 'chart' ? 'Distribución de Voluntarios' : 'Cobertura por Comité'}
+            </h3>
+            <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-widest mt-0.5">
+              {distributionView === 'chart'
+                ? isScopedToSingleCommittee
+                  ? `División por Áreas Operativas · ${targetCommitteeName}`
+                  : 'Distribución de Voluntarios entre Comités'
+                : 'Porcentaje de requerimientos asignados'}
+            </p>
+          </div>
+
+          {/* View Switcher Controls: Cobertura (Lista) vs Distribución (Pie Chart) */}
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center p-0.5 rounded-lg bg-dark3 border border-border">
+              <button
+                type="button"
+                onClick={() => setDistributionView('list')}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs font-bold font-inter transition-all flex items-center gap-1.5 cursor-pointer",
+                  distributionView === 'list'
+                    ? "bg-[#4d7cfe] text-white shadow-sm font-extrabold"
+                    : "text-text-dim hover:text-text"
+                )}
+                title="Ver lista de cobertura y requerimientos"
+              >
+                <span className="material-symbols-outlined text-[15px]">view_list</span>
+                <span>Cobertura</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDistributionView('chart')}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs font-bold font-inter transition-all flex items-center gap-1.5 cursor-pointer",
+                  distributionView === 'chart'
+                    ? "bg-[#4d7cfe] text-white shadow-sm font-extrabold"
+                    : "text-text-dim hover:text-text"
+                )}
+                title="Ver gráfico circular de distribución"
+              >
+                <span className="material-symbols-outlined text-[15px]">donut_large</span>
+                <span>Distribución</span>
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="divide-y divide-white/5">
-          {committeeStatus.map((committee, idx) => (
+
+        <AnimatePresence mode="wait">
+          {distributionView === 'list' ? (
             <motion.div
-              key={committee.id}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 + idx * 0.05 }}
-              className="px-5 sm:px-8 py-3 flex items-center justify-between hover:bg-white/[0.02] transition-colors group cursor-default"
+              key="list"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+              className="divide-y divide-white/5"
             >
-              <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider group-hover:text-text transition-colors truncate" title={committee.name}>{committee.name}</p>
-              <div className="flex items-center gap-4 shrink-0">
-                <div className="w-32 sm:w-48 h-1.5 bg-dark3 rounded-full overflow-hidden border border-border">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${committee.coverage}%` }}
-                    transition={{ duration: 1, delay: 0.5 + idx * 0.05 }}
-                    className={`h-full rounded-full ${committee.status === 'success' ? 'bg-accent' :
-                      committee.status === 'warning' ? 'bg-amber-400' : 'bg-red'
-                      }`}
-                  />
-                </div>
-                <span className="text-[11px] font-bold text-text-dim w-10 tabular-nums text-right">{committee.coverage}%</span>
-              </div>
+              {committeeStatus.map((committee, idx) => (
+                <motion.div
+                  key={committee.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.05 + idx * 0.03 }}
+                  className="px-5 sm:px-8 py-3 flex items-center justify-between hover:bg-white/[0.02] transition-colors group cursor-default"
+                >
+                  <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider group-hover:text-text transition-colors truncate" title={committee.name}>{committee.name}</p>
+                  <div className="flex items-center gap-4 shrink-0">
+                    <div className="w-32 sm:w-48 h-1.5 bg-dark3 rounded-full overflow-hidden border border-border">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${committee.coverage}%` }}
+                        transition={{ duration: 0.8, delay: 0.1 + idx * 0.03 }}
+                        className={`h-full rounded-full ${committee.status === 'success' ? 'bg-accent' :
+                          committee.status === 'warning' ? 'bg-amber-400' : 'bg-red'
+                          }`}
+                      />
+                    </div>
+                    <span className="text-[11px] font-bold text-text-dim w-10 tabular-nums text-right">{committee.coverage}%</span>
+                  </div>
+                </motion.div>
+              ))}
             </motion.div>
-          ))}
-        </div>
+          ) : (
+            <motion.div
+              key="chart"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+            >
+              <DashboardDistributionChart
+                title={isScopedToSingleCommittee ? `Distribución por Áreas` : 'Distribución por Comités'}
+                subtitle={isScopedToSingleCommittee ? `Comité: ${targetCommitteeName}` : 'Todos los Comités'}
+                items={distributionItems}
+                totalLabel={distributionMetric === 'volunteers' ? 'Total Voluntarios' : 'Total Turnos'}
+                unitLabel={distributionMetric === 'volunteers' ? 'voluntarios' : 'turnos cubiertos'}
+                isScopedToCommittee={isScopedToSingleCommittee}
+                committeeName={targetCommitteeName || ''}
+                selectedCommitteeId={targetCommitteeObj?.id}
+                canManageAreas={true}
+                metric={distributionMetric}
+                onMetricChange={setDistributionMetric}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
       {/* Mapa de Calor Operativo — edge to edge, no card */}
