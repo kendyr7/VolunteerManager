@@ -1,0 +1,47 @@
+{
+  "project_id": "tjcrgohdkntkixirhilo",
+  "batch_id": "91184437-7240-4c71-bba8-026a47f90eb7",
+  "source_workbook": "Comparativa_Auditoria_Seguridad_Lista_Importar.xlsx",
+  "target_committee": {
+    "id": "1f9c66c6-f00e-4bac-be32-a72ac45708a5",
+    "name": "Seguridad"
+  },
+  "operation": "insert_new_conflict_free_volunteers",
+  "inserted_count": 40,
+  "counts_before": {
+    "volunteers_total": 924,
+    "security_active": 107
+  },
+  "counts_after": {
+    "volunteers_total": 964,
+    "security_active": 147
+  },
+  "verification": {
+    "missing_rows": 0,
+    "data_mismatches": 0,
+    "duplicate_batch_phones": 0,
+    "new_shift_dependencies": 0,
+    "new_attendance_dependencies": 0,
+    "new_passkey_dependencies": 0,
+    "activity_log_entries": 41
+  },
+  "rollback_locator": {
+    "table": "public.activity_logs",
+    "details_contains_batch_id": "91184437-7240-4c71-bba8-026a47f90eb7",
+    "target_id_references": "public.volunteers.id"
+  },
+  "intentionally_deferred": {
+    "archived": ["Josué Isaac Muñiz Chávez"],
+    "missing_phone": ["Silvio Enrique Flores"],
+    "shared_phone_pairs": [
+      ["Alberto Pilarte", "Juana Pilarte"],
+      ["Juan Carlos Ortiz Mercado", "Rosalba Ampié de Ortiz"]
+    ],
+    "existing_for_reassignment": [
+      "Allison Jazmín Salinas Reyes",
+      "Kenia Melissa Hernández Cuadra",
+      "Óscar José Aburto Morán",
+      "Steven Aldana"
+    ]
+  }
+}
