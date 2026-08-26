@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatE164 } from "@/lib/whatsapp";
@@ -59,6 +59,8 @@ const itemVariants = {
 
 export default function CoordinatorDashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedView = searchParams.get('view');
   const shouldReduceMotion = useReducedMotion();
   const {
     rawVolunteers,
@@ -180,6 +182,7 @@ export default function CoordinatorDashboard() {
 
   const touchStartXRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
+  const heatmapDeepLinkHandledRef = useRef(false);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0].clientX;
@@ -225,6 +228,21 @@ export default function CoordinatorDashboard() {
       return nextState;
     });
   }, []);
+
+  useEffect(() => {
+    if (requestedView !== 'heatmap-fullscreen' || heatmapDeepLinkHandledRef.current) return;
+    heatmapDeepLinkHandledRef.current = true;
+    window.history.replaceState(null, '', '/dashboard');
+    const frame = window.requestAnimationFrame(() => {
+      setIsHeatmapFullscreen(true);
+      try {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen?.().catch(() => {});
+        }
+      } catch {}
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [requestedView]);
 
   useEffect(() => {
     if (!isHeatmapFullscreen) return;

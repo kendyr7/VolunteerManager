@@ -32,6 +32,9 @@ import {
   touchWhatsAppConversation,
 } from '@/lib/services/whatsapp-conversation-store';
 import { getShiftAreaDetails } from '@/lib/shift-area';
+import { SHIFT_CHANGE_REASONS } from '@/lib/shift-change-reasons';
+import { getCommitteeCoverageSnapshot, isCoverageComplete } from '@/lib/shift-coverage';
+import { createValidatedShiftChangeRequest } from '@/lib/services/shift-change-request.service';
 import {
   CONFIGURABLE_PERMISSION_DEFAULTS,
   CONFIGURABLE_PERMISSION_KEYS,
@@ -140,7 +143,7 @@ function formatWhatsAppAssignmentDate(dayKey: string): string {
   const dateStr = parseDayKeyToDateStr(dayKey);
   const [year, month, day] = dateStr.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day, 12));
-  const parts = new Intl.DateTimeFormat('es-NI', {
+  const parts = new Intl.DateTimeFormat('es-GT', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -167,14 +170,6 @@ type ScopedAction = {
 
 const ACTION_PREFIX = 'vm1';
 const PAGE_SIZE = 8;
-const CHANGE_REASONS: Record<string, string> = {
-  work: 'Compromiso laboral o académico',
-  health: 'Motivo de salud',
-  family: 'Compromiso o emergencia familiar',
-  church: 'Asignación o responsabilidad de la Iglesia',
-  transport: 'Dificultad de transporte',
-  schedule: 'Conflicto con otro horario',
-};
 const CONVERSATION_CLOSE_PHRASES = new Set([
   'gracias',
   'muchas gracias',
@@ -1787,7 +1782,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
         const [currDay, currShift, reqDay, reqShift, reasonCode] = interactiveId
           .replace('reschedule_reason_', '')
           .split('__');
-        const reason = CHANGE_REASONS[reasonCode];
+        const reason = SHIFT_CHANGE_REASONS[reasonCode];
         const validEventDays = new Set(getOperationalEventDays().map(formatDateShort));
         const validShiftKeys = new Set(['T1', 'T2', 'T3', 'T4']);
 
@@ -1796,56 +1791,41 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
           return NextResponse.json({ status: 'success' }, { status: 200 });
         }
 
-        const [{ data: sourceShift }, { data: requestedShift }, { data: existingRequest }] = await Promise.all([
-          supabase.from('shifts').select('day_key, shift_key, checked_out, checked_out_at')
-            .eq('volunteer_id', targetVolId).eq('day_key', currDay).eq('shift_key', currShift).maybeSingle(),
-          supabase.from('shifts').select('day_key, shift_key')
-            .eq('volunteer_id', targetVolId).eq('day_key', reqDay).eq('shift_key', reqShift).maybeSingle(),
-          supabase.from('shift_change_requests').select('id')
-            .eq('volunteer_id', targetVolId).eq('current_day_key', currDay)
-            .eq('current_shift_key', currShift).eq('status', 'pending').maybeSingle(),
-        ]);
+        // Revalidate the complete request at the final click. The volunteer may
+        // spend several minutes in the interactive flow while the schedule is
+        // being edited from the coordinator portal.
+        const requestResult = await createValidatedShiftChangeRequest(supabase, {
+          volunteerId: targetVolId,
+          currentDayKey: currDay,
+          currentShiftKey: currShift,
+          requestedDayKey: reqDay,
+          requestedShiftKey: reqShift,
+          reason,
+        });
 
-        if (!sourceShift || sourceShift.checked_out || sourceShift.checked_out_at) {
-          await sendWhatsAppText({
-            to: rawFrom,
-            text: `${firstName}, el turno original ya no está disponible para solicitar un cambio.`
-          });
+        if (!requestResult.success) {
+          if (requestResult.code === 'COVERAGE_FULL') {
+            const coverageLabel = requestResult.coverage
+              ? ` (${requestResult.coverage.count}/${requestResult.coverage.required})`
+              : '';
+            await sendWhatsAppInteractiveButtons({
+              to: rawFrom,
+              bodyText: `${firstName}, el turno *${reqShift}* del *${reqDay}* ya tiene la cobertura completa para *${committeeName}*${coverageLabel}. Selecciona otra fecha u horario para continuar.`,
+              buttons: [
+                { id: encodeAction(targetVolId, 'reschedule_from', currDay, currShift), title: 'Elegir otro turno' },
+                { id: encodeAction(targetVolId, 'home'), title: 'Volver al menú' },
+              ],
+            });
+          } else {
+            await sendWhatsAppText({
+              to: rawFrom,
+              text: `${firstName}, ${requestResult.error}`,
+            });
+          }
           return NextResponse.json({ status: 'success' }, { status: 200 });
         }
-        if (requestedShift || (currDay === reqDay && currShift === reqShift)) {
-          await sendWhatsAppText({
-            to: rawFrom,
-            text: `${firstName}, ya tienes asignado el turno solicitado. Selecciona otra fecha u horario.`
-          });
-          return NextResponse.json({ status: 'success' }, { status: 200 });
-        }
-        if (existingRequest) {
-          await sendWhatsAppText({
-            to: rawFrom,
-            text: `${firstName}, ya existe una solicitud pendiente para cambiar *${currDay} · ${currShift}*.`
-          });
-          return NextResponse.json({ status: 'success' }, { status: 200 });
-        }
 
-        const { data: createdRequest, error: requestError } = await supabase
-          .from('shift_change_requests')
-          .insert({
-            volunteer_id: targetVolId,
-            current_day_key: currDay,
-            current_shift_key: currShift,
-            requested_day_key: reqDay,
-            requested_shift_key: reqShift,
-            reason,
-            status: 'pending'
-          })
-          .select('id')
-          .single();
-
-        if (requestError) {
-          console.error('[WHATSAPP WEBHOOK] Error creating shift change request:', requestError.message);
-          throw new Error(`Unable to create the shift change request: ${requestError.message}`);
-        }
+        const createdRequest = requestResult.request;
 
         await writeWhatsAppVolunteerAudit(supabase, {
           volunteerId: targetVolId,
@@ -1879,7 +1859,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
         const [currDay, currShift, reqDay, reqShift] = interactiveId
           .replace('reschedule_to_', '')
           .split('__');
-        const reasonRows = Object.entries(CHANGE_REASONS).map(([code, reason]) => ({
+        const reasonRows = Object.entries(SHIFT_CHANGE_REASONS).map(([code, reason]) => ({
           id: encodeAction(targetVolId, 'reschedule_reason', currDay, currShift, reqDay, reqShift, code),
           title: reason,
           description: 'Usar este motivo en la solicitud',
@@ -1948,21 +1928,36 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
           .eq('volunteer_id', targetVolId)
           .eq('day_key', reqDay);
         const alreadyAssigned = new Set((assignedTargets || []).map(item => item.shift_key));
-        const targetRows = getAvailableShiftKeys(reqDay)
-          .filter(shiftKey => !(currDay === reqDay && currShift === shiftKey) && !alreadyAssigned.has(shiftKey))
+        const availableShiftKeys = getAvailableShiftKeys(reqDay)
+          .filter(shiftKey => !(currDay === reqDay && currShift === shiftKey) && !alreadyAssigned.has(shiftKey));
+        const coverage = selectedCommitteeId
+          ? await getCommitteeCoverageSnapshot(supabase, selectedCommitteeId, [reqDay])
+          : null;
+        const targetRows = availableShiftKeys
+          .filter(shiftKey => {
+            const slot = coverage?.slots.find(item => item.dayKey === reqDay && item.shiftKey === shiftKey);
+            return !isCoverageComplete(slot);
+          })
           .map(shiftKey => {
             const official = getOfficialShiftTime(reqDay, shiftKey);
+            const slot = coverage?.slots.find(item => item.dayKey === reqDay && item.shiftKey === shiftKey);
+            const coverageLabel = slot && slot.required > 0
+              ? ` · Cobertura ${slot.count}/${slot.required}`
+              : '';
             return {
               id: encodeAction(targetVolId, 'reschedule_to', currDay, currShift, reqDay, shiftKey),
               title: official.name,
-              description: official.timeLabel,
+              description: `${official.timeLabel}${coverageLabel}`,
             };
           });
 
         if (targetRows.length === 0) {
+          const allOptionsCovered = availableShiftKeys.length > 0;
           await sendWhatsAppText({
             to: rawFrom,
-            text: `${firstName}, ya tienes asignados todos los horarios disponibles para *${reqDay}*. Selecciona otra fecha.`
+            text: allOptionsCovered
+              ? `${firstName}, todos los horarios disponibles del *${reqDay}* ya tienen la cobertura completa para *${committeeName}*. Selecciona otra fecha.`
+              : `${firstName}, ya tienes asignados todos los horarios disponibles para *${reqDay}*. Selecciona otra fecha.`
           });
           return NextResponse.json({ status: 'success' }, { status: 200 });
         }

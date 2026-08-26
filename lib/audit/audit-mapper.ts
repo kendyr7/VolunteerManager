@@ -229,7 +229,8 @@ export class AuditMapper {
 
     const createdDate = new Date(rawLog.created_at);
     const formattedDate = !isNaN(createdDate.getTime())
-      ? createdDate.toLocaleString('es-NI', {
+      ? createdDate.toLocaleString('es-GT', {
+          timeZone: 'America/Guatemala',
           day: '2-digit',
           month: 'short',
           hour: '2-digit',

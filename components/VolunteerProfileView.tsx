@@ -44,6 +44,7 @@ import { getVolunteerProfileMetrics } from "@/lib/services/volunteer-profile.ser
 import { AdminSessionCorrectionModal } from "./AdminSessionCorrectionModal";
 import { AdminCreateSessionModal } from "./AdminCreateSessionModal";
 import type { ShiftAreaDetails } from "@/lib/shift-area";
+import { ShiftChangeReasonSelector } from "@/components/ShiftChangeReasonSelector";
 
 export interface VolunteerProfileData {
   id: string;
@@ -459,9 +460,9 @@ export function VolunteerProfileView({
   const staleOpenSession = useMemo(() => {
     const openSess = fetchedSessions.find((s: any) => s.status === 'open');
     if (!openSess) return null;
-    const nicaString = new Date().toLocaleString("en-US", { timeZone: "America/Managua" });
-    const nicaNow = new Date(nicaString);
-    const currentDayKey = format(nicaNow, "EEE d", { locale: es }).toLowerCase();
+    const guatemalaString = new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" });
+    const guatemalaNow = new Date(guatemalaString);
+    const currentDayKey = format(guatemalaNow, "EEE d", { locale: es }).toLowerCase();
     const sessDayKey = (openSess.day_key || openSess.dayKey || '').toLowerCase();
     if (sessDayKey && sessDayKey !== currentDayKey) {
       return openSess;
@@ -606,7 +607,7 @@ export function VolunteerProfileView({
   const handleSendRescheduleRequest = async () => {
     if (!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey) return;
     if (!requestReason.trim()) {
-      setSubmitError("Por favor ingresa la razón o motivo por el cual solicitas el cambio.");
+      setSubmitError("Selecciona el motivo principal de tu solicitud.");
       return;
     }
 
@@ -818,7 +819,7 @@ export function VolunteerProfileView({
             <div>
               <span className="font-bold text-amber-300 block text-xs">⚠ Salida pendiente (Día anterior o turno finalizado)</span>
               <span className="text-text-dim text-[11px] block mt-0.5">
-                Entrada: {format(new Date(staleOpenSession.started_at), 'hh:mm a')} ({staleOpenSession.day_key}) · Salida: No registrada
+                Entrada: {new Date(staleOpenSession.started_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true })} ({staleOpenSession.day_key}) · Salida: No registrada
               </span>
             </div>
           </div>
@@ -1614,6 +1615,7 @@ export function VolunteerProfileView({
                               onClick={() => {
                                 setTargetDayKey(d.key);
                                 setTargetShiftKey('');
+                                setRequestReason('');
                               }}
                               className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-xl border transition-all bg-dark3 cursor-pointer ${
                                 isSelected
@@ -1643,7 +1645,7 @@ export function VolunteerProfileView({
                             const tAssigned = !isSameShift && isVolunteerShiftAssigned(rescheduleCtx, targetDayKey, t);
                             const capInfo = getVolunteerShiftCapacity(rescheduleCtx, targetDayKey, t);
                             const isFull = capInfo.isFull;
-                            const isBtnDisabled = isSameShift || tCompleted || tAssigned;
+                            const isBtnDisabled = isSameShift || tCompleted || tAssigned || isFull;
                             return (
                               <button
                                 key={t}
@@ -1687,12 +1689,10 @@ export function VolunteerProfileView({
                         <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block">
                           3. Motivo o razón del cambio:
                         </label>
-                        <textarea
-                          rows={2}
-                          placeholder="Explica brevemente el motivo por el cual necesitas reagendar tu turno (ej: compromiso laboral, asunto de salud...)"
+                        <ShiftChangeReasonSelector
                           value={requestReason}
-                          onChange={(e) => setRequestReason(e.target.value)}
-                          className="w-full bg-dark3 border border-border text-text text-xs p-3 rounded-xl focus:outline-none focus:border-[#4d7cfe] font-medium placeholder:text-text-dim"
+                          onChange={setRequestReason}
+                          disabled={isSubmitting}
                         />
                       </div>
                     )}
@@ -1732,9 +1732,9 @@ export function VolunteerProfileView({
                   <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
                     <span className="material-symbols-outlined text-[20px] text-amber-400 shrink-0">warning</span>
                     <div>
-                      <p className="text-amber-200 font-extrabold text-xs mb-0.5">Capacidad Máxima Alcanzada</p>
+                      <p className="text-amber-200 font-extrabold text-xs mb-0.5">Cobertura Completa</p>
                       <p className="text-[11px] text-amber-300/90 font-medium leading-relaxed">
-                        El turno <strong className="text-white">{targetShiftKey}</strong> del <strong className="text-white">{targetDayKey}</strong> ya alcanzó la meta requerida para <strong className="text-white">{targetCapacity.committeeName}</strong> ({targetCapacity.count}/{targetCapacity.maxReq}). Puedes enviar la solicitud y el coordinador decidirá si te sobreasigna.
+                        El turno <strong className="text-white">{targetShiftKey}</strong> del <strong className="text-white">{targetDayKey}</strong> ya tiene la cobertura completa para <strong className="text-white">{targetCapacity.committeeName}</strong> ({targetCapacity.count}/{targetCapacity.maxReq}). Selecciona otra fecha u horario.
                       </p>
                     </div>
                   </div>
@@ -1753,7 +1753,7 @@ export function VolunteerProfileView({
 
                   <Button
                     type="button"
-                    disabled={!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey || !requestReason.trim() || isSubmitting || sourceShiftCompleted || targetShiftStatus.isSource || targetShiftStatus.isCompleted || targetShiftStatus.isAssigned}
+                    disabled={!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey || !requestReason.trim() || isSubmitting || sourceShiftCompleted || targetShiftStatus.isSource || targetShiftStatus.isCompleted || targetShiftStatus.isAssigned || targetCapacity.isFull}
                     onClick={handleSendRescheduleRequest}
                     className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-dark3 disabled:text-text-dim disabled:border-border text-white rounded-full h-11 text-xs font-bold shadow-lg active:scale-95 transition-all cursor-pointer"
                   >

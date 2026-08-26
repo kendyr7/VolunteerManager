@@ -31,6 +31,10 @@ import {
 } from '@/lib/volunteer-name-matching';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 import { broadcastShiftSync } from './shift-broadcast.service';
+import {
+  findPendingShiftChangeTargetConflict,
+  pendingShiftConflictMessage,
+} from './shift-change-request.service';
 
 export interface UpdateProfilePayload {
   firstName: string;
@@ -1693,6 +1697,28 @@ export class VolunteerMutationService {
       const supabase = await getAdminSupabase();
 
       if (assign) {
+        const { data: existingAssignment, error: existingAssignmentError } = await supabase
+          .from('shifts')
+          .select('id')
+          .eq('volunteer_id', volunteerId)
+          .eq('day_key', dayKey)
+          .eq('shift_key', shiftKey)
+          .maybeSingle();
+        if (existingAssignmentError) {
+          return { success: false, error: existingAssignmentError.message };
+        }
+
+        if (!existingAssignment) {
+          const conflict = await findPendingShiftChangeTargetConflict(
+            supabase,
+            volunteerId,
+            [{ dayKey, shiftKey }]
+          );
+          if (conflict) {
+            return { success: false, error: pendingShiftConflictMessage(conflict) };
+          }
+        }
+
         const { data: insertedShift, error } = await supabase
           .from('shifts')
           .upsert(
@@ -1774,6 +1800,23 @@ export class VolunteerMutationService {
         .from('shifts')
         .select('id, volunteer_id, day_key, shift_key')
         .eq('volunteer_id', volunteerId);
+
+      const oldAssignmentKeys = new Set(
+        (oldShifts || []).map(shift => `${shift.day_key}\u0000${shift.shift_key}`)
+      );
+      const newlyAssignedShifts = Object.entries(shiftsByDay).flatMap(([dayKey, shiftKeys]) =>
+        shiftKeys
+          .filter(shiftKey => !oldAssignmentKeys.has(`${dayKey}\u0000${shiftKey}`))
+          .map(shiftKey => ({ dayKey, shiftKey }))
+      );
+      const conflict = await findPendingShiftChangeTargetConflict(
+        supabase,
+        volunteerId,
+        newlyAssignedShifts
+      );
+      if (conflict) {
+        return { success: false, error: pendingShiftConflictMessage(conflict) };
+      }
 
       // Delete existing shifts
       const { error: delErr } = await supabase

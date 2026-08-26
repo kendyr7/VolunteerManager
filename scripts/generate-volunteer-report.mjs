@@ -111,9 +111,9 @@ async function generateReport() {
     const cleanFirstName = (v.first_name || '').replace(/^\(Traducción\)\s*/i, '').trim();
 
     const d = new Date(v.created_at);
-    const localDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' }).format(d);
-    const localTimeStr = new Intl.DateTimeFormat('es-NI', {
-      timeZone: 'America/Managua',
+    const localDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala' }).format(d);
+    const localTimeStr = new Intl.DateTimeFormat('es-GT', {
+      timeZone: 'America/Guatemala',
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
@@ -198,7 +198,7 @@ async function generateReport() {
 
   wsSummary.mergeCells('B3:I3');
   const subBanner = wsSummary.getCell('B3');
-  subBanner.value = 'Corte de Nuevos Ingresos: Domingo, 16 de Agosto de 2026 (Día de Ayer) • Zona Horaria: America/Managua (UTC-6)';
+  subBanner.value = 'Corte de Nuevos Ingresos: Domingo, 16 de Agosto de 2026 (Día de Ayer) • Zona horaria: Guatemala';
   subBanner.font = { name: FONT_FAMILY, size: 10, color: { argb: 'FF' + COLORS.secondaryText } };
   subBanner.alignment = { vertical: 'middle', horizontal: 'left' };
   wsSummary.getRow(3).height = 18;

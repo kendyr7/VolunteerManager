@@ -1,5 +1,3 @@
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import { getOfficialShiftTime } from "@/lib/dates";
 
 export interface ShiftTimeResult {
@@ -43,7 +41,12 @@ export function getUnifiedShiftTimes(
 
   if (checkInLog?.created_at) {
     try {
-      startTime = format(new Date(checkInLog.created_at), "hh:mm a", { locale: es });
+      startTime = new Date(checkInLog.created_at).toLocaleTimeString('es-GT', {
+        timeZone: 'America/Guatemala',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
     } catch (e) {}
   }
 

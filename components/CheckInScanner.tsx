@@ -32,6 +32,7 @@ interface CheckInScannerProps {
   coordinatorName: string;
   role: string;
   committeeName: string;
+  initialView?: 'scanner' | 'history';
 }
 
 type ScannerState = 'idle' | 'scanning' | 'loading' | 'success' | 'already_checked_in' | 'manual_selection' | 'error';
@@ -61,10 +62,11 @@ function getInitials(name: string): string {
 function formatDateLabel(date: Date): string {
   if (!date || isNaN(date.getTime())) return '';
   const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
-  const timeStr = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  const guatemalaDateKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala' });
+  const isToday = guatemalaDateKey.format(date) === guatemalaDateKey.format(now);
+  const timeStr = date.toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit' });
   if (isToday) return `Hoy, ${timeStr}`;
-  const dayStr = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  const dayStr = date.toLocaleDateString('es-GT', { timeZone: 'America/Guatemala', day: 'numeric', month: 'short' });
   return `${dayStr}, ${timeStr}`;
 }
 
@@ -83,11 +85,12 @@ export function CheckInScanner({
   coordinatorId,
   coordinatorName,
   role,
-  committeeName
+  committeeName,
+  initialView = 'scanner',
 }: CheckInScannerProps) {
   const { refresh } = useCoordinatorData();
   const [state, setState] = useState<ScannerState>('idle');
-  const [mainView, setMainView] = useState<'scanner' | 'history'>('scanner');
+  const [mainView, setMainView] = useState<'scanner' | 'history'>(initialView);
   const [errorMsg, setErrorMsg] = useState("");
   const [sessionCount, setSessionCount] = useState(0);
   const [camerasList, setCamerasList] = useState<Array<{ id: string, label: string }>>([]);
@@ -101,6 +104,11 @@ export function CheckInScanner({
     session?: any;
   } | null>(null);
   const [history, setHistory] = useState<ScanEntry[]>([]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setMainView(initialView));
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialView]);
 
   // Unified Profile Drawer state
   const [drawerVolunteer, setDrawerVolunteer] = useState<any>(null);
@@ -815,7 +823,7 @@ export function CheckInScanner({
         playWarningBeep();
         triggerVibration(200);
         const startTimeStr = res.session?.started_at
-          ? new Date(res.session.started_at).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit', hour12: true })
+          ? new Date(res.session.started_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true })
           : '—';
         const dayLabel = res.session?.day_key || res.previousDayKey || 'día anterior';
         setScanResult({
@@ -837,7 +845,7 @@ export function CheckInScanner({
         playWarningBeep();
         triggerVibration(100);
         const startTimeStr = res.session?.started_at
-          ? new Date(res.session.started_at).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit', hour12: true })
+          ? new Date(res.session.started_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true })
           : '6:58 AM';
         setScanResult({
           volunteer: res.volunteer || "Voluntario",

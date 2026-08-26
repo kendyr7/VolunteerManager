@@ -33,6 +33,7 @@ import { SortableTableHead, TableSortDirection } from "@/components/SortableTabl
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useMobileNavigationMode } from "@/lib/use-mobile-navigation-mode";
 import { ReminderCapacityProjectionCard } from "@/components/ReminderCapacityProjection";
+import { useSearchParams } from "next/navigation";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -110,10 +111,13 @@ const getCommitteeStyle = (committeeName: string, isSelected: boolean) => {
 };
 
 export default function SettingsPage() {
+  const searchParams = useSearchParams();
+  const requestedSection = searchParams.get('section');
   const { refresh } = useCoordinatorData();
   const { mode: mobileNavigationMode, setMode: setMobileNavigationMode } = useMobileNavigationMode();
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Lector');
   const [canManagePermissions, setCanManagePermissions] = useState(false);
+  const [canViewActivityLogs, setCanViewActivityLogs] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [committees, setCommittees] = useState<{ id: string, name: string, status?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -274,8 +278,10 @@ export default function SettingsPage() {
         setPermissionsMap(result.snapshot.permissions);
         setCurrentRole(result.snapshot.role);
         setCanManagePermissions(hasCapability(result.snapshot, 'manage_permissions'));
+        setCanViewActivityLogs(hasCapability(result.snapshot, 'view_activity_logs'));
       } else {
         setCanManagePermissions(false);
+        setCanViewActivityLogs(false);
       }
     });
   }, []);
@@ -388,6 +394,21 @@ export default function SettingsPage() {
   const [settingsSearch, setSettingsSearch] = useState('');
   const [isSettingsSearchFocused, setIsSettingsSearchFocused] = useState(false);
 
+  useEffect(() => {
+    if (requestedSection !== 'mobileNavigation') return;
+    window.history.replaceState(null, '', '/settings#settings-mobileNavigation');
+    const frame = window.requestAnimationFrame(() => {
+      setOpenSections(previous => ({ ...previous, mobileNavigation: true }));
+      window.requestAnimationFrame(() => {
+        document.getElementById('settings-mobileNavigation')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [requestedSection]);
+
   const searchableSettings = useMemo(() => {
     const sections = [
       {
@@ -449,7 +470,7 @@ export default function SettingsPage() {
       );
     }
 
-    if (canManagePermissions) {
+    if (canViewActivityLogs) {
       sections.push({
         id: 'activity',
         title: 'Historial de actividades',
@@ -460,7 +481,7 @@ export default function SettingsPage() {
     }
 
     return sections;
-  }, [canManagePermissions, currentRole, isMobile]);
+  }, [canViewActivityLogs, currentRole, isMobile]);
 
   const settingsSearchResults = useMemo(() => {
     const query = settingsSearch.trim();
@@ -493,25 +514,35 @@ export default function SettingsPage() {
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [activityLogsError, setActivityLogsError] = useState<string | null>(null);
   const [selectedActionFilter, setSelectedActionFilter] = useState<string>('Todas');
   const [logSearchQuery, setLogSearchQuery] = useState<string>('');
 
   const fetchLogs = useCallback(async () => {
-    if (!canManagePermissions) return;
+    if (!canViewActivityLogs) return;
     setIsLoadingLogs(true);
+    setActivityLogsError(null);
     try {
-      const logs = await getActivityLogs(500);
-      setActivityLogs(logs);
+      const result = await getActivityLogs(500);
+      if (result.success) {
+        setActivityLogs(result.logs);
+      } else {
+        setActivityLogs([]);
+        setActivityLogsError(result.error);
+      }
+    } catch {
+      setActivityLogs([]);
+      setActivityLogsError('No se pudo cargar el historial de actividades.');
     } finally {
       setIsLoadingLogs(false);
     }
-  }, [canManagePermissions]);
+  }, [canViewActivityLogs]);
 
   useEffect(() => {
-    if (canManagePermissions) {
+    if (canViewActivityLogs) {
       fetchLogs();
     }
-  }, [canManagePermissions, fetchLogs]);
+  }, [canViewActivityLogs, fetchLogs]);
 
   const filteredLogs = useMemo(() => {
     return activityLogs.filter(log => {
@@ -1127,9 +1158,9 @@ export default function SettingsPage() {
                         const isSynced = pk.backed_up;
                         const icon = isInternal ? 'fingerprint' : transports.includes('usb') ? 'usb' : 'key';
                         const deviceLabel = pk.device_name || (isInternal ? 'Biometría del dispositivo' : 'Llave de seguridad');
-                        const addedDate = new Date(pk.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+                        const addedDate = new Date(pk.created_at).toLocaleDateString('es-GT', { timeZone: 'America/Guatemala', day: 'numeric', month: 'short', year: 'numeric' });
                         const lastUsed = pk.last_used_at
-                          ? new Date(pk.last_used_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+                          ? new Date(pk.last_used_at).toLocaleDateString('es-GT', { timeZone: 'America/Guatemala', day: 'numeric', month: 'short' })
                           : null;
 
                         return (
@@ -1731,7 +1762,7 @@ export default function SettingsPage() {
           )}
 
           {/* Historial de Actividades (Solo Admins) */}
-          {canManagePermissions && (
+          {canViewActivityLogs && (
             <div id="settings-activity" className="w-full scroll-mt-44 transition-all border-t border-border mt-2 pt-2">
               <div
                 onClick={() => isMobile && toggleSection('activity')}
@@ -1821,6 +1852,22 @@ export default function SettingsPage() {
                       <span className="material-symbols-outlined animate-spin text-[24px]">progress_activity</span>
                       <p className="text-xs font-inter">Cargando historial de actividades...</p>
                     </div>
+                  ) : activityLogsError ? (
+                    <div
+                      role="alert"
+                      className="flex flex-col items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-6 text-center"
+                    >
+                      <span className="material-symbols-outlined text-[26px] text-rose-600 dark:text-rose-400">error</span>
+                      <p className="text-xs font-bold text-text">{activityLogsError}</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={fetchLogs}
+                        className="h-8 rounded-full border-border bg-dark2 px-3 text-[11px] font-bold text-text"
+                      >
+                        Reintentar
+                      </Button>
+                    </div>
                   ) : filteredLogs.length === 0 ? (
                     <div className="py-8 text-center text-text-dim space-y-2 border border-dashed border-border rounded-xl">
                       <span className="material-symbols-outlined text-[28px]">manage_search</span>
@@ -1830,8 +1877,8 @@ export default function SettingsPage() {
                   ) : (
                     <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1 scrollbar-thin">
                       {filteredLogs.map((log) => {
-                        const dateStr = new Date(log.created_at).toLocaleString('es-NI', {
-                          timeZone: 'America/Managua',
+                        const dateStr = new Date(log.created_at).toLocaleString('es-GT', {
+                          timeZone: 'America/Guatemala',
                           day: '2-digit',
                           month: 'short',
                           year: 'numeric',

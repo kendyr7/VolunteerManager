@@ -146,6 +146,14 @@ export function canViewDashboard() {
   return hasCapability(currentSnapshot, 'view_dashboard');
 }
 
+export function canViewSettings() {
+  return hasCapability(currentSnapshot, 'view_settings');
+}
+
+export function canViewActivityLogs() {
+  return hasCapability(currentSnapshot, 'view_activity_logs');
+}
+
 export function canEditShifts(targetCommitteeId?: string | null) {
   return hasCapability(currentSnapshot, 'reschedule_volunteer', targetCommitteeId);
 }

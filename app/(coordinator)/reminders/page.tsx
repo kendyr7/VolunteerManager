@@ -124,7 +124,7 @@ function DeliveryStatusBadge({
 
   const display = DELIVERY_STATUS_UI[info.status];
   const updatedLabel = info.updatedAt
-    ? new Date(info.updatedAt).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'short' })
+    ? new Date(info.updatedAt).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Guatemala' })
     : '';
   const diagnostic = [display.label, info.errorMessage, info.errorDetails, updatedLabel]
     .filter(Boolean)

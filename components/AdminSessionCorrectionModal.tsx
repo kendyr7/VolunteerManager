@@ -260,7 +260,7 @@ export function AdminSessionCorrectionModal({
                     <span className="text-[#4d7cfe] font-black">{block.blockLabel}</span>
                   </div>
                   <p className="text-text-dim text-[11px]">
-                    Entrada original: <strong className="text-text">{new Date(session.started_at).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit', hour12: true })}</strong>
+                    Entrada original: <strong className="text-text">{new Date(session.started_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true })}</strong>
                   </p>
                 </div>
               ) : (
@@ -345,7 +345,7 @@ export function AdminSessionCorrectionModal({
                     ⚠ Posible Entrada Olvidada
                   </div>
                   <p className="text-text-dim leading-relaxed">
-                    El voluntario escaneó a las <strong>{new Date(session.started_at).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit', hour12: true })}</strong>. Se corregirá su hora de entrada a la hora oficial de inicio del bloque.
+                    El voluntario escaneó a las <strong>{new Date(session.started_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true })}</strong>. Se corregirá su hora de entrada a la hora oficial de inicio del bloque.
                   </p>
                   <p className="text-text-dim text-[11px] mt-1">
                     Bloque programado: <strong className="text-text">{block.blockLabel}</strong>

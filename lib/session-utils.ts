@@ -43,14 +43,14 @@ export function validateSessionConstraints(
 }
 
 /**
- * Calculates Nicaragua local hour float (e.g. 7.5 = 7:30 AM, 17.25 = 5:15 PM)
+ * Calculates Guatemala local hour float (e.g. 7.5 = 7:30 AM, 17.25 = 5:15 PM)
  */
-export function getNicaraguaHourFloat(dateInput: Date | string): number {
+export function getGuatemalaHourFloat(dateInput: Date | string): number {
   const d = new Date(dateInput);
   if (isNaN(d.getTime())) return 0;
-  const nicaStr = d.toLocaleString("en-US", { timeZone: "America/Managua" });
-  const nicaDate = new Date(nicaStr);
-  return nicaDate.getHours() + nicaDate.getMinutes() / 60 + nicaDate.getSeconds() / 3600;
+  const guatemalaString = d.toLocaleString("en-US", { timeZone: "America/Guatemala" });
+  const guatemalaDate = new Date(guatemalaString);
+  return guatemalaDate.getHours() + guatemalaDate.getMinutes() / 60 + guatemalaDate.getSeconds() / 3600;
 }
 
 /**
@@ -65,16 +65,16 @@ export function inferShiftsForSession(
 ): OfficialShiftTime[] {
   if (!sessionStart) return [];
 
-  const sessionStartHour = getNicaraguaHourFloat(sessionStart);
+  const sessionStartHour = getGuatemalaHourFloat(sessionStart);
 
   let sessionEndHour: number;
   if (sessionEnd) {
-    sessionEndHour = getNicaraguaHourFloat(sessionEnd);
+    sessionEndHour = getGuatemalaHourFloat(sessionEnd);
   } else {
-    // For OPEN sessions: evaluate up to CURRENT Nicaragua time, constrained by the continuous block
+    // For OPEN sessions: evaluate up to CURRENT Guatemala time, constrained by the continuous block
     const block = getContinuousScheduledBlockForSession(dayKey, sessionStart, assignedShifts);
     const blockEndHour = block ? getOfficialShiftTime(dayKey, block.endShiftKey).endHour : 24;
-    const currentNowHour = getNicaraguaHourFloat(new Date());
+    const currentNowHour = getGuatemalaHourFloat(new Date());
     sessionEndHour = Math.min(currentNowHour, blockEndHour);
   }
 
@@ -258,7 +258,7 @@ export function getContinuousScheduledBlockForSession(
   const blocks = getContinuousScheduledBlocks(dayKey, assignedShiftKeys);
   if (blocks.length === 0) return null;
 
-  const sessionStartHour = getNicaraguaHourFloat(startedAt);
+  const sessionStartHour = getGuatemalaHourFloat(startedAt);
 
   const matchedBlock = blocks.find(b =>
     (sessionStartHour >= b.startHour - 0.75 && sessionStartHour <= b.endHour) ||
