@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from "rea
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { List } from 'react-window';
 import { CSSProperties } from 'react';
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 // ...
 import { Input } from "@/components/ui/input";
@@ -128,8 +128,16 @@ type SortOrder = 'asc' | 'desc';
 import { updateVolunteerStatusAction, swapVolunteerActivationAction, resetVolunteerPinAction } from "@/app/actions/volunteer-actions";
 
 export default function VolunteersPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const requestedAction = searchParams.get('action');
+  const requestedShiftDay = searchParams.get('day')?.trim() || null;
+  const requestedShiftParam = searchParams.get('shift')?.trim().toUpperCase() || null;
+  const requestedShiftKey = requestedShiftParam && /^T[1-4]$/.test(requestedShiftParam)
+    ? requestedShiftParam
+    : null;
+  const requestedCommittee = searchParams.get('committee')?.trim() || null;
+  const hasDashboardScheduleFilter = Boolean(requestedShiftDay);
   const supabase = createClient();
   const {
     rawVolunteers,
@@ -148,7 +156,7 @@ export default function VolunteersPage() {
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
 
   // Table Column Sort State
-  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortField, setSortField] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
   const handleSort = (field: SortField) => {
@@ -679,7 +687,7 @@ export default function VolunteersPage() {
 
   const filteredVolunteers = useMemo(() => {
     const matchedSearchIds = new Set(searchService.search(appliedSearch));
-    return filterVolunteerIds(augmentedVolunteers, matchedSearchIds, {
+    const baseFiltered = filterVolunteerIds(augmentedVolunteers, matchedSearchIds, {
       currentRole,
       currentCommittee,
       canViewAllVolunteers,
@@ -687,6 +695,16 @@ export default function VolunteersPage() {
       selectedCommittees,
       selectedStakes,
       selectedWards,
+    });
+
+    if (!requestedShiftDay) return baseFiltered;
+    return baseFiltered.filter(volunteer => {
+      const assignedShifts = globalShifts[volunteer.id]?.[requestedShiftDay] || [];
+      const matchesSchedule = requestedShiftKey
+        ? assignedShifts.includes(requestedShiftKey)
+        : assignedShifts.length > 0;
+      const matchesCommittee = !requestedCommittee || volunteer.committee === requestedCommittee;
+      return matchesSchedule && matchesCommittee;
     });
   }, [
     searchService,
@@ -699,11 +717,13 @@ export default function VolunteersPage() {
     selectedCommittees,
     selectedStakes,
     selectedWards,
+    globalShifts,
+    requestedShiftDay,
+    requestedShiftKey,
+    requestedCommittee,
   ]);
 
   const sortedFilteredVolunteers = useMemo(() => {
-    if (!sortField) return filteredVolunteers;
-
     return [...filteredVolunteers].sort((a, b) => {
       let valA: any = a[sortField];
       let valB: any = b[sortField];
@@ -919,6 +939,32 @@ export default function VolunteersPage() {
       </div>
 
       <div className="flex flex-col gap-4 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
+        {hasDashboardScheduleFilter && (
+          <motion.div
+            variants={itemVariants}
+            className="w-full flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#4d7cfe]/25 bg-[#4d7cfe]/10 px-4 py-3"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="material-symbols-outlined text-[20px] text-[#4d7cfe]">filter_alt</span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Filtro del dashboard</p>
+                <p className="truncate text-sm font-extrabold text-text">
+                  {requestedShiftKey ? `${requestedShiftKey} · ` : 'Todos los turnos · '}{requestedShiftDay}
+                  {requestedCommittee ? ` · ${requestedCommittee}` : ' · Todos los comités'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.replace('/volunteers')}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-dark2 px-3 text-[11px] font-bold text-text-dim transition-colors hover:border-[#4d7cfe]/40 hover:text-text"
+            >
+              <span className="material-symbols-outlined text-[16px]">close</span>
+              Limpiar filtro
+            </button>
+          </motion.div>
+        )}
+
         <motion.div variants={itemVariants} className="bg-dark2 border border-border rounded-[20px] shadow-lg overflow-clip flex flex-col w-full">
           <AlphabetScrubber isMobile={isMobile} />
           {/* Contenedor de Datos: Escritorio PC vs Móvil */}

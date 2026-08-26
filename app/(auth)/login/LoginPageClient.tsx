@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { LoginForm } from "./LoginForm";
-import { motion, useAnimation, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn } from "@/lib/utils";
@@ -56,9 +56,12 @@ function TempleQuoteRotator({ isMobile = false }: { isMobile?: boolean }) {
   const current = TEMPLE_QUOTES[index];
 
   return (
-    <div className="relative overflow-hidden backdrop-blur-xl bg-gradient-to-t from-black/85 via-black/50 to-black/20 p-6 md:p-9 rounded-3xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.6)] transition-all">
+    <div className={cn(
+      "relative overflow-hidden backdrop-blur-xl bg-gradient-to-t from-black/90 via-black/60 to-black/30 border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.6)] transition-all",
+      isMobile ? "p-4 sm:p-5 rounded-2xl" : "p-6 md:p-9 rounded-3xl"
+    )}>
       {/* Background Watermark Quote Mark */}
-      <span className="absolute -top-4 -left-1 text-8xl font-serif text-white/10 select-none pointer-events-none leading-none">
+      <span className={cn("absolute -top-4 -left-1 font-serif text-white/10 select-none pointer-events-none leading-none", isMobile ? "text-6xl" : "text-8xl")}>
         &ldquo;
       </span>
 
@@ -70,31 +73,20 @@ function TempleQuoteRotator({ isMobile = false }: { isMobile?: boolean }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="space-y-4"
+            className={isMobile ? "space-y-2" : "space-y-4"}
           >
-            <p className={cn("text-white font-inter font-medium leading-relaxed drop-shadow-md tracking-tight", isMobile ? "text-base sm:text-lg" : "text-xl lg:text-2xl")}>
+            <p className={cn("text-white font-inter font-medium leading-relaxed drop-shadow-md tracking-tight", isMobile ? "text-xs sm:text-sm md:text-base leading-snug sm:leading-relaxed" : "text-xl lg:text-2xl")}>
               &ldquo;{current.quote}&rdquo;
             </p>
 
-            <div className="flex items-center gap-3 pt-1">
-              <div className="h-px w-8 bg-gradient-to-r from-white/60 to-transparent" />
-              <p className="text-white/90 font-bold uppercase tracking-widest text-[11px] sm:text-xs">
+            <div className="flex items-center gap-3 pt-0.5">
+              <div className="h-px w-6 sm:w-8 bg-gradient-to-r from-white/60 to-transparent" />
+              <p className="text-white/90 font-bold uppercase tracking-widest text-[10px] sm:text-xs">
                 {current.author}
               </p>
             </div>
           </motion.div>
         </AnimatePresence>
-      </div>
-
-      {/* Smooth 14-Second Progress Line */}
-      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10 overflow-hidden">
-        <motion.div
-          key={index}
-          initial={{ width: "0%" }}
-          animate={{ width: "100%" }}
-          transition={{ duration: 14, ease: "linear" }}
-          className="h-full bg-gradient-to-r from-[#4d7cfe] via-sky-400 to-emerald-400"
-        />
       </div>
     </div>
   );
@@ -271,14 +263,12 @@ function PrivacyTermsModal({
 
 export function LoginPageClient() {
   const [page, setPage] = useState(0);
-  const [vw, setVw] = useState(0);
   const [isDark, setIsDark] = useState(true);
   const [activeLegalModal, setActiveLegalModal] = useState<'privacy' | 'terms' | null>(null);
-  const controls = useAnimation();
-
-  useEffect(() => {
-    setVw(window.innerWidth);
-  }, []);
+  const [autoSecondsLeft, setAutoSecondsLeft] = useState(10);
+  const [hasManuallySwitched, setHasManuallySwitched] = useState(false);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
 
   useEffect(() => {
     const applyTheme = (dark: boolean) => {
@@ -307,34 +297,65 @@ export function LoginPageClient() {
     return () => mediaQuery.removeEventListener("change", listener);
   }, []);
 
+  const goToPage = useCallback((newPage: number) => {
+    setHasManuallySwitched(true);
+    setPage(newPage);
+  }, []);
+
+  // 10-second automatic advance from Hero Image to Login Form
   useEffect(() => {
-    if (vw) {
-      controls.start({ x: page === 0 ? 0 : -vw });
-    }
-  }, [page, vw, controls]);
+    if (page !== 0 || hasManuallySwitched) return;
 
-  const onDragEnd = useCallback(
-    (_e: any, info: { offset: { x: number }; velocity: { x: number } }) => {
-      if (!vw) return;
-      const threshold = vw * 0.2;
-      const velocityThreshold = 500;
+    const interval = setInterval(() => {
+      setAutoSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setPage(1);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-      let newPage = page;
+    return () => clearInterval(interval);
+  }, [page, hasManuallySwitched]);
 
-      if ((info.offset.x < -threshold || info.velocity.x < -velocityThreshold) && page === 0) {
-        newPage = 1;
-      } else if ((info.offset.x > threshold || info.velocity.x > velocityThreshold) && page === 1) {
-        newPage = 0;
-      }
+  const handlePanEnd = useCallback(
+    (_e: any, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
+      const threshold = 30;
+      const velocityThreshold = 120;
 
-      if (newPage !== page) {
-        setPage(newPage);
-      } else {
-        controls.start({ x: page === 0 ? 0 : -vw });
+      if (Math.abs(info.offset.x) > Math.abs(info.offset.y) * 0.9) {
+        if ((info.offset.x < -threshold || info.velocity.x < -velocityThreshold) && page === 0) {
+          goToPage(1);
+        } else if ((info.offset.x > threshold || info.velocity.x > velocityThreshold) && page === 1) {
+          goToPage(0);
+        }
       }
     },
-    [vw, page, controls],
+    [page, goToPage],
   );
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+
+    if (Math.abs(deltaX) > 30 && Math.abs(deltaX) > Math.abs(deltaY) * 1.1) {
+      if (deltaX < 0 && page === 0) {
+        goToPage(1);
+      } else if (deltaX > 0 && page === 1) {
+        goToPage(0);
+      }
+    }
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+  };
 
   const templeImageSrc = isDark ? "/templodark.jpg" : "/templo.jpg";
 
@@ -406,23 +427,19 @@ export function LoginPageClient() {
       </div>
 
       {/* ── Mobile layout (<md) ── */}
-      <div className="md:hidden fixed inset-0 overflow-hidden bg-black select-none">
+      <div 
+        className="md:hidden fixed inset-0 overflow-hidden bg-black select-none"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <motion.div
-          drag="x"
-          dragConstraints={{ left: -(vw || 0), right: 0 }}
-          dragElastic={0.05}
-          dragMomentum={false}
-          onDragEnd={onDragEnd}
-          animate={controls}
-          transition={{ type: "spring", damping: 40, stiffness: 400 }}
-          className="flex h-full"
-          style={{
-            touchAction: "pan-y",
-            width: vw ? `${vw * 2}px` : "200%",
-          }}
+          animate={{ x: page === 0 ? "0%" : "-50%" }}
+          transition={{ type: "spring", damping: 30, stiffness: 280 }}
+          onPanEnd={handlePanEnd}
+          className="flex h-full w-[200%]"
         >
-          {/* ── Page 0 — Hero image + quote ── */}
-          <div className="relative h-full w-1/2 shrink-0 bg-black touch-pan-y">
+          {/* ── Page 0 — Hero image + quote + Prominent CTA ── */}
+          <div className="relative h-full w-1/2 shrink-0 bg-black touch-pan-y flex flex-col justify-end">
             <Image
               src={templeImageSrc}
               alt="Templo de Managua"
@@ -430,11 +447,34 @@ export function LoginPageClient() {
               className="object-cover transition-opacity duration-500"
               priority
             />
+            {/* Subtle dark gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent z-10 pointer-events-none" />
 
-            <div className="absolute inset-x-6 bottom-6 z-10">
+            <div className="relative z-20 p-4 sm:p-6 space-y-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
               <TempleQuoteRotator isMobile />
-            </div>
 
+              {/* Direct Call to Action button */}
+              <button
+                type="button"
+                onClick={() => goToPage(1)}
+                className="w-full flex items-center justify-between py-3.5 px-5 rounded-2xl bg-gradient-to-r from-[#4d7cfe] via-[#2563eb] to-[#1d4ed8] hover:from-[#3b66e0] hover:to-blue-700 text-white font-inter font-extrabold text-sm shadow-[0_12px_28px_rgba(77,124,254,0.45)] border border-white/20 active:scale-[0.98] transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="material-symbols-outlined text-[20px] text-white">login</span>
+                  <span>Continuar a Iniciar Sesión</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!hasManuallySwitched && autoSecondsLeft > 0 && (
+                    <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full text-white/90">
+                      Auto ({autoSecondsLeft}s)
+                    </span>
+                  )}
+                  <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
+                    arrow_forward
+                  </span>
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* ── Page 1 — Login form ── */}
@@ -443,9 +483,9 @@ export function LoginPageClient() {
               colors={isDark ? ["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"] : ["#60a5fa", "#3b82f6", "#93c5fd", "#2563eb"]}
               backgroundColor={isDark ? "#050a15" : "#f8fafc"}
             />
-            <div className="relative z-10 flex min-h-full flex-col justify-center px-6 py-12">
+            <div className="relative z-10 flex min-h-full flex-col justify-center px-6 py-14 pt-16">
               <div className="mx-auto w-full max-w-sm">
-                <div className="mb-10 flex flex-col items-center text-center">
+                <div className="mb-8 flex flex-col items-center text-center">
                   <AnimatedLogo className={`w-14 h-14 mb-4 ${isDark ? 'text-white' : 'text-[#4d7cfe]'}`} />
                   <div className={`text-[16px] tracking-wider mb-1 uppercase whitespace-nowrap font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     Bienvenido de nuevo
@@ -487,36 +527,43 @@ export function LoginPageClient() {
           </div>
         </motion.div>
 
-        {/* Top bar: swipe hint + page dots */}
-        <div className="absolute top-6 inset-x-6 z-30 flex items-center justify-between pointer-events-none">
+        {/* Top bar: Glass Segmented Navigation Switcher + Hint */}
+        <div className="absolute top-4 sm:top-6 inset-x-4 sm:inset-x-6 z-30 flex items-center justify-between pointer-events-none">
           {page === 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, x: [0, 4, 0] }}
-              transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
-              className="flex items-center gap-1"
-            >
-              <span className="text-white/60 text-[10px] font-bold uppercase tracking-widest">
-                Desliza
-              </span>
-              <span className="material-symbols-outlined text-white/60 text-lg">
-                chevron_right
-              </span>
-            </motion.div>
+            <div className="flex items-center gap-1.5 text-white/70 text-[11px] font-bold tracking-wide pointer-events-auto drop-shadow-md">
+              <span className="material-symbols-outlined text-[16px] animate-pulse text-[#4d7cfe]">swipe</span>
+              <span>Desliza o espera {autoSecondsLeft}s</span>
+            </div>
           )}
-          <div className={`flex items-center gap-2 pointer-events-auto ${page === 0 ? "" : "ml-auto"}`}>
+          <div className="flex items-center gap-1 rounded-full p-1 bg-black/60 backdrop-blur-xl border border-white/20 shadow-lg pointer-events-auto ml-auto">
             <button
-              onClick={() => setPage(0)}
-              title="Ver imagen"
-              className={`rounded-full transition-all duration-300 focus:outline-none ${page === 0 ? "bg-white w-6 h-2" : "bg-white/30 w-2 h-2"
-                }`}
-            />
+              type="button"
+              onClick={() => goToPage(0)}
+              title="Ver mensaje del templo"
+              className={cn(
+                "px-3 py-1 rounded-full text-xs font-inter font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+                page === 0
+                  ? "bg-white text-slate-950 shadow-md font-extrabold"
+                  : "text-white/70 hover:text-white"
+              )}
+            >
+              <span className="material-symbols-outlined text-[14px]">image</span>
+              <span>Templo</span>
+            </button>
             <button
-              onClick={() => setPage(1)}
+              type="button"
+              onClick={() => goToPage(1)}
               title="Iniciar sesión"
-              className={`rounded-full transition-all duration-300 focus:outline-none ${page === 1 ? "bg-white w-6 h-2" : "bg-white/30 w-2 h-2"
-                }`}
-            />
+              className={cn(
+                "px-3 py-1 rounded-full text-xs font-inter font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+                page === 1
+                  ? "bg-[#4d7cfe] text-white shadow-md font-extrabold"
+                  : "text-white/70 hover:text-white"
+              )}
+            >
+              <span className="material-symbols-outlined text-[14px]">login</span>
+              <span>Ingresar</span>
+            </button>
           </div>
         </div>
       </div>

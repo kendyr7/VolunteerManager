@@ -1,7 +1,6 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
@@ -57,6 +56,18 @@ const itemVariants = {
   }
 };
 
+const DASHBOARD_SIMULATION_STORAGE_KEY = 'volunteer-manager.dashboard.include-simulation';
+
+function readStoredSimulationPreference() {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    return window.localStorage.getItem(DASHBOARD_SIMULATION_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 export default function CoordinatorDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -71,7 +82,7 @@ export default function CoordinatorDashboard() {
     loading,
   } = useCoordinatorData();
   const [dashboardAccess, setDashboardAccess] = useState<'checking' | 'allowed' | 'denied'>('checking');
-  const [includeSimulation, setIncludeSimulation] = useState(false);
+  const [includeSimulation, setIncludeSimulation] = useState(readStoredSimulationPreference);
 
   const EVENT_DAYS = useMemo(() => getActiveEventDays({ includeSimulation }).map(date => ({
       date,
@@ -88,6 +99,7 @@ export default function CoordinatorDashboard() {
   }, [requirementsByCommittee]);
 
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
+  const [selectedChartDay, setSelectedChartDay] = useState<string | null>(null);
   const [hoveredHeatmapDay, setHoveredHeatmapDay] = useState<string | null>(null);
   const [chartMetric, setChartMetric] = useState<'volunteers' | 'shifts'>('volunteers');
   const [selectedHeatmapCommittee, setSelectedHeatmapCommittee] = useState<string>('todos');
@@ -208,6 +220,48 @@ export default function CoordinatorDashboard() {
     touchStartXRef.current = null;
     touchStartYRef.current = null;
   }, [handlePrevCommittee, handleNextCommittee]);
+
+  const openVolunteersForHeatmapSlot = useCallback((dayKey: string, shiftKey: string) => {
+    const params = new URLSearchParams({ day: dayKey, shift: shiftKey });
+    if (
+      selectedHeatmapCommittee
+      && selectedHeatmapCommittee !== 'todos'
+      && selectedHeatmapCommittee !== 'all'
+    ) {
+      params.set('committee', selectedHeatmapCommittee);
+    }
+
+    setIsHeatmapFullscreen(false);
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+    }
+    router.push(`/volunteers?${params.toString()}`);
+  }, [router, selectedHeatmapCommittee]);
+
+  const openVolunteersForChartDay = useCallback((dayKey: string) => {
+    const params = new URLSearchParams({ day: dayKey });
+    if (
+      selectedHeatmapCommittee
+      && selectedHeatmapCommittee !== 'todos'
+      && selectedHeatmapCommittee !== 'all'
+    ) {
+      params.set('committee', selectedHeatmapCommittee);
+    }
+
+    router.push(`/volunteers?${params.toString()}`);
+  }, [router, selectedHeatmapCommittee]);
+
+  const toggleSimulation = useCallback(() => {
+    setIncludeSimulation(currentValue => {
+      const nextValue = !currentValue;
+      try {
+        window.localStorage.setItem(DASHBOARD_SIMULATION_STORAGE_KEY, String(nextValue));
+      } catch {
+        // Keep the in-memory preference when browser storage is unavailable.
+      }
+      return nextValue;
+    });
+  }, []);
 
   const openHeatmapFullscreen = useCallback(() => {
     setIsHeatmapFullscreen(true);
@@ -704,6 +758,63 @@ export default function CoordinatorDashboard() {
   const volsPerDay = isOperationalSynced ? operationalData.volsPerDay : clientVolsPerDay;
   const shiftsPerDay = isOperationalSynced ? operationalData.shiftsPerDay : clientShiftsPerDay;
   const totalVolsWithShifts = isOperationalSynced ? operationalData.totalVolsWithShifts : clientTotalVolsWithShifts;
+  const coverageStatus = globalStats.globalCoveragePercentage >= 100
+    ? { label: 'Completo', className: 'bg-accent/15 text-accent' }
+    : globalStats.globalCoveragePercentage >= 70
+      ? { label: 'En progreso', className: 'bg-amber-500/15 text-amber-500' }
+      : { label: 'Crítico', className: 'bg-red/15 text-red' };
+  const chartModel = useMemo(() => {
+    const values = chartMetric === 'volunteers' ? volsPerDay : shiftsPerDay;
+    const requiredByDay = Object.fromEntries(
+      heatmapMatrix.map(day => [
+        day.day,
+        day.shifts.reduce((total, shift) => total + shift.required, 0),
+      ])
+    ) as Record<string, number>;
+    const dailyValues = EVENT_DAYS.map(day => values[day.key] || 0);
+    const volunteerAverage = EVENT_DAYS.length > 0
+      ? Math.round(dailyValues.reduce((total, value) => total + value, 0) / EVENT_DAYS.length)
+      : 0;
+    const hasRequirements = Object.values(requiredByDay).some(value => value > 0);
+    const referenceValues = Object.fromEntries(
+      EVENT_DAYS.map(day => [
+        day.key,
+        chartMetric === 'shifts' && hasRequirements
+          ? requiredByDay[day.key] || 0
+          : volunteerAverage,
+      ])
+    ) as Record<string, number>;
+    const referenceList = EVENT_DAYS.map(day => referenceValues[day.key] || 0);
+    const rawMax = Math.max(...dailyValues, ...referenceList, 1);
+    const scaleStep = Math.max(10, Math.ceil(rawMax / 40) * 10);
+    const scaleMax = scaleStep * 4;
+    const nonZeroRequirements = Object.values(requiredByDay).filter(value => value > 0);
+    const minimumRequirement = nonZeroRequirements.length > 0 ? Math.min(...nonZeroRequirements) : 0;
+    const maximumRequirement = nonZeroRequirements.length > 0 ? Math.max(...nonZeroRequirements) : 0;
+
+    return {
+      values,
+      referenceValues,
+      scaleMax,
+      scaleMidpoint: scaleStep * 2,
+      referenceLabel: chartMetric === 'shifts' && hasRequirements ? 'Cobertura requerida' : 'Promedio diario',
+      referenceSummary: chartMetric === 'shifts' && hasRequirements
+        ? minimumRequirement === maximumRequirement
+          ? `${maximumRequirement.toLocaleString()} turnos por día`
+          : `${minimumRequirement.toLocaleString()}–${maximumRequirement.toLocaleString()} turnos por día`
+        : `${volunteerAverage.toLocaleString()} personas por día`,
+      referencePoints: EVENT_DAYS.map((day, index) => {
+        const x = ((index + 0.5) / EVENT_DAYS.length) * 100;
+        const y = 100 - ((referenceValues[day.key] || 0) / scaleMax) * 100;
+        return `${x},${y}`;
+      }).join(' '),
+      hasShiftRequirements: chartMetric === 'shifts' && hasRequirements,
+    };
+  }, [chartMetric, volsPerDay, shiftsPerDay, heatmapMatrix, EVENT_DAYS]);
+  const activeChartDay = hoveredDay || selectedChartDay;
+  const selectedChartDayInfo = selectedChartDay
+    ? EVENT_DAYS.find(day => day.key === selectedChartDay) || null
+    : null;
 
   if (dashboardAccess === 'checking') {
     return (
@@ -777,7 +888,7 @@ export default function CoordinatorDashboard() {
             <button
               type="button"
               aria-pressed={includeSimulation}
-              onClick={() => setIncludeSimulation(value => !value)}
+              onClick={toggleSimulation}
               className={`h-9 rounded-full border px-3 text-[11px] font-bold transition-all active:scale-[0.97] ${
                 includeSimulation
                   ? 'border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-300'
@@ -812,124 +923,114 @@ export default function CoordinatorDashboard() {
         className="w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6 md:space-y-12 pb-20 pt-4"
       >
 
-      {/* Primary KPIs - Edge to Edge Fine Line Grid */}
-      <div className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/5 mb-8">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-[1px]">
-          {/* Card 1 */}
-          <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3 relative">
-            <div className="flex items-start justify-between mb-3 sm:mb-6">
-              <div className="p-3 bg-blue-500/10 text-blue-500 rounded-sm group-hover:bg-[#4d7cfe] group-hover:text-white transition-colors duration-300">
-                <span className="material-symbols-outlined text-[20px]">track_changes</span>
+      {/* Primary KPIs */}
+      <div className="-mx-4 mb-8 border-y border-border bg-border sm:-mx-6 lg:-mx-8">
+        <div className="grid grid-cols-2 gap-px lg:grid-cols-4">
+          <section className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="material-symbols-outlined flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-[18px] text-blue-500 sm:size-9">groups</span>
+                <p className="min-w-0 text-[11px] font-bold leading-[1.15] text-text sm:text-sm sm:leading-tight">Voluntarios activos</p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveKpiInfo({
-                    title: "Voluntarios Reclutados",
-                    explanation: "Compara el total de voluntarios registrados en el sistema contra la meta total de requerimientos sumando todos los turnos del evento.",
-                    formula: "Voluntarios Registrados / Suma de Requerimientos Totales"
-                  })}
-                  className="text-text-dim hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
-                  title="¿Cómo se calcula este KPI?"
-                >
-                  <span className="material-symbols-outlined text-[18px]">help_outline</span>
-                </button>
-                <div className="flex flex-col items-end">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-dim mb-1">Progreso</span>
-                  <Badge variant="secondary" className="bg-dark3 text-text font-bold border-none text-[10px] px-2 h-5">
-                    +{globalStats.recruitmentPercentage}%
-                  </Badge>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => setActiveKpiInfo({
+                  title: "Voluntarios Activos",
+                  explanation: "Muestra la cantidad real de personas activas disponibles en el alcance seleccionado. El dato secundario indica cuántas ya tienen al menos un turno asignado.",
+                  formula: "Conteo único de voluntarios activos"
+                })}
+                className="-mr-2 flex size-10 shrink-0 items-center justify-center rounded-lg text-text-dim transition-colors hover:bg-white/10 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                title="¿Cómo se calcula este KPI?"
+                aria-label="Cómo se calcula Voluntarios Activos"
+              >
+                <span className="material-symbols-outlined text-[19px]">help_outline</span>
+              </button>
             </div>
-            <div className="space-y-1 pr-4 sm:pr-0">
-              <h3 className="text-text font-bold tracking-tighter flex items-baseline gap-2">
-                {globalStats.totalRecruited} <span className="text-sm font-bold text-muted uppercase tracking-widest">/ {globalStats.targetVolunteers}</span>
-              </h3>
-              <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Voluntarios Reclutados</p>
+            <div className="flex flex-1 items-center py-4 sm:py-5">
+              <p className="text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]">
+                {globalStats.totalRecruited}
+              </p>
             </div>
-          </div>
+            <div className="flex items-end justify-between gap-2 border-t border-border pt-3">
+              <p className="max-w-[10rem] text-[11px] font-semibold leading-tight text-text-dim sm:text-xs">Con turnos asignados</p>
+              <p className="shrink-0 text-lg font-extrabold leading-none text-blue-500 tabular-nums sm:text-xl">{totalVolsWithShifts}</p>
+            </div>
+          </section>
 
-          {/* Card 2 */}
-          <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3 relative">
-            <div className="flex items-start justify-between mb-3 sm:mb-6">
-              <div className="p-3 bg-accent/10 rounded-sm group-hover:bg-accent group-hover:text-white transition-colors duration-300 text-accent">
-                <span className="material-symbols-outlined text-[20px]">monitoring</span>
+          <section className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="material-symbols-outlined flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-[18px] text-accent sm:size-9">monitoring</span>
+                <p className="min-w-0 text-[11px] font-bold leading-[1.15] text-text sm:text-sm sm:leading-tight">Turnos registrados</p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveKpiInfo({
-                    title: "Turnos Registrados",
-                    explanation: "Muestra el porcentaje de cobertura de requerimientos que ya cuentan con un voluntario asignado en la agenda.",
-                    formula: "(Turnos Asignados válidos / Suma de Requerimientos Totales) × 100"
-                  })}
-                  className="text-text-dim hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
-                  title="¿Cómo se calcula este KPI?"
-                >
-                  <span className="material-symbols-outlined text-[18px]">help_outline</span>
-                </button>
-                <div className="flex flex-col items-end">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-dim mb-1">Estado</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                    <span className="text-[10px] font-bold text-accent uppercase tracking-widest">Óptimo</span>
-                  </div>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => setActiveKpiInfo({
+                  title: "Turnos Registrados",
+                  explanation: "Muestra el porcentaje de cobertura de requerimientos que ya cuentan con un voluntario asignado en la agenda.",
+                  formula: "(Turnos Asignados válidos / Suma de Requerimientos Totales) × 100"
+                })}
+                className="-mr-2 flex size-10 shrink-0 items-center justify-center rounded-lg text-text-dim transition-colors hover:bg-white/10 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                title="¿Cómo se calcula este KPI?"
+                aria-label="Cómo se calcula Turnos Registrados"
+              >
+                <span className="material-symbols-outlined text-[19px]">help_outline</span>
+              </button>
             </div>
-            <div className="space-y-1">
-              <h3 className="text-text font-bold tracking-tighter">
-                {globalStats.globalCoveragePercentage}%
-              </h3>
-              <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Turnos Registrados</p>
+            <div className="flex flex-1 items-center py-4 sm:py-5">
+              <p className="flex items-start text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]">
+                {globalStats.globalCoveragePercentage}
+                <span className="ml-1 mt-1 text-[0.42em] font-extrabold tracking-[-0.02em] text-accent sm:mt-1.5">%</span>
+              </p>
             </div>
-            <p className="text-[10px] text-text-dim mt-3 sm:mt-6 font-inter font-bold uppercase tracking-[0.1em]">% de turnos registrados</p>
-          </div>
+            <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+              <p className="text-[11px] font-semibold leading-tight text-text-dim sm:text-xs">Cobertura de cupos</p>
+              <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold leading-none sm:text-[11px] ${coverageStatus.className}`}>
+                {coverageStatus.label}
+              </span>
+            </div>
+          </section>
 
-          {/* Card 3 */}
-          <div className="bg-dark2 p-4 sm:p-7 group transition-all duration-300 hover:bg-dark3 relative">
-            <div className="flex items-start justify-between mb-3 sm:mb-6">
-              <div className={`p-3 rounded-sm transition-colors duration-300 ${globalStats.criticalAlerts > 0 ? 'bg-red/20 text-red group-hover:bg-red group-hover:text-white' : 'bg-dark3 text-text-dim group-hover:bg-white/10 group-hover:text-white'}`}>
-                <span className="material-symbols-outlined text-[20px]">security</span>
+          <section className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className={`material-symbols-outlined flex size-8 shrink-0 items-center justify-center rounded-lg text-[18px] sm:size-9 ${globalStats.criticalAlerts > 0 ? 'bg-red/15 text-red' : 'bg-white/5 text-text-dim'}`}>security</span>
+                <p className="min-w-0 text-[11px] font-bold leading-[1.15] text-text sm:text-sm sm:leading-tight">Alertas críticas</p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveKpiInfo({
-                    title: "Alertas Críticas",
-                    explanation: "Cantidad de turnos (por comité y día) donde los voluntarios asignados son menores al mínimo de requerimientos configurado.",
-                    formula: "Conteo de slots donde Voluntarios Asignados < Requerimiento Configurado"
-                  })}
-                  className="text-text-dim hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
-                  title="¿Cómo se calcula este KPI?"
-                >
-                  <span className="material-symbols-outlined text-[18px]">help_outline</span>
-                </button>
-                <div className="flex flex-col items-end">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-dim mb-1">Prioridad</span>
-                  <Badge variant="outline" className={`font-inter font-bold text-[10px] border-none px-2 h-5 ${globalStats.criticalAlerts > 0 ? 'bg-red/20 text-red' : 'bg-dark3 text-text-dim'}`}>
-                    {globalStats.criticalAlerts > 0 ? 'ACCIÓN REQ.' : 'NORMAL'}
-                  </Badge>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => setActiveKpiInfo({
+                  title: "Alertas Críticas",
+                  explanation: "Cantidad de turnos (por comité y día) donde los voluntarios asignados son menores al mínimo de requerimientos configurado.",
+                  formula: "Conteo de slots donde Voluntarios Asignados < Requerimiento Configurado"
+                })}
+                className="-mr-2 flex size-10 shrink-0 items-center justify-center rounded-lg text-text-dim transition-colors hover:bg-white/10 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red"
+                title="¿Cómo se calcula este KPI?"
+                aria-label="Cómo se calcula Alertas Críticas"
+              >
+                <span className="material-symbols-outlined text-[19px]">help_outline</span>
+              </button>
             </div>
-            <div className="space-y-1">
-              <h3 className={`font-bold tracking-tighter ${globalStats.criticalAlerts > 0 ? 'text-red' : 'text-text'}`}>
+            <div className="flex flex-1 items-center py-4 sm:py-5">
+              <p className={`text-[44px] font-black leading-none tracking-[-0.045em] tabular-nums sm:text-[60px] xl:text-[68px] ${globalStats.criticalAlerts > 0 ? 'text-red' : 'text-text'}`}>
                 {globalStats.criticalAlerts}
-              </h3>
-              <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Alertas Críticas</p>
+              </p>
             </div>
-            <p className="text-[10px] mt-3 sm:mt-6 font-inter font-bold uppercase tracking-[0.1em] text-text-dim">
-              {globalStats.criticalAlerts > 0 ? 'Turnos bajo el mínimo' : 'Estabilidad operativa'}
-            </p>
-          </div>
+            <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+              <p className="text-[11px] font-semibold leading-tight text-text-dim sm:text-xs">
+                {globalStats.criticalAlerts > 0 ? 'Turnos bajo el mínimo' : 'Estabilidad operativa'}
+              </p>
+              <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold leading-none sm:text-[11px] ${globalStats.criticalAlerts > 0 ? 'bg-red/15 text-red' : 'bg-accent/15 text-accent'}`}>
+                {globalStats.criticalAlerts > 0 ? 'Revisar' : 'Normal'}
+              </span>
+            </div>
+          </section>
 
-          {/* Card 4 — Asistencia General */}
-          <div className="bg-dark2 p-4 sm:p-7 group transition-colors hover:bg-dark3 relative">
-            <div className="flex items-start justify-between mb-3 sm:mb-6">
-              <div className="p-3 bg-dark3 rounded-sm group-hover:bg-emerald-500 transition-colors duration-300 text-text">
-                <span className="material-symbols-outlined text-[20px]">person_check</span>
+          <section className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="material-symbols-outlined flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-[18px] text-emerald-500 sm:size-9">person_check</span>
+                <p className="min-w-0 text-[11px] font-bold leading-[1.15] text-text sm:text-sm sm:leading-tight">Asistencia general</p>
               </div>
               <button
                 type="button"
@@ -938,153 +1039,200 @@ export default function CoordinatorDashboard() {
                   explanation: "Porcentaje de turnos donde el voluntario escaneó su código QR de asistencia respecto al total de turnos asignados.",
                   formula: "(Turnos con QR Confirmado / Total de Turnos Asignados a Voluntarios) × 100"
                 })}
-                className="text-text-dim hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
+                className="-mr-2 flex size-10 shrink-0 items-center justify-center rounded-lg text-text-dim transition-colors hover:bg-white/10 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 title="¿Cómo se calcula este KPI?"
+                aria-label="Cómo se calcula Asistencia General"
               >
-                <span className="material-symbols-outlined text-[18px]">help_outline</span>
+                <span className="material-symbols-outlined text-[19px]">help_outline</span>
               </button>
             </div>
-            <div className="space-y-1">
-              <h3 className="font-bold tracking-tighter text-text">
-                {globalStats.attendanceRate}%
-              </h3>
-              <p className="text-xs font-inter font-bold text-text-dim uppercase tracking-wider">Asistencia General</p>
+            <div className="flex flex-1 items-center py-4 sm:py-5">
+              <p className="flex items-start text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]">
+                {globalStats.attendanceRate}
+                <span className="ml-1 mt-1 text-[0.42em] font-extrabold tracking-[-0.02em] text-emerald-500 sm:mt-1.5">%</span>
+              </p>
             </div>
-            <div className="mt-3 sm:mt-6 flex items-baseline gap-1.5 whitespace-nowrap overflow-hidden">
-              <p className="text-[13px] font-inter font-extrabold text-text tabular-nums leading-none shrink-0">
+            <div className="flex items-end justify-between gap-2 border-t border-border pt-3">
+              <p className="text-[11px] font-semibold leading-tight text-text-dim sm:text-xs">QR confirmados</p>
+              <p className="shrink-0 text-base font-extrabold leading-none text-text tabular-nums sm:text-lg">
                 {globalStats.checkedInCount}
-                {globalStats.totalAssigned > 0 && (
-                  <span className="text-white/30">/{globalStats.totalAssigned}</span>
-                )}
-              </p>
-              <p className="text-[10px] text-text-dim font-inter font-bold uppercase tracking-widest whitespace-nowrap truncate">
-                QR Confirmado{globalStats.checkedInCount !== 1 ? 's' : ''}
+                {globalStats.totalAssigned > 0 && <span className="text-text-dim">/{globalStats.totalAssigned}</span>}
               </p>
             </div>
-          </div>
+          </section>
         </div>
       </div>
 
-      {/* Bar Chart — edge to edge, no card */}
-      <motion.div variants={itemVariants} className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/[0.02] mb-8">
-        {/* Header */}
-        <div className="px-5 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <p className="text-xl font-bold text-text tracking-tighter leading-none tabular-nums">
-              {chartMetric === 'volunteers' ? totalVolsWithShifts.toLocaleString() : globalStats.totalAssigned.toLocaleString()}
-            </p>
-            <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider leading-tight mt-0.5">
-              {chartMetric === 'volunteers' ? 'Voluntarios Únicos con Turnos' : 'Total Turnos Cubiertos'}
-            </p>
+      {/* Activity by day — edge to edge */}
+      <motion.section variants={itemVariants} className="-mx-4 mb-8 border-y border-border bg-dark2 sm:-mx-6 lg:-mx-8">
+        <div className="flex flex-col gap-4 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <div className="min-w-0">
+            <p className="text-sm font-extrabold text-text">Actividad por día</p>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <p className="text-xl font-extrabold leading-none text-text tabular-nums">
+                {chartMetric === 'volunteers' ? totalVolsWithShifts.toLocaleString() : globalStats.totalAssigned.toLocaleString()}
+              </p>
+              <p className="text-[11px] font-semibold leading-tight text-text-dim">
+                {chartMetric === 'volunteers' ? 'voluntarios únicos en el evento' : 'turnos cubiertos en el evento'}
+              </p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="bg-dark3 p-1 rounded-lg border border-white/10 flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-dark3 p-1" role="group" aria-label="Métrica de la gráfica">
               <button
                 type="button"
                 onClick={() => setChartMetric('volunteers')}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${
+                aria-pressed={chartMetric === 'volunteers'}
+                className={`min-h-8 rounded-md px-3 text-[11px] font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] ${
                   chartMetric === 'volunteers'
-                    ? 'bg-[#4d7cfe] text-white shadow-sm'
-                    : 'text-text-dim hover:text-white'
+                    ? 'bg-[#4d7cfe] text-white'
+                    : 'text-text-dim hover:bg-dark2 hover:text-text'
                 }`}
               >
-                Personas Únicas
+                Personas únicas
               </button>
               <button
                 type="button"
                 onClick={() => setChartMetric('shifts')}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${
+                aria-pressed={chartMetric === 'shifts'}
+                className={`min-h-8 rounded-md px-3 text-[11px] font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] ${
                   chartMetric === 'shifts'
-                    ? 'bg-[#4d7cfe] text-white shadow-sm'
-                    : 'text-text-dim hover:text-white'
+                    ? 'bg-[#4d7cfe] text-white'
+                    : 'text-text-dim hover:bg-dark2 hover:text-text'
                 }`}
               >
-                Turnos Cubiertos
+                Turnos cubiertos
               </button>
             </div>
 
-            <div className="hidden md:flex items-center px-2 py-1 rounded-sm border border-border bg-dark3 text-[10px] font-bold text-text-dim shrink-0">
+            <div className="hidden items-center rounded-md border border-border bg-dark3 px-2.5 py-1.5 text-[10px] font-bold text-text-dim md:flex">
               {includeSimulation ? '5 – 26 Sep' : '10 – 26 Sep'}
             </div>
           </div>
         </div>
 
-        {/* Chart area */}
-        <div className="px-3 sm:px-8 py-5">
-          <div className="w-full flex flex-col">
-            <div className="flex items-end gap-0.5 sm:gap-1.5 h-[230px] pt-14 relative">
-              {(() => {
-                const targetData = chartMetric === 'volunteers' ? volsPerDay : shiftsPerDay;
-                const maxCount = Math.max(...Object.values(targetData), 1);
-                const totalDays = EVENT_DAYS.length;
+        <div className="px-3 py-5 sm:px-8 sm:py-6">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 pl-9 sm:pl-11">
+            <div className="flex items-center gap-2 text-[11px] font-semibold text-text-dim">
+              <span className={`block w-6 border-t border-dashed ${chartModel.hasShiftRequirements ? 'border-amber-500' : 'border-text-dim'}`} />
+              <span>{chartModel.referenceLabel}</span>
+              <span className="text-text">{chartModel.referenceSummary}</span>
+            </div>
+            <p className="text-[10px] font-semibold text-text-dim">Selecciona una barra para consultar el día</p>
+          </div>
 
-                return EVENT_DAYS.map((day, idx) => {
-                  const count = targetData[day.key] || 0;
+          <div className="grid grid-cols-[32px_minmax(0,1fr)] gap-2 sm:grid-cols-[38px_minmax(0,1fr)] sm:gap-3">
+            <div className="relative h-[240px] pt-12 text-right text-[9px] font-semibold text-text-dim tabular-nums sm:text-[10px]">
+              <span className="absolute right-0 top-[42px]">{chartModel.scaleMax.toLocaleString()}</span>
+              <span className="absolute right-0 top-[calc(50%+18px)] -translate-y-1/2">{chartModel.scaleMidpoint.toLocaleString()}</span>
+              <span className="absolute bottom-0 right-0">0</span>
+            </div>
+
+            <div className="relative h-[240px] pt-12">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 top-12">
+                <div className="absolute inset-x-0 top-0 border-t border-border" />
+                <div className="absolute inset-x-0 top-1/2 border-t border-border/70" />
+                <div className="absolute inset-x-0 bottom-0 border-t border-border" />
+                <svg className={`absolute inset-0 z-10 size-full overflow-visible ${chartModel.hasShiftRequirements ? 'text-amber-500' : 'text-text-dim'}`} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline
+                    points={chartModel.referencePoints}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 4"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </svg>
+              </div>
+
+              <div className="absolute inset-x-0 bottom-0 top-12 z-20 flex items-end gap-0.5 sm:gap-1.5">
+                {EVENT_DAYS.map((day, idx) => {
+                  const count = chartModel.values[day.key] || 0;
                   const volsCount = volsPerDay[day.key] || 0;
                   const shiftsCount = shiftsPerDay[day.key] || 0;
-                  const heightPct = maxCount > 0 ? Math.max((count / maxCount) * 100, count > 0 ? 5 : 2) : 2;
-                  const isHovered = hoveredDay === day.key;
-
-                  // Smart tooltip alignment to prevent screen edge overflow
+                  const heightPct = Math.max((count / chartModel.scaleMax) * 100, count > 0 ? 3 : 1);
+                  const isActive = activeChartDay === day.key;
+                  const isSelected = selectedChartDay === day.key;
+                  const totalDays = EVENT_DAYS.length;
                   let alignClass = "left-1/2 -translate-x-1/2";
-                  if (idx < 3) {
-                    alignClass = "left-0 translate-x-0";
-                  } else if (idx >= totalDays - 3) {
-                    alignClass = "right-0 left-auto translate-x-0";
-                  }
+                  if (idx < 3) alignClass = "left-0 translate-x-0";
+                  if (idx >= totalDays - 3) alignClass = "right-0 left-auto translate-x-0";
 
                   return (
-                    <div
+                    <button
                       key={day.key}
-                      className="flex-1 flex flex-col items-center justify-end h-full group cursor-pointer"
+                      type="button"
+                      aria-label={`${day.label} ${day.dateNum}: ${volsCount} personas únicas y ${shiftsCount} turnos cubiertos`}
+                      aria-pressed={isSelected}
+                      className="group flex h-full flex-1 cursor-pointer items-end justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4d7cfe]"
                       onMouseEnter={() => setHoveredDay(day.key)}
                       onMouseLeave={() => setHoveredDay(null)}
-                      onClick={() => setHoveredDay(prev => prev === day.key ? null : day.key)}
+                      onFocus={() => setHoveredDay(day.key)}
+                      onBlur={() => setHoveredDay(null)}
+                      onClick={() => setSelectedChartDay(previous => previous === day.key ? null : day.key)}
                     >
-                      <motion.div
-                        initial={{ height: 0 }}
+                      <motion.span
+                        initial={false}
                         animate={{ height: `${heightPct}%` }}
-                        transition={{ duration: 0.7, delay: idx * 0.025, ease: "circOut" }}
-                        className={`w-full rounded-[2px] sm:rounded-[3px] transition-colors duration-150 relative ${isHovered
-                          ? 'bg-[#4d7cfe] shadow-[0_0_12px_rgba(77,124,254,0.4)]'
-                          : 'bg-[#4d7cfe]/20 hover:bg-[#4d7cfe]/50'
-                          }`}
+                        transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        className={`relative block w-full rounded-t-[3px] transition-colors duration-200 ${
+                          isSelected
+                            ? 'bg-[#4d7cfe]'
+                            : isActive
+                              ? 'bg-[#4d7cfe]/70'
+                              : 'bg-[#4d7cfe]/25 group-hover:bg-[#4d7cfe]/50'
+                        }`}
                       >
-                        {/* Floating detailed tooltip popup (clamped within viewport) */}
-                        {isHovered && (
-                          <div className={`absolute bottom-full ${alignClass} mb-2 bg-dark2 border border-white/20 text-text text-[10px] font-bold px-3 py-2 rounded-lg whitespace-nowrap shadow-2xl pointer-events-none z-50 flex flex-col gap-0.5 text-center min-w-[110px]`}>
-                            <span className="text-[#4d7cfe] font-black text-[11px]">{day.label} {day.dateNum}</span>
-                            <span className="text-white">{volsCount} personas únicas</span>
-                            <span className="text-text-dim text-[9px]">{shiftsCount} turnos cubiertos</span>
-                          </div>
+                        {isActive && (
+                          <span className={`pointer-events-none absolute bottom-full z-30 mb-2 flex min-w-[116px] flex-col gap-0.5 whitespace-nowrap rounded-lg border border-border bg-dark2 px-3 py-2 text-center text-[10px] font-bold text-text shadow-md ${alignClass}`}>
+                            <span className="text-[11px] font-extrabold text-[#4d7cfe]">{day.label} {day.dateNum}</span>
+                            <span>{volsCount} personas únicas</span>
+                            <span className="text-[9px] text-text-dim">{shiftsCount} turnos cubiertos</span>
+                          </span>
                         )}
-                      </motion.div>
-                    </div>
+                      </motion.span>
+                    </button>
                   );
-                });
-              })()}
-            </div>
-
-            <div className="flex gap-0.5 sm:gap-1.5 mt-2">
-              {EVENT_DAYS.map(day => (
-                <div key={day.key} className="flex-1 text-center">
-                  <span className={`text-[8px] sm:text-[10px] font-bold transition-colors ${hoveredDay === day.key ? 'text-[#4d7cfe]' : 'text-text-dim'}`}>{day.dateNum}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Mobile-friendly active day breakdown banner */}
-            <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/5 pt-2">
-              <span className="text-[11px] font-bold text-text-dim uppercase tracking-widest">Septiembre 2026</span>
-              <div className="sm:hidden flex items-center gap-1.5 text-[10px] font-bold text-[#4d7cfe] bg-dark3 px-2.5 py-1 rounded-full border border-white/10">
-                <span className="material-symbols-outlined text-[14px]">touch_app</span>
-                <span>{hoveredDay ? `${EVENT_DAYS.find(d => d.key === hoveredDay)?.label} ${EVENT_DAYS.find(d => d.key === hoveredDay)?.dateNum}: ${volsPerDay[hoveredDay] || 0} p. / ${shiftsPerDay[hoveredDay] || 0} turnos` : 'Toca una barra para ver detalle'}</span>
+                })}
               </div>
             </div>
           </div>
+
+          <div className="ml-10 mt-2 flex gap-0.5 sm:ml-[50px] sm:gap-1.5">
+            {EVENT_DAYS.map(day => (
+              <div key={day.key} className="flex-1 text-center">
+                <span className={`text-[8px] font-bold transition-colors sm:text-[10px] ${activeChartDay === day.key ? 'text-[#4d7cfe]' : 'text-text-dim'}`}>
+                  {day.dateNum}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 flex min-h-11 flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+            <p className="text-[11px] font-semibold text-text-dim">Septiembre 2026</p>
+            {selectedChartDayInfo ? (
+              <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+                <p className="text-[11px] font-bold text-text">
+                  <span className="text-[#4d7cfe]">{selectedChartDayInfo.label} {selectedChartDayInfo.dateNum}</span>
+                  {' · '}{(volsPerDay[selectedChartDayInfo.key] || 0).toLocaleString()} personas
+                  {' · '}{(shiftsPerDay[selectedChartDayInfo.key] || 0).toLocaleString()} turnos
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openVolunteersForChartDay(selectedChartDayInfo.key)}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[#4d7cfe] px-3 text-[11px] font-bold text-white transition-colors duration-200 hover:bg-[#3b66e0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] focus-visible:ring-offset-2 focus-visible:ring-offset-dark2"
+                >
+                  Ver voluntarios
+                  <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </button>
+              </div>
+            ) : (
+              <p className="text-[10px] font-semibold text-text-dim sm:hidden">Toca una barra para ver el detalle</p>
+            )}
+          </div>
         </div>
-      </motion.div>
+      </motion.section>
 
       {/* Cobertura por Comité — edge to edge */}
       <motion.div variants={itemVariants} className="-mx-4 sm:-mx-6 lg:-mx-8 border-y border-white/5 bg-white/[0.02] mb-8">
@@ -1208,13 +1356,17 @@ export default function CoordinatorDashboard() {
                     const shift = dayData.shifts[shiftIdx];
                     const isHovered = hoveredHeatmapDay === dayData.day;
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={dayData.day}
+                        onClick={() => openVolunteersForHeatmapSlot(dayData.day, shiftId)}
                         onMouseEnter={() => setHoveredHeatmapDay(dayData.day)}
                         onMouseLeave={() => setHoveredHeatmapDay(null)}
-                        className={`flex-1 min-h-[60px] flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-1 transition-all duration-150 cursor-pointer ${
+                        className={`flex-1 min-h-[60px] flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-1 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4d7cfe] ${
                           isHovered ? 'brightness-125 saturate-125' : ''
                         }`}
+                        aria-label={`Ver voluntarios de ${shiftId} el ${dayData.day}`}
+                        title={`Ver ${shift.assigned} voluntario${shift.assigned === 1 ? '' : 's'} de ${shiftId} el ${dayData.day}`}
                         style={{
                           backgroundColor: shift.required === 0 ? (isHovered ? 'var(--dark2)' : 'var(--dark3)') :
                             shift.coverage >= 1 ? (isHovered ? 'rgba(20, 184, 166, 0.28)' : 'rgba(20, 184, 166, 0.15)') :
@@ -1230,7 +1382,7 @@ export default function CoordinatorDashboard() {
                         ) : (
                           <span className="text-[10px] text-muted">-</span>
                         )}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -1407,13 +1559,17 @@ export default function CoordinatorDashboard() {
                       const shift = dayData.shifts[shiftIdx];
                       const isHovered = hoveredHeatmapDay === dayData.day;
                       return (
-                        <div
+                        <button
+                          type="button"
                           key={dayData.day}
+                          onClick={() => openVolunteersForHeatmapSlot(dayData.day, shiftId)}
                           onMouseEnter={() => setHoveredHeatmapDay(dayData.day)}
                           onMouseLeave={() => setHoveredHeatmapDay(null)}
-                          className={`flex-1 min-h-0 flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-0.5 sm:p-1 transition-all duration-150 cursor-pointer ${
+                          className={`flex-1 min-h-0 flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-0.5 sm:p-1 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4d7cfe] ${
                             isHovered ? 'brightness-125 saturate-125' : ''
                           }`}
+                          aria-label={`Ver voluntarios de ${shiftId} el ${dayData.day}`}
+                          title={`Ver ${shift.assigned} voluntario${shift.assigned === 1 ? '' : 's'} de ${shiftId} el ${dayData.day}`}
                           style={{
                             backgroundColor: shift.required === 0 ? (isHovered ? 'var(--dark2)' : 'var(--dark3)') :
                               shift.coverage >= 1 ? (isHovered ? 'rgba(20, 184, 166, 0.28)' : 'rgba(20, 184, 166, 0.15)') :
@@ -1433,7 +1589,7 @@ export default function CoordinatorDashboard() {
                           ) : (
                             <span className="text-[10px] sm:text-xs text-muted font-bold">-</span>
                           )}
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
