@@ -16,6 +16,7 @@ import {
   getVolunteerShiftCapacity,
 } from "@/lib/use-volunteer-reschedule-context";
 import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
+import { ShiftChangeReasonSelector } from "@/components/ShiftChangeReasonSelector";
 
 type VolunteerRequestSortField = 'status' | 'currentShift' | 'requestedShift' | 'reason' | 'date';
 
@@ -89,7 +90,7 @@ export function VolunteerRequestsClient({
   const handleSendRescheduleRequest = async () => {
     if (!volunteerId || !sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey) return;
     if (!requestReason.trim()) {
-      setSubmitError("Por favor ingresa la razón o motivo por el cual solicitas el cambio.");
+      setSubmitError("Selecciona el motivo principal de tu solicitud.");
       return;
     }
 
@@ -296,7 +297,7 @@ export function VolunteerRequestsClient({
 
                       {/* Fecha */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap text-text-dim font-mono text-[11px]">
-                        {req.created_at ? new Date(req.created_at).toLocaleDateString('es-ES') : ''}
+                        {req.created_at ? new Date(req.created_at).toLocaleDateString('es-GT', { timeZone: 'America/Guatemala' }) : ''}
                       </td>
                     </tr>
                   );
@@ -335,7 +336,7 @@ export function VolunteerRequestsClient({
                       </span>
                     )}
                     <span className="text-[10px] font-mono text-text-dim">
-                      {req.created_at ? new Date(req.created_at).toLocaleDateString('es-ES') : ''}
+                      {req.created_at ? new Date(req.created_at).toLocaleDateString('es-GT', { timeZone: 'America/Guatemala' }) : ''}
                     </span>
                   </div>
 
@@ -520,7 +521,11 @@ export function VolunteerRequestsClient({
                             <button
                               key={d.key}
                               type="button"
-                              onClick={() => setTargetDayKey(d.key)}
+                              onClick={() => {
+                                setTargetDayKey(d.key);
+                                setTargetShiftKey('');
+                                setRequestReason('');
+                              }}
                               className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-xl border transition-all bg-dark3 ${
                                 isSelected
                                   ? 'border-[#4d7cfe] text-[#4d7cfe] shadow-md bg-[#4d7cfe]/10'
@@ -549,7 +554,7 @@ export function VolunteerRequestsClient({
                             const tAssigned = !isSameShift && isVolunteerShiftAssigned(rescheduleCtx, targetDayKey, t);
                             const capInfo = getVolunteerShiftCapacity(rescheduleCtx, targetDayKey, t);
                             const isFull = capInfo.isFull;
-                            const isBtnDisabled = isSameShift || tCompleted || tAssigned;
+                            const isBtnDisabled = isSameShift || tCompleted || tAssigned || isFull;
                             return (
                               <button
                                 key={t}
@@ -593,12 +598,10 @@ export function VolunteerRequestsClient({
                         <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block">
                           3. Motivo o razón del cambio:
                         </label>
-                        <textarea
-                          rows={2}
-                          placeholder="Explica brevemente el motivo por el cual necesitas reagendar tu turno (ej: compromiso laboral, asunto de salud...)"
+                        <ShiftChangeReasonSelector
                           value={requestReason}
-                          onChange={(e) => setRequestReason(e.target.value)}
-                          className="w-full bg-dark3 border border-border text-text text-xs p-3 rounded-xl focus:outline-none focus:border-[#4d7cfe] font-medium placeholder:text-text-dim"
+                          onChange={setRequestReason}
+                          disabled={isSubmitting}
                         />
                       </div>
                     )}
@@ -638,9 +641,9 @@ export function VolunteerRequestsClient({
                   <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
                     <span className="material-symbols-outlined text-[20px] text-amber-400 shrink-0">warning</span>
                     <div>
-                      <p className="text-amber-200 font-extrabold text-xs mb-0.5">Capacidad Máxima Alcanzada</p>
+                      <p className="text-amber-200 font-extrabold text-xs mb-0.5">Cobertura Completa</p>
                       <p className="text-[11px] text-amber-300/90 font-medium leading-relaxed">
-                        El turno <strong className="text-white">{targetShiftKey}</strong> del <strong className="text-white">{targetDayKey}</strong> ya alcanzó la meta requerida para <strong className="text-white">{targetCapacity.committeeName}</strong> ({targetCapacity.count}/{targetCapacity.maxReq}). Puedes enviar la solicitud y el coordinador decidirá si te sobreasigna.
+                        El turno <strong className="text-white">{targetShiftKey}</strong> del <strong className="text-white">{targetDayKey}</strong> ya tiene la cobertura completa para <strong className="text-white">{targetCapacity.committeeName}</strong> ({targetCapacity.count}/{targetCapacity.maxReq}). Selecciona otra fecha u horario.
                       </p>
                     </div>
                   </div>
@@ -659,7 +662,7 @@ export function VolunteerRequestsClient({
 
                   <Button
                     type="button"
-                    disabled={!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey || !requestReason.trim() || isSubmitting || sourceShiftCompleted || targetShiftStatus.isSource || targetShiftStatus.isCompleted || targetShiftStatus.isAssigned}
+                    disabled={!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey || !requestReason.trim() || isSubmitting || sourceShiftCompleted || targetShiftStatus.isSource || targetShiftStatus.isCompleted || targetShiftStatus.isAssigned || targetCapacity.isFull}
                     onClick={handleSendRescheduleRequest}
                     className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-dark3 disabled:text-text-dim disabled:border-border text-white rounded-full h-11 text-xs font-bold shadow-lg active:scale-95 transition-all"
                   >

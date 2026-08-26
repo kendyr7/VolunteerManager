@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { normalizeSearch } from "@/lib/utils";
+import { cn, normalizeSearch } from "@/lib/utils";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import {
   fetchAllShiftChangeRequestsAction,
+  fetchShiftChangeCoverageImpactAction,
   approveShiftChangeRequestAction,
   rejectShiftChangeRequestAction
 } from "@/app/actions/shift-change-actions";
@@ -17,6 +18,9 @@ import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
+import { getCommitteeColor } from "@/lib/committee-colors";
+import { ShiftChangeCoverageImpactPanel } from "@/components/ShiftChangeCoverageImpact";
+import type { ShiftChangeCoverageImpact } from "@/lib/shift-coverage";
 
 type RequestSortField = 'volunteer' | 'committee' | 'currentShift' | 'requestedShift' | 'reason';
 
@@ -31,6 +35,13 @@ export default function ReplacementsPage() {
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
   const [sortField, setSortField] = useState<RequestSortField>('volunteer');
   const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
+  const impactLoadVersion = useRef(0);
+  const [impactReview, setImpactReview] = useState<{
+    requestId: string | null;
+    loading: boolean;
+    impact?: ShiftChangeCoverageImpact;
+    error?: string | null;
+  }>({ requestId: null, loading: false });
 
   // Custom Reject Modal State
   const [rejectModal, setRejectModal] = useState<{ isOpen: boolean; requestId: string | null }>({
@@ -141,11 +152,37 @@ export default function ReplacementsPage() {
     setProcessingId(requestId);
     const res = await approveShiftChangeRequestAction(requestId);
     if (res.success) {
+      impactLoadVersion.current += 1;
+      setImpactReview({ requestId: null, loading: false });
       await loadShiftRequests();
     } else {
       alert("❌ Error aprobando solicitud: " + res.error);
     }
     setProcessingId(null);
+  };
+
+  const closeImpactReview = () => {
+    impactLoadVersion.current += 1;
+    setImpactReview({ requestId: null, loading: false });
+  };
+
+  const handleReviewCoverage = async (requestId: string) => {
+    if (impactReview.requestId === requestId) {
+      closeImpactReview();
+      return;
+    }
+
+    const version = impactLoadVersion.current + 1;
+    impactLoadVersion.current = version;
+    setImpactReview({ requestId, loading: true });
+    const result = await fetchShiftChangeCoverageImpactAction(requestId);
+    if (impactLoadVersion.current !== version) return;
+
+    if (result.success) {
+      setImpactReview({ requestId, loading: false, impact: result.impact });
+    } else {
+      setImpactReview({ requestId, loading: false, error: result.error });
+    }
   };
 
   const handleConfirmReject = async () => {
@@ -157,12 +194,26 @@ export default function ReplacementsPage() {
     const defaultReason = "limitación de disponibilidad de cupos en el turno solicitado";
     const res = await rejectShiftChangeRequestAction(requestId, defaultReason);
     if (res.success) {
+      impactLoadVersion.current += 1;
+      setImpactReview({ requestId: null, loading: false });
       await loadShiftRequests();
     } else {
       alert("❌ Error rechazando solicitud: " + res.error);
     }
     setProcessingId(null);
   };
+
+  const renderImpactReview = (requestId: string) => (
+    <ShiftChangeCoverageImpactPanel
+      impact={impactReview.requestId === requestId ? impactReview.impact : undefined}
+      loading={impactReview.requestId === requestId && impactReview.loading}
+      error={impactReview.requestId === requestId ? impactReview.error : null}
+      processing={processingId === requestId}
+      onApprove={() => handleApproveRequest(requestId)}
+      onReject={() => setRejectModal({ isOpen: true, requestId })}
+      onClose={closeImpactReview}
+    />
+  );
 
   return (
     <div className="w-full mx-auto pb-32 lg:pb-0 flex flex-col min-h-screen">
@@ -294,7 +345,7 @@ export default function ReplacementsPage() {
                   <tbody className="divide-y divide-border/60 font-medium">
                     {sortedDesktopRequests.map((req) => {
                       const volName = `${req.volunteers?.first_name || ''} ${req.volunteers?.last_name || ''}`.trim() || 'Voluntario';
-                      const commName = req.volunteers?.committees?.name || 'Servicio';
+                      const commName = req.volunteers?.committees?.name || 'Sin comité';
                       const phone = req.volunteers?.phone || '';
                       const reviewerName = req.reviewer?.full_name || (req.reviewed_by ? 'Coordinador' : null);
 
@@ -303,7 +354,8 @@ export default function ReplacementsPage() {
                       const isRejected = req.status === 'rejected';
 
                       return (
-                        <tr key={req.id} className="hover:bg-dark3/40 transition-all">
+                        <Fragment key={req.id}>
+                        <tr className="hover:bg-dark3/40 transition-all">
                           {/* Voluntario */}
                           <td className="py-3.5 px-4 whitespace-nowrap">
                             <div className="font-bold text-text text-sm"><HighlightText text={volName} term={appliedSearch} /></div>
@@ -314,7 +366,7 @@ export default function ReplacementsPage() {
 
                           {/* Comité */}
                           <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30">
+                            <span className={cn("inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border", getCommitteeColor(commName))}>
                               <HighlightText text={commName} term={appliedSearch} />
                             </span>
                           </td>
@@ -351,21 +403,16 @@ export default function ReplacementsPage() {
                                 <Button
                                   size="sm"
                                   disabled={processingId === req.id}
-                                  onClick={() => setRejectModal({ isOpen: true, requestId: req.id })}
-                                  className="bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-[11px] font-bold rounded-full h-8 px-3 active:scale-95 transition-all flex items-center gap-1 shrink-0"
+                                  onClick={() => handleReviewCoverage(req.id)}
+                                  className={cn(
+                                    "border text-[11px] font-bold rounded-full h-8 px-3.5 active:scale-95 transition-all flex items-center gap-1.5 shrink-0",
+                                    impactReview.requestId === req.id
+                                      ? "border-[#4d7cfe]/40 bg-[#4d7cfe]/15 text-[#7da0ff]"
+                                      : "border-border bg-dark3 text-text hover:bg-dark"
+                                  )}
                                 >
-                                  <span className="material-symbols-outlined text-[15px]">close</span>
-                                  <span>Rechazar</span>
-                                </Button>
-
-                                <Button
-                                  size="sm"
-                                  disabled={processingId === req.id}
-                                  onClick={() => handleApproveRequest(req.id)}
-                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-extrabold rounded-full h-8 px-3.5 shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center gap-1 shrink-0"
-                                >
-                                  <span className="material-symbols-outlined text-[15px]">check</span>
-                                  <span>Aprobar</span>
+                                  <span className="material-symbols-outlined text-[16px]">{impactReview.requestId === req.id ? 'expand_less' : 'grid_view'}</span>
+                                  <span>{impactReview.requestId === req.id ? 'Ocultar impacto' : 'Revisar cobertura'}</span>
                                 </Button>
                               </div>
                             ) : (
@@ -391,6 +438,14 @@ export default function ReplacementsPage() {
                             )}
                           </td>
                         </tr>
+                        {isPending && impactReview.requestId === req.id && (
+                          <tr className="bg-dark3/20">
+                            <td colSpan={6} className="px-4 py-3">
+                              {renderImpactReview(req.id)}
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       );
                     })}
                   </tbody>
@@ -401,7 +456,7 @@ export default function ReplacementsPage() {
               <div className="block lg:hidden space-y-3 w-full">
                 {filteredRequests.map((req) => {
                   const volName = `${req.volunteers?.first_name || ''} ${req.volunteers?.last_name || ''}`.trim() || 'Voluntario';
-                  const commName = req.volunteers?.committees?.name || 'Servicio';
+                  const commName = req.volunteers?.committees?.name || 'Sin comité';
                   const phone = req.volunteers?.phone || '';
                   const reviewerName = req.reviewer?.full_name || (req.reviewed_by ? 'Coordinador' : null);
 
@@ -410,14 +465,15 @@ export default function ReplacementsPage() {
                   const isRejected = req.status === 'rejected';
 
                   return (
-                    <div key={req.id} className="bg-dark2 border border-border rounded-xl p-3.5 space-y-2.5 shadow-sm">
+                    <Fragment key={req.id}>
+                    <div className="bg-dark2 border border-border rounded-xl p-3.5 space-y-2.5 shadow-sm">
                       {/* Top line: Volunteer Name, Committee Badge */}
                       <div className="flex items-center justify-between gap-2">
                         <div>
                           <h4 className="font-bold text-text text-sm leading-tight"><HighlightText text={volName} term={appliedSearch} /></h4>
                           {phone && <p className="text-[10px] text-text-dim font-mono">{phone}</p>}
                         </div>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30 shrink-0">
+                        <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border shrink-0", getCommitteeColor(commName))}>
                           <HighlightText text={commName} term={appliedSearch} />
                         </span>
                       </div>
@@ -451,27 +507,20 @@ export default function ReplacementsPage() {
                       {/* Bottom line: Actions or Status */}
                       <div className="pt-2 border-t border-border/60 flex items-center justify-end gap-2">
                         {isPending ? (
-                          <>
-                            <Button
-                              size="sm"
-                              disabled={processingId === req.id}
-                              onClick={() => setRejectModal({ isOpen: true, requestId: req.id })}
-                              className="flex-1 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-[11px] font-bold rounded-full h-8 px-3 active:scale-95 transition-all flex items-center justify-center gap-1"
-                            >
-                              <span className="material-symbols-outlined text-[15px]">close</span>
-                              <span>Rechazar</span>
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              disabled={processingId === req.id}
-                              onClick={() => handleApproveRequest(req.id)}
-                              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-extrabold rounded-full h-8 px-3.5 shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center justify-center gap-1"
-                            >
-                              <span className="material-symbols-outlined text-[15px]">check</span>
-                              <span>Aprobar</span>
-                            </Button>
-                          </>
+                          <Button
+                            size="sm"
+                            disabled={processingId === req.id}
+                            onClick={() => handleReviewCoverage(req.id)}
+                            className={cn(
+                              "w-full border text-[11px] font-bold rounded-full h-9 px-3.5 active:scale-95 transition-all flex items-center justify-center gap-1.5",
+                              impactReview.requestId === req.id
+                                ? "border-[#4d7cfe]/40 bg-[#4d7cfe]/15 text-[#7da0ff]"
+                                : "border-border bg-dark3 text-text hover:bg-dark"
+                            )}
+                          >
+                            <span className="material-symbols-outlined text-[16px]">{impactReview.requestId === req.id ? 'expand_less' : 'grid_view'}</span>
+                            <span>{impactReview.requestId === req.id ? 'Ocultar impacto' : 'Revisar cobertura'}</span>
+                          </Button>
                         ) : (
                           <div className="flex items-center gap-2">
                             {reviewerName && (
@@ -493,6 +542,8 @@ export default function ReplacementsPage() {
                         )}
                       </div>
                     </div>
+                    {isPending && impactReview.requestId === req.id && renderImpactReview(req.id)}
+                    </Fragment>
                   );
                 })}
               </div>

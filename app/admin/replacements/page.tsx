@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { getCommitteeColor } from "@/lib/committee-colors";
 import {
   fetchPendingShiftChangeRequestsAction,
   approveShiftChangeRequestAction,
@@ -87,7 +89,7 @@ export default function ReplacementsPage() {
           <div className="grid grid-cols-1 gap-4">
             {shiftRequests.map((req) => {
               const volName = `${req.volunteers?.first_name || ''} ${req.volunteers?.last_name || ''}`.trim() || 'Voluntario';
-              const commName = req.volunteers?.committees?.name || 'Servicio';
+              const commName = req.volunteers?.committees?.name || 'Sin comité';
               const phone = req.volunteers?.phone || '';
 
               return (
@@ -96,7 +98,7 @@ export default function ReplacementsPage() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <h4 className="font-bold text-slate-900 text-base">{volName}</h4>
-                        <Badge className="bg-blue-100 text-blue-800 border-none text-[11px] font-bold">
+                        <Badge variant="outline" className={cn("text-[11px] font-bold", getCommitteeColor(commName))}>
                           {commName}
                         </Badge>
                         <Badge className="bg-amber-100 text-amber-800 border-none text-[11px] font-bold">

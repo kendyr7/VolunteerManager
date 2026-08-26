@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from "rea
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { List } from 'react-window';
 import { CSSProperties } from 'react';
+import { useSearchParams } from "next/navigation";
 
 // ...
 import { Input } from "@/components/ui/input";
@@ -45,7 +46,7 @@ import { filterVolunteerIds } from "@/lib/services/volunteer-filter.service";
 import { groupVolunteersAlphabetically } from "@/lib/services/volunteer-grouping.service";
 import { RealtimeDebugOverlay } from "@/components/RealtimeDebugOverlay";
 import { useVolunteerStore } from "@/lib/store/use-volunteer-store";
-import { updateVolunteerAction } from "@/app/actions/volunteer-actions";
+import { saveShiftsAction, updateVolunteerAction } from "@/app/actions/volunteer-actions";
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { HighlightText } from "@/components/HighlightText";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
@@ -125,6 +126,8 @@ type SortOrder = 'asc' | 'desc';
 import { updateVolunteerStatusAction, swapVolunteerActivationAction, resetVolunteerPinAction } from "@/app/actions/volunteer-actions";
 
 export default function VolunteersPage() {
+  const searchParams = useSearchParams();
+  const requestedAction = searchParams.get('action');
   const supabase = createClient();
   const {
     rawVolunteers,
@@ -241,6 +244,17 @@ export default function VolunteersPage() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [addVolunteerFormVersion, setAddVolunteerFormVersion] = useState(0);
+
+  useEffect(() => {
+    if (requestedAction !== 'new' || !canCreateVolunteer()) return;
+    window.history.replaceState(null, '', '/volunteers');
+    const frame = window.requestAnimationFrame(() => {
+      setAddVolunteerFormVersion(version => version + 1);
+      setIsAddSheetOpen(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [requestedAction]);
+
   const { drawerRef: addVolunteerDrawerRef } = useMobileDrawerNavigation({
     isOpen: isAddSheetOpen,
     onClose: () => setIsAddSheetOpen(false),
@@ -592,39 +606,11 @@ export default function VolunteersPage() {
       return;
     }
 
-    // Delete existing shifts for this volunteer
-    const { error: delErr } = await supabase
-      .from('shifts')
-      .delete()
-      .eq('volunteer_id', selectedVolunteer.id);
-
-    if (delErr) {
-      console.error("Error deleting shifts:", delErr);
+    const result = await saveShiftsAction(selectedVolunteer.id, shiftsByDay);
+    if (!result.success) {
+      showToast(result.error || 'Error al guardar turnos', 'error');
+      setIsEditingShifts(true);
       return;
-    }
-
-    // Insert new shift rows
-    const insertRows = [];
-    for (const [dayKey, shiftKeys] of Object.entries(shiftsByDay)) {
-      for (const shiftKey of shiftKeys) {
-        insertRows.push({
-          volunteer_id: selectedVolunteer.id,
-          day_key: dayKey,
-          shift_key: shiftKey
-        });
-      }
-    }
-
-    if (insertRows.length > 0) {
-      const { error: insErr } = await supabase
-        .from('shifts')
-        .insert(insertRows);
-
-      if (insErr) {
-        console.error("Error inserting shifts:", insErr);
-        showToast("Error al guardar turnos", "error");
-        return;
-      }
     }
 
     setSaved(true);

@@ -4,6 +4,7 @@ import { getAdminSupabase } from "@/lib/supabase/admin";
 import { AuditRepository } from "@/lib/audit/audit-repository";
 import { AuditEntryViewModel } from "@/lib/audit/audit-mapper";
 import {
+  AuthorizationError,
   requireAuthenticated,
   requireCapability,
   requireVolunteerSelfOrCapability,
@@ -11,6 +12,10 @@ import {
 import { roleDisplayName } from '@/lib/role-permissions';
 
 export type ActivityLog = AuditEntryViewModel;
+
+export type ActivityLogsResult =
+  | { success: true; logs: ActivityLog[] }
+  | { success: false; logs: []; error: string; code: 'FORBIDDEN' | 'LOAD_ERROR' };
 
 let historicalImportSyncPromise: Promise<void> | null = null;
 
@@ -170,14 +175,30 @@ export async function syncPastRequestsToActivityLogs() {
   }
 }
 
-export async function getActivityLogs(limit = 500): Promise<ActivityLog[]> {
+export async function getActivityLogs(limit = 500): Promise<ActivityLogsResult> {
   try {
-    await requireCapability('manage_permissions');
+    await requireCapability('view_activity_logs');
+    const safeLimit = Number.isFinite(limit)
+      ? Math.min(Math.max(Math.trunc(limit), 1), 500)
+      : 500;
     await Promise.all([syncPastRequestsToActivityLogs(), syncHistoricalImportsToVolunteerLogs()]);
-    return await AuditRepository.getGlobalAuditLogs(limit);
+    return { success: true, logs: await AuditRepository.getGlobalAuditLogs(safeLimit) };
   } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return {
+        success: false,
+        logs: [],
+        error: 'No tienes permiso para consultar el historial de actividades.',
+        code: 'FORBIDDEN',
+      };
+    }
     console.error("Error in getActivityLogs:", err);
-    return [];
+    return {
+      success: false,
+      logs: [],
+      error: 'No se pudo cargar el historial de actividades.',
+      code: 'LOAD_ERROR',
+    };
   }
 }
 

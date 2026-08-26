@@ -20,6 +20,8 @@ export type ConfigurablePermissionKey =
   | 'role.committee.view_global_reports';
 
 export type Capability =
+  | 'view_settings'
+  | 'view_activity_logs'
   | 'view_dashboard'
   | 'view_volunteers'
   | 'view_all_volunteers'
@@ -149,6 +151,10 @@ export function hasCapability(
 
   if (snapshot.coordinatorType === 'technology') {
     switch (capability) {
+      case 'view_settings':
+        return true;
+      case 'view_activity_logs':
+        return false;
       case 'view_dashboard':
         return snapshot.permissions['role.technology.view_dashboard'];
       case 'view_volunteers':
@@ -195,6 +201,10 @@ export function hasCapability(
     const isOwnCommittee = !targetCommitteeId || targetCommitteeId === snapshot.committeeId;
     const isExplicitOwnCommittee = Boolean(targetCommitteeId) && targetCommitteeId === snapshot.committeeId;
     switch (capability) {
+      case 'view_settings':
+        return true;
+      case 'view_activity_logs':
+        return false;
       case 'view_dashboard':
       case 'view_volunteers':
       case 'view_reports':

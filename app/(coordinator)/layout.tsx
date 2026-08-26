@@ -13,6 +13,11 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MobileThemeMenu } from "@/components/mobile-theme-menu";
 import { useThemePreference } from "@/lib/use-theme-preference";
 import { useMobileNavigationMode } from "@/lib/use-mobile-navigation-mode";
+import {
+  MobileQuickWheel,
+  type MobileQuickWheelAction,
+  type MobileQuickWheelItem,
+} from "@/components/MobileQuickWheel";
 
 // Helper component for Material Symbols
 function Icon({ name, size = 20, className = "" }: { name: string, size?: number, className?: string }) {
@@ -26,6 +31,24 @@ function Icon({ name, size = 20, className = "" }: { name: string, size?: number
   );
 }
 
+const QUICK_WHEEL_ROUTES = [
+  '/dashboard',
+  '/volunteers',
+  '/shifts',
+  '/check-in',
+  '/replacements',
+  '/settings',
+] as const;
+
+const QUICK_WHEEL_LABELS: Record<(typeof QUICK_WHEEL_ROUTES)[number], string> = {
+  '/dashboard': 'Inicio',
+  '/volunteers': 'Voluntarios',
+  '/shifts': 'Turnos',
+  '/check-in': 'Escanear QR',
+  '/replacements': 'Solicitudes',
+  '/settings': 'Ajustes',
+};
+
 import {
   canViewDashboard,
   canViewReports,
@@ -36,6 +59,8 @@ import {
   canManageUsers,
   canViewRequests,
   canManageOwnAreaCoverage,
+  canViewSettings,
+  canCreateVolunteer,
   getAuthorizationSnapshotCache,
   syncAllPermissionsFromDatabase
 } from "@/lib/permissions";
@@ -91,6 +116,7 @@ function CoordinatorLayoutInner({
     const routeAllowed = (() => {
       if (pathname.startsWith('/users')) return canManageUsers();
       if (pathname.startsWith('/settings/phone')) return canManageUsers();
+      if (pathname.startsWith('/settings')) return canViewSettings();
       if (pathname.startsWith('/areas')) return canManageOwnAreaCoverage();
       if (pathname.startsWith('/check-in')) return canQrCheckin();
       if (pathname.startsWith('/import')) return canImportData();
@@ -189,6 +215,47 @@ function CoordinatorLayoutInner({
     return true;
   });
   const visibleBottomItems = BOTTOM_ITEMS.filter(item => !mounted ? item.roles.includes('Admin') : item.roles.includes(currentRole));
+  const quickWheelActions: Record<(typeof QUICK_WHEEL_ROUTES)[number], MobileQuickWheelAction[]> = {
+    '/dashboard': [
+      { name: 'Mapa de calor', href: '/dashboard?view=heatmap-fullscreen', icon: 'grid_view' },
+    ],
+    '/volunteers': canCreateVolunteer()
+      ? [{ name: 'Agregar nuevo', href: '/volunteers?action=new', icon: 'person_add' }]
+      : [],
+    '/shifts': [
+      { name: 'Programados', href: '/shifts?view=turnos', icon: 'event_upcoming' },
+      { name: 'Activos', href: '/shifts?view=active', icon: 'radio_button_checked' },
+    ],
+    '/check-in': [
+      { name: 'Abrir escáner', href: '/check-in?view=scanner', icon: 'qr_code_scanner' },
+      { name: 'Ver historial', href: '/check-in?view=history', icon: 'history' },
+    ],
+    '/replacements': [
+      { name: 'Pendientes', href: '/replacements?tab=pending', icon: 'pending_actions' },
+      { name: 'Historial', href: '/replacements?tab=history', icon: 'history' },
+    ],
+    '/settings': [
+      {
+        name: resolvedTheme === 'dark' ? 'Tema claro' : 'Tema oscuro',
+        icon: resolvedTheme === 'dark' ? 'light_mode' : 'dark_mode',
+        command: 'toggle-theme',
+      },
+      {
+        name: 'Navegación',
+        href: '/settings?section=mobileNavigation#settings-mobileNavigation',
+        icon: 'mobile_friendly',
+      },
+    ],
+  };
+  const quickWheelItems = QUICK_WHEEL_ROUTES
+    .map((href) => [...visibleNavItems, ...visibleBottomItems].find(item => item.href === href))
+    .filter((item): item is (typeof visibleNavItems)[number] => Boolean(item))
+    .map<MobileQuickWheelItem>(item => ({
+      name: QUICK_WHEEL_LABELS[item.href as (typeof QUICK_WHEEL_ROUTES)[number]] || item.name,
+      href: item.href,
+      icon: item.icon,
+      actions: quickWheelActions[item.href as (typeof QUICK_WHEEL_ROUTES)[number]],
+    }));
   const allMobileNavItems = [
     ...visibleNavItems,
     ...visibleBottomItems,
@@ -386,17 +453,17 @@ function CoordinatorLayoutInner({
       </div>
 
       {isCommandMode ? (
-        <button
-          type="button"
-          onClick={openGlobalSearch}
-          aria-label="Buscar en toda la plataforma"
-          className={cn(
-            "fixed bottom-5 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-[#4d7cfe] text-white shadow-lg transition-transform duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] focus-visible:ring-offset-2 focus-visible:ring-offset-dark lg:hidden",
-            isGlobalSearchOpen && "scale-[0.97]"
-          )}
-        >
-          <Icon name="search" size={21} />
-        </button>
+        <MobileQuickWheel
+          items={quickWheelItems}
+          onSearch={openGlobalSearch}
+          onSelect={(item) => {
+            if (item.command === 'toggle-theme') {
+              toggleTheme();
+              return;
+            }
+            if (item.href) router.push(item.href);
+          }}
+        />
       ) : (
         <div className="fixed bottom-6 left-0 right-0 z-50 px-4 lg:hidden">
           <MobileThemeMenu

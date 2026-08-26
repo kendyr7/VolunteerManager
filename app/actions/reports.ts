@@ -7,7 +7,7 @@ import { hasCapability } from "@/lib/role-permissions";
 import { getActiveEventDays, getAvailableShiftKeys, getOfficialShiftTime, getOperationalEventDays, isSimulationEventDay } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { getNicaraguaHourFloat } from "@/lib/session-utils";
+import { getGuatemalaHourFloat } from "@/lib/session-utils";
 
 export interface ReportItem {
   registrationId: string;
@@ -175,14 +175,14 @@ function parseDayKeyToDateStr(dayKey: string): string {
 }
 
 
-function parseNicaraguaShiftEnd(dayKey: string, shiftKey: string): Date {
+function parseGuatemalaShiftEnd(dayKey: string, shiftKey: string): Date {
   const isoDate = parseDayKeyToDateStr(dayKey);
   if (!isoDate || isoDate === dayKey) return new Date(); // unknown date, treat as past
 
   const official = getOfficialShiftTime(dayKey, shiftKey);
   const endHour = official.endHour;
 
-  // Build a UTC timestamp for the Nicaragua local end time (UTC-6 = endHour + 6 UTC)
+  // Build the instant that corresponds to the Guatemala local end time.
   const [year, month, day] = isoDate.split('-').map(Number);
   const utcMillis = Date.UTC(year, month - 1, day, Math.floor(endHour) + 6, Math.round((endHour % 1) * 60), 0);
   return new Date(utcMillis);
@@ -267,8 +267,8 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
       const assignedShiftKeys = assignedShiftsByVolunteerDay.get(assignmentKey);
       if (!assignedShiftKeys?.size) return;
 
-      const startHour = getNicaraguaHourFloat(session.started_at);
-      let endHour = session.ended_at ? getNicaraguaHourFloat(session.ended_at) : startHour;
+      const startHour = getGuatemalaHourFloat(session.started_at);
+      let endHour = session.ended_at ? getGuatemalaHourFloat(session.ended_at) : startHour;
       if (session.ended_at && endHour < startHour) endHour += 24;
 
       assignedShiftKeys.forEach(shiftKey => {
@@ -355,7 +355,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
         status = 'confirmed';
         durationMinutes = attendance.completedMinutes;
       } else if (!attendance?.hasOpen) {
-        const shiftEndTime = parseNicaraguaShiftEnd(s.day_key, s.shift_key);
+        const shiftEndTime = parseGuatemalaShiftEnd(s.day_key, s.shift_key);
         if (now > shiftEndTime) status = 'absent';
       }
 
@@ -390,7 +390,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
             durationMinutes = 0;
           }
         } else {
-          const shiftEndTime = parseNicaraguaShiftEnd(s.day_key, s.shift_key);
+          const shiftEndTime = parseGuatemalaShiftEnd(s.day_key, s.shift_key);
           if (now > shiftEndTime) {
             status = 'absent';
           }
@@ -421,7 +421,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
             durationMinutes = shiftMeta.hours * 60;
           }
         } else {
-          const shiftEndTime = parseNicaraguaShiftEnd(s.day_key, s.shift_key);
+          const shiftEndTime = parseGuatemalaShiftEnd(s.day_key, s.shift_key);
           if (now > shiftEndTime) {
             status = 'absent';
           }

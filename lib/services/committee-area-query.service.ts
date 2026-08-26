@@ -205,9 +205,9 @@ export class CommitteeAreaQueryService {
       const shiftKeys = getAvailableShiftKeys(key);
       return {
         key,
-        label: new Intl.DateTimeFormat('es-NI', { weekday: 'short' }).format(date).replace('.', ''),
-        dateLabel: new Intl.DateTimeFormat('es-NI', { day: 'numeric', month: 'short' }).format(date).replace('.', ''),
-        dateNum: new Intl.DateTimeFormat('es-NI', { day: 'numeric' }).format(date),
+        label: new Intl.DateTimeFormat('es-GT', { weekday: 'short' }).format(date).replace('.', ''),
+        dateLabel: new Intl.DateTimeFormat('es-GT', { day: 'numeric', month: 'short' }).format(date).replace('.', ''),
+        dateNum: new Intl.DateTimeFormat('es-GT', { day: 'numeric' }).format(date),
         shiftKeys,
         shiftLabels: Object.fromEntries(
           shiftKeys.map((shiftKey) => [shiftKey, getOfficialShiftTime(key, shiftKey).shortTimeLabel])

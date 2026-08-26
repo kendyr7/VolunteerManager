@@ -379,7 +379,7 @@ export default function DocsPage() {
         </div>
 
         <p className="text-center text-xs text-text-dim pb-4">
-          Última actualización: {new Date().toLocaleDateString("es-ES", { year: "numeric", month: "long", day: "numeric" })}
+          Última actualización: {new Date().toLocaleDateString("es-GT", { timeZone: "America/Guatemala", year: "numeric", month: "long", day: "numeric" })}
         </p>
       </div>
     </>

@@ -6,12 +6,12 @@ import { broadcastShiftSync } from "@/lib/services/shift-broadcast.service";
 import { requireCapability } from '@/lib/authorization';
 
 /**
- * Formatea una fecha según la zona horaria oficial de Nicaragua (America/Managua, UTC-6)
+ * Formatea una fecha según la zona horaria oficial de Guatemala.
  */
-function formatNicaraguaTime(dateInput?: string | Date) {
+function formatGuatemalaTime(dateInput?: string | Date) {
   const d = dateInput ? new Date(dateInput) : new Date();
-  return d.toLocaleString('es-NI', {
-    timeZone: 'America/Managua',
+  return d.toLocaleString('es-GT', {
+    timeZone: 'America/Guatemala',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -78,13 +78,13 @@ export async function undoVolunteerCheckInAction({
     }
 
     // 3. Registrar auditoría inmutable
-    const timeStr = formatNicaraguaTime();
+    const timeStr = formatGuatemalaTime();
     await createActivityLog({
       userName: actorName,
       userRole: actorRole,
       actionType: 'Deshacer',
       description: `Revirtió la entrada (Check-in) de ${volName}`,
-      details: `Turno ${shiftKey} (${dayKey}) revertido a estado Programado a las ${timeStr} (Hora Nicaragua).`,
+      details: `Turno ${shiftKey} (${dayKey}) revertido a estado Programado a las ${timeStr} (hora de Guatemala).`,
       targetId: volunteerId
     });
 
@@ -150,13 +150,13 @@ export async function reopenCompletedShiftAction({
       });
     }
 
-    const timeStr = formatNicaraguaTime();
+    const timeStr = formatGuatemalaTime();
     await createActivityLog({
       userName: actorName,
       userRole: actorRole,
       actionType: 'Deshacer',
       description: `Reabrió el turno completado de ${volName}`,
-      details: `Turno ${shiftKey} (${dayKey}) devuelto a estado 'En Turno' a las ${timeStr} (Hora Nicaragua).`,
+      details: `Turno ${shiftKey} (${dayKey}) devuelto a estado 'En Turno' a las ${timeStr} (hora de Guatemala).`,
       targetId: volunteerId
     });
 
@@ -253,13 +253,13 @@ export async function rollbackReassignmentAction({
       return { success: false, error: insErr.message };
     }
 
-    const timeStr = formatNicaraguaTime();
+    const timeStr = formatGuatemalaTime();
     await createActivityLog({
       userName: actorName,
       userRole: actorRole,
       actionType: 'Deshacer',
       description: `Revirtió la reasignación de turno de ${volName}`,
-      details: `Devuelto de ${currentShiftKey} (${currentDayKey}) a su turno original ${previousShiftKey} (${previousDayKey}) a las ${timeStr} (Hora Nicaragua).`,
+      details: `Devuelto de ${currentShiftKey} (${currentDayKey}) a su turno original ${previousShiftKey} (${previousDayKey}) a las ${timeStr} (hora de Guatemala).`,
       targetId: volunteerId
     });
 

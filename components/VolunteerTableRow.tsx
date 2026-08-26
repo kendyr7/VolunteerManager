@@ -4,6 +4,9 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { HighlightText } from '@/components/HighlightText';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
+import { getCommitteeColor } from '@/lib/committee-colors';
+
+export { getCommitteeColor } from '@/lib/committee-colors';
 
 export const USER_TABLE_STYLES = {
   name: "font-inter font-bold text-sm text-text leading-snug group-hover:text-text-bright transition-colors",
@@ -11,32 +14,6 @@ export const USER_TABLE_STYLES = {
   badgeBase: "border font-inter font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full transition-all",
   statusActive: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20",
   statusPending: "bg-amber-500/15 text-amber-400 border-amber-500/20",
-};
-
-export const getCommitteeColor = (committee: string) => {
-  if (!committee) return 'bg-dark3 text-text-dim border-border';
-  const comm = committee.toLowerCase();
-  if (comm.includes('seguridad')) return 'bg-[#fe4d97]/15 text-[#fe4d97] border-[#fe4d97]/20';
-  if (comm.includes('guía') || comm.includes('guia')) return 'bg-[#6dd230]/15 text-[#6dd230] border-[#6dd230]/20';
-  if (comm.includes('historia')) return 'bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20';
-  if (comm.includes('traducción') || comm.includes('traduccion')) return 'bg-amber-500/15 text-amber-500 border-amber-500/20';
-  if (comm.includes('transporte')) return 'bg-purple-500/15 text-purple-500 border-purple-500/20';
-  if (comm.includes('auxilios') || comm.includes('médico') || comm.includes('medico')) return 'bg-teal-500/15 text-teal-500 border-teal-500/20';
-
-  const colors = [
-    'bg-[#4d7cfe]/15 text-[#4d7cfe] border-[#4d7cfe]/20',
-    'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-    'bg-indigo-500/15 text-indigo-400 border-indigo-500/20',
-    'bg-rose-500/15 text-rose-400 border-rose-500/20',
-    'bg-orange-500/15 text-orange-400 border-orange-500/20',
-    'bg-sky-500/15 text-sky-400 border-sky-500/20'
-  ];
-  let hash = 0;
-  for (let i = 0; i < committee.length; i++) {
-    hash = committee.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash) % colors.length;
-  return colors[index];
 };
 
 export interface VolunteerType {

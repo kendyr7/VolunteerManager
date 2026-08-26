@@ -154,6 +154,34 @@
   --sidebar-ring: #4d7cfe;
 }
 
+/* Theme changes use one composited snapshot so every surface changes together. */
+html[data-theme-transition='active']::view-transition-old(root),
+html[data-theme-transition='active']::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html[data-theme-transition='active']::view-transition-old(root) {
+  z-index: 0;
+}
+
+html[data-theme-transition='active']::view-transition-new(root) {
+  z-index: 1;
+}
+
+html[data-theme-transition='active'] *,
+html[data-theme-transition='active'] *::before,
+html[data-theme-transition='active'] *::after {
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-transition='active']::view-transition-old(root),
+  html[data-theme-transition='active']::view-transition-new(root) {
+    animation-duration: 0.01ms;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

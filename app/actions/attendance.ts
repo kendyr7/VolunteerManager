@@ -124,7 +124,7 @@ async function logCheckInActivity(
   }
 }
 
-// Parse day key to actual Date representing the end of the shift in Nicaragua timezone (UTC-6)
+// Parse day key to the instant representing the end of the shift in Guatemala.
 function parseShiftDateTime(dayKey: string, shiftKey: string): Date {
   const dayNumPart = dayKey.split(' ')[1];
   const dayNum = parseInt(dayNumPart) || 10; // Fallback to 10
@@ -132,25 +132,23 @@ function parseShiftDateTime(dayKey: string, shiftKey: string): Date {
   const official = getOfficialShiftTime(dayKey, shiftKey);
   const endHour = official.endHour;
 
-  // Nicaragua is UTC-6. So UTC Time = Nicaragua Time + 6 hours.
-  // Using Date.UTC guarantees a timezone-independent absolute epoch timestamp.
+  // Guatemala is six hours behind the zero-offset reference used by Date.UTC.
   const utcMillis = Date.UTC(2026, 8, dayNum, Math.floor(endHour) + 6, Math.round((endHour % 1) * 60), 0);
   return new Date(utcMillis);
 }
 
-// Check if current time is within a shift window (with 45 min buffer before/after) based on America/Managua time
+// Check if current time is within a shift window (with 45 min buffer before/after) in Guatemala.
 function isCurrentTimeInShiftWindow(dayKey: string, shiftKey: string): boolean {
-  // Get current time in America/Managua timezone
-  const nicaString = new Date().toLocaleString("en-US", { timeZone: "America/Managua" });
-  const nicaNow = new Date(nicaString);
+  const guatemalaString = new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" });
+  const guatemalaNow = new Date(guatemalaString);
   
   // Format current date to day_key: e.g. "mié 16"
-  const currentDayKey = format(nicaNow, "EEE d", { locale: es }).toLowerCase();
+  const currentDayKey = format(guatemalaNow, "EEE d", { locale: es }).toLowerCase();
   if (dayKey.toLowerCase() !== currentDayKey) {
     return false;
   }
 
-  const currentHour = nicaNow.getHours() + nicaNow.getMinutes() / 60;
+  const currentHour = guatemalaNow.getHours() + guatemalaNow.getMinutes() / 60;
 
   const official = getOfficialShiftTime(dayKey, shiftKey);
   // Window definitions (StartHour - 45 min buffer to EndHour + 45 min buffer)
@@ -231,10 +229,10 @@ export async function openAttendanceSessionAction(
   isInternalCall = false
 ) {
   await requireCapability('scan_qr_attendance');
-  // Server-generated Nicaragua time & day_key (Never trust client timestamp/dayKey for check-in)
-  const nicaString = new Date().toLocaleString("en-US", { timeZone: "America/Managua" });
-  const nicaNow = new Date(nicaString);
-  const serverDayKey = format(nicaNow, "EEE d", { locale: es }).toLowerCase();
+  // Server-generated Guatemala time & day_key (never trust client timestamp/dayKey for check-in)
+  const guatemalaString = new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" });
+  const guatemalaNow = new Date(guatemalaString);
+  const serverDayKey = format(guatemalaNow, "EEE d", { locale: es }).toLowerCase();
   const dayKey = isInternalCall ? serverDayKey : (dayKeyInput || serverDayKey);
 
   // Check if open session already exists (Caso 4: Doble check-in)
@@ -771,9 +769,9 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
   const volunteerName = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim();
 
   // 1. Check if volunteer already has an open session
-  const nicaString = new Date().toLocaleString("en-US", { timeZone: "America/Managua" });
-  const nicaNow = new Date(nicaString);
-  const currentDayKey = format(nicaNow, "EEE d", { locale: es }).toLowerCase();
+  const guatemalaString = new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" });
+  const guatemalaNow = new Date(guatemalaString);
+  const currentDayKey = format(guatemalaNow, "EEE d", { locale: es }).toLowerCase();
 
   const openSession = await getOpenSessionForVolunteer(volunteerId);
   if (openSession) {
@@ -802,7 +800,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       session: openSession,
       volunteer: volunteerName,
       committee: volunteer.committees?.name || "Sin comité",
-      message: `El voluntario ${volunteerName} ya posee una sesión activa iniciada a las ${new Date(openSession.started_at).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit', hour12: true })}.`
+      message: `El voluntario ${volunteerName} ya posee una sesión activa iniciada a las ${new Date(openSession.started_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true })}.`
     };
   }
 
@@ -949,9 +947,9 @@ export async function adjustCheckoutTimeAction({
       : 'Voluntario';
 
     const oldDateStr = shift.checked_out_at
-      ? new Date(shift.checked_out_at).toLocaleTimeString('es-NI', { timeZone: 'America/Managua', hour: '2-digit', minute: '2-digit', hour12: true })
+      ? new Date(shift.checked_out_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true })
       : 'Desconocido';
-    const newDateStr = new Date(newCheckOutIso).toLocaleTimeString('es-NI', { timeZone: 'America/Managua', hour: '2-digit', minute: '2-digit', hour12: true });
+    const newDateStr = new Date(newCheckOutIso).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true });
 
     await createActivityLog({
       userName: authorizedActor.name,

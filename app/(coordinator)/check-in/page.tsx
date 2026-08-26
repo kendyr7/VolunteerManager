@@ -8,7 +8,12 @@ export const metadata = {
   description: "Escanear pases QR de voluntarios para registrar asistencia",
 };
 
-export default async function CheckInPage() {
+export default async function CheckInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  const params = await searchParams;
   const authorization = await getAuthorizationSnapshot();
   if (!authorization.authenticated || authorization.userType !== 'profile') {
     redirect('/login');
@@ -27,6 +32,7 @@ export default async function CheckInPage() {
       coordinatorName={coordinatorName}
       role={authorization.role}
       committeeName={committeeName}
+      initialView={params.view === 'history' ? 'history' : 'scanner'}
     />
   );
 }

@@ -50,9 +50,10 @@ function defaultReviewForm(item: PendingImportException): ReviewFormState {
 
 function formatSubmittedAt(value: string): string {
   try {
-    return new Intl.DateTimeFormat('es-NI', {
+    return new Intl.DateTimeFormat('es-GT', {
       dateStyle: 'medium',
       timeStyle: 'short',
+      timeZone: 'America/Guatemala',
     }).format(new Date(value));
   } catch {
     return value;

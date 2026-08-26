@@ -12,6 +12,13 @@ import {
 } from '@/lib/authorization';
 import { hasCapability } from '@/lib/role-permissions';
 import { isShiftAvailableForDay } from '@/lib/dates';
+import {
+  getCommitteeCoverageSnapshot,
+  getCoverageLevel,
+  isCoverageComplete,
+  type ShiftChangeCoverageImpact,
+} from '@/lib/shift-coverage';
+import { createValidatedShiftChangeRequest } from '@/lib/services/shift-change-request.service';
 
 function getAdminClient() {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -30,13 +37,13 @@ export async function fetchAllShiftChangeRequestsAction() {
     const supabase = getAdminClient();
     const { data, error } = await supabase
       .from('shift_change_requests')
-      .select('*, volunteers(id, first_name, last_name, phone, committee_id), reviewer:profiles!shift_change_requests_reviewed_by_fkey(full_name)')
+      .select('*, volunteers(id, first_name, last_name, phone, committee_id, committees(name)), reviewer:profiles!shift_change_requests_reviewed_by_fkey(full_name)')
       .order('created_at', { ascending: false });
 
     if (error) {
       const fallback = await supabase
         .from('shift_change_requests')
-        .select('*, volunteers(id, first_name, last_name, phone, committee_id)')
+        .select('*, volunteers(id, first_name, last_name, phone, committee_id, committees(name))')
         .order('created_at', { ascending: false });
       const requests = fallback.data || [];
       return {
@@ -63,6 +70,127 @@ export async function fetchPendingShiftChangeRequestsAction() {
   return fetchAllShiftChangeRequestsAction();
 }
 
+export async function fetchShiftChangeCoverageImpactAction(
+  requestId: string
+): Promise<{ success: true; impact: ShiftChangeCoverageImpact } | { success: false; error: string }> {
+  try {
+    const supabase = getAdminClient();
+    const { data: request, error } = await supabase
+      .from('shift_change_requests')
+      .select('id, volunteer_id, status, current_day_key, current_shift_key, requested_day_key, requested_shift_key, volunteers(id, first_name, last_name, committee_id, committees(name))')
+      .eq('id', requestId)
+      .single();
+
+    if (error || !request) {
+      return { success: false, error: 'Solicitud no encontrada.' };
+    }
+
+    await requireVolunteerCapability('reschedule_volunteer', request.volunteer_id);
+
+    const volunteer = request.volunteers;
+    if (!volunteer?.committee_id) {
+      return { success: false, error: 'El voluntario no tiene un comité asignado.' };
+    }
+
+    const committeeName = volunteer.committees?.name || 'Sin comité';
+    const snapshot = await getCommitteeCoverageSnapshot(
+      supabase,
+      volunteer.committee_id,
+      [request.current_day_key, request.requested_day_key]
+    );
+    const sameSlot = request.current_day_key === request.requested_day_key
+      && request.current_shift_key === request.requested_shift_key;
+    const sourceAssignment = snapshot.assignments.find(assignment =>
+      assignment.volunteerId === request.volunteer_id
+      && assignment.dayKey === request.current_day_key
+      && assignment.shiftKey === request.current_shift_key
+    );
+    const targetAssignment = snapshot.assignments.find(assignment =>
+      assignment.volunteerId === request.volunteer_id
+      && assignment.dayKey === request.requested_day_key
+      && assignment.shiftKey === request.requested_shift_key
+    );
+    const targetSlot = snapshot.slots.find(slot =>
+      slot.dayKey === request.requested_day_key && slot.shiftKey === request.requested_shift_key
+    );
+    // If the target was assigned after the request was created, approving is still
+    // useful: it only needs to remove the original shift and must not add capacity.
+    const targetFull = !targetAssignment && isCoverageComplete(targetSlot);
+
+    const days = [...new Set([request.current_day_key, request.requested_day_key])].map(dayKey => ({
+      dayKey,
+      slots: snapshot.slots
+        .filter(slot => slot.dayKey === dayKey)
+        .map(slot => {
+          const isSource = slot.dayKey === request.current_day_key && slot.shiftKey === request.current_shift_key;
+          const isTarget = slot.dayKey === request.requested_day_key && slot.shiftKey === request.requested_shift_key;
+          const projectedCount = Math.max(
+            0,
+            slot.count
+              - (isSource && sourceAssignment && !sameSlot ? 1 : 0)
+              + (isTarget && !targetAssignment && !sameSlot ? 1 : 0)
+          );
+
+          return {
+            ...slot,
+            projectedCount,
+            level: getCoverageLevel(projectedCount, slot.required),
+            role: isSource && isTarget ? 'both' as const : isSource ? 'source' as const : isTarget ? 'target' as const : null,
+          };
+        }),
+    }));
+
+    const sourceSlot = days
+      .flatMap(day => day.slots)
+      .find(slot => slot.role === 'source' || slot.role === 'both');
+    const sourceWouldBeUnderstaffed = Boolean(
+      sourceSlot && sourceSlot.required > 0 && sourceSlot.projectedCount < sourceSlot.required
+    );
+    const canApprove = request.status === 'pending'
+      && Boolean(sourceAssignment)
+      && !sourceAssignment?.checkedOut
+      && !sameSlot
+      && !targetFull;
+
+    let recommendation: ShiftChangeCoverageImpact['recommendation'] = 'safe';
+    let message = targetAssignment
+      ? `Actualmente aparece en ambos turnos. Aprobar conservará ${request.requested_shift_key} (${request.requested_day_key}) y retirará ${request.current_shift_key} (${request.current_day_key}).`
+      : 'El cambio mantiene la cobertura requerida en ambos turnos.';
+    if (!canApprove) {
+      recommendation = 'blocked';
+      if (targetFull) message = 'El turno solicitado ya tiene la cobertura completa y no admite más solicitudes.';
+      else if (request.status !== 'pending') message = 'Esta solicitud ya fue procesada.';
+      else if (!sourceAssignment) message = 'El turno original ya no está asignado al voluntario.';
+      else if (sourceAssignment.checkedOut) message = 'El turno original ya fue completado.';
+      else if (sameSlot) message = 'El turno solicitado es igual al turno original.';
+      else message = 'La solicitud no puede aprobarse con su estado actual.';
+    } else if (sourceWouldBeUnderstaffed) {
+      recommendation = 'warning';
+      message = targetAssignment
+        ? `Actualmente aparece en ambos turnos. Aprobar conservará ${request.requested_shift_key} (${request.requested_day_key}) y retirará ${request.current_shift_key} (${request.current_day_key}); el turno de origen quedará por debajo de la cobertura requerida.`
+        : 'El destino tiene espacio, pero aprobar dejaría el turno original por debajo de la cobertura requerida.';
+    }
+
+    return {
+      success: true,
+      impact: {
+        requestId: request.id,
+        volunteerName: `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || 'Voluntario',
+        committeeName,
+        status: request.status,
+        canApprove,
+        targetFull,
+        sourceWouldBeUnderstaffed,
+        recommendation,
+        message,
+        days,
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'No se pudo consultar la cobertura.' };
+  }
+}
+
 export async function approveShiftChangeRequestAction(requestId: string) {
   try {
     const supabase = getAdminClient();
@@ -70,7 +198,7 @@ export async function approveShiftChangeRequestAction(requestId: string) {
     // 1. Fetch request details
     const { data: request, error: reqErr } = await supabase
       .from('shift_change_requests')
-      .select('*, volunteers(id, first_name, last_name, phone)')
+      .select('*, volunteers(id, first_name, last_name, phone, committee_id, committees(name))')
       .eq('id', requestId)
       .single();
 
@@ -79,6 +207,9 @@ export async function approveShiftChangeRequestAction(requestId: string) {
     }
     if (!isShiftAvailableForDay(request.requested_day_key, request.requested_shift_key)) {
       return { success: false, error: 'La jornada del 5 de septiembre solo permite T1 (9:00 AM - 2:00 PM).' };
+    }
+    if (request.status !== 'pending') {
+      return { success: false, error: 'Esta solicitud ya fue procesada.' };
     }
     const reviewer = await requireVolunteerCapability('reschedule_volunteer', request.volunteer_id);
     const reviewerId = reviewer.userId;
@@ -93,11 +224,48 @@ export async function approveShiftChangeRequestAction(requestId: string) {
     // 2. Fetch and remove old shift
     const { data: oldShift } = await supabase
       .from('shifts')
-      .select('id, volunteer_id, day_key, shift_key')
+      .select('id, volunteer_id, day_key, shift_key, checked_out, checked_out_at')
       .eq('volunteer_id', request.volunteer_id)
       .eq('day_key', request.current_day_key)
       .eq('shift_key', request.current_shift_key)
       .maybeSingle();
+
+    if (!oldShift) {
+      return { success: false, error: 'El turno original ya no está asignado al voluntario.' };
+    }
+    if (oldShift.checked_out || oldShift.checked_out_at) {
+      return { success: false, error: 'No se puede cambiar un turno que ya fue completado.' };
+    }
+    if (request.current_day_key === request.requested_day_key && request.current_shift_key === request.requested_shift_key) {
+      return { success: false, error: 'El turno solicitado es igual al turno actual.' };
+    }
+
+    const { data: existingTarget } = await supabase
+      .from('shifts')
+      .select('id')
+      .eq('volunteer_id', request.volunteer_id)
+      .eq('day_key', request.requested_day_key)
+      .eq('shift_key', request.requested_shift_key)
+      .maybeSingle();
+
+    // A pre-existing target does not consume a new place. This can legitimately
+    // happen when the schedule changes after the volunteer submitted the request.
+    if (vol.committee_id && !existingTarget) {
+      const coverage = await getCommitteeCoverageSnapshot(
+        supabase,
+        vol.committee_id,
+        [request.requested_day_key]
+      );
+      const targetSlot = coverage.slots.find(slot =>
+        slot.dayKey === request.requested_day_key && slot.shiftKey === request.requested_shift_key
+      );
+      if (isCoverageComplete(targetSlot)) {
+        return {
+          success: false,
+          error: `El turno ${request.requested_shift_key} del ${request.requested_day_key} ya tiene la cobertura completa para ${vol.committees?.name || 'este comité'}.`,
+        };
+      }
+    }
 
     await supabase
       .from('shifts')
@@ -114,28 +282,32 @@ export async function approveShiftChangeRequestAction(requestId: string) {
       });
     }
 
-    // 3. Insert new shift
-    const { data: newShift, error: insErr } = await supabase
-      .from('shifts')
-      .upsert({
-        volunteer_id: request.volunteer_id,
-        day_key: request.requested_day_key,
-        shift_key: request.requested_shift_key
-      }, { onConflict: 'volunteer_id,day_key,shift_key' })
-      .select('*')
-      .single();
+    // 3. Insert the target only when it is not already present. In the stale
+    // request case, keeping the existing target and removing the source is the
+    // complete requested move.
+    if (!existingTarget) {
+      const { data: newShift, error: insErr } = await supabase
+        .from('shifts')
+        .upsert({
+          volunteer_id: request.volunteer_id,
+          day_key: request.requested_day_key,
+          shift_key: request.requested_shift_key
+        }, { onConflict: 'volunteer_id,day_key,shift_key' })
+        .select('*')
+        .single();
 
-    if (insErr) {
-      console.error("Error updating shift for approval:", insErr);
-      return { success: false, error: insErr.message };
-    }
+      if (insErr) {
+        console.error("Error updating shift for approval:", insErr);
+        return { success: false, error: insErr.message };
+      }
 
-    if (newShift) {
-      broadcastShiftSync({
-        eventType: 'INSERT',
-        table: 'shifts',
-        record: newShift,
-      });
+      if (newShift) {
+        broadcastShiftSync({
+          eventType: 'INSERT',
+          table: 'shifts',
+          record: newShift,
+        });
+      }
     }
 
     // 4. Update request status with reviewer UUID
@@ -255,57 +427,37 @@ export async function createShiftChangeRequestAction(params: {
   reason?: string;
 }) {
   try {
-    if (!isShiftAvailableForDay(params.requestedDayKey, params.requestedShiftKey)) {
-      return { success: false, error: 'La jornada del 5 de septiembre solo permite T1 (9:00 AM - 2:00 PM).' };
-    }
-    const normalizedReason = params.reason?.trim() || '';
-    if (!normalizedReason) {
-      return {
-        success: false,
-        error: 'Debes describir el motivo de la solicitud de cambio de turno.'
-      };
-    }
-
     await requireVolunteerSelfOrCapability('reschedule_volunteer', params.volunteerId);
     const supabase = getAdminClient();
+    const result = await createValidatedShiftChangeRequest(supabase, params);
+    if (!result.success) return result;
 
-    // Check if there is already a pending request for this volunteer & shift
-    const { data: existing } = await supabase
-      .from('shift_change_requests')
-      .select('*')
-      .eq('volunteer_id', params.volunteerId)
-      .eq('current_day_key', params.currentDayKey)
-      .eq('current_shift_key', params.currentShiftKey)
-      .eq('status', 'pending')
-      .maybeSingle();
-
-    if (existing) {
-      return {
-        success: false,
-        error: `Ya tienes una solicitud pendiente para cambiar tu turno del ${params.currentDayKey} (${params.currentShiftKey}).`
-      };
+    const volunteerName = `${result.volunteer.first_name || ''} ${result.volunteer.last_name || ''}`.trim() || 'Voluntario';
+    const auditCreated = await createActivityLog({
+      userName: volunteerName,
+      userRole: 'Voluntario',
+      actionType: 'Solicitud',
+      description: 'Envió desde el portal una solicitud de cambio de turno',
+      details: JSON.stringify({
+        context: {
+          source: 'Portal',
+          channel: 'Portal',
+          requestId: result.request.id,
+          summary: `${params.currentDayKey} · ${params.currentShiftKey} → ${params.requestedDayKey} · ${params.requestedShiftKey}`,
+          currentDayKey: params.currentDayKey,
+          currentShiftKey: params.currentShiftKey,
+          requestedDayKey: params.requestedDayKey,
+          requestedShiftKey: params.requestedShiftKey,
+          reason: params.reason?.trim() || '',
+        },
+      }),
+      targetId: params.volunteerId,
+    });
+    if (!auditCreated) {
+      console.warn('[SHIFT CHANGE] Request created but portal audit logging failed:', result.request.id);
     }
 
-    const { data, error } = await supabase
-      .from('shift_change_requests')
-      .insert({
-        volunteer_id: params.volunteerId,
-        current_day_key: params.currentDayKey,
-        current_shift_key: params.currentShiftKey,
-        requested_day_key: params.requestedDayKey,
-        requested_shift_key: params.requestedShiftKey,
-        reason: normalizedReason,
-        status: 'pending'
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Error creating shift change request:", error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, request: data };
+    return { success: true, request: result.request };
   } catch (err: any) {
     return { success: false, error: err.message };
   }

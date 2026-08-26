@@ -1118,7 +1118,7 @@ export default function PhoneCleanupPersonCentricPage() {
                             <td className="px-4 py-3 text-text">{resultCopy}</td>
                             <td className="px-4 py-3 text-xs text-text-dim">
                               {group.processedAt
-                                ? new Date(group.processedAt).toLocaleDateString('es-NI', { timeZone: 'America/Managua', day: '2-digit', month: 'short', year: 'numeric' })
+                                ? new Date(group.processedAt).toLocaleDateString('es-GT', { timeZone: 'America/Guatemala', day: '2-digit', month: 'short', year: 'numeric' })
                                 : 'No disponible'}
                             </td>
                             <td className="px-4 py-3 text-right">
@@ -1175,8 +1175,8 @@ export default function PhoneCleanupPersonCentricPage() {
                         {archivedCount > 0 && <span>{archivedCount} {archivedCount === 1 ? 'archivado' : 'archivados'}</span>}
                         <span>
                           {group.processedAt
-                            ? new Date(group.processedAt).toLocaleString('es-NI', {
-                                timeZone: 'America/Managua',
+                            ? new Date(group.processedAt).toLocaleString('es-GT', {
+                                timeZone: 'America/Guatemala',
                                 day: '2-digit',
                                 month: 'short',
                                 year: 'numeric',

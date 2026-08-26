@@ -915,12 +915,12 @@ export default function ShiftsPage() {
     return dbCount + localCount;
   }, [rawShiftsData, completedShiftsMap, volunteerMap]);
 
-  const formatManaguaTime = (isoString?: string) => {
+  const formatGuatemalaTime = (isoString?: string) => {
     if (!isoString) return undefined;
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return undefined;
-    return d.toLocaleTimeString('es-NI', {
-      timeZone: 'America/Managua',
+    return d.toLocaleTimeString('es-GT', {
+      timeZone: 'America/Guatemala',
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
@@ -936,10 +936,10 @@ export default function ShiftsPage() {
     const diffMs = Math.max(0, end.getTime() - start.getTime());
     const totalMins = Math.round(diffMs / (1000 * 60));
 
-    // Comparación de días en zona horaria de Nicaragua
-    const startDateManagua = start.toLocaleDateString('es-NI', { timeZone: 'America/Managua' });
-    const endDateManagua = end.toLocaleDateString('es-NI', { timeZone: 'America/Managua' });
-    const isOverNextDay = startDateManagua !== endDateManagua || totalMins > 720;
+    // Comparación de días en zona horaria de Guatemala
+    const startDateGuatemala = start.toLocaleDateString('es-GT', { timeZone: 'America/Guatemala' });
+    const endDateGuatemala = end.toLocaleDateString('es-GT', { timeZone: 'America/Guatemala' });
+    const isOverNextDay = startDateGuatemala !== endDateGuatemala || totalMins > 720;
 
     const hours = Math.floor(totalMins / 60);
     const minutes = totalMins % 60;
@@ -950,7 +950,7 @@ export default function ShiftsPage() {
     else if (hours > 0) text = `${hours}h`;
     else text = `${minutes}m`;
 
-    return { text, isOver8Hours, isOverNextDay, hours, minutes, startDateManagua, endDateManagua };
+    return { text, isOver8Hours, isOverNextDay, hours, minutes, startDateGuatemala, endDateGuatemala };
   };
 
   // Modal de Ajuste de Hora de Salida (Alerta de Siguiente Día)
@@ -1001,11 +1001,11 @@ export default function ShiftsPage() {
       const targetH = parseInt(hStr) || 12;
       const targetM = parseInt(mStr) || 0;
 
-      const year = parseInt(startDate.toLocaleDateString('es-NI', { timeZone: 'America/Managua', year: 'numeric' }));
-      const month = parseInt(startDate.toLocaleDateString('es-NI', { timeZone: 'America/Managua', month: '2-digit' }));
-      const day = parseInt(startDate.toLocaleDateString('es-NI', { timeZone: 'America/Managua', day: '2-digit' }));
+      const year = parseInt(startDate.toLocaleDateString('es-GT', { timeZone: 'America/Guatemala', year: 'numeric' }));
+      const month = parseInt(startDate.toLocaleDateString('es-GT', { timeZone: 'America/Guatemala', month: '2-digit' }));
+      const day = parseInt(startDate.toLocaleDateString('es-GT', { timeZone: 'America/Guatemala', day: '2-digit' }));
 
-      // Nicaragua UTC-6
+      // Guatemala local time mapped to the corresponding instant.
       const newUtcMs = Date.UTC(year, month - 1, day, targetH + 6, targetM, 0);
       const newCheckOutIso = new Date(newUtcMs).toISOString();
 
@@ -1109,19 +1109,19 @@ export default function ShiftsPage() {
     }
   };
 
-  const getTodayNicaraguaKey = useCallback(() => {
+  const getTodayGuatemalaKey = useCallback(() => {
     try {
-      const nicaraguaStr = new Date().toLocaleDateString("en-US", { timeZone: "America/Managua" });
-      const nicDate = new Date(nicaraguaStr);
+      const guatemalaString = new Date().toLocaleDateString("en-US", { timeZone: "America/Guatemala" });
+      const guatemalaDate = new Date(guatemalaString);
       const match = EVENT_DAYS.find(d => {
         const dDate = new Date(d.date);
-        return dDate.getFullYear() === nicDate.getFullYear() &&
-               dDate.getMonth() === nicDate.getMonth() &&
-               dDate.getDate() === nicDate.getDate();
+        return dDate.getFullYear() === guatemalaDate.getFullYear() &&
+               dDate.getMonth() === guatemalaDate.getMonth() &&
+               dDate.getDate() === guatemalaDate.getDate();
       });
       if (match) return match.key;
     } catch (e) {
-      console.error("Error calculating Nicaragua date:", e);
+      console.error("Error calculating Guatemala date:", e);
     }
     return EVENT_DAYS[0]?.key || "";
   }, [EVENT_DAYS]);
@@ -1315,8 +1315,8 @@ export default function ShiftsPage() {
                                 const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
                                 const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
                                 const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
-                                const checkInTimeStr = formatManaguaTime(shiftRecord?.checked_in_at);
-                                const checkOutTimeStr = formatManaguaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
+                                const checkInTimeStr = formatGuatemalaTime(shiftRecord?.checked_in_at);
+                                const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
                                 const elapsed = getElapsedInfoBetween(shiftRecord?.checked_in_at, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
 
                                 return (
@@ -1592,8 +1592,8 @@ export default function ShiftsPage() {
                                   const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
                                   const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
                                   const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
-                                  const checkInTimeStr = formatManaguaTime(shiftRecord?.checked_in_at);
-                                  const checkOutTimeStr = formatManaguaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
+                                  const checkInTimeStr = formatGuatemalaTime(shiftRecord?.checked_in_at);
+                                  const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
                                   const elapsed = getElapsedInfoBetween(shiftRecord?.checked_in_at, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
 
                                   return (

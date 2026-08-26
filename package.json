@@ -13,7 +13,8 @@
     "check:whatsapp-delivery": "node --no-warnings --experimental-strip-types scripts/check-whatsapp-delivery.mts",
     "check:whatsapp-retry": "node --no-warnings --experimental-strip-types scripts/check-whatsapp-retry-policy.mts",
     "preview:whatsapp-reminders": "node --no-warnings --experimental-strip-types scripts/preview-automatic-reminders.mts",
-    "test:authorization": "node scripts/test_authorization_suite.js"
+    "test:authorization": "node scripts/test_authorization_suite.js",
+    "test:settings-authorization": "node scripts/test_settings_authorization.js"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

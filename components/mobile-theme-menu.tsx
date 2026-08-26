@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import type { ThemePreference } from '@/lib/use-theme-preference';
+import type { ThemePreference, ThemeTransitionOrigin } from '@/lib/use-theme-preference';
 
 const THEME_OPTIONS: Array<{
   value: ThemePreference;
@@ -16,7 +16,7 @@ const THEME_OPTIONS: Array<{
 interface MobileThemeMenuProps {
   open: boolean;
   preference: ThemePreference;
-  onChange: (preference: ThemePreference) => void;
+  onChange: (preference: ThemePreference, source?: ThemeTransitionOrigin) => void;
   onClose: () => void;
 }
 
@@ -58,8 +58,8 @@ export function MobileThemeMenu({
               type="button"
               role="menuitemradio"
               aria-checked={isSelected}
-              onClick={() => {
-                onChange(option.value);
+              onClick={(event) => {
+                onChange(option.value, event);
                 onClose();
               }}
               className={cn(
