@@ -46,7 +46,15 @@ export interface ShiftAreaAssignmentScope {
 
 interface ShiftAreaAssignmentResult extends MutationResult {
   assignedCount?: number;
+  previousAssignments?: ShiftAreaRestoreInput[];
 }
+
+export interface ShiftAreaRestoreInput {
+  shiftId: string;
+  areaId: string | null;
+}
+
+export const MAX_SHIFT_AREA_ASSIGNMENTS = 250;
 
 function cleanSingleLine(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
@@ -79,7 +87,7 @@ export class CommitteeAreaService {
 
   static async getShiftAssignmentScope(shiftIds: string[]): Promise<ShiftAreaAssignmentScope | null> {
     const uniqueShiftIds = Array.from(new Set(shiftIds.filter(Boolean)));
-    if (uniqueShiftIds.length === 0 || uniqueShiftIds.length > 250) return null;
+    if (uniqueShiftIds.length === 0 || uniqueShiftIds.length > MAX_SHIFT_AREA_ASSIGNMENTS) return null;
 
     const supabase = await getAdminSupabase();
     const { data: shifts, error: shiftsError } = await supabase
@@ -346,7 +354,9 @@ export class CommitteeAreaService {
     const changedAssignments = currentScope.assignments.filter(
       (assignment) => assignment.areaId !== normalizedAreaId
     );
-    if (changedAssignments.length === 0) return { success: true, assignedCount: 0 };
+    if (changedAssignments.length === 0) {
+      return { success: true, assignedCount: 0, previousAssignments: [] };
+    }
 
     const supabase = await getAdminSupabase();
     const previousAreaIds = Array.from(new Set(
@@ -396,6 +406,117 @@ export class CommitteeAreaService {
     });
     if (error || data !== changedAssignments.length) {
       return { success: false, error: errorMessage(error, 'No se pudieron actualizar todas las asignaciones') };
+    }
+
+    return {
+      success: true,
+      assignedCount: changedAssignments.length,
+      previousAssignments: changedAssignments.map((assignment) => ({
+        shiftId: assignment.id,
+        areaId: assignment.areaId,
+      })),
+    };
+  }
+
+  static async restoreShiftAreas(
+    scope: ShiftAreaAssignmentScope,
+    assignments: ShiftAreaRestoreInput[],
+    actor: AuditActor & { id: string }
+  ): Promise<ShiftAreaAssignmentResult> {
+    const targetAreaByShiftId = new Map(assignments.map((assignment) => [assignment.shiftId, assignment.areaId || null]));
+    if (targetAreaByShiftId.size !== assignments.length || assignments.length > MAX_SHIFT_AREA_ASSIGNMENTS) {
+      return { success: false, error: 'La reversión contiene asignaciones duplicadas o supera el límite permitido.' };
+    }
+
+    const currentScope = await this.getShiftAssignmentScope(assignments.map((assignment) => assignment.shiftId));
+    if (!currentScope || currentScope.committeeId !== scope.committeeId) {
+      return { success: false, error: 'Una o más asignaciones ya no están disponibles.' };
+    }
+
+    const targetAreaIds = Array.from(new Set(
+      assignments.map((assignment) => assignment.areaId).filter((areaId): areaId is string => Boolean(areaId))
+    ));
+    const targetAreaNames = new Map<string, string>();
+    if (targetAreaIds.length > 0) {
+      const supabase = await getAdminSupabase();
+      const { data: areas, error: areasError } = await supabase
+        .from('committee_areas')
+        .select('id, committee_id, name, status')
+        .in('id', targetAreaIds);
+      if (
+        areasError
+        || !areas
+        || areas.length !== targetAreaIds.length
+        || areas.some((area) => area.committee_id !== scope.committeeId)
+      ) {
+        return { success: false, error: 'Una de las áreas anteriores ya no pertenece a este comité.' };
+      }
+      for (const area of areas) targetAreaNames.set(area.id, area.name);
+    }
+
+    const currentAreaIds = Array.from(new Set(
+      currentScope.assignments.map((assignment) => assignment.areaId).filter((areaId): areaId is string => Boolean(areaId))
+    ));
+    const currentAreaNames = new Map<string, string>();
+    if (currentAreaIds.length > 0) {
+      const supabase = await getAdminSupabase();
+      const { data: areas } = await supabase
+        .from('committee_areas')
+        .select('id, name')
+        .in('id', currentAreaIds);
+      for (const area of areas || []) currentAreaNames.set(area.id, area.name);
+    }
+
+    const changedAssignments = currentScope.assignments.filter(
+      (assignment) => assignment.areaId !== targetAreaByShiftId.get(assignment.id)
+    );
+    if (changedAssignments.length === 0) return { success: true, assignedCount: 0 };
+
+    const restoreRows = changedAssignments.map((assignment) => ({
+      shift_id: assignment.id,
+      area_id: targetAreaByShiftId.get(assignment.id) || null,
+    }));
+    const auditRows = changedAssignments.map((assignment) => {
+      const targetAreaId = targetAreaByShiftId.get(assignment.id) || null;
+      const currentAreaName = assignment.areaId
+        ? currentAreaNames.get(assignment.areaId) || 'Área actual'
+        : 'Sin área';
+      const restoredAreaName = targetAreaId
+        ? targetAreaNames.get(targetAreaId) || 'Área anterior'
+        : 'Sin área';
+      return {
+        user_name: actor.name,
+        user_role: actor.role,
+        action_type: 'Edición',
+        description: `Revirtió el área del turno ${assignment.shiftKey} de ${assignment.dayKey}: ${currentAreaName} → ${restoredAreaName}`,
+        details: JSON.stringify({
+          changes: [{
+            field: 'area_id',
+            label: 'Área asignada',
+            oldValue: currentAreaName,
+            newValue: restoredAreaName,
+          }],
+          context: {
+            operation: 'shift_area_restore',
+            committeeId: scope.committeeId,
+            shiftId: assignment.id,
+            dayKey: assignment.dayKey,
+            shiftKey: assignment.shiftKey,
+            previousAreaId: assignment.areaId,
+            areaId: targetAreaId,
+          },
+        }),
+        target_id: assignment.volunteerId,
+      };
+    });
+
+    const supabase = await getAdminSupabase();
+    const { data, error } = await supabase.rpc('restore_shift_areas_with_audit', {
+      p_assignments: restoreRows,
+      p_audit_rows: auditRows,
+    });
+    if (error || data !== changedAssignments.length) {
+      return { success: false, error: errorMessage(error, 'No se pudieron revertir todas las asignaciones') };
     }
 
     return { success: true, assignedCount: changedAssignments.length };

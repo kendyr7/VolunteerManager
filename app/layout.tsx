@@ -85,6 +85,7 @@ export default async function RootLayout({
       lang="es"
       className={`${outfit.variable} h-full antialiased dark`}
       style={{ colorScheme: 'dark', backgroundColor: '#050505' }}
+      suppressHydrationWarning
     >
       <head>
         <meta name="facebook-domain-verification" content="p85nbgrccc871olpq4fug39saag8if" />
@@ -93,7 +94,7 @@ export default async function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <link rel="preload" href="/material-symbols-outlined.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       </head>
-      <body className="min-h-full flex flex-col font-sans bg-dark text-text tracking-[-0.01em]">
+      <body className="min-h-full flex flex-col font-sans bg-dark text-text tracking-[-0.01em]" suppressHydrationWarning>
         <TokenProvider token={sessionToken} />
         <AutoLogout />
         <UnofficialSiteBanner initialAcknowledged={hasAcknowledgedUnofficialSite} />

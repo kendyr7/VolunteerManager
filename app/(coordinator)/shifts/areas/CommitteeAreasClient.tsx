@@ -9,6 +9,7 @@ import {
   createCommitteeAreaAction,
   restoreCommitteeAreaAction,
   saveAreaRequirementsAction,
+  restoreVolunteerAreasAction,
   updateCommitteeAreaAction,
 } from '@/app/actions/committee-area-actions';
 import { Button } from '@/components/ui/button';
@@ -18,9 +19,11 @@ import { Toast } from '@/components/ui/toast';
 import { SmartSearchBar } from '@/components/SmartSearchBar';
 import { EventDayCards, EventShiftCard } from '@/components/EventDayCards';
 import { VolunteerProfileDrawer } from '@/components/VolunteerProfileDrawer';
+import { AssignScopeDrawer, type VolunteerShiftAssignmentItem } from '@/components/AssignScopeDrawer';
 import type {
   AreaManagementData,
   AreaManagementItem,
+  AreaVolunteer,
 } from '@/lib/services/committee-area-query.service';
 import { cn } from '@/lib/utils';
 
@@ -28,6 +31,7 @@ type ShiftKey = 'T1' | 'T2' | 'T3' | 'T4';
 type RequirementMap = Record<string, number>;
 export type AreaView = 'areas' | 'assignments' | 'coverage';
 const ALL_SHIFTS: ShiftKey[] = ['T1', 'T2', 'T3', 'T4'];
+const MAX_SHIFT_AREA_ASSIGNMENTS = 250;
 type ToastState = {
   visible: boolean;
   message: string;
@@ -338,17 +342,12 @@ function AssignmentPanel({
   const [statusFilter, setStatusFilter] = useState<'all' | 'unassigned' | 'assigned'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [targetAreaId, setTargetAreaId] = useState('__none__');
+  const [bulkScope, setBulkScope] = useState<'slot' | 'all'>('slot');
+  const [bulkConfirmationSignature, setBulkConfirmationSignature] = useState<string | null>(null);
   const [profileVolunteerId, setProfileVolunteerId] = useState<string | null>(null);
-  const [areaOverrides, setAreaOverrides] = useState<Map<string, string | null>>(new Map());
-
-  const assignments = useMemo(
-    () => data.assignments.map((assignment) => (
-      areaOverrides.has(assignment.id)
-        ? { ...assignment, areaId: areaOverrides.get(assignment.id) ?? null }
-        : assignment
-    )),
-    [areaOverrides, data.assignments]
-  );
+  const [scopeDrawerVolunteer, setScopeDrawerVolunteer] = useState<AreaVolunteer | null>(null);
+  const [scopeDrawerTargetAreaId, setScopeDrawerTargetAreaId] = useState<string | null>(null);
+  const [scopeDrawerInitialShiftIds, setScopeDrawerInitialShiftIds] = useState<string[]>([]);
 
   const selectedDay = data.eventDays.find((day) => day.key === dayKey) || firstDay;
   const volunteersById = useMemo(
@@ -360,13 +359,29 @@ function AssignmentPanel({
     [data.areas]
   );
 
+  // Group all assignments by volunteer across the whole event
+  const assignmentsByVolunteer = useMemo(() => {
+    const map = new Map<string, VolunteerShiftAssignmentItem[]>();
+    for (const assignment of data.assignments) {
+      const list = map.get(assignment.volunteerId) || [];
+      list.push({
+        id: assignment.id,
+        dayKey: assignment.dayKey,
+        shiftKey: assignment.shiftKey,
+        areaId: assignment.areaId,
+      });
+      map.set(assignment.volunteerId, list);
+    }
+    return map;
+  }, [data.assignments]);
+
   const slotAssignments = useMemo(
-    () => assignments
+    () => data.assignments
       .filter((assignment) => assignment.dayKey === dayKey && assignment.shiftKey === shiftKey)
       .map((assignment) => ({ ...assignment, volunteer: volunteersById.get(assignment.volunteerId) }))
       .filter((assignment) => assignment.volunteer)
       .sort((a, b) => a.volunteer!.name.localeCompare(b.volunteer!.name, 'es')),
-    [assignments, dayKey, shiftKey, volunteersById]
+    [data.assignments, dayKey, shiftKey, volunteersById]
   );
 
   const normalizedSearch = search.trim().toLocaleLowerCase('es');
@@ -383,6 +398,7 @@ function AssignmentPanel({
 
   const visibleIds = filteredAssignments.map((assignment) => assignment.id);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected = visibleIds.some((id) => selectedIds.has(id));
   const activeAreas = data.areas.filter((area) => area.status === 'active');
   const validTargetAreaId = targetAreaId === '__none__' || activeAreas.some((area) => area.id === targetAreaId)
     ? targetAreaId
@@ -390,14 +406,64 @@ function AssignmentPanel({
 
   const assignmentsByDay = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const assignment of assignments) {
+    for (const assignment of data.assignments) {
       counts.set(assignment.dayKey, (counts.get(assignment.dayKey) || 0) + 1);
     }
     return counts;
-  }, [assignments]);
+  }, [data.assignments]);
 
   const unassignedCount = slotAssignments.filter((a) => !a.areaId).length;
   const assignedCount = slotAssignments.length - unassignedCount;
+
+  // Selected volunteers across current slot selection
+  const selectedVolunteers = useMemo(() => {
+    const selectedShiftSet = new Set(selectedIds);
+    const vols = new Set<string>();
+    for (const a of slotAssignments) {
+      if (selectedShiftSet.has(a.id)) {
+        vols.add(a.volunteerId);
+      }
+    }
+    return Array.from(vols);
+  }, [selectedIds, slotAssignments]);
+
+  // All shift IDs belonging to the selected volunteers across the entire event
+  const selectedAllShiftIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const volId of selectedVolunteers) {
+      const volShifts = assignmentsByVolunteer.get(volId) || [];
+      for (const s of volShifts) {
+        ids.push(s.id);
+      }
+    }
+    return ids;
+  }, [selectedVolunteers, assignmentsByVolunteer]);
+
+  // Unique days touched by all shifts of selected volunteers
+  const selectedDaysCount = useMemo(() => {
+    const dayKeys = new Set<string>();
+    for (const volId of selectedVolunteers) {
+      const volShifts = assignmentsByVolunteer.get(volId) || [];
+      for (const s of volShifts) {
+        dayKeys.add(s.dayKey);
+      }
+    }
+    return dayKeys.size;
+  }, [selectedVolunteers, assignmentsByVolunteer]);
+  const bulkShiftIds = bulkScope === 'slot' ? Array.from(selectedIds) : selectedAllShiftIds;
+  const bulkShiftCount = bulkShiftIds.length;
+  const bulkLimitExceeded = bulkShiftCount > MAX_SHIFT_AREA_ASSIGNMENTS;
+  const bulkTargetAreaId = validTargetAreaId === '__none__' ? null : validTargetAreaId;
+  const assignmentsById = useMemo(
+    () => new Map(data.assignments.map((assignment) => [assignment.id, assignment])),
+    [data.assignments]
+  );
+  const bulkReplacementCount = bulkShiftIds.reduce((count, shiftId) => {
+    const currentAreaId = assignmentsById.get(shiftId)?.areaId || null;
+    return count + (currentAreaId && currentAreaId !== bulkTargetAreaId ? 1 : 0);
+  }, 0);
+  const bulkSelectionSignature = `${bulkScope}:${bulkTargetAreaId || '__none__'}:${[...bulkShiftIds].sort().join(',')}`;
+  const bulkAwaitingConfirmation = bulkReplacementCount > 0 && bulkConfirmationSignature === bulkSelectionSignature;
 
   function toggleSelection(id: string) {
     setSelectedIds((current) => {
@@ -417,20 +483,30 @@ function AssignmentPanel({
     });
   }
 
-  async function applyArea() {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-    const nextAreaId = validTargetAreaId === '__none__' ? null : validTargetAreaId;
-    const selectedShiftIds = new Set(ids);
-    const previousOverrides = areaOverrides;
-    setAreaOverrides((current) => {
-      const next = new Map(current);
-      selectedShiftIds.forEach((shiftId) => next.set(shiftId, nextAreaId));
-      return next;
-    });
-    const success = await onAssign(ids, nextAreaId);
-    if (success) setSelectedIds(new Set());
-    else setAreaOverrides(previousOverrides);
+  async function applyBulkArea() {
+    const targetAreaNormalized = bulkTargetAreaId;
+    const shiftIdsToApply = bulkShiftIds;
+    if (shiftIdsToApply.length === 0 || shiftIdsToApply.length > MAX_SHIFT_AREA_ASSIGNMENTS) return;
+    if (bulkReplacementCount > 0 && !bulkAwaitingConfirmation) {
+      setBulkConfirmationSignature(bulkSelectionSignature);
+      return;
+    }
+
+    const success = await onAssign(shiftIdsToApply, targetAreaNormalized);
+    if (success) {
+      setSelectedIds(new Set());
+      setBulkConfirmationSignature(null);
+    }
+  }
+
+  function openScopeDrawer(volunteer: AreaVolunteer, preselectedAreaId: string | null) {
+    const volunteerShifts = assignmentsByVolunteer.get(volunteer.id) || [];
+    const activeShift = volunteerShifts.find(
+      (assignment) => assignment.dayKey === dayKey && assignment.shiftKey === shiftKey
+    );
+    setScopeDrawerVolunteer(volunteer);
+    setScopeDrawerTargetAreaId(preselectedAreaId);
+    setScopeDrawerInitialShiftIds(activeShift ? [activeShift.id] : volunteerShifts[0] ? [volunteerShifts[0].id] : []);
   }
 
   return (
@@ -456,7 +532,7 @@ function AssignmentPanel({
           <span className="block text-[10px] font-bold uppercase tracking-widest text-text-dim">Turno a gestionar</span>
           <div className="grid grid-cols-4 gap-2 md:flex md:flex-wrap">
             {(selectedDay?.shiftKeys || []).map((key) => {
-              const count = assignments.filter((assignment) => assignment.dayKey === dayKey && assignment.shiftKey === key).length;
+              const count = data.assignments.filter((assignment) => assignment.dayKey === dayKey && assignment.shiftKey === key).length;
               const selected = shiftKey === key;
               return (
                 <EventShiftCard
@@ -558,31 +634,44 @@ function AssignmentPanel({
               <input
                 type="checkbox"
                 checked={allVisibleSelected}
+                ref={(element) => {
+                  if (element) element.indeterminate = someVisibleSelected && !allVisibleSelected;
+                }}
                 onChange={selectAllVisible}
                 className="h-4 w-4 rounded border-border accent-[#4d7cfe]"
               />
               <span>Seleccionar visibles ({filteredAssignments.length})</span>
             </label>
             <span className="font-bold tabular-nums text-text-dim">
-              {selectedIds.size} seleccionado{selectedIds.size === 1 ? '' : 's'}
+              {selectedIds.size} voluntario{selectedIds.size === 1 ? '' : 's'} seleccionado{selectedIds.size === 1 ? '' : 's'}
             </span>
           </div>
 
           {/* Desktop Table View */}
           <div className="hidden overflow-x-auto md:block">
-            <table className="w-full border-collapse text-left text-xs">
+            <table className="w-full table-fixed border-collapse text-left text-xs">
+              <colgroup>
+                <col className="w-12" />
+                <col />
+                <col className="w-16" />
+                <col className="w-[36%]" />
+                <col className="w-28" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-border bg-dark2/60 text-[11px] font-bold text-text-dim">
-                  <th scope="col" className="w-12 px-4 py-2.5"><span className="sr-only">Seleccionar</span></th>
+                  <th scope="col" className="px-4 py-2.5"><span className="sr-only">Seleccionar</span></th>
                   <th scope="col" className="px-3 py-2.5 font-bold text-text">Voluntario</th>
-                  <th scope="col" className="w-20 px-3 py-2.5 text-center font-bold text-text">Edad</th>
-                  <th scope="col" className="w-[280px] px-4 py-2.5 font-bold text-text">Área asignada</th>
+                  <th scope="col" className="px-2 py-2.5 text-center font-bold text-text">Edad</th>
+                  <th scope="col" className="px-3 py-2.5 font-bold text-text">Área asignada</th>
+                  <th scope="col" className="px-2 py-2.5 text-center font-bold text-text">Alcance</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40 font-inter">
                 {filteredAssignments.map((assignment) => {
                   const area = assignment.areaId ? areasById.get(assignment.areaId) : null;
                   const isSelected = selectedIds.has(assignment.id);
+                  const volShifts = assignmentsByVolunteer.get(assignment.volunteerId) || [];
+                  const totalShiftsCount = volShifts.length;
 
                   return (
                     <tr
@@ -592,7 +681,8 @@ function AssignmentPanel({
                         isSelected && 'bg-[#4d7cfe]/10'
                       )}
                     >
-                      <td className="px-4 py-2">
+                      {/* Checkbox */}
+                      <td className="px-4 py-2.5">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -601,49 +691,55 @@ function AssignmentPanel({
                           className="h-4 w-4 rounded border-border accent-[#4d7cfe]"
                         />
                       </td>
-                      <td className="px-3 py-2 text-left">
+
+                      {/* Volunteer Name */}
+                      <td className="px-3 py-2.5 text-left">
                         <button
                           type="button"
                           onClick={() => setProfileVolunteerId(assignment.volunteerId)}
-                          className="font-bold text-xs text-text hover:text-[#4d7cfe] transition-colors text-left truncate max-w-[260px] cursor-pointer block"
+                          className="block max-w-full truncate text-left text-xs font-bold text-text transition-colors hover:text-[#4d7cfe] cursor-pointer"
                           aria-label={`Abrir perfil de ${assignment.volunteer!.name}`}
                         >
                           {assignment.volunteer!.name}
                         </button>
                       </td>
-                      <td className="px-3 py-2 text-center font-bold tabular-nums text-text-dim">
+
+                      {/* Age */}
+                      <td className="px-2 py-2.5 text-center font-bold tabular-nums text-text-dim">
                         {assignment.volunteer!.age ?? '—'}
                       </td>
-                      <td className="px-4 py-2">
+
+                      {/* Area Dropdown */}
+                      <td className="px-3 py-2.5">
                         <Select
                           disabled={busy}
                           value={assignment.areaId || '__none__'}
                           onValueChange={async (val) => {
                             const newAreaId = val === '__none__' ? null : val;
-                            const previousOverrides = areaOverrides;
-                            setAreaOverrides((prev) => new Map(prev).set(assignment.id, newAreaId));
-                            const success = await onAssign([assignment.id], newAreaId);
-                            if (!success) setAreaOverrides(previousOverrides);
+                            if (totalShiftsCount > 1) {
+                              // If volunteer has multiple shifts, open the scope drawer with the new area preselected
+                              openScopeDrawer(assignment.volunteer!, newAreaId);
+                            } else {
+                              // Single shift direct assignment
+                              await onAssign([assignment.id], newAreaId);
+                            }
                           }}
                         >
                           <SelectTrigger className={cn(
-                            'h-7 rounded-lg px-2.5 text-xs font-bold border transition-colors max-w-[220px]',
+                            'h-8 w-full rounded-full border px-3 text-xs font-bold transition-colors',
                             area
                               ? 'border-[#4d7cfe]/30 bg-[#4d7cfe]/10 text-[#4d7cfe]'
                               : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
                           )}>
                             <SelectValue>
                               {area ? (
-                                <div className="flex items-center gap-1 truncate">
-                                  <span className="material-symbols-outlined text-[13px]">location_on</span>
-                                  <span className="truncate">{area.name}</span>
-                                </div>
+                                <span className="truncate">{area.name}</span>
                               ) : (
                                 <span>Sin área asignada</span>
                               )}
                             </SelectValue>
                           </SelectTrigger>
-                          <SelectContent className="bg-dark2 border-border text-text">
+                          <SelectContent className="bg-dark2 border-border text-text z-50">
                             <SelectItem value="__none__" className="text-xs font-bold text-amber-400">
                               Sin área asignada
                             </SelectItem>
@@ -654,6 +750,21 @@ function AssignmentPanel({
                             ))}
                           </SelectContent>
                         </Select>
+                      </td>
+
+                      {/* Multi-shift Scope Action Button */}
+                      <td className="px-2 py-2.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => openScopeDrawer(assignment.volunteer!, assignment.areaId)}
+                          disabled={busy}
+                          title="Elegir en cuáles turnos se aplicará el área"
+                          aria-label={`Configurar alcance: ${totalShiftsCount} turno${totalShiftsCount === 1 ? '' : 's'} de ${assignment.volunteer!.name}`}
+                          className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-dark3 px-2.5 text-[11px] font-bold text-text-dim transition-all hover:border-[#4d7cfe]/40 hover:bg-[#4d7cfe]/10 hover:text-text active:scale-[0.97] cursor-pointer disabled:opacity-50"
+                        >
+                          <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">tune</span>
+                          <span>{totalShiftsCount} turno{totalShiftsCount === 1 ? '' : 's'}</span>
+                        </button>
                       </td>
                     </tr>
                   );
@@ -667,103 +778,178 @@ function AssignmentPanel({
             {filteredAssignments.map((assignment) => {
               const area = assignment.areaId ? areasById.get(assignment.areaId) : null;
               const isSelected = selectedIds.has(assignment.id);
+              const volShifts = assignmentsByVolunteer.get(assignment.volunteerId) || [];
+              const totalShiftsCount = volShifts.length;
 
               return (
                 <div
                   key={assignment.id}
                   className={cn(
-                    'grid grid-cols-[auto_minmax(0,1fr)_minmax(116px,42%)] items-center gap-2.5 px-3 py-2.5 transition-colors',
+                    'flex flex-col gap-2.5 px-3.5 py-3 transition-colors',
                     isSelected && 'bg-[#4d7cfe]/10'
                   )}
                 >
-                  <label className="flex min-h-11 cursor-pointer items-center justify-center">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleSelection(assignment.id)}
-                      aria-label={`Seleccionar a ${assignment.volunteer!.name}`}
-                      className="h-5 w-5 shrink-0 rounded border-border accent-[#4d7cfe]"
-                    />
-                  </label>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelection(assignment.id)}
+                        aria-label={`Seleccionar a ${assignment.volunteer!.name}`}
+                        className="h-5 w-5 shrink-0 rounded border-border accent-[#4d7cfe]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setProfileVolunteerId(assignment.volunteerId)}
+                        className="flex flex-col text-left truncate cursor-pointer"
+                        aria-label={`Abrir perfil de ${assignment.volunteer!.name}`}
+                      >
+                        <span className="text-xs font-bold leading-tight text-text truncate">
+                          {assignment.volunteer!.name}
+                        </span>
+                        <span className="text-[10px] font-bold text-text-dim">
+                          {assignment.volunteer!.age ? `${assignment.volunteer!.age} años` : 'Edad no registrada'}
+                        </span>
+                      </button>
+                    </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setProfileVolunteerId(assignment.volunteerId)}
-                    className="flex min-h-11 min-w-0 flex-col justify-center text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] focus-visible:ring-offset-2 focus-visible:ring-offset-dark2"
-                    aria-label={`Abrir perfil de ${assignment.volunteer!.name}`}
-                  >
-                    <span className="line-clamp-2 text-xs font-bold leading-4 text-text">
-                      {assignment.volunteer!.name}
-                    </span>
-                    <span className="mt-0.5 text-[10px] font-bold leading-4 text-text-dim">
-                      {assignment.volunteer!.age ? `${assignment.volunteer!.age} años` : 'Edad no registrada'}
-                    </span>
-                  </button>
+                  </div>
 
-                  <Select
-                    disabled={busy}
-                    value={assignment.areaId || '__none__'}
-                    onValueChange={async (val) => {
-                      const newAreaId = val === '__none__' ? null : val;
-                      const previousOverrides = areaOverrides;
-                      setAreaOverrides((prev) => new Map(prev).set(assignment.id, newAreaId));
-                      const success = await onAssign([assignment.id], newAreaId);
-                      if (!success) setAreaOverrides(previousOverrides);
-                    }}
-                  >
-                    <SelectTrigger
-                      aria-label={`Área asignada a ${assignment.volunteer!.name}`}
-                      className={cn(
-                        'h-11 min-w-0 max-w-none rounded-lg border px-2.5 text-[11px] font-bold transition-colors',
-                        area
-                          ? 'border-[#4d7cfe]/30 bg-[#4d7cfe]/10 text-[#4d7cfe]'
-                          : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-                      )}
+                  {/* Area Selector + Scope button */}
+                  <div className="grid grid-cols-[1fr_auto] items-center gap-2 pl-7">
+                    <Select
+                      disabled={busy}
+                      value={assignment.areaId || '__none__'}
+                      onValueChange={async (val) => {
+                        const newAreaId = val === '__none__' ? null : val;
+                        if (totalShiftsCount > 1) {
+                          openScopeDrawer(assignment.volunteer!, newAreaId);
+                        } else {
+                          await onAssign([assignment.id], newAreaId);
+                        }
+                      }}
                     >
-                      <SelectValue>
-                        {area ? (
-                          <span className="truncate">{area.name}</span>
-                        ) : (
-                          <span>Sin área</span>
+                      <SelectTrigger
+                        aria-label={`Área asignada a ${assignment.volunteer!.name}`}
+                        className={cn(
+                          'h-10 rounded-lg border px-2.5 text-xs font-bold transition-colors w-full',
+                          area
+                            ? 'border-[#4d7cfe]/30 bg-[#4d7cfe]/10 text-[#4d7cfe]'
+                            : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
                         )}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="bg-dark2 border-border text-text">
-                      <SelectItem value="__none__" className="text-xs font-bold text-amber-400">
-                        Sin área
-                      </SelectItem>
-                      {activeAreas.map((a) => (
-                        <SelectItem key={a.id} value={a.id} className="text-xs font-bold">
-                          {a.name}
+                      >
+                        <SelectValue>
+                          {area ? (
+                            <span className="truncate">{area.name}</span>
+                          ) : (
+                            <span>Sin área</span>
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="bg-dark2 border-border text-text z-50">
+                        <SelectItem value="__none__" className="text-xs font-bold text-amber-400">
+                          Sin área
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        {activeAreas.map((a) => (
+                          <SelectItem key={a.id} value={a.id} className="text-xs font-bold">
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <button
+                      type="button"
+                      onClick={() => openScopeDrawer(assignment.volunteer!, assignment.areaId)}
+                      disabled={busy}
+                      title="Elegir en cuáles turnos se aplicará el área"
+                      aria-label={`Configurar alcance para ${assignment.volunteer!.name}: ${totalShiftsCount} turno${totalShiftsCount === 1 ? '' : 's'}`}
+                      className="flex h-10 min-w-24 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-dark3 px-3 text-text-dim transition-all hover:border-[#4d7cfe]/40 hover:bg-[#4d7cfe]/10 hover:text-text cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[18px] text-[#4d7cfe]">tune</span>
+                      <span className="text-[11px] font-bold">{totalShiftsCount} turno{totalShiftsCount === 1 ? '' : 's'}</span>
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
 
           {/* Sticky Bottom Action Bar for Bulk Assignment */}
-          <div className="sticky bottom-0 flex flex-col gap-2.5 border-t border-border bg-dark2/95 backdrop-blur-md p-3 sm:flex-row sm:items-center sm:justify-between shadow-xl">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-text">
-                {selectedIds.size > 0 ? (
-                  <span className="text-[#4d7cfe]">{selectedIds.size} voluntario{selectedIds.size === 1 ? '' : 's'} seleccionado{selectedIds.size === 1 ? '' : 's'}</span>
-                ) : (
-                  <span className="text-text-dim">Selecciona voluntarios para asignar en lote</span>
-                )}
-              </span>
+          <div className="sticky bottom-0 flex flex-col gap-3 border-t border-border bg-dark2/95 backdrop-blur-md p-3.5 sm:flex-row sm:items-center sm:justify-between shadow-2xl z-30">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-text">
+                  {selectedIds.size > 0 ? (
+                    <span className="text-[#4d7cfe] font-black">
+                      {selectedVolunteers.length} voluntario{selectedVolunteers.length === 1 ? '' : 's'} seleccionado{selectedVolunteers.length === 1 ? '' : 's'}
+                    </span>
+                  ) : (
+                    <span className="text-text-dim">Selecciona voluntarios para asignar en lote</span>
+                  )}
+                </span>
+              </div>
+
+              {/* Scope Switcher when selection is active */}
+              {selectedIds.size > 0 && (
+                <div className="space-y-1.5 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider">Alcance:</span>
+                    <button
+                    type="button"
+                    onClick={() => setBulkScope('slot')}
+                    className={cn(
+                      'px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all cursor-pointer',
+                      bulkScope === 'slot'
+                        ? 'bg-[#4d7cfe] text-white border-[#4d7cfe]'
+                        : 'bg-dark3 border-border text-text-dim hover:text-text'
+                    )}
+                  >
+                    Solo este turno ({selectedIds.size})
+                    </button>
+                    <button
+                    type="button"
+                    onClick={() => setBulkScope('all')}
+                    className={cn(
+                      'px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all cursor-pointer',
+                      bulkScope === 'all'
+                        ? 'bg-[#4d7cfe] text-white border-[#4d7cfe]'
+                        : 'bg-dark3 border-border text-text-dim hover:text-text'
+                    )}
+                  >
+                    Todos sus turnos ({selectedAllShiftIds.length} en {selectedDaysCount} fechas)
+                    </button>
+                  </div>
+                  {bulkLimitExceeded && (
+                    <p className="text-[11px] font-bold text-amber-400" role="alert">
+                      El máximo es {MAX_SHIFT_AREA_ASSIGNMENTS} turnos por operación. Reduce la selección para continuar.
+                    </p>
+                  )}
+                  {bulkAwaitingConfirmation && (
+                    <p className="text-[11px] font-bold text-amber-400" role="alert">
+                      Confirma el reemplazo del área actual en {bulkReplacementCount} turno{bulkReplacementCount === 1 ? '' : 's'}.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
+            {/* Target Area selector & Apply button */}
             <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:w-auto">
-              <Select value={validTargetAreaId} onValueChange={(value) => value && setTargetAreaId(value)}>
-                <SelectTrigger aria-label="Área para asignación en lote" className="h-11 min-w-0 rounded-lg border-border bg-dark3 px-3 text-xs font-bold sm:h-8 sm:min-w-[160px]">
+              <Select
+                value={validTargetAreaId}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  setTargetAreaId(value);
+                  setBulkConfirmationSignature(null);
+                }}
+              >
+                <SelectTrigger aria-label="Área para asignación en lote" className="h-10 min-w-0 rounded-lg border-border bg-dark3 px-3 text-xs font-bold sm:h-9 sm:min-w-[170px]">
                   <SelectValue>
                     {validTargetAreaId === '__none__' ? 'Sin área' : areasById.get(validTargetAreaId)?.name || 'Selecciona un área'}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectContent className="bg-dark2 border-border text-text">
+                <SelectContent className="bg-dark2 border-border text-text z-50">
                   <SelectItem value="__none__" className="text-xs font-bold">
                     Sin área
                   </SelectItem>
@@ -777,21 +963,50 @@ function AssignmentPanel({
 
               <Button
                 type="button"
-                onClick={applyArea}
-                disabled={selectedIds.size === 0 || busy}
-                className="h-11 rounded-lg bg-[#4d7cfe] px-3.5 font-inter text-xs font-bold text-white transition-all hover:bg-[#3b6ae0] active:scale-95 disabled:opacity-40 sm:h-8"
+                onClick={applyBulkArea}
+                disabled={selectedIds.size === 0 || busy || bulkLimitExceeded}
+                className="btn-action h-10 rounded-lg px-4 font-inter text-xs font-bold text-white transition-all shadow-sm sm:h-9"
               >
-                {busy ? 'Aplicando…' : `Asignar a ${selectedIds.size || ''}`}
+                {busy
+                  ? 'Aplicando…'
+                  : bulkAwaitingConfirmation
+                    ? `Confirmar (${bulkShiftCount})`
+                    : bulkReplacementCount > 0
+                      ? `Revisar (${bulkShiftCount})`
+                      : `Asignar (${bulkShiftCount})`}
               </Button>
             </div>
           </div>
         </>
       )}
 
+      {/* Volunteer Profile Drawer */}
       <VolunteerProfileDrawer
         isOpen={Boolean(profileVolunteerId)}
         onClose={() => setProfileVolunteerId(null)}
         volunteerId={profileVolunteerId}
+      />
+
+      {/* Multi-Shift Scope Drawer */}
+      <AssignScopeDrawer
+        key={`${scopeDrawerVolunteer?.id || 'closed'}:${scopeDrawerTargetAreaId || '__none__'}:${scopeDrawerInitialShiftIds.join(',')}`}
+        isOpen={Boolean(scopeDrawerVolunteer)}
+        onClose={() => {
+          setScopeDrawerVolunteer(null);
+          setScopeDrawerTargetAreaId(null);
+          setScopeDrawerInitialShiftIds([]);
+        }}
+        volunteer={scopeDrawerVolunteer}
+        initialTargetAreaId={scopeDrawerTargetAreaId}
+        activeAreas={activeAreas}
+        eventDays={data.eventDays}
+        volunteerShifts={scopeDrawerVolunteer ? assignmentsByVolunteer.get(scopeDrawerVolunteer.id) || [] : []}
+        areasById={areasById}
+        busy={busy}
+        onConfirmAssign={onAssign}
+        initialSelectedShiftIds={scopeDrawerInitialShiftIds}
+        activeDayKey={dayKey}
+        activeShiftKey={shiftKey}
       />
     </section>
   );
@@ -1109,9 +1324,28 @@ export function CommitteeAreasClient({
   const [savedRequirements, setSavedRequirements] = useState<RequirementMap>(initialRequirements);
   const [toast, setToast] = useState<ToastState>({ visible: false, message: '', type: 'success' });
 
+  const [areaOverrides, setAreaOverrides] = useState<Map<string, string | null>>(new Map());
+
+  const effectiveAssignments = useMemo(
+    () => data.assignments.map((assignment) => (
+      areaOverrides.has(assignment.id)
+        ? { ...assignment, areaId: areaOverrides.get(assignment.id) ?? null }
+        : assignment
+    )),
+    [areaOverrides, data.assignments]
+  );
+
+  const effectiveData = useMemo<AreaManagementData>(
+    () => ({
+      ...data,
+      assignments: effectiveAssignments,
+    }),
+    [data, effectiveAssignments]
+  );
+
   const visibleAreas = useMemo(
-    () => data.areas.filter((area) => showArchived || area.status === 'active'),
-    [data.areas, showArchived]
+    () => effectiveData.areas.filter((area) => showArchived || area.status === 'active'),
+    [effectiveData.areas, showArchived]
   );
 
   const selectedArea = useMemo<AreaManagementItem | null>(() => {
@@ -1120,8 +1354,8 @@ export function CommitteeAreasClient({
   }, [requestedAreaId, visibleAreas]);
 
   const isDirty = JSON.stringify(requirements) !== JSON.stringify(savedRequirements);
-  const activeCount = data.areas.filter((area) => area.status === 'active').length;
-  const archivedCount = data.areas.length - activeCount;
+  const activeCount = effectiveData.areas.filter((area) => area.status === 'active').length;
+  const archivedCount = effectiveData.areas.length - activeCount;
   const busy = isPending || mutationPending;
 
   function showToast(message: string, type: ToastState['type'] = 'success', options?: Pick<ToastState, 'actionLabel' | 'onAction'>) {
@@ -1242,15 +1476,85 @@ export function CommitteeAreasClient({
   }
 
   async function handleAssign(shiftIds: string[], areaId: string | null) {
-    const result = await runMutation(() => assignVolunteerAreasAction(shiftIds, areaId));
+    const uniqueShiftIds = Array.from(new Set(shiftIds));
+    if (uniqueShiftIds.length === 0 || uniqueShiftIds.length > MAX_SHIFT_AREA_ASSIGNMENTS) {
+      showToast(`Selecciona entre 1 y ${MAX_SHIFT_AREA_ASSIGNMENTS} turnos por operación.`, 'error');
+      return false;
+    }
+
+    const previousMap = new Map<string, string | null>();
+    for (const id of uniqueShiftIds) {
+      const existing = data.assignments.find((a) => a.id === id);
+      previousMap.set(
+        id,
+        areaOverrides.has(id) ? areaOverrides.get(id) ?? null : existing?.areaId ?? null
+      );
+    }
+
+    // Apply optimistic update immediately
+    setAreaOverrides((prev) => {
+      const next = new Map(prev);
+      uniqueShiftIds.forEach((id) => next.set(id, areaId));
+      return next;
+    });
+
+    let result: Awaited<ReturnType<typeof assignVolunteerAreasAction>>;
+    try {
+      result = await runMutation(() => assignVolunteerAreasAction(uniqueShiftIds, areaId));
+    } catch {
+      setAreaOverrides((prev) => {
+        const next = new Map(prev);
+        previousMap.forEach((value, id) => next.set(id, value));
+        return next;
+      });
+      showToast('No se pudo completar la asignación. Verifica tu sesión e inténtalo nuevamente.', 'error');
+      return false;
+    }
     if (!result.success) {
+      // Revert optimistic update on failure
+      setAreaOverrides((prev) => {
+        const next = new Map(prev);
+        previousMap.forEach((val, id) => next.set(id, val));
+        return next;
+      });
       showToast(result.error || 'No se pudieron actualizar las asignaciones.', 'error');
       return false;
     }
-    const updatedCount = result.assignedCount ?? shiftIds.length;
-    showToast(updatedCount === 0
-      ? 'Los voluntarios seleccionados ya tenían esa área.'
-      : `${updatedCount} asignación${updatedCount === 1 ? '' : 'es'} actualizada${updatedCount === 1 ? '' : 's'}.`
+
+    const updatedCount = result.assignedCount ?? uniqueShiftIds.length;
+    const undoAssignments = result.previousAssignments || [];
+    showToast(
+      updatedCount === 0
+        ? 'Los voluntarios seleccionados ya tenían esa área.'
+        : `${updatedCount} asignación${updatedCount === 1 ? '' : 'es'} guardada${updatedCount === 1 ? '' : 's'}.`,
+      'success',
+      updatedCount > 0 && undoAssignments.length > 0 ? {
+        actionLabel: 'Deshacer',
+        onAction: async () => {
+          const undoMap = new Map(undoAssignments.map((assignment) => [assignment.shiftId, assignment.areaId]));
+          setAreaOverrides((prev) => {
+            const next = new Map(prev);
+            undoMap.forEach((value, id) => next.set(id, value));
+            return next;
+          });
+
+          try {
+            const revResult = await runMutation(() => restoreVolunteerAreasAction(undoAssignments));
+            if (!revResult.success) {
+              throw new Error(revResult.error || 'No se pudo revertir la asignación.');
+            }
+            showToast('Asignación revertida correctamente.', 'info');
+          } catch {
+            setAreaOverrides((prev) => {
+              const next = new Map(prev);
+              undoAssignments.forEach((assignment) => next.set(assignment.shiftId, areaId));
+              return next;
+            });
+            showToast('No se pudo revertir la asignación. Los cambios originales se mantienen.', 'error');
+          }
+          router.refresh();
+        },
+      } : undefined
     );
     router.refresh();
     return true;
@@ -1296,7 +1600,7 @@ export function CommitteeAreasClient({
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         >
-          <AssignmentPanel data={data} busy={busy} onAssign={handleAssign} />
+          <AssignmentPanel data={effectiveData} busy={busy} onAssign={handleAssign} />
         </motion.div>
       ) : view === 'coverage' ? (
         <motion.div
@@ -1306,7 +1610,7 @@ export function CommitteeAreasClient({
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         >
-          <CoveragePanel data={data} onManageAreas={() => { setView('areas'); refreshTo(null, { view: 'areas' }); }} />
+          <CoveragePanel data={effectiveData} onManageAreas={() => { setView('areas'); refreshTo(null, { view: 'areas' }); }} />
         </motion.div>
       ) : (
         <motion.div
