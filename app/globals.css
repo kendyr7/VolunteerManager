@@ -479,3 +479,13 @@ html.material-symbols-ready .material-symbols-outlined {
   width: 100% !important;
   height: 100% !important;
 }
+@keyframes toast-progress-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+.toast-progress {
+  animation-name: toast-progress-countdown;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}

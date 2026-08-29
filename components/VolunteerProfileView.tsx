@@ -69,6 +69,7 @@ export interface VolunteerProfileViewProps {
   checkedInMap?: Record<string, boolean> | Record<string, string[]>;
   checkedOutMap?: Record<string, boolean> | Record<string, string[]>;
   shiftAreasBySlot?: Record<string, ShiftAreaDetails | null>;
+  pendingShiftKeys?: ReadonlySet<string>;
 
   // Handlers
   onToggleShift?: (dayKey: string, shiftKey: string) => void;
@@ -193,6 +194,7 @@ export function VolunteerProfileView({
   checkedInMap: externalCheckedInMap,
   checkedOutMap: externalCheckedOutMap,
   shiftAreasBySlot,
+  pendingShiftKeys,
   onToggleShift: externalOnToggleShift,
   isEditingShifts = false,
   canEditShifts = true,
@@ -1184,7 +1186,12 @@ export function VolunteerProfileView({
               const dayKey = d.key;
               const assignedListFromProps = shiftsByDay[dayKey] || [];
               const assignedListFromDb = dbShiftRecords.filter(r => r.day_key === dayKey).map(r => r.shift_key);
-              const assignedList = Array.from(new Set([...assignedListFromProps, ...assignedListFromDb]));
+              // When a parent controls the schedule, it is the source of truth. Mixing its
+              // optimistic state with the older DB snapshot makes removed shifts appear
+              // selected again until Realtime finishes synchronizing.
+              const assignedList = externalShiftsByDay
+                ? assignedListFromProps
+                : Array.from(new Set([...assignedListFromProps, ...assignedListFromDb]));
               const assignedAreas = assignedList.flatMap((shiftKey) => {
                 const area = shiftAreasBySlot?.[`${dayKey}:${shiftKey}`] || null;
                 return area ? [{ shiftKey, area }] : [];
@@ -1261,11 +1268,14 @@ export function VolunteerProfileView({
 
                       const tooltipKey = `${dayKey}-${t}`;
                       const isTooltipOpen = activeShiftTooltipKey === tooltipKey;
+                      const isSavingShift = pendingShiftKeys?.has(tooltipKey) ?? false;
 
                       return (
                         <div key={t} className="flex flex-col items-center relative group">
                           <button
                             type="button"
+                            disabled={isSavingShift}
+                            aria-busy={isSavingShift}
                             onClick={(e) => {
                               if (outCheck) {
                                 e.stopPropagation();
@@ -1277,7 +1287,8 @@ export function VolunteerProfileView({
                             className={cn(
                               "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all cursor-pointer",
                               statusStyle,
-                              (canClick || outCheck) && "hover:bg-dark hover:border-border active:scale-95"
+                              (canClick || outCheck) && !isSavingShift && "hover:bg-dark hover:border-border active:scale-95",
+                              isSavingShift && "cursor-progress"
                             )}
                             title={titleText}
                           >

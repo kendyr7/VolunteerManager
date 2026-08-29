@@ -41,6 +41,9 @@ export function VolunteerProfileDrawer({
   const [isMobile, setIsMobile] = useState(false);
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit_profile'>(initialMode);
   const [isEditingShifts, setIsEditingShifts] = useState(false);
+  const [optimisticShiftStates, setOptimisticShiftStates] = useState<Record<string, boolean>>({});
+  const [pendingShiftKeys, setPendingShiftKeys] = useState<Set<string>>(() => new Set());
+  const pendingShiftKeysRef = useRef(new Set<string>());
 
   // Edit Profile Form States
   const [editFirstName, setEditFirstName] = useState('');
@@ -159,7 +162,7 @@ export function VolunteerProfileDrawer({
   // Layer 3 (fallback): flat shiftsData array.
   // NOTE: hasStoreEntry must be the reactive selector (above), NOT useVolunteerStore.getState(),
   // otherwise React will not re-render when shifts are added/removed.
-  const shiftsByDay = useMemo(() => {
+  const baseShiftsByDay = useMemo(() => {
     if (!activeVolunteer) return {};
     const result: Record<string, string[]> = {};
 
@@ -196,6 +199,30 @@ export function VolunteerProfileDrawer({
     });
     return result;
   }, [activeVolunteer, hasStoreEntry, storeShifts, globalShifts, shiftsData]);
+
+  const shiftsByDay = useMemo(() => {
+    const result = Object.fromEntries(
+      Object.entries(baseShiftsByDay).map(([dayKey, shiftKeys]) => [dayKey, [...shiftKeys]])
+    ) as Record<string, string[]>;
+
+    for (const [slotKey, assigned] of Object.entries(optimisticShiftStates)) {
+      const separatorIndex = slotKey.lastIndexOf(':');
+      const dayKey = slotKey.slice(0, separatorIndex);
+      const shiftKey = slotKey.slice(separatorIndex + 1);
+      const current = result[dayKey] || [];
+      result[dayKey] = assigned
+        ? (current.includes(shiftKey) ? current : [...current, shiftKey])
+        : current.filter(key => key !== shiftKey);
+    }
+
+    return result;
+  }, [baseShiftsByDay, optimisticShiftStates]);
+
+  useEffect(() => {
+    setOptimisticShiftStates({});
+    pendingShiftKeysRef.current.clear();
+    setPendingShiftKeys(new Set());
+  }, [activeVolunteer?.id]);
 
   const shiftAreasBySlot = useMemo(() => {
     if (!activeVolunteer) return {};
@@ -249,22 +276,47 @@ export function VolunteerProfileDrawer({
   if (!isOpen || !activeVolunteer) return null;
 
   const handleToggleShift = async (dayKey: string, shiftKey: string) => {
-    const isCurrentlyAssigned = shiftsByDay[dayKey]?.includes(shiftKey);
+    const slotKey = `${dayKey}:${shiftKey}`;
+    if (pendingShiftKeysRef.current.has(slotKey)) return;
+
+    const isCurrentlyAssigned = shiftsByDay[dayKey]?.includes(shiftKey) ?? false;
+    const shouldAssign = !isCurrentlyAssigned;
+    pendingShiftKeysRef.current.add(slotKey);
+    setPendingShiftKeys(new Set(pendingShiftKeysRef.current));
+    setOptimisticShiftStates(current => ({ ...current, [slotKey]: shouldAssign }));
 
     try {
       const result = await toggleShiftAction(
         activeVolunteer.id,
         dayKey,
         shiftKey,
-        !isCurrentlyAssigned
+        shouldAssign
       );
       if (!result.success) {
+        setOptimisticShiftStates(current => {
+          const next = { ...current };
+          delete next[slotKey];
+          return next;
+        });
         showToast(result.error || 'Error al actualizar turno', 'error');
         return;
       }
       await refresh(true);
+      setOptimisticShiftStates(current => {
+        const next = { ...current };
+        delete next[slotKey];
+        return next;
+      });
     } catch (e: any) {
+      setOptimisticShiftStates(current => {
+        const next = { ...current };
+        delete next[slotKey];
+        return next;
+      });
       showToast(e?.message || 'Error al actualizar turno', 'error');
+    } finally {
+      pendingShiftKeysRef.current.delete(slotKey);
+      setPendingShiftKeys(new Set(pendingShiftKeysRef.current));
     }
   };
 
@@ -400,6 +452,7 @@ export function VolunteerProfileDrawer({
                     checkedInMap={checkedInMap}
                     checkedOutMap={checkedOutMap}
                     shiftAreasBySlot={shiftAreasBySlot}
+                    pendingShiftKeys={pendingShiftKeys}
                     onToggleShift={handleToggleShift}
                     isEditingShifts={isEditingShifts}
                     canEditShifts={canEditShifts()}

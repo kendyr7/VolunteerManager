@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useTransition, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { recalculateReliability } from "@/app/actions/attendance";
 import { toggleShiftAction } from "@/app/actions/volunteer-actions";
@@ -70,8 +70,26 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
   const [checkedOutShifts, setCheckedOutShifts] = useState<Record<string, string[]>>(initialParsed.checkedOut);
   const [shiftAreasBySlot, setShiftAreasBySlot] = useState<Record<string, ShiftAreaDetails | null>>(initialParsed.areas);
   const [loading, setLoading] = useState(!volunteerInfo && initialShifts.length === 0);
-  const [isPending, startTransition] = useTransition();
+  const [pendingShiftKeys, setPendingShiftKeys] = useState<Set<string>>(() => new Set());
+  const pendingShiftKeysRef = useRef(new Set<string>());
   const volunteerData = volunteerInfo;
+
+  const setShiftAssigned = useCallback((dayKey: string, shiftKey: string, assigned: boolean) => {
+    setShiftsByDay(prev => {
+      const current = prev[dayKey] || [];
+      const next = assigned
+        ? (current.includes(shiftKey) ? current : [...current, shiftKey])
+        : current.filter(s => s !== shiftKey);
+      return { ...prev, [dayKey]: next };
+    });
+
+    setShiftAreasBySlot(current => {
+      const next = { ...current };
+      if (assigned) next[areaSlotKey(dayKey, shiftKey)] = next[areaSlotKey(dayKey, shiftKey)] ?? null;
+      else delete next[areaSlotKey(dayKey, shiftKey)];
+      return next;
+    });
+  }, []);
 
   // Load shifts for this volunteer
   const loadShifts = useCallback(async () => {
@@ -121,48 +139,39 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
   }, [loadShifts, supabase, volunteerId]);
 
   // Toggle shift on click
-  const handleToggleShift = (dayKey: string, shiftKey: string) => {
+  const handleToggleShift = async (dayKey: string, shiftKey: string) => {
     // If the shift is already checked-in or checked-out, do not allow toggling
     const isCheckedIn = (checkedInShifts[dayKey] || []).includes(shiftKey);
     const isCheckedOut = (checkedOutShifts[dayKey] || []).includes(shiftKey);
     if (isCheckedIn || isCheckedOut) return;
 
-    startTransition(async () => {
-      const active = (shiftsByDay[dayKey] || []).includes(shiftKey);
-      const result = await toggleShiftAction(volunteerId, dayKey, shiftKey, !active);
+    const slotKey = areaSlotKey(dayKey, shiftKey);
+    if (pendingShiftKeysRef.current.has(slotKey)) return;
+
+    const active = (shiftsByDay[dayKey] || []).includes(shiftKey);
+    const shouldAssign = !active;
+    pendingShiftKeysRef.current.add(slotKey);
+    setPendingShiftKeys(new Set(pendingShiftKeysRef.current));
+    setShiftAssigned(dayKey, shiftKey, shouldAssign);
+
+    try {
+      const result = await toggleShiftAction(volunteerId, dayKey, shiftKey, shouldAssign);
 
       if (!result.success) {
+        setShiftAssigned(dayKey, shiftKey, active);
         console.error("Error updating shift:", result.error);
         return;
       }
 
-      if (active) {
-        setShiftsByDay(prev => {
-          const current = prev[dayKey] || [];
-          return {
-            ...prev,
-            [dayKey]: current.filter(s => s !== shiftKey)
-          };
-        });
-        setShiftAreasBySlot((current) => {
-          const next = { ...current };
-          delete next[areaSlotKey(dayKey, shiftKey)];
-          return next;
-        });
-      } else {
-        setShiftsByDay(prev => {
-          const current = prev[dayKey] || [];
-          return {
-            ...prev,
-            [dayKey]: [...current, shiftKey]
-          };
-        });
-        setShiftAreasBySlot((current) => ({ ...current, [areaSlotKey(dayKey, shiftKey)]: null }));
-      }
-      
       // Recalculate reliability score
-      await recalculateReliability(volunteerId);
-    });
+      void recalculateReliability(volunteerId);
+    } catch (error) {
+      setShiftAssigned(dayKey, shiftKey, active);
+      console.error("Error updating shift:", error);
+    } finally {
+      pendingShiftKeysRef.current.delete(slotKey);
+      setPendingShiftKeys(new Set(pendingShiftKeysRef.current));
+    }
   };
 
   if (loading) {
@@ -177,7 +186,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
 
   return (
     <div className="flex flex-col gap-4 w-full pb-16">
-      {isPending && (
+      {pendingShiftKeys.size > 0 && (
         <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-text border border-emerald-500/20 font-bold px-4 py-2 rounded-xl shadow-lg flex items-center gap-2 text-xs animate-pulse">
           <span className="material-symbols-outlined text-[16px] animate-spin">sync</span>
           Guardando cambios...
@@ -191,6 +200,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
         checkedInMap={checkedInShifts}
         checkedOutMap={checkedOutShifts}
         shiftAreasBySlot={shiftAreasBySlot}
+        pendingShiftKeys={pendingShiftKeys}
         onToggleShift={handleToggleShift}
       />
     </div>
