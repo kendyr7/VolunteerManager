@@ -7,14 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { generatePinMessage, generateWaMeLink, formatE164, validatePhone8Digits } from "@/lib/whatsapp";
+import { formatE164, validatePhone8Digits } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
 import { canImportData, getAuthorizationSnapshotCache } from "@/lib/permissions";
 import { motion, AnimatePresence } from "framer-motion";
 // xlsx is loaded dynamically inside downloadExcelTemplate() and processFile()
 // to avoid bundling ~800 KB into the initial JS chunk for this route.
-import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
+import { sendBulkVolunteerCredentialsAction, sendVolunteerCredentialsAction } from "@/app/actions/whatsapp";
 import { bulkImportVolunteersAction, getPendingImportExceptionsAction } from "@/app/actions/volunteer-actions";
 import { ImportPendingApprovals } from "@/components/ImportPendingApprovals";
 import {
@@ -23,6 +23,7 @@ import {
 } from "@/lib/volunteer-name-matching";
 
 interface ParsedVolunteer {
+  id?: string;
   rowNum: number;
   firstName: string;
   lastName: string;
@@ -32,8 +33,6 @@ interface ParsedVolunteer {
   phone: string;
   committeeName: string;
   committeeId?: string;
-  pin?: string;
-  waLink?: string;
   error?: string;
   isDuplicate?: boolean;
   duplicateKind?: 'phone' | 'name';
@@ -495,22 +494,22 @@ export default function ImportPage() {
         return;
       }
 
-      for (const vol of res.importedVolunteers) {
-        const message = generatePinMessage(`${vol.firstName} ${vol.lastName}`, vol.pin, "https://volunteermanager.org");
-        const waLink = generateWaMeLink(vol.phone, message);
-
-        if (sendWelcomeMessage) {
-          // Send automatic WhatsApp message
-          await sendWelcomeWhatsAppAction(vol.phone, vol.firstName, vol.pin);
+      if (sendWelcomeMessage && res.importedVolunteers.length > 0) {
+        const delivery = await sendBulkVolunteerCredentialsAction({
+          volunteerIds: res.importedVolunteers.map(volunteer => volunteer.id),
+        });
+        if (!delivery.success || delivery.failedCount) {
+          showToast('La importación finalizó, pero algunas credenciales no pudieron enviarse por WhatsApp.', 'info');
         }
+      }
 
+      for (const vol of res.importedVolunteers) {
         results.push({
+          id: vol.id,
           firstName: vol.firstName,
           lastName: vol.lastName,
           phone: vol.phone,
-          pin: vol.pin,
           committeeName: vol.committeeName || '',
-          waLink,
         });
       }
 
@@ -1145,12 +1144,12 @@ export default function ImportPage() {
                 </div>
                 <CardTitle className="text-xl sm:text-2xl font-bold text-text">¡Importación Exitosa!</CardTitle>
                 <CardDescription className="text-text-dim text-base sm:text-lg mt-2 font-medium">
-                  Se han registrado los nuevos voluntarios y generado sus PINs de acceso.
+                  Se registraron los nuevos voluntarios. Sus PINs permanecen protegidos.
                 </CardDescription>
               </CardHeader>
               
               <CardContent className="p-6 sm:p-10 space-y-4">
-                <p className="text-xs font-bold text-text-dim uppercase tracking-widest mb-6 text-center">Lista de Envíos Pendientes (WhatsApp)</p>
+                <p className="text-xs font-bold text-text-dim uppercase tracking-widest mb-6 text-center">Voluntarios importados</p>
                 <div className="max-h-[600px] overflow-auto sm:pr-2 space-y-3">
                   {parsedData.map((vol, i) => (
                     <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 sm:p-6 bg-dark3 rounded-2xl border border-border gap-5 sm:gap-6 group hover:bg-dark2 hover:shadow-md transition-all">
@@ -1160,18 +1159,25 @@ export default function ImportPage() {
                           <p className="text-xs sm:text-sm text-text-dim font-mono flex items-center gap-1.5 bg-dark2 sm:bg-transparent px-3 py-1.5 sm:p-0 rounded-lg border sm:border-none border-border">
                             <span className="material-symbols-outlined text-[16px] text-text-dim">call</span> {vol.phone}
                           </p>
-                          <p className="text-xs sm:text-sm text-text-dim font-mono flex items-center gap-1.5 bg-dark2 sm:bg-transparent px-3 py-1.5 sm:p-0 rounded-lg border sm:border-none border-border">
-                            <span className="material-symbols-outlined text-[16px] text-text-dim">key</span> PIN: <span className="font-bold text-text">{vol.pin}</span>
+                          <p className="text-xs sm:text-sm text-text-dim flex items-center gap-1.5 bg-dark2 sm:bg-transparent px-3 py-1.5 sm:p-0 rounded-lg border sm:border-none border-border">
+                            <span className="material-symbols-outlined text-[16px] text-text-dim">shield_lock</span> PIN protegido
                           </p>
                         </div>
                       </div>
                       <Button 
                         size="sm" 
                         className="w-full sm:w-auto bg-[#25D366] hover:bg-[#1ebd5a] text-white rounded-xl px-6 font-bold shadow-sm shadow-green-500/20 h-12 sm:h-10 transition-all active:scale-[0.95]"
-                        onClick={() => window.open(vol.waLink, '_blank')}
+                        onClick={async () => {
+                          if (!vol.id) return;
+                          const delivery = await sendVolunteerCredentialsAction({ volunteerId: vol.id });
+                          showToast(
+                            delivery.success ? `Credenciales enviadas a ${vol.firstName}.` : (delivery.error || 'No se pudo enviar el WhatsApp.'),
+                            delivery.success ? 'success' : 'error'
+                          );
+                        }}
                       >
                         <span className="material-symbols-outlined text-[20px] sm:text-[18px] mr-2">send</span>
-                        Enviar PIN
+                        Enviar por WhatsApp
                       </Button>
                     </div>
                   ))}

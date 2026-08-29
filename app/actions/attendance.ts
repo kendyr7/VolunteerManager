@@ -158,15 +158,15 @@ function isCurrentTimeInShiftWindow(dayKey: string, shiftKey: string): boolean {
   return currentHour >= startWindow && currentHour <= endWindow;
 }
 
-// 1. Generate Dynamic Pass Token
+// 1. Generate the volunteer's permanent pass token
 export async function generateEntryPassToken(volunteerId: string) {
   await requireVolunteerSelfOrCapability('scan_qr_attendance', volunteerId);
 
   const payload = createEntryPassPayload(volunteerId);
 
   return {
+    version: payload.v,
     volunteerId: payload.id,
-    timestamp: payload.ts,
     signature: payload.sig,
   };
 }
@@ -764,6 +764,9 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
 
   if (volError || !volunteer) {
     return { error: "Voluntario no encontrado en el sistema." };
+  }
+  if (volunteer.status === 'archived') {
+    return { error: "El pase QR pertenece a un voluntario archivado." };
   }
 
   const volunteerName = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim();

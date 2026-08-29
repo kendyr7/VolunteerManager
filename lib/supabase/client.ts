@@ -33,22 +33,29 @@ export function createClient() {
             headers.set('Authorization', `Bearer ${globalToken}`);
             options.headers = headers;
           }
-          try {
-            const res = await fetch(url, options);
-            if (!res.ok) {
-              const text = await res.text();
-              // Don't trigger console.error overlay for 404 missing table schema errors (PGRST205)
-              if (res.status !== 404 && !text.includes('PGRST205')) {
-                console.error("Supabase fetch failed:", res.status, res.statusText, text);
+          let lastError: unknown;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+              const res = await fetch(url, options);
+              if (!res.ok) {
+                const text = await res.text();
+                // Don't trigger console.error overlay for 404 missing table schema errors (PGRST205)
+                if (res.status !== 404 && !text.includes('PGRST205')) {
+                  console.error("Supabase fetch failed:", res.status, res.statusText, text);
+                }
+                // Devolver un objeto Response que supabase pueda parsear
+                return new Response(text, { status: res.status, statusText: res.statusText, headers: res.headers });
               }
-              // Devolver un objeto Response que supabase pueda parsear
-              return new Response(text, { status: res.status, statusText: res.statusText, headers: res.headers });
+              return res;
+            } catch (err) {
+              lastError = err;
+              if (attempt < 2) {
+                await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+              }
             }
-            return res;
-          } catch (err) {
-            console.error("Supabase fetch network error:", err);
-            throw err;
           }
+          console.error("Supabase fetch network error:", lastError);
+          throw lastError;
         }
       }
     }

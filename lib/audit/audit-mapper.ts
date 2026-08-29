@@ -41,6 +41,39 @@ export interface AuditEntryViewModel {
   }> | null;
 }
 
+const PIN_TEXT_PATTERN = /(\bPIN(?:\s+de\s+acceso)?\s*[:=]\s*["']?)\d{4,8}/gi;
+
+function isPinChange(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const change = value as Record<string, unknown>;
+  return [change.field, change.label].some(candidate =>
+    typeof candidate === 'string' && candidate.toLowerCase().includes('pin')
+  );
+}
+
+function redactAuditValue(value: unknown): unknown {
+  if (typeof value === 'string') return value.replace(PIN_TEXT_PATTERN, '$1[REDACTADO]');
+  if (Array.isArray(value)) return value.filter(item => !isPinChange(item)).map(redactAuditValue);
+  if (!value || typeof value !== 'object') return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !key.toLowerCase().includes('pin'))
+      .map(([key, nestedValue]) => [key, redactAuditValue(nestedValue)])
+  );
+}
+
+export function redactSensitiveAuditDetails(details: unknown): string | null {
+  if (details === null || details === undefined) return null;
+  if (typeof details !== 'string') return JSON.stringify(redactAuditValue(details));
+
+  try {
+    return JSON.stringify(redactAuditValue(JSON.parse(details)));
+  } catch {
+    return details.replace(PIN_TEXT_PATTERN, '$1[REDACTADO]');
+  }
+}
+
 export class AuditMapper {
   /**
    * Transforms any historical production log into a unified AuditEntryViewModel.
@@ -130,12 +163,13 @@ export class AuditMapper {
     }
 
     // Details JSON parsing for structured diffs
+    const safeDetails = redactSensitiveAuditDetails(rawLog.details);
     let parsedChanges: AuditEntryViewModel['parsedChanges'] = null;
-    let cleanSubtitle = rawLog.details || '';
+    let cleanSubtitle = safeDetails || '';
 
-    if (rawLog.details && typeof rawLog.details === 'string' && rawLog.details.trim().startsWith('{')) {
+    if (safeDetails && safeDetails.trim().startsWith('{')) {
       try {
-        const parsed = JSON.parse(rawLog.details);
+        const parsed = JSON.parse(safeDetails);
         if (Array.isArray(parsed.changes) && parsed.changes.length > 0) {
           parsedChanges = parsed.changes;
           const labels = parsed.changes.map((c: any) => c.label || c.field).join(', ');
@@ -256,7 +290,7 @@ export class AuditMapper {
       user_name: rawLog.user_name || 'Sistema',
       user_role: displayActorRole,
       description: rawLog.description || '',
-      details: rawLog.details || null,
+      details: safeDetails,
       target_id: rawTargetId,
       created_at: rawLog.created_at || new Date().toISOString(),
 
@@ -273,7 +307,7 @@ export class AuditMapper {
       badgeText,
       badgeStyle,
       colorClass,
-      rawDetails: rawLog.details || null,
+      rawDetails: safeDetails,
       parsedChanges,
     };
   }

@@ -1370,7 +1370,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
         to: rawFrom,
         image: qrImage,
         filename: `pase-qr-${targetVolId}.png`,
-        caption: `🎟️ *Pase QR de ${selectedVolunteerName}*\n\nMuéstralo al coordinador al llegar. Este código es personal y vence en 30 minutos.`,
+        caption: `🎟️ *Pase QR de ${selectedVolunteerName}*\n\nMuéstralo al coordinador al llegar. Este código es personal.`,
       });
 
       if (!imageResult.success) {
@@ -1389,11 +1389,10 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
         volunteerId: targetVolId,
         volunteerName: selectedVolunteerName,
         actionType: 'Pase QR',
-        description: 'Generó su pase QR desde WhatsApp',
+        description: 'Solicitó su pase QR desde WhatsApp',
         wamid,
         context: {
           channel: 'WhatsApp',
-          expiresInMinutes: 30,
           whatsappMessageId: imageResult.messageId || null,
         },
       });
@@ -2256,7 +2255,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
             },
             {
               id: encodeAction(targetVolId, 'qr'),
-              title: 'Generar mi código QR',
+              title: 'Recibir mi código QR',
               description: 'Recibe la imagen de tu pase de entrada'
             },
             {
@@ -2278,7 +2277,7 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
       console.warn("Main Interactive List failed, sending plain text fallback:", mainListRes.error);
       await sendWhatsAppText({
         to: rawFrom,
-        text: `Hola ${firstName}, ¿cómo podemos ayudarte el día de hoy?\n\n1. Olvidé mi PIN\n2. Confirmar asistencia\n3. Consultar mis turnos\n4. Solicitar un cambio\n5. Contactar a mi coordinador\n6. Generar mi código QR\n7. Cambiar de perfil\n8. Finalizar conversación\n\nTambién puedes escribir *áreas* para consultar sus descripciones.`
+        text: `Hola ${firstName}, ¿cómo podemos ayudarte el día de hoy?\n\n1. Olvidé mi PIN\n2. Confirmar asistencia\n3. Consultar mis turnos\n4. Solicitar un cambio\n5. Contactar a mi coordinador\n6. Recibir mi código QR\n7. Cambiar de perfil\n8. Finalizar conversación\n\nTambién puedes escribir *áreas* para consultar sus descripciones.`
       });
     }
 

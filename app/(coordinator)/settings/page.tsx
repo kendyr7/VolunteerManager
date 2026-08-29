@@ -2029,7 +2029,6 @@ export default function SettingsPage() {
                                           <th className="px-3 py-2 text-slate-600 dark:text-text-dim">Voluntario</th>
                                           <th className="px-3 py-2 w-32 font-mono text-slate-600 dark:text-text-dim">Teléfono</th>
                                           <th className="px-3 py-2 w-36 text-slate-600 dark:text-text-dim">Comité</th>
-                                          <th className="px-3 py-2 text-center w-24 text-slate-600 dark:text-text-dim">PIN</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-inter">
@@ -2056,15 +2055,6 @@ export default function SettingsPage() {
                                                   {u.committee ? (
                                                     <span className="inline-block px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 text-[9px] font-bold">
                                                       {u.committee}
-                                                    </span>
-                                                  ) : (
-                                                    <span className="text-slate-400 dark:text-text-dim text-[10px]">—</span>
-                                                  )}
-                                                </td>
-                                                <td className="px-3 py-1.5 text-center">
-                                                  {u.pin ? (
-                                                    <span className="inline-block px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 font-mono text-[10px] font-bold">
-                                                      {u.pin}
                                                     </span>
                                                   ) : (
                                                     <span className="text-slate-400 dark:text-text-dim text-[10px]">—</span>

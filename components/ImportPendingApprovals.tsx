@@ -9,7 +9,7 @@ import {
   getPendingImportExceptionsAction,
   resolvePendingImportExceptionAction,
 } from '@/app/actions/volunteer-actions';
-import { sendWelcomeWhatsAppAction } from '@/app/actions/whatsapp';
+import { sendVolunteerCredentialsAction } from '@/app/actions/whatsapp';
 import type {
   PendingImportException,
   ResolvePendingImportExceptionRequest,
@@ -360,11 +360,9 @@ export function ImportPendingApprovals({
     let welcomeFailed = false;
     if (response.createdVolunteer?.sendWelcomeMessage) {
       try {
-        const welcomeResult = await sendWelcomeWhatsAppAction(
-          response.createdVolunteer.phone,
-          response.createdVolunteer.firstName,
-          response.createdVolunteer.pin
-        );
+        const welcomeResult = await sendVolunteerCredentialsAction({
+          volunteerId: response.createdVolunteer.id,
+        });
         if (!welcomeResult.success) {
           welcomeFailed = true;
           notify('Se aprobó el perfil, pero no se pudo enviar el mensaje de bienvenida.', 'info');

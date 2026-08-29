@@ -181,7 +181,6 @@ async function runFullUserScenario() {
         firstName: 'TestRealtime',
         lastName: 'NuevoVoluntario',
         phone: `+5059${Math.floor(1000000 + Math.random() * 9000000)}`,
-        pin: '1234',
         stake: 'Managua',
         neighborhood: 'Central',
         committeeId: commA?.id,

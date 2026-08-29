@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -9,13 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
-import { generateWaMeLink, validatePhone8Digits } from "@/lib/whatsapp";
-import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
+import { validatePhone8Digits } from "@/lib/whatsapp";
 import { canManageUsers } from "@/lib/permissions";
 import {
   createUserProfileAction,
   listUserProfilesAction,
   resetPlatformUserPinAction,
+  sendBulkPlatformUserPinsWhatsAppAction,
+  sendPlatformUserPinWhatsAppAction,
   updatePlatformUserStatusAction,
   updateUserProfileAction,
 } from "@/app/actions/user-actions";
@@ -112,7 +114,6 @@ interface PlatformUser {
   status: 'pending' | 'active';
   isArchived?: boolean;
   inviteLink?: string;
-  pin?: string;
 }
 
 type UserSortField = 'name' | 'phone' | 'role';
@@ -206,6 +207,20 @@ export default function UsersPage() {
   const { inputValue, setInputValue, appliedSearch, setAppliedSearch, applySearch } = useDebouncedSearch();
   const [userSortField, setUserSortField] = useState<UserSortField>('name');
   const [userSortDirection, setUserSortDirection] = useState<TableSortDirection>('asc');
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const isSelectionActive = selectedUsers.size > 0;
+    window.dispatchEvent(new CustomEvent('hide-mobile-bottom-nav', {
+      detail: { hidden: isSelectionActive },
+    }));
+
+    return () => {
+      window.dispatchEvent(new CustomEvent('hide-mobile-bottom-nav', {
+        detail: { hidden: false },
+      }));
+    };
+  }, [selectedUsers.size]);
 
   useEffect(() => {
     if (!requestedSearch) return;
@@ -214,7 +229,6 @@ export default function UsersPage() {
   }, [requestedSearch, setAppliedSearch, setInputValue]);
 
   const [isMobile, setIsMobile] = useState(false);
-  const [showPin, setShowPin] = useState(false);
   const { drawerRef: addUserDrawerRef, scrollAreaRef: addUserScrollRef } = useMobileDrawerNavigation({
     isOpen: isInviteOpen,
     onClose: () => resetInviteForm(),
@@ -272,7 +286,6 @@ export default function UsersPage() {
   const [newCommittee, setNewCommittee] = useState<string>(COMMITTEES[0]);
   const [sendWelcomeWhatsApp, setSendWelcomeWhatsApp] = useState(true);
   const [generatedInvite, setGeneratedInvite] = useState<PlatformUser | null>(null);
-  const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -311,10 +324,9 @@ export default function UsersPage() {
           phone: p.phone || '',
           role: p.role as Role,
           coordinatorType: p.coordinator_type as CoordinatorType | null,
-          committee: p.committees?.name,
-          status: p.pin ? 'active' : 'pending',
+          committee: p.committees?.[0]?.name,
+          status: 'active',
           isArchived: p.status === 'archived',
-          pin: p.pin || ''
         }))
       );
     }
@@ -385,8 +397,7 @@ export default function UsersPage() {
       role: result.user.role as Role,
       coordinatorType: result.user.coordinatorType as CoordinatorType | null,
       committee: result.user.committee,
-      status: 'pending',
-      pin: result.user.pin,
+      status: 'active',
       inviteLink: `http://localhost:3000/login`
     };
 
@@ -466,7 +477,7 @@ export default function UsersPage() {
     setConfirmModal({
       isOpen: true,
       title: 'Resetear PIN',
-      message: `¿Estás seguro de resetear el PIN de ${user.name} a '1234'?`,
+      message: `Se generará un nuevo PIN temporal para ${user.name}. Por seguridad, el PIN no se mostrará; podrás enviarlo al número registrado por WhatsApp.`,
       confirmText: 'Resetear',
       type: 'danger',
       onConfirm: async () => {
@@ -474,11 +485,52 @@ export default function UsersPage() {
         if (!result.success) {
           showToast(result.error || "Error al resetear PIN", "error");
         } else {
-          showToast(`PIN de ${user.name} reseteado a '1234'`);
+          showToast(`PIN de ${user.name} restablecido. Ya puedes enviarlo por WhatsApp.`);
           loadData();
         }
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
+    });
+  };
+
+  const handleSendPinWhatsApp = async (user: PlatformUser) => {
+    showToast(`Enviando credenciales a ${user.name}...`, 'info');
+    const result = await sendPlatformUserPinWhatsAppAction(user.id);
+    if (result.success) {
+      showToast(`Credenciales enviadas a ${user.name} por WhatsApp.`);
+    } else {
+      showToast(result.error || 'No se pudieron enviar las credenciales por WhatsApp.', 'error');
+    }
+  };
+
+  const handleToggleUserSelection = useCallback((userId: string) => {
+    setSelectedUsers(previous => {
+      const next = new Set(previous);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }, []);
+
+  const handleBulkSendUsers = () => {
+    if (selectedUsers.size === 0) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Enviar credenciales por WhatsApp',
+      message: `Se enviarán las credenciales de ${selectedUsers.size} usuario${selectedUsers.size === 1 ? '' : 's'} al teléfono registrado. Los PIN no se mostrarán. ¿Deseas continuar?`,
+      confirmText: 'Enviar WhatsApp',
+      type: 'primary',
+      onConfirm: async () => {
+        showToast('Enviando credenciales por WhatsApp...', 'info');
+        const result = await sendBulkPlatformUserPinsWhatsAppAction(Array.from(selectedUsers));
+        if (result.success) {
+          showToast(`${result.sentCount} credencial${result.sentCount === 1 ? '' : 'es'} enviada${result.sentCount === 1 ? '' : 's'}${result.failedCount ? `; ${result.failedCount} fallaron` : ''}.`, result.failedCount ? 'info' : 'success');
+        } else {
+          showToast(result.error || 'No se pudieron enviar las credenciales.', 'error');
+        }
+        setSelectedUsers(new Set());
+        setConfirmModal(previous => ({ ...previous, isOpen: false }));
+      },
     });
   };
 
@@ -505,17 +557,6 @@ export default function UsersPage() {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const getWaLink = (user: PlatformUser) => {
-    const text = `¡Hola ${user.name}! Has sido invitado como ${getPlatformRoleLabel(user)} en Volunteer Manager.\n\nIngresa con tu número y tu PIN temporal (${user.pin}) para acceder:\nhttp://localhost:3000/login`;
-    return generateWaMeLink(user.phone, text);
   };
 
   const resetInviteForm = () => {
@@ -557,6 +598,16 @@ export default function UsersPage() {
       );
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [users, appliedSearch, showArchived]);
+
+  const handleSelectAllVisibleUsers = useCallback(() => {
+    const visibleIds = filteredUsers.map(user => user.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedUsers.has(id));
+    setSelectedUsers(previous => {
+      const next = new Set(previous);
+      visibleIds.forEach(id => allSelected ? next.delete(id) : next.add(id));
+      return next;
+    });
+  }, [filteredUsers, selectedUsers]);
 
   const desktopSortedUsers = useMemo(() => {
     const rows = [...filteredUsers];
@@ -689,6 +740,45 @@ export default function UsersPage() {
             <span>Añadir</span>
           </Button>
         </motion.div>
+
+        {mounted && typeof document !== 'undefined' && createPortal(
+          <AnimatePresence>
+            {selectedUsers.size > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 32, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 32, scale: 0.96 }}
+                className="fixed left-1/2 z-[80] flex w-[92%] max-w-xl -translate-x-1/2 items-center justify-between gap-3 rounded-full border border-white/15 bg-[#141517]/95 px-4 py-2.5 text-sm shadow-[0_12px_40px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+                style={{ bottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+              >
+                <div className="flex min-w-0 items-center gap-2.5 pl-1">
+                  <Badge className="rounded-full bg-[#25D366] px-2.5 py-0.5 text-xs font-black text-black shadow-sm">{selectedUsers.size}</Badge>
+                  <span className="hidden truncate text-xs font-bold text-white sm:inline">
+                    {selectedUsers.size === 1 ? 'usuario seleccionado' : 'usuarios seleccionados'}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedUsers(new Set())}
+                    className="rounded-full px-2.5 py-1.5 text-xs font-bold text-text-dim transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                  <Button
+                    type="button"
+                    onClick={handleBulkSendUsers}
+                    className="flex h-9 items-center gap-1.5 rounded-full bg-[#25D366] px-4 text-xs font-extrabold text-black shadow-md transition-all hover:bg-[#1ebd5a] active:scale-95"
+                  >
+                    <span className="material-symbols-outlined text-[17px]">send_to_mobile</span>
+                    <span>Enviar WhatsApp</span>
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
       </div>
 
       {/* Drawer Lateral (Añadir Usuario) - Custom Fixed Drawer matching Volunteers design */}
@@ -832,15 +922,11 @@ export default function UsersPage() {
                   </p>
                 </div>
 
-                <div className="w-full bg-dark3 border border-border rounded-2xl p-3 flex items-center justify-between gap-3">
-                  <code className="text-xs text-text font-mono truncate">PIN: {generatedInvite.pin}</code>
-                  <button
-                    onClick={() => copyToClipboard(`Nombre: ${generatedInvite.name} | PIN: ${generatedInvite.pin}`)}
-                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-dark2 hover:bg-dark border border-border text-xs font-bold text-text transition-all active:scale-95 cursor-pointer"
-                  >
-                    {copied ? <span className="material-symbols-outlined text-[15px] text-emerald-500">check_circle</span> : <span className="material-symbols-outlined text-[15px]">content_copy</span>}
-                    {copied ? 'Copiado' : 'Copiar'}
-                  </button>
+                <div className="w-full bg-dark3 border border-border rounded-2xl p-4 flex items-start gap-3 text-left">
+                  <span className="material-symbols-outlined text-[20px] text-[#4d7cfe] shrink-0">shield_lock</span>
+                  <p className="text-xs text-text-dim leading-relaxed">
+                    El PIN está protegido y no puede visualizarse ni copiarse. Solo se enviará al número registrado del usuario.
+                  </p>
                 </div>
 
                 {/* Primary Meta WhatsApp Button */}
@@ -848,33 +934,13 @@ export default function UsersPage() {
                   type="button"
                   onClick={async () => {
                     showToast(`Enviando WhatsApp a ${generatedInvite.name}...`);
-                    const res = await sendWelcomeWhatsAppAction(
-                      generatedInvite.phone,
-                      generatedInvite.name,
-                      generatedInvite.pin || '1234'
-                    );
-                    if (res.success) {
-                      showToast(`✅ ¡WhatsApp enviado a ${generatedInvite.name}!`);
-                    } else {
-                      showToast(`❌ Error de WhatsApp: ${res.error}`, 'error');
-                    }
+                    await handleSendPinWhatsApp(generatedInvite);
                   }}
                   className="w-full h-11 flex items-center justify-center gap-2 rounded-full bg-[#25D366] hover:bg-[#1ebd5a] text-black font-extrabold text-xs transition-all shadow-lg active:scale-95 mt-1 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[18px]">chat</span>
                   Enviar credenciales por WhatsApp Meta
                 </Button>
-
-                {/* Direct Manual Chat Link */}
-                <a
-                  href={getWaLink(generatedInvite)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full h-10 flex items-center justify-center gap-2 rounded-full bg-dark3 hover:bg-dark border border-border text-text-dim hover:text-text font-bold text-xs transition-all"
-                >
-                  <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-                  Abrir chat manual en WhatsApp
-                </a>
 
                 <Button
                   variant="outline"
@@ -902,6 +968,24 @@ export default function UsersPage() {
             <table className="w-full text-sm text-left border-separate border-spacing-0">
               <thead className="bg-dark3 sticky top-0 z-20 text-[10px] font-bold text-text-dim uppercase tracking-wider border-b border-border/70">
                 <tr>
+                  <th className="w-12 px-3 py-4 text-center">
+                    <button
+                      type="button"
+                      onClick={handleSelectAllVisibleUsers}
+                      className={cn(
+                        'mx-auto flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border-[1.5px] transition-all',
+                        filteredUsers.length > 0 && filteredUsers.every(user => selectedUsers.has(user.id))
+                          ? 'border-[#25D366] bg-[#25D366] text-black'
+                          : filteredUsers.some(user => selectedUsers.has(user.id))
+                            ? 'border-[#25D366] bg-[#25D366]/40 text-black'
+                            : 'border-white/30 hover:border-white/60'
+                      )}
+                      aria-label="Seleccionar usuarios visibles"
+                    >
+                      {filteredUsers.length > 0 && filteredUsers.every(user => selectedUsers.has(user.id)) && <span className="material-symbols-outlined text-[14px]">check</span>}
+                      {filteredUsers.some(user => selectedUsers.has(user.id)) && !filteredUsers.every(user => selectedUsers.has(user.id)) && <span className="material-symbols-outlined text-[14px]">remove</span>}
+                    </button>
+                  </th>
                   <SortableTableHead field="name" activeField={userSortField} direction={userSortDirection} onSort={handleUserSort} className="px-5 py-4">Usuario</SortableTableHead>
                   <SortableTableHead field="phone" activeField={userSortField} direction={userSortDirection} onSort={handleUserSort} className="px-3 py-4">Teléfono</SortableTableHead>
                   <SortableTableHead field="role" activeField={userSortField} direction={userSortDirection} onSort={handleUserSort} className="px-3 py-4">Rol y Acceso</SortableTableHead>
@@ -911,13 +995,13 @@ export default function UsersPage() {
               <tbody className="divide-y divide-white/5">
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="px-5 py-8 text-center text-text-dim">
+                    <td colSpan={5} className="px-5 py-8 text-center text-text-dim">
                       Cargando usuarios...
                     </td>
                   </tr>
                 ) : filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-5 py-8 text-center text-text-dim">
+                    <td colSpan={5} className="px-5 py-8 text-center text-text-dim">
                       No se encontraron usuarios.
                     </td>
                   </tr>
@@ -938,6 +1022,19 @@ export default function UsersPage() {
                           className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
                           onClick={() => handleEditClick(user)}
                         >
+                          <td className="w-12 px-3 py-4 text-center" onClick={event => event.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleUserSelection(user.id)}
+                              className={cn(
+                                'mx-auto flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border-[1.5px] transition-all',
+                                selectedUsers.has(user.id) ? 'border-[#25D366] bg-[#25D366] text-black' : 'border-white/30 hover:border-white/60'
+                              )}
+                              aria-label={`Seleccionar a ${user.name}`}
+                            >
+                              {selectedUsers.has(user.id) && <span className="material-symbols-outlined text-[14px]">check</span>}
+                            </button>
+                          </td>
                           <td className="px-5 py-4">
                             <p className={USER_TABLE_STYLES.name}>
                               <HighlightText text={user.name} term={appliedSearch} />
@@ -982,23 +1079,14 @@ export default function UsersPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 text-[#25D366] hover:bg-[#25D366]/15 hover:text-[#25D366] transition-all active:scale-90"
-                                title="Enviar credenciales por WhatsApp Meta"
+                                title="Enviar credenciales por WhatsApp"
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   showToast(`Enviando WhatsApp a ${user.name}...`);
-                                  const res = await sendWelcomeWhatsAppAction(
-                                    user.phone,
-                                    user.name,
-                                    user.pin || '1234'
-                                  );
-                                  if (res.success) {
-                                    showToast(`✅ ¡WhatsApp enviado a ${user.name}!`);
-                                  } else {
-                                    showToast(`❌ Error enviando WhatsApp: ${res.error}`, 'error');
-                                  }
+                                  await handleSendPinWhatsApp(user);
                                 }}
                               >
-                                <span className="material-symbols-outlined text-[18px]">chat</span>
+                                <span className="material-symbols-outlined text-[18px]">send_to_mobile</span>
                               </Button>
                               <Button
                                 variant="ghost"
@@ -1051,6 +1139,10 @@ export default function UsersPage() {
                         swipeLeftText={user.isArchived ? 'Desarchivar' : 'Archivar'}
                         swipeLeftColorClass={user.isArchived ? 'text-blue-500' : 'text-amber-500'}
                         swipeLeftBgColor={user.isArchived ? 'rgba(59, 130, 246, 0.2)' : 'rgba(245, 158, 11, 0.2)'}
+
+                        isSelected={selectedUsers.has(user.id)}
+                        onToggleSelect={() => handleToggleUserSelection(user.id)}
+                        selectionModeActive={selectedUsers.size > 0}
                         
                         badges={
                           <>
@@ -1158,31 +1250,11 @@ export default function UsersPage() {
                   )}
 
                   <div className="space-y-2">
-                    <label className="block mb-1.5 text-xs font-extrabold text-text">PIN de Acceso Actual</label>
-                    <div className="flex gap-2">
-                      <div className="relative w-32 shrink-0">
-                        <input
-                          readOnly
-                          type={showPin ? "text" : "password"}
-                          value={
-                            editingUser?.pin
-                              ? editingUser.pin
-                              : ''
-                          }
-                          className="w-full h-10 pl-3 pr-8 rounded-lg border border-border bg-dark text-text-dim font-inter font-bold outline-none tracking-widest text-left"
-                        />
-                        {editingUser?.pin && (
-                          <button
-                            type="button"
-                            onClick={() => setShowPin(!showPin)}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 transition-colors flex items-center justify-center text-text-dim hover:text-text"
-                          >
-                            <span className="material-symbols-outlined text-[18px]">
-                              {showPin ? 'visibility_off' : 'visibility'}
-                            </span>
-                          </button>
-                        )}
-                      </div>
+                    <label className="block mb-1.5 text-xs font-extrabold text-text">Seguridad del PIN</label>
+                    <div className="rounded-xl border border-border bg-dark3 p-3 text-[11px] leading-relaxed text-text-dim">
+                      El PIN de acceso es privado. Nadie puede visualizarlo; solo puedes restablecerlo o enviarlo al teléfono registrado por WhatsApp.
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <Button
                         type="button"
                         variant="outline"
@@ -1192,8 +1264,16 @@ export default function UsersPage() {
                         <span className="material-symbols-outlined text-[18px]">lock_reset</span>
                         <span>Resetear PIN</span>
                       </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => editingUser && handleSendPinWhatsApp(editingUser)}
+                        className="h-10 px-4 flex items-center justify-center gap-2 border border-[#25D366]/30 rounded-lg text-[#25D366] bg-[#25D366]/10 hover:bg-[#25D366]/15 font-bold font-inter text-sm"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">chat</span>
+                        <span>Enviar por WhatsApp</span>
+                      </Button>
                     </div>
-                    <p className="text-[10px] italic font-inter text-text-dim">El PIN por defecto tras un reseteo es '1234'.</p>
                   </div>
                 </div>
 

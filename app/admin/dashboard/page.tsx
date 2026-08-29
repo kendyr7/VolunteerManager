@@ -11,13 +11,17 @@ export const metadata = {
   title: "Dashboard Global | Volunteer Manager",
 };
 
+function committeeRelationName(relation: { name?: string | null } | Array<{ name?: string | null }> | null) {
+  return (Array.isArray(relation) ? relation[0] : relation)?.name || 'Sin comité';
+}
+
 export default async function AdminDashboard() {
   const supabase = await createClient();
 
   // Fetch volunteers, committees and shifts
   const { data: volunteersData } = await supabase
     .from('volunteers')
-    .select('*, committees(name)');
+    .select('id, status, committee_id, committees(name)');
 
   const { data: committeesData } = await supabase
     .from('committees')
@@ -91,7 +95,7 @@ export default async function AdminDashboard() {
         totalRequired += req;
 
         const count = volunteers.filter(vol => {
-          const volComm = vol.committees?.name || 'Sin comité';
+          const volComm = committeeRelationName(vol.committees);
           if (volComm !== comm) return false;
           const vShifts = globalShifts[vol.id];
           return vShifts && vShifts[day.key] && vShifts[day.key].includes(shiftId);
@@ -131,7 +135,7 @@ export default async function AdminDashboard() {
         required += req;
 
         const count = volunteers.filter(vol => {
-          const volComm = vol.committees?.name || 'Sin comité';
+          const volComm = committeeRelationName(vol.committees);
           if (volComm !== c.name) return false;
           const vShifts = globalShifts[vol.id];
           return vShifts && vShifts[day.key] && vShifts[day.key].includes(shiftId);

@@ -1,13 +1,9 @@
-import crypto from "crypto";
 import { signSession, verifySessionToken } from "../lib/auth";
 import { isExtendedShiftDay, getOfficialShiftTime } from "../lib/dates";
+import { createEntryPassPayload, validateEntryPassQrValue } from "../lib/entry-pass";
 
 if (!process.env.JWT_SECRET) {
   process.env.JWT_SECRET = "test_secret_key_12345678901234567890";
-}
-
-function getSecret(): string {
-  return process.env.JWT_SECRET || "test_secret_key_12345678901234567890";
 }
 
 function testGenerateEntryPassTokenLogic(
@@ -31,15 +27,12 @@ function testGenerateEntryPassTokenLogic(
     throw new Error("No tienes permiso para generar el pase QR de este voluntario. Solo administradores pueden generar pases de otros usuarios.");
   }
 
-  const timestamp = Date.now();
-  const hmac = crypto.createHmac("sha256", getSecret());
-  hmac.update(`${targetVolunteerId}:${timestamp}`);
-  const signature = hmac.digest("hex");
+  const payload = createEntryPassPayload(targetVolunteerId);
 
   return {
-    volunteerId: targetVolunteerId,
-    timestamp,
-    signature
+    version: payload.v,
+    volunteerId: payload.id,
+    signature: payload.sig,
   };
 }
 
@@ -137,26 +130,28 @@ const adminGeneratedPass = testGenerateEntryPassTokenLogic(adminSession, volunte
 // 1. Check Payload Structure
 assert(
   typeof adminGeneratedPass.volunteerId === "string" &&
-  typeof adminGeneratedPass.timestamp === "number" &&
+  adminGeneratedPass.version === 1 &&
   typeof adminGeneratedPass.signature === "string",
-  "Admin QR payload contiene { volunteerId, timestamp, signature }"
+  "Admin QR payload contiene { version, volunteerId, signature }"
 );
 
-// 2. Validate HMAC signature as checkInVolunteer does
-const recomputedHmac = crypto.createHmac("sha256", getSecret())
-  .update(`${volunteerB}:${adminGeneratedPass.timestamp}`)
-  .digest("hex");
+// 2. Validate the same permanent payload used by checkInVolunteer
+const qrValue = JSON.stringify({
+  v: adminGeneratedPass.version,
+  id: adminGeneratedPass.volunteerId,
+  sig: adminGeneratedPass.signature,
+});
+const validation = validateEntryPassQrValue(qrValue);
 assert(
-  recomputedHmac === adminGeneratedPass.signature,
-  "QR generado por Admin pasa la validación HMAC idénticamente"
+  validation.success && validation.payload.id === volunteerB,
+  "QR generado por Admin pasa la validación HMAC"
 );
 
-// 3. Validate 30-min Expiration
-const now = Date.now();
-const ageMinutes = (now - adminGeneratedPass.timestamp) / (1000 * 60);
+// 3. Validate that repeated requests always produce the same QR
+const repeatedPass = testGenerateEntryPassTokenLogic(adminSession, volunteerB);
 assert(
-  ageMinutes < 30,
-  "QR generado por Admin conserva expiración de 30 minutos"
+  JSON.stringify(repeatedPass) === JSON.stringify(adminGeneratedPass),
+  "El QR del voluntario es permanente y no cambia entre solicitudes"
 );
 
 // 4. Validate Target Identity (Represents Volunteer B, not Admin)

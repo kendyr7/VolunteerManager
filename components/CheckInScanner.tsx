@@ -50,6 +50,40 @@ interface ScanEntry {
   isCompleted?: boolean;
 }
 
+type ScannerCamera = { id: string; label: string };
+
+const PREFERRED_CAMERA_STORAGE_KEY = 'volunteer_manager_preferred_camera_id';
+
+function getCameraPriority(camera: ScannerCamera, preferredCameraId: string | null): number {
+  if (camera.id === preferredCameraId) return 10_000;
+
+  const label = camera.label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const isFront = /\b(front|user|selfie|frontal|delantera|avant)\b/.test(label);
+  const isBack = /\b(back|rear|environment|trasera|traseira|arriere)\b/.test(label);
+  const isUltraWide = /\b(ultra[ -]?wide|ultra gran angular|0[.,][56]x)\b/.test(label);
+  const isTelephoto = /\b(telephoto|teleobjetivo|telefoto|zoom|[234]x)\b/.test(label);
+  const isPrimary = /\b(main|primary|principal|standard|camera2? 0|camara 0)\b/.test(label)
+    || label === 'back camera'
+    || label === 'rear camera';
+
+  return (isBack ? 1_000 : 0)
+    + (isPrimary ? 300 : 0)
+    - (isUltraWide ? 600 : 0)
+    - (isTelephoto ? 400 : 0)
+    - (isFront ? 1_000 : 0);
+}
+
+function orderCameras(cameras: ScannerCamera[], preferredCameraId: string | null): ScannerCamera[] {
+  return cameras
+    .map((camera, index) => ({ camera, index }))
+    .sort((a, b) => {
+      const priorityDifference = getCameraPriority(b.camera, preferredCameraId)
+        - getCameraPriority(a.camera, preferredCameraId);
+      return priorityDifference || a.index - b.index;
+    })
+    .map(({ camera }) => camera);
+}
+
 
 
 function getInitials(name: string): string {
@@ -93,7 +127,7 @@ export function CheckInScanner({
   const [mainView, setMainView] = useState<'scanner' | 'history'>(initialView);
   const [errorMsg, setErrorMsg] = useState("");
   const [sessionCount, setSessionCount] = useState(0);
-  const [camerasList, setCamerasList] = useState<Array<{ id: string, label: string }>>([]);
+  const [camerasList, setCamerasList] = useState<ScannerCamera[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>("");
   const [scanResult, setScanResult] = useState<{
     volunteer: string;
@@ -677,35 +711,24 @@ export function CheckInScanner({
 
         const config = { fps: 10 };
 
-        const cameraCandidates: Array<string | { facingMode: string }> = [];
+        const cameraCandidates: Array<string | MediaTrackConstraints> = [];
 
         try {
           const cameras = await Html5Qrcode.getCameras();
           if (cameras && cameras.length > 0) {
-            setCamerasList(cameras.map(c => ({ id: c.id, label: c.label })));
-
-            const mainBack = cameras.find(c => {
-              const lbl = c.label.toLowerCase();
-              const isBack = lbl.includes('back') || lbl.includes('rear') || lbl.includes('trasera') || lbl.includes('camara 0') || lbl.includes('camera 0');
-              const isUltra = lbl.includes('ultra') || lbl.includes('0.5x') || lbl.includes('0.6x');
-              const isTele = lbl.includes('telephoto') || lbl.includes('2x') || lbl.includes('3x') || lbl.includes('zoom');
-              return isBack && !isUltra && !isTele;
-            });
-
-            if (mainBack) {
-              cameraCandidates.push(mainBack.id);
-              setSelectedCameraId(mainBack.id);
-            } else {
-              const lastCam = cameras[cameras.length - 1];
-              cameraCandidates.push(lastCam.id);
-              setSelectedCameraId(lastCam.id);
+            let preferredCameraId: string | null = null;
+            try {
+              preferredCameraId = localStorage.getItem(PREFERRED_CAMERA_STORAGE_KEY);
+            } catch {
+              // Storage can be unavailable in private browsing modes.
             }
 
-            cameras.forEach(c => {
-              if (c.id !== selectedCameraId) {
-                cameraCandidates.push(c.id);
-              }
-            });
+            const orderedCameras = orderCameras(
+              cameras.map(camera => ({ id: camera.id, label: camera.label })),
+              preferredCameraId,
+            );
+            setCamerasList(orderedCameras);
+            cameraCandidates.push(...orderedCameras.map(camera => camera.id));
           }
         } catch {
           // Enumeration not supported
@@ -718,6 +741,9 @@ export function CheckInScanner({
           if (cancelled) break;
           try {
             await html5Qrcode.start(candidate, config, qrCodeSuccessCallback, () => {});
+            if (typeof candidate === 'string') {
+              setSelectedCameraId(candidate);
+            }
             started = true;
             break;
           } catch {
@@ -769,14 +795,18 @@ export function CheckInScanner({
         await html5QrcodeRef.current.stop();
       }
 
-      setSelectedCameraId(nextCamera.id);
-
       const qrCodeSuccessCallback = async (decodedText: string) => {
         await stopScanning();
         handleScannedData(decodedText);
       };
 
       await html5QrcodeRef.current.start(nextCamera.id, { fps: 10 }, qrCodeSuccessCallback, () => {});
+      setSelectedCameraId(nextCamera.id);
+      try {
+        localStorage.setItem(PREFERRED_CAMERA_STORAGE_KEY, nextCamera.id);
+      } catch {
+        // The camera still works even if the preference cannot be persisted.
+      }
     } catch (e) {
       console.error("Error switching camera:", e);
       setErrorMsg("No se pudo cambiar a la siguiente cámara.");

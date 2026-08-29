@@ -78,7 +78,7 @@ async function runAuditContractTests() {
 
     assert(!!log1, 'Log entry created for volunteer creation');
     assert(log1?.target_id === volId1, 'target_id matches volunteer.id');
-    assert(!JSON.stringify(log1).includes(createRes.volunteer?.pin || '____none'), 'Zero secrets: PIN is NOT stored in activity_logs');
+    assert(!JSON.stringify(log1).toLowerCase().includes('"pin"'), 'Zero secrets: PIN is NOT stored in activity_logs');
     assert(log1?.details?.includes('context'), 'details uses structured context contract');
 
     // -------------------------------------------------------------------------

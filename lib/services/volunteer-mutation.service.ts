@@ -25,6 +25,7 @@ import { getAdminSupabase } from '@/lib/supabase/admin';
 import { VolunteerDiffBuilder, VolunteerRow } from './volunteer-diff-builder';
 import { VolunteerAuditWriter, AuditActor, WriteEditAuditPayload } from './volunteer-audit-writer';
 import { getLocal8Digits, normalizePhoneE164 } from '@/lib/whatsapp';
+import { generateTemporaryPin } from '@/lib/pin-security';
 import {
   findPotentialVolunteerNameMatches,
   VolunteerNameCandidate,
@@ -55,7 +56,6 @@ export interface CreateVolunteerPayload {
   neighborhood?: string | null;
   committeeId?: string | null;
   age?: number | null;
-  pin?: string | null;
   allowSharedPhone?: boolean;
 }
 
@@ -73,7 +73,6 @@ export interface BulkImportItemPayload {
   committeeId?: string | null;
   committeeName?: string;
   age?: number | null;
-  pin?: string | null;
   sourceRow?: number | null;
   sendWelcomeMessage?: boolean;
 }
@@ -106,7 +105,6 @@ export interface UpdateStatusResult extends MutationResult {
 export interface CreateVolunteerResult extends MutationResult {
   volunteer?: {
     id: string;
-    pin: string;
   };
 }
 
@@ -121,7 +119,6 @@ export interface BulkImportResult {
     firstName: string;
     lastName: string;
     phone: string;
-    pin: string;
     committeeName?: string;
   }>;
   error?: string;
@@ -185,7 +182,6 @@ export interface ResolvePendingImportExceptionResult extends MutationResult {
     firstName: string;
     lastName: string;
     phone: string;
-    pin: string;
     sendWelcomeMessage: boolean;
   };
 }
@@ -340,7 +336,7 @@ export class VolunteerMutationService {
     payload: CreateVolunteerPayload,
     sharedPhone?: { ownerId: string; reason: string; authorizedBy: string }
   ): Promise<{ data: any | null; error: any | null }> {
-    const pin = payload.pin || String(Math.floor(1000 + Math.random() * 9000));
+    const pin = generateTemporaryPin();
     const phoneNormalized = normalizePhoneE164(payload.phone);
     const { data, error } = await supabase
       .from('volunteers')
@@ -633,7 +629,6 @@ export class VolunteerMutationService {
         success: true,
         volunteer: {
           id: inserted.id,
-          pin: inserted.pin,
         },
       };
     } catch (err) {
@@ -755,7 +750,6 @@ export class VolunteerMutationService {
           firstName: inserted.first_name,
           lastName: inserted.last_name || '',
           phone: inserted.phone,
-          pin: inserted.pin,
           committeeName: commName || undefined,
         });
 
@@ -1051,7 +1045,7 @@ export class VolunteerMutationService {
         return { success: false, error: 'Selecciona una resolución válida para el número repetido.' };
       }
 
-      const pin = String(Math.floor(1000 + Math.random() * 9000));
+      const pin = generateTemporaryPin();
       const insertPayload: Record<string, unknown> = {
         first_name: pending.first_name,
         last_name: pending.last_name || '',
@@ -1073,7 +1067,7 @@ export class VolunteerMutationService {
       const { data: inserted, error: insertError } = await supabase
         .from('volunteers')
         .insert(insertPayload)
-        .select('id, first_name, last_name, phone, pin')
+        .select('id, first_name, last_name, phone')
         .single();
       if (insertError || !inserted) {
         return { success: false, error: insertError?.message || 'No se pudo crear el voluntario.' };
@@ -1125,7 +1119,6 @@ export class VolunteerMutationService {
           firstName: inserted.first_name,
           lastName: inserted.last_name || '',
           phone: inserted.phone,
-          pin: inserted.pin,
           sendWelcomeMessage: pending.send_welcome_message === true,
         },
       };
@@ -1330,7 +1323,7 @@ export class VolunteerMutationService {
   }
 
   /**
-   * Administrative PIN reset: Sets volunteer PIN to '1234' and registers an audit log.
+   * Administrative PIN reset: generates a private temporary PIN and registers an audit log.
    */
   static async resetPin(volunteerId: string, actor: AuditActor): Promise<MutationResult> {
     try {
@@ -1348,7 +1341,7 @@ export class VolunteerMutationService {
 
       const { error: updateErr } = await supabase
         .from('volunteers')
-        .update({ pin: '1234' })
+        .update({ pin: generateTemporaryPin() })
         .eq('id', volunteerId);
 
       if (updateErr) {

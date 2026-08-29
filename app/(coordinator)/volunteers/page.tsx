@@ -38,7 +38,7 @@ import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { formatE164, validatePhone8Digits, getLocal8Digits } from "@/lib/whatsapp";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
-import { sendWelcomeWhatsAppAction, sendVolunteerCredentialsAction } from "@/app/actions/whatsapp";
+import { sendVolunteerCredentialsAction } from "@/app/actions/whatsapp";
 import { VolunteerProfileView } from "@/components/VolunteerProfileView";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 import { VolunteerTableRow } from "@/components/VolunteerTableRow";
@@ -357,7 +357,7 @@ export default function VolunteersPage() {
     setConfirmModal({
       isOpen: true,
       title: 'Resetear PIN',
-      message: `¿Estás seguro de que deseas resetear el PIN de ${vol.name}? Se establecerá el PIN temporal '1234'.`,
+      message: `Se generará un nuevo PIN temporal para ${vol.name}. Por seguridad, no se mostrará; podrás enviarlo al número registrado por WhatsApp.`,
       confirmText: 'Resetear PIN',
       type: 'primary',
       onConfirm: async () => {
@@ -367,7 +367,7 @@ export default function VolunteersPage() {
           console.error("Error resetting PIN:", res.error);
           showToast(res.error || "Error al resetear el PIN", "error");
         } else {
-          showToast(`PIN de ${vol.name} reseteado a '1234'`, "success");
+          showToast(`PIN de ${vol.name} restablecido. Ya puedes enviarlo por WhatsApp.`, "success");
         }
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }

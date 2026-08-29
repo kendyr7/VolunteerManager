@@ -37,6 +37,7 @@ const QUICK_WHEEL_ROUTES = [
   '/shifts',
   '/check-in',
   '/replacements',
+  '/users',
   '/settings',
 ] as const;
 
@@ -46,6 +47,7 @@ const QUICK_WHEEL_LABELS: Record<(typeof QUICK_WHEEL_ROUTES)[number], string> = 
   '/shifts': 'Turnos',
   '/check-in': 'Escanear QR',
   '/replacements': 'Solicitudes',
+  '/users': 'Usuarios',
   '/settings': 'Ajustes',
 };
 
@@ -213,6 +215,7 @@ function CoordinatorLayoutInner({
     if (!mounted) return item.roles.includes('Admin');
     if (!item.roles.includes(currentRole)) return false;
     if (item.href === '/dashboard' && !canViewDashboard()) return false;
+    if (item.href === '/users' && !canManageUsers()) return false;
     if (currentRole === 'Editor') {
       if (item.href === '/volunteers' && !canViewVolunteers()) return false;
       if (item.href === '/areas' && !canManageOwnAreaCoverage()) return false;
@@ -221,7 +224,6 @@ function CoordinatorLayoutInner({
       if (item.href === '/replacements' && !canViewRequests()) return false;
       if (item.href === '/reports' && !canViewReports()) return false;
       if (item.href === '/import' && !canImportData()) return false;
-      if (item.href === '/users' && !canManageUsers()) return false;
     }
     if (currentRole === 'Lector') {
       if (item.href === '/volunteers' && !canViewVolunteers()) return false;
@@ -248,6 +250,9 @@ function CoordinatorLayoutInner({
       { name: 'Pendientes', href: '/replacements?tab=pending', icon: 'pending_actions' },
       { name: 'Historial', href: '/replacements?tab=history', icon: 'history' },
     ],
+    '/users': canManageUsers()
+      ? [{ name: 'Agregar usuario', href: '/users?action=new', icon: 'person_add' }]
+      : [],
     '/settings': [
       {
         name: resolvedTheme === 'dark' ? 'Tema claro' : 'Tema oscuro',

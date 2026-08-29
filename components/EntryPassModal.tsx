@@ -42,9 +42,8 @@ export function EntryPassModal({
   volunteerName,
   committeeName,
 }: EntryPassModalProps) {
-  const [tokenData, setTokenData] = useState<{ id: string; ts: number; sig: string } | null>(null);
+  const [tokenData, setTokenData] = useState<{ v: 1; id: string; sig: string } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<number>(1800);
   const [todayShifts, setTodayShifts] = useState<VolunteerScheduleShift[]>([]);
   const [mounted, setMounted] = useState(false);
 
@@ -54,8 +53,7 @@ export function EntryPassModal({
     setLoading(true);
     try {
       const res = await generateEntryPassToken(volunteerId);
-      setTokenData({ id: res.volunteerId, ts: res.timestamp, sig: res.signature });
-      setTimeLeft(1800);
+      setTokenData({ v: res.version, id: res.volunteerId, sig: res.signature });
 
       const schedule = await getVolunteerScheduleAction(volunteerId);
       if (schedule.success) {
@@ -74,26 +72,6 @@ export function EntryPassModal({
   useEffect(() => {
     if (isOpen) loadTokenAndShifts();
   }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen || !tokenData) return;
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) { clearInterval(timer); loadTokenAndShifts(); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [isOpen, tokenData]);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Time expiry warning — last 5 mins
-  const isExpiringSoon = timeLeft <= 300;
 
   const qrValue = tokenData ? JSON.stringify(tokenData) : "";
   if (!mounted) return null;
@@ -187,45 +165,24 @@ export function EntryPassModal({
                   {/* Volunteer identity */}
                   <div className="text-center">
                     <p className="text-base font-semibold text-white tracking-tight">{volunteerName}</p>
-                    <div className="flex items-center justify-center gap-2 mt-2">
+                    <div className="flex items-center justify-center mt-2">
                       <Badge variant="secondary" className="bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/25 font-inter font-bold text-[10px] py-0.5 px-2.5">
                         {committeeName}
-                      </Badge>
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-inter font-bold text-[10px] py-0.5 px-2.5">
-                        Pase Activo
                       </Badge>
                     </div>
                   </div>
 
-                  {/* Timer + refresh */}
-                  <div className="flex items-center justify-center gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                        <span className={`material-symbols-outlined text-[18px] ${isExpiringSoon ? 'text-amber-400' : 'text-emerald-400'}`}>
-                          timer
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-none mb-1">
-                          Vence en
-                        </p>
-                        <span className={`font-inter text-lg font-bold tabular-nums leading-none ${isExpiringSoon ? 'text-amber-400' : 'text-emerald-400'}`}>
-                          {formatTime(timeLeft)}
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={loadTokenAndShifts}
-                      disabled={loading}
-                      className="btn-action h-10 px-4 rounded-full text-xs font-bold text-white shadow-lg shadow-blue-500/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none disabled:transform-none"
-                    >
-                      <span className={`material-symbols-outlined text-[16px] ${loading ? 'animate-spin' : ''}`}>
-                        refresh
-                      </span>
-                      Actualizar
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={loadTokenAndShifts}
+                    disabled={loading}
+                    className="btn-action h-10 px-4 rounded-full text-xs font-bold text-white shadow-lg shadow-blue-500/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none disabled:transform-none"
+                  >
+                    <span className={`material-symbols-outlined text-[16px] ${loading ? 'animate-spin' : ''}`}>
+                      refresh
+                    </span>
+                    Volver a cargar
+                  </button>
                 </div>
 
                 {/* ── Right column: shifts + close ── */}

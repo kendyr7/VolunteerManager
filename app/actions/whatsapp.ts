@@ -1,8 +1,9 @@
 'use server'
 
-import { isWhatsAppCapacityError, sendVolunteerWelcomeTemplate } from "@/lib/whatsapp-api";
+import { isWhatsAppCapacityError } from "@/lib/whatsapp-api";
 import { formatE164 } from "@/lib/whatsapp";
-import { requireCapability } from "@/lib/authorization";
+import { generateTemporaryPin } from '@/lib/pin-security';
+import { getAuthorizationSnapshot, requireCapability } from "@/lib/authorization";
 import { hasCapability } from "@/lib/role-permissions";
 import { createActivityLog } from "@/app/actions/activity-actions";
 import { getAdminSupabase } from '@/lib/supabase/admin';
@@ -26,6 +27,24 @@ export type ReminderDeliveryLog = {
   delivery_error_details: string | null;
   sent_at: string;
 };
+
+async function requireCredentialDeliveryAuthorization() {
+  const authorization = await getAuthorizationSnapshot();
+  const allowed = authorization.authenticated && (
+    hasCapability(authorization, 'view_notices') ||
+    hasCapability(authorization, 'create_volunteer') ||
+    hasCapability(authorization, 'import_volunteers') ||
+    hasCapability(authorization, 'manage_platform_users')
+  );
+  if (!allowed) throw new Error('No tienes permiso para enviar credenciales por WhatsApp.');
+  return authorization;
+}
+
+function canDeliverCredentialsGlobally(authorization: Awaited<ReturnType<typeof getAuthorizationSnapshot>>) {
+  return hasCapability(authorization, 'view_all_volunteers') ||
+    hasCapability(authorization, 'import_volunteers') ||
+    hasCapability(authorization, 'manage_platform_users');
+}
 
 export type ReminderCapacityProjectionRow = ReminderCapacityDay;
 export type ReminderCapacityProjection = PersistedReminderCapacityPlan;
@@ -90,43 +109,6 @@ export async function getReminderDeliveryLogsAction() {
   }
 }
 
-export async function sendWelcomeWhatsAppAction(phone: string, name: string, pin: string) {
-  try {
-    const { getAuthorizationSnapshot } = await import('@/lib/authorization');
-    const authorization = await getAuthorizationSnapshot();
-    if (
-      !authorization.authenticated ||
-      (!hasCapability(authorization, 'manage_platform_users') &&
-       !hasCapability(authorization, 'view_notices') &&
-       !hasCapability(authorization, 'create_volunteer') &&
-       !hasCapability(authorization, 'import_volunteers'))
-    ) {
-      return { success: false, error: "No tienes permiso para enviar credenciales por WhatsApp." };
-    }
-
-    const formattedPhone = formatE164(phone);
-    if (!formattedPhone) {
-      return { success: false, error: "Teléfono inválido" };
-    }
-
-    const result = await sendVolunteerWelcomeTemplate({
-      to: formattedPhone,
-      name,
-      pin
-    });
-
-    if (!result.success) {
-      console.error("Error enviando WhatsApp de bienvenida:", result.error);
-      return { success: false, error: result.error };
-    }
-
-    return { success: true, messageId: result.messageId };
-  } catch (err: unknown) {
-    console.error("Error en sendWelcomeWhatsAppAction:", err);
-    return { success: false, error: "Error interno del servidor" };
-  }
-}
-
 export async function sendVolunteerCredentialsAction({
   volunteerId,
   forcePinReset = false,
@@ -135,7 +117,7 @@ export async function sendVolunteerCredentialsAction({
   forcePinReset?: boolean;
 }) {
   try {
-    const authorization = await requireCapability('view_notices');
+    const authorization = await requireCredentialDeliveryAuthorization();
     const supabase = await getAdminSupabase();
 
     const { data: volunteer, error: volunteerError } = await supabase
@@ -149,7 +131,7 @@ export async function sendVolunteerCredentialsAction({
     }
 
     if (
-      !hasCapability(authorization, 'view_all_volunteers') &&
+      !canDeliverCredentialsGlobally(authorization) &&
       authorization.committeeId !== volunteer.committee_id
     ) {
       return { success: false, error: 'Solo puedes enviar credenciales a voluntarios de tu comité.' };
@@ -163,7 +145,7 @@ export async function sendVolunteerCredentialsAction({
 
     let pin = volunteer.pin;
     if (!pin || forcePinReset) {
-      pin = String(Math.floor(1000 + Math.random() * 9000));
+      pin = generateTemporaryPin();
       const { error: updatePinError } = await supabase
         .from('volunteers')
         .update({ pin, updated_at: new Date().toISOString() })
@@ -221,7 +203,7 @@ export async function sendBulkVolunteerCredentialsAction({
   forcePinReset?: boolean;
 }) {
   try {
-    const authorization = await requireCapability('view_notices');
+    const authorization = await requireCredentialDeliveryAuthorization();
     if (!Array.isArray(volunteerIds) || volunteerIds.length === 0) {
       return { success: false, error: 'No se seleccionaron voluntarios.' };
     }
@@ -234,7 +216,7 @@ export async function sendBulkVolunteerCredentialsAction({
       .in('id', volunteerIds)
       .neq('status', 'archived');
 
-    if (!hasCapability(authorization, 'view_all_volunteers')) {
+    if (!canDeliverCredentialsGlobally(authorization)) {
       query = query.eq('committee_id', authorization.committeeId!);
     }
 
@@ -274,7 +256,7 @@ export async function sendBulkVolunteerCredentialsAction({
 
       let pin = vol.pin;
       if (!pin || forcePinReset) {
-        pin = String(Math.floor(1000 + Math.random() * 9000));
+        pin = generateTemporaryPin();
         await supabase
           .from('volunteers')
           .update({ pin, updated_at: new Date().toISOString() })

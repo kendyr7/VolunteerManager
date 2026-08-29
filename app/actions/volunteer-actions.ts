@@ -208,7 +208,7 @@ export async function swapVolunteerActivationAction(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Resets a volunteer's PIN to '1234' and registers an audit log (target_id = volunteer.id).
+ * Generates a new private temporary PIN and registers an audit log (target_id = volunteer.id).
  */
 export async function resetVolunteerPinAction(volunteerId: string): Promise<MutationResult> {
   if (!volunteerId) {

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { validatePhone8Digits } from "@/lib/whatsapp";
-import { sendWelcomeWhatsAppAction } from "@/app/actions/whatsapp";
+import { sendVolunteerCredentialsAction } from "@/app/actions/whatsapp";
 import { createVolunteerAction } from "@/app/actions/volunteer-actions";
 import { SharedPhoneWarning } from "@/components/SharedPhoneWarning";
 
@@ -93,11 +93,9 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
         return;
       }
 
-      const pin = result.volunteer.pin;
-
       if (sendWelcomeMessage) {
         try {
-          const waResult = await sendWelcomeWhatsAppAction(sanitizedPhone, first_name, pin);
+          const waResult = await sendVolunteerCredentialsAction({ volunteerId: result.volunteer.id });
           if (!waResult.success) {
             showToast("Voluntario añadido, pero falló el envío de WhatsApp", "info");
           } else {

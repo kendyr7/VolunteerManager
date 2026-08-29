@@ -267,7 +267,6 @@ export async function logImportActivityAction(
     lastName: string;
     phone: string;
     committeeName?: string;
-    pin?: string;
   }>,
   customUserName?: string
 ): Promise<boolean> {
@@ -287,7 +286,6 @@ export async function logImportActivityAction(
         lastName: u.lastName,
         phone: u.phone,
         committee: u.committeeName || '',
-        pin: u.pin || ''
       }))
     };
 

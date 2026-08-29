@@ -14,7 +14,7 @@ const TUTORIALS = [
     title: "Cómo usar el bot de WhatsApp",
     shortTitle: "Bot de WhatsApp",
     description: "Aprende a iniciar la conversación, identificar tu perfil y abrir las opciones del bot.",
-    duration: "00:20",
+    duration: "00:22",
     icon: "chat",
     accent: "green" as const,
     src: "/tutorials/whatsapp-bot.mp4",
@@ -25,13 +25,25 @@ const TUTORIALS = [
     id: "request",
     title: "Cómo solicitar un cambio de turno",
     shortTitle: "Cambio de turno",
-    description: "Mira cómo enviar una solicitud desde el portal o desde el bot y qué sucede después.",
-    duration: "00:24",
+    description: "Mira cómo enviar una solicitud desde el portal móvil y qué sucede después.",
+    duration: "00:28",
     icon: "published_with_changes",
     accent: "blue" as const,
     src: "/tutorials/shift-request.mp4",
     poster: "/tutorials/shift-request.png",
     captions: "/tutorials/shift-request.vtt",
+  },
+  {
+    id: "attendance",
+    title: "Cómo registrar tu entrada y salida",
+    shortTitle: "Registro con QR",
+    description: "Aprende qué hacer al llegar a la mesa de Tecnología y al finalizar tu jornada de servicio.",
+    duration: "00:49",
+    icon: "qr_code_scanner",
+    accent: "blue" as const,
+    src: "/tutorials/qr-attendance.mp4",
+    poster: "/tutorials/qr-attendance.png",
+    captions: "/tutorials/qr-attendance.vtt",
   },
 ];
 
@@ -67,7 +79,7 @@ export function VolunteerTutorials({ onClose, onStartRequest }: VolunteerTutoria
         <div
           role="tablist"
           aria-label="Seleccionar tutorial en video"
-          className="grid grid-cols-2 gap-2 border-b border-border p-3 lg:block lg:space-y-1 lg:border-b-0 lg:border-r lg:p-3"
+          className="grid grid-cols-3 gap-2 border-b border-border p-3 lg:block lg:space-y-1 lg:border-b-0 lg:border-r lg:p-3"
         >
           {TUTORIALS.map(tutorial => {
             const isActive = tutorial.id === activeTutorial.id;
@@ -106,7 +118,7 @@ export function VolunteerTutorials({ onClose, onStartRequest }: VolunteerTutoria
         </div>
 
         <div id="tutorial-video-panel" role="tabpanel" className="min-w-0 p-3 sm:p-5">
-          <div className="overflow-hidden rounded-xl bg-black ring-1 ring-inset ring-white/10">
+          <div className="mx-auto max-w-[430px] overflow-hidden rounded-xl bg-black ring-1 ring-inset ring-white/10">
             <video
               key={activeTutorial.id}
               controls
@@ -114,7 +126,7 @@ export function VolunteerTutorials({ onClose, onStartRequest }: VolunteerTutoria
               preload="metadata"
               poster={activeTutorial.poster}
               aria-label={activeTutorial.title}
-              className="aspect-video w-full bg-black object-contain"
+              className="aspect-[9/16] w-full bg-black object-contain"
             >
               <source src={activeTutorial.src} type="video/mp4" />
               <track

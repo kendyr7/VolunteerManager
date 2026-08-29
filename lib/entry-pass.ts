@@ -1,11 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-export const ENTRY_PASS_VALIDITY_MS = 30 * 60 * 1000;
-export const ENTRY_PASS_CLOCK_SKEW_MS = 5 * 60 * 1000;
-
 export type EntryPassPayload = {
+  v: 1;
   id: string;
-  ts: number;
   sig: string;
 };
 
@@ -17,26 +14,22 @@ function getEntryPassSecret(): string {
   return secret;
 }
 
-function signEntryPass(volunteerId: string, timestamp: number): string {
+function signEntryPass(volunteerId: string): string {
   return createHmac('sha256', getEntryPassSecret())
-    .update(`${volunteerId}:${timestamp}`)
+    .update(`entry-pass:v1:${volunteerId}`)
     .digest('hex');
 }
 
-export function createEntryPassPayload(
-  volunteerId: string,
-  timestamp = Date.now(),
-): EntryPassPayload {
+export function createEntryPassPayload(volunteerId: string): EntryPassPayload {
   return {
+    v: 1,
     id: volunteerId,
-    ts: timestamp,
-    sig: signEntryPass(volunteerId, timestamp),
+    sig: signEntryPass(volunteerId),
   };
 }
 
 export function validateEntryPassQrValue(
   qrValue: string,
-  now = Date.now(),
 ): { success: true; payload: EntryPassPayload } | { success: false; error: string } {
   let candidate: unknown;
   try {
@@ -49,12 +42,12 @@ export function validateEntryPassQrValue(
     return { success: false, error: 'Código QR inválido. Formato no compatible.' };
   }
 
-  const { id, ts, sig } = candidate as Partial<EntryPassPayload>;
-  if (typeof id !== 'string' || !id || typeof ts !== 'number' || typeof sig !== 'string' || !sig) {
+  const { v, id, sig } = candidate as Partial<EntryPassPayload>;
+  if (v !== 1 || typeof id !== 'string' || !id || typeof sig !== 'string' || !sig) {
     return { success: false, error: 'Código QR inválido. Formato no compatible.' };
   }
 
-  const expectedSignature = signEntryPass(id, ts);
+  const expectedSignature = signEntryPass(id);
   const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
   const receivedBuffer = Buffer.from(sig, 'utf8');
   const hasValidSignature = expectedBuffer.length === receivedBuffer.length
@@ -64,13 +57,5 @@ export function validateEntryPassQrValue(
     return { success: false, error: 'Código QR no válido o alterado.' };
   }
 
-  const elapsed = now - ts;
-  if (elapsed > ENTRY_PASS_VALIDITY_MS || elapsed < -ENTRY_PASS_CLOCK_SKEW_MS) {
-    return {
-      success: false,
-      error: 'El código QR ha expirado. Por favor, solicita al voluntario generar uno nuevo.',
-    };
-  }
-
-  return { success: true, payload: { id, ts, sig } };
+  return { success: true, payload: { v, id, sig } };
 }

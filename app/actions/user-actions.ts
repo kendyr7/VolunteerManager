@@ -7,8 +7,14 @@ import { requireCapability } from '@/lib/authorization';
 import { CoordinatorType } from '@/lib/role-permissions';
 import { sendVolunteerWelcomeTemplate } from '@/lib/whatsapp-api';
 import { formatE164 } from '@/lib/whatsapp';
+import { generateTemporaryPin } from '@/lib/pin-security';
 
 type PlatformRole = 'Admin' | 'Editor' | 'Lector';
+
+function relationName(relation: { name?: string | null } | Array<{ name?: string | null }> | null): string | undefined {
+  const row = Array.isArray(relation) ? relation[0] : relation;
+  return row?.name || undefined;
+}
 
 export async function getCurrentSettingsProfileAction() {
   try {
@@ -41,7 +47,10 @@ export async function listUserProfilesAction() {
     await requireCapability('manage_platform_users');
     const supabase = await getAdminSupabase();
     const [profilesResult, committeesResult] = await Promise.all([
-      supabase.from('profiles').select('*, committees(name)').order('created_at', { ascending: false }),
+      supabase
+        .from('profiles')
+        .select('id, full_name, phone, role, coordinator_type, committee_id, status, created_at, committees(name)')
+        .order('created_at', { ascending: false }),
       supabase.from('committees').select('id, name').or('status.is.null,status.neq.archived'),
     ]);
     const error = profilesResult.error || committeesResult.error;
@@ -87,7 +96,7 @@ export async function createUserProfileAction({
       return { success: false as const, error: 'Selecciona el comité del Coordinador de comité.' };
     }
 
-    const pin = Math.floor(1000 + Math.random() * 9000).toString();
+    const pin = generateTemporaryPin();
     const supabase = await getAdminSupabase();
     const { data: inserted, error } = await supabase
       .from('profiles')
@@ -99,7 +108,7 @@ export async function createUserProfileAction({
         committee_id: normalizedType === 'committee' ? committeeId : null,
         pin,
       })
-      .select('*, committees(name)')
+      .select('id, full_name, phone, role, coordinator_type, committee_id, status, committees(name)')
       .single();
 
     if (error) {
@@ -132,8 +141,7 @@ export async function createUserProfileAction({
         phone: inserted.phone,
         role: inserted.role,
         coordinatorType: inserted.coordinator_type,
-        committee: inserted.committees?.name,
-        pin: inserted.pin,
+        committee: relationName(inserted.committees),
       },
       waSuccess,
       waError,
@@ -185,7 +193,7 @@ export async function updateUserProfileAction({
         committee_id: normalizedType === 'committee' ? committeeId : null,
       })
       .eq('id', userId)
-      .select('*, committees(name)')
+      .select('id, full_name, phone, role, coordinator_type, committee_id, status, committees(name)')
       .single();
     if (error) return { success: false as const, error: `Error al actualizar usuario: ${error.message}` };
 
@@ -206,7 +214,7 @@ export async function updateUserProfileAction({
         phone: updated.phone,
         role: updated.role,
         coordinatorType: updated.coordinator_type,
-        committee: updated.committees?.name,
+        committee: relationName(updated.committees),
       },
     };
   } catch (error) {
@@ -219,7 +227,10 @@ export async function resetPlatformUserPinAction(userId: string) {
     const actor = await requireCapability('manage_platform_users');
     const supabase = await getAdminSupabase();
     const { data: user } = await supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle();
-    const { error } = await supabase.from('profiles').update({ pin: '1234' }).eq('id', userId);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ pin: generateTemporaryPin() })
+      .eq('id', userId);
     if (error) return { success: false as const, error: error.message };
     await supabase.from('activity_logs').insert({
       user_name: actor.name,
@@ -230,6 +241,122 @@ export async function resetPlatformUserPinAction(userId: string) {
       target_id: userId,
     });
     return { success: true as const };
+  } catch (error) {
+    return { success: false as const, error: error instanceof Error ? error.message : 'No autorizado.' };
+  }
+}
+
+export async function sendPlatformUserPinWhatsAppAction(userId: string) {
+  try {
+    const actor = await requireCapability('manage_platform_users');
+    const supabase = await getAdminSupabase();
+    const { data: user, error: fetchError } = await supabase
+      .from('profiles')
+      .select('id, full_name, phone, pin, status')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (fetchError || !user) {
+      return { success: false as const, error: 'No se encontró el usuario.' };
+    }
+    if (user.status === 'archived') {
+      return { success: false as const, error: 'No se pueden enviar credenciales a un usuario archivado.' };
+    }
+
+    const phone = formatE164(user.phone || '');
+    if (!phone) return { success: false as const, error: 'El usuario no tiene un teléfono válido.' };
+
+    let pin = user.pin as string | null;
+    if (!pin) {
+      pin = generateTemporaryPin();
+      const { error: updateError } = await supabase.from('profiles').update({ pin }).eq('id', userId);
+      if (updateError) return { success: false as const, error: 'No se pudo generar el PIN de acceso.' };
+    }
+
+    const delivery = await sendVolunteerWelcomeTemplate({
+      to: phone,
+      name: user.full_name || 'Usuario',
+      pin,
+    });
+    if (!delivery.success) {
+      return { success: false as const, error: delivery.error || 'No se pudo enviar el PIN por WhatsApp.' };
+    }
+
+    await supabase.from('activity_logs').insert({
+      user_name: actor.name,
+      user_role: actor.role,
+      action_type: 'Seguridad',
+      description: `Envió el PIN de acceso de ${user.full_name || 'un usuario'} por WhatsApp`,
+      details: JSON.stringify({ userId, operation: 'platform_user_pin_delivery' }),
+      target_id: userId,
+    });
+
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, error: error instanceof Error ? error.message : 'No autorizado.' };
+  }
+}
+
+export async function sendBulkPlatformUserPinsWhatsAppAction(userIds: string[]) {
+  try {
+    const actor = await requireCapability('manage_platform_users');
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return { success: false as const, error: 'No se seleccionaron usuarios.' };
+    }
+
+    const supabase = await getAdminSupabase();
+    const { data: users, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, phone, pin, status')
+      .in('id', userIds)
+      .neq('status', 'archived');
+    if (error || !users) return { success: false as const, error: 'No se pudieron cargar los usuarios seleccionados.' };
+
+    let sentCount = 0;
+    let failedCount = 0;
+    const results: Array<{ id: string; name: string; success: boolean; error?: string }> = [];
+
+    for (const user of users) {
+      const name = user.full_name || 'Usuario';
+      const phone = formatE164(user.phone || '');
+      if (!phone) {
+        failedCount++;
+        results.push({ id: user.id, name, success: false, error: 'Teléfono inválido o ausente.' });
+        continue;
+      }
+
+      let pin = user.pin as string | null;
+      if (!pin) {
+        pin = generateTemporaryPin();
+        const { error: pinError } = await supabase.from('profiles').update({ pin }).eq('id', user.id);
+        if (pinError) {
+          failedCount++;
+          results.push({ id: user.id, name, success: false, error: 'No se pudo generar el PIN.' });
+          continue;
+        }
+      }
+
+      const delivery = await sendVolunteerWelcomeTemplate({ to: phone, name, pin });
+      if (!delivery.success) {
+        failedCount++;
+        results.push({ id: user.id, name, success: false, error: delivery.error || 'WhatsApp rechazó el envío.' });
+        continue;
+      }
+
+      sentCount++;
+      results.push({ id: user.id, name, success: true });
+      await supabase.from('activity_logs').insert({
+        user_name: actor.name,
+        user_role: actor.role,
+        action_type: 'Seguridad',
+        description: `Envió el PIN de acceso de ${name} por WhatsApp`,
+        details: JSON.stringify({ userId: user.id, operation: 'platform_user_pin_delivery_bulk' }),
+        target_id: user.id,
+      });
+      if (users.length > 1) await new Promise(resolve => setTimeout(resolve, 150));
+    }
+
+    return { success: true as const, total: users.length, sentCount, failedCount, results };
   } catch (error) {
     return { success: false as const, error: error instanceof Error ? error.message : 'No autorizado.' };
   }

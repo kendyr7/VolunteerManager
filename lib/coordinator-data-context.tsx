@@ -28,6 +28,15 @@ import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 import { withShiftAreaDetails } from '@/lib/shift-area';
 
 const STALE_TIME_MS = 60_000;
+const SAFE_VOLUNTEER_FIELDS = 'id, first_name, last_name, phone, stake, neighborhood, committee_id, age, status, created_at, committees(name)';
+
+function withoutSensitiveVolunteerFields(record: any) {
+  if (!record || typeof record !== 'object') return record;
+  const safeRecord = { ...record };
+  delete safeRecord.pin;
+  delete safeRecord.pin_hash;
+  return safeRecord;
+}
 
 interface CoordinatorDataContextValue {
   rawVolunteers: any[];
@@ -220,12 +229,12 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             ? fetchAllRows(
                 supabase,
                 'volunteers',
-                '*, committees(name)'
+                SAFE_VOLUNTEER_FIELDS
               )
             : fetchAllRows(
                 supabase,
                 'volunteers',
-                '*, committees(name)',
+                SAFE_VOLUNTEER_FIELDS,
                 (q) => q.eq('committee_id', committeeId!)
               );
 
@@ -408,8 +417,8 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             timestamp: new Date().toISOString()
           });
 
-          const newRec = payload.new as any;
-          const oldRec = payload.old as any;
+          const newRec = withoutSensitiveVolunteerFields(payload.new);
+          const oldRec = withoutSensitiveVolunteerFields(payload.old);
           const volName = newRec ? `${newRec.first_name || ''} ${newRec.last_name || ''}`.trim() : undefined;
 
           realtimeDebugLogger.addLog({
@@ -420,13 +429,13 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             volunteerId: newRec?.id || oldRec?.id,
             volunteerName: volName,
             details: `Volunteer ${payload.eventType}: ${volName || ''} (${newRec?.neighborhood || ''})`,
-            payload: payload.eventType === 'DELETE' ? payload.old : payload.new,
+            payload: payload.eventType === 'DELETE' ? oldRec : newRec,
           });
 
-          if (payload.eventType === 'DELETE' && payload.old) {
-            eventQueueRef.current?.enqueue('DELETE', payload.old, 'volunteers', traceId);
-          } else if (payload.eventType && payload.new) {
-            eventQueueRef.current?.enqueue(payload.eventType as any, payload.new, 'volunteers', traceId);
+          if (payload.eventType === 'DELETE' && oldRec) {
+            eventQueueRef.current?.enqueue('DELETE', oldRec, 'volunteers', traceId);
+          } else if (payload.eventType && newRec) {
+            eventQueueRef.current?.enqueue(payload.eventType as any, newRec, 'volunteers', traceId);
           }
         }
       )
