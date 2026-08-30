@@ -69,6 +69,7 @@ export const metadata: Metadata = {
 import { AutoLogout } from "@/components/AutoLogout";
 import { TokenProvider } from "@/components/TokenProvider";
 import { UnofficialSiteBanner } from "@/components/UnofficialSiteBanner";
+import { AppInstallPrompt } from "@/components/AppInstallPrompt";
 import { cookies } from "next/headers";
 
 export default async function RootLayout({
@@ -98,6 +99,7 @@ export default async function RootLayout({
         <TokenProvider token={sessionToken} />
         <AutoLogout />
         <UnofficialSiteBanner initialAcknowledged={hasAcknowledgedUnofficialSite} />
+        <AppInstallPrompt />
         {children}
         <Script
           id="material-symbols-font-ready"
