@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import {
+  ensureBrowserPushSubscription,
+  getBrowserPushSubscription,
+  restoreBrowserPushSubscription,
+  setBrowserPushPreference,
+} from '@/lib/push/browser';
 
 type PushState = { configured: boolean; active: boolean; serverActive?: boolean; publicKey?: string; requests?: boolean; coverage?: boolean };
 const focusStyle = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] focus-visible:ring-offset-2 focus-visible:ring-offset-dark2';
@@ -25,20 +31,6 @@ function browserSupport() {
   return '';
 }
 
-function keyBytes(key: string) {
-  return Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), character => character.charCodeAt(0));
-}
-
-async function worker() {
-  await navigator.serviceWorker.register('/sw.js');
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([navigator.serviceWorker.ready,
-      new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('La app no pudo prepararse. Recarga la página e intenta nuevamente.')), 10000); }),
-    ]);
-  } finally { clearTimeout(timeout); }
-}
-
 export function PushNotificationSettings() {
   const [state, setState] = useState<PushState | null>(null);
   const [support, setSupport] = useState('');
@@ -48,9 +40,9 @@ export function PushNotificationSettings() {
   const load = useCallback(async () => {
     try {
       setSupport(browserSupport());
-      const result = await api('subscription') as PushState;
-      const registration = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration('/') : null;
-      const subscription = registration && 'pushManager' in registration ? await registration.pushManager.getSubscription() : null;
+      let result = await api('subscription') as PushState;
+      if (await restoreBrowserPushSubscription(result)) result = await api('subscription') as PushState;
+      const subscription = await getBrowserPushSubscription();
       setState({ ...result, serverActive: result.active, active: result.active && Boolean(subscription) && 'Notification' in window && Notification.permission === 'granted' });
       setError('');
     } catch (error) { setError(error instanceof Error ? error.message : 'No se pudo cargar la configuración.'); }
@@ -69,17 +61,11 @@ export function PushNotificationSettings() {
       // Request immediately in the click handler (required by iOS).
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') { setSupport(browserSupport()); setNotice('No se activaron las notificaciones. Puedes hacerlo cuando quieras.'); return; }
-      const registration = await worker();
-      let subscription = await registration.pushManager.getSubscription();
-      const expected = keyBytes(state.publicKey);
-      if (subscription) {
-        const current = subscription.options.applicationServerKey;
-        if (!current || new Uint8Array(current).some((value, index) => value !== expected[index]) || current.byteLength !== expected.length) {
-          await subscription.unsubscribe(); subscription = null;
-        }
-      }
-      if (!subscription) { subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: expected }); created = subscription; }
+      const ensured = await ensureBrowserPushSubscription(state.publicKey);
+      const subscription = ensured.subscription;
+      if (ensured.created) created = subscription;
       await api('subscription', 'POST', subscription.toJSON());
+      setBrowserPushPreference(true);
       await load();
       setNotice('Notificaciones activadas en este dispositivo.');
       window.dispatchEvent(new Event('push-settings-changed'));
@@ -95,10 +81,10 @@ export function PushNotificationSettings() {
       setState(previous => previous ? { ...previous, active: false, serverActive: false } : previous);
       // Server revocation is authoritative even if the browser has lost permission/support.
       try {
-        const registration = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration('/') : null;
-        const subscription = registration && 'pushManager' in registration ? await registration.pushManager.getSubscription() : null;
+        const subscription = await getBrowserPushSubscription();
         await subscription?.unsubscribe();
       } catch { /* No server sends remain; local cleanup can be retried on activation. */ }
+      setBrowserPushPreference(false);
       setNotice('Ya no se enviarán notificaciones a este dispositivo.');
       window.dispatchEvent(new Event('push-settings-changed'));
     } catch (error) { setError(error instanceof Error ? error.message : 'No se pudieron desactivar.'); }
@@ -146,8 +132,12 @@ export function PushNotificationInvite() {
   useEffect(() => {
     const refresh = async () => {
       try {
-        if (sessionStorage.getItem('push-invite-dismissed') === '1') return;
-        const state = await api('subscription') as PushState;
+        let state = await api('subscription') as PushState;
+        if (await restoreBrowserPushSubscription(state)) state = await api('subscription') as PushState;
+        if (sessionStorage.getItem('push-invite-dismissed') === '1') {
+          setVisible(false);
+          return;
+        }
         setVisible(state.configured && !state.active);
       } catch { /* Settings shows configuration errors; no interruptions here. */ }
     };

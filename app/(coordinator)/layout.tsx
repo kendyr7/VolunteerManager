@@ -15,7 +15,7 @@ import { MobileNavigationDock } from '@/components/MobileNavigationDock';
 import { useThemePreference } from "@/lib/use-theme-preference";
 import { useMobileNavigationMode } from "@/lib/use-mobile-navigation-mode";
 import { PushNotificationInvite } from '@/components/PushNotificationSettings';
-import { unsubscribeBrowserPush } from '@/lib/push/browser';
+import { preserveBrowserPushOnLogout } from '@/lib/push/browser';
 import { NotificationCenter, NotificationCenterTrigger } from '@/components/NotificationCenter';
 import { NAVIGATION_ICONS } from '@/lib/navigation-icons';
 import {
@@ -191,8 +191,8 @@ function CoordinatorLayoutInner({
   const handleLogout = async () => {
     localStorage.removeItem('mock_role');
     localStorage.removeItem('mock_committee');
-    await unsubscribeBrowserPush();
-    await logout();
+    const { pushRevoked } = await logout();
+    await preserveBrowserPushOnLogout(pushRevoked);
     window.location.href = '/login';
   };
 

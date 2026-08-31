@@ -203,9 +203,14 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
   }
 }
 
-export async function logout(): Promise<void> {
+export async function logout(): Promise<{ pushRevoked: boolean }> {
   const cookieStore = await cookies();
+  let pushRevoked = true;
   try { await revokePushDevice(); }
-  catch { console.error('[PUSH] No se pudo revocar el dispositivo al cerrar sesión.'); }
+  catch {
+    pushRevoked = false;
+    console.error('[PUSH] No se pudo revocar el dispositivo al cerrar sesión.');
+  }
   finally { cookieStore.delete('session'); }
+  return { pushRevoked };
 }

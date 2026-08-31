@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/actions/auth";
-import { unsubscribeBrowserPush } from '@/lib/push/browser';
+import { preserveBrowserPushOnLogout } from '@/lib/push/browser';
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MobileThemeMenu } from "@/components/mobile-theme-menu";
 import { useThemePreference } from "@/lib/use-theme-preference";
@@ -49,8 +49,8 @@ export default function VolunteerLayout({
   ];
 
   const handleLogoutClick = async () => {
-    await unsubscribeBrowserPush();
-    await logout();
+    const { pushRevoked } = await logout();
+    await preserveBrowserPushOnLogout(pushRevoked);
     window.location.href = "/login";
   };
 
