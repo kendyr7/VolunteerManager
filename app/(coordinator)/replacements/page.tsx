@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useState, useEffect, useMemo, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,8 @@ type RequestSortField = 'volunteer' | 'committee' | 'currentShift' | 'requestedS
 
 export default function ReplacementsPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const requestedId = searchParams.get('requestId') || '';
   const requestedSearch = searchParams.get('search')?.trim() || '';
   const requestedTab = searchParams.get('tab') || '';
   const removeUrlSearch = useRemoveSearchParam();
@@ -84,9 +86,22 @@ export default function ReplacementsPage() {
     return shiftRequests.filter(r => r.status === 'approved' || r.status === 'rejected');
   }, [shiftRequests]);
 
+  const linkedRequestStatus = shiftRequests.find(request => request.id === requestedId)?.status;
+  useEffect(() => {
+    if (!requestedId || !linkedRequestStatus) return;
+    const timer = setTimeout(() => setActiveTab(linkedRequestStatus === 'pending' ? 'pending' : 'history'), 0);
+    return () => clearTimeout(timer);
+  }, [requestedId, linkedRequestStatus]);
+  const clearLinkedRequest = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('requestId');
+    router.replace(`/replacements${params.size ? `?${params}` : ''}`, { scroll: false });
+  };
+
   const currentTabRequests = activeTab === 'pending' ? pendingRequestsList : historyRequestsList;
 
   const filteredRequests = useMemo(() => {
+    if (requestedId) return shiftRequests.filter(request => request.id === requestedId);
     if (!appliedSearch.trim()) return currentTabRequests;
     const searchTerms = appliedSearch.split(',').map(s => normalizeSearch(s.trim())).filter(s => s.length > 0);
 
@@ -111,7 +126,7 @@ export default function ReplacementsPage() {
         reasonText.includes(term)
       );
     });
-  }, [currentTabRequests, appliedSearch]);
+  }, [currentTabRequests, appliedSearch, requestedId, shiftRequests]);
 
   const sortedDesktopRequests = useMemo(() => {
     const getValue = (request: any) => {
@@ -240,7 +255,7 @@ export default function ReplacementsPage() {
           <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
             <div className="flex items-center bg-dark3 p-1 rounded-full border border-border shrink-0">
               <button
-                onClick={() => setActiveTab('pending')}
+                onClick={() => { clearLinkedRequest(); setActiveTab('pending'); }}
                 className={`px-4 py-1.5 text-xs font-bold rounded-full transition-all flex items-center gap-2 cursor-pointer ${
                   activeTab === 'pending'
                     ? 'bg-[#4d7cfe] text-white shadow-md'
@@ -256,7 +271,7 @@ export default function ReplacementsPage() {
               </button>
 
               <button
-                onClick={() => setActiveTab('history')}
+                onClick={() => { clearLinkedRequest(); setActiveTab('history'); }}
                 className={`px-4 py-1.5 text-xs font-bold rounded-full transition-all flex items-center gap-2 cursor-pointer ${
                   activeTab === 'history'
                     ? 'bg-[#4d7cfe] text-white shadow-md'
@@ -298,6 +313,10 @@ export default function ReplacementsPage() {
 
       {/* Main Content Area */}
       <div className="flex flex-col gap-4 md:gap-6 flex-1 px-4 sm:px-6 lg:px-8 pt-2">
+        {requestedId && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-dark2 px-4 py-3 text-sm text-text">
+          <p>{!loadingRequests && !linkedRequestStatus ? 'Esta solicitud ya no está disponible o no tienes acceso.' : 'Mostrando la solicitud de tu notificación.'}</p>
+          <button type="button" onClick={clearLinkedRequest} className="min-h-11 rounded px-2 font-bold text-blue-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] dark:text-blue-200">Ver todas las solicitudes</button>
+        </div>}
         <div className="space-y-4">
           {loadingRequests && shiftRequests.length === 0 ? (
             <Card className="border border-border bg-dark2 p-8 text-center text-text-dim rounded-xl">

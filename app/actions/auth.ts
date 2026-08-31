@@ -10,6 +10,7 @@ import {
 } from '@/lib/auth-rate-limit'
 import { getAdminSupabase } from '@/lib/supabase/admin'
 import { formatE164 } from '@/lib/whatsapp'
+import { revokePushDevice } from '@/lib/push/device'
 
 export type AuthState = {
   error?: string;
@@ -114,6 +115,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
         committee: committeeName
       });
 
+      await revokePushDevice();
       const cookieStore = await cookies();
       cookieStore.set('session', sessionToken, {
         httpOnly: true,
@@ -164,6 +166,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
         committee: committeeName
       });
 
+      await revokePushDevice();
       const cookieStore = await cookies();
       cookieStore.set('session', sessionToken, {
         httpOnly: true,
@@ -259,5 +262,7 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
 
 export async function logout(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.delete('session');
+  try { await revokePushDevice(); }
+  catch { console.error('[PUSH] No se pudo revocar el dispositivo al cerrar sesión.'); }
+  finally { cookieStore.delete('session'); }
 }

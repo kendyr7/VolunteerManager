@@ -2,6 +2,7 @@ import { isShiftAvailableForDay } from '@/lib/dates';
 import { isShiftChangeReason } from '@/lib/shift-change-reasons';
 import { getCommitteeCoverageSnapshot, isCoverageComplete } from '@/lib/shift-coverage';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { schedulePushDispatch } from '@/lib/push/service';
 
 type SupabaseClientLike = SupabaseClient;
 
@@ -255,6 +256,7 @@ export async function createValidatedShiftChangeRequest(
     };
   }
 
+  schedulePushDispatch();
   return { success: true, request: request as ShiftChangeRequestRow, volunteer };
 }
 

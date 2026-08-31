@@ -1,5 +1,7 @@
 'use server';
 
+import { schedulePushDispatch } from '@/lib/push/service';
+
 /**
  * volunteer-actions.ts — Server Actions for the `volunteers` domain.
  *
@@ -242,6 +244,7 @@ export async function toggleShiftAction(
   const session = await requireVolunteerCapability('reschedule_volunteer', volunteerId);
   const result = await VolunteerMutationService.toggleShift(volunteerId, dayKey, shiftKey, assign);
   if (!result.success) return result;
+  schedulePushDispatch();
 
   const auditCreated = await createActivityLog({
     userName: session.name,
@@ -281,6 +284,7 @@ export async function saveShiftsAction(
   const session = await requireVolunteerCapability('reschedule_volunteer', volunteerId);
   const result = await VolunteerMutationService.saveShifts(volunteerId, shiftsByDay);
   if (!result.success) return result;
+  schedulePushDispatch();
 
   const assignedShifts = Object.entries(shiftsByDay).flatMap(([dayKey, shiftKeys]) =>
     shiftKeys.map(shiftKey => ({ dayKey, shiftKey }))

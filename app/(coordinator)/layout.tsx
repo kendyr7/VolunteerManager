@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,10 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MobileThemeMenu } from "@/components/mobile-theme-menu";
 import { useThemePreference } from "@/lib/use-theme-preference";
 import { useMobileNavigationMode } from "@/lib/use-mobile-navigation-mode";
+import { PushNotificationInvite } from '@/components/PushNotificationSettings';
+import { unsubscribeBrowserPush } from '@/lib/push/browser';
+import { NotificationCenter, NotificationCenterTrigger } from '@/components/NotificationCenter';
+import { NAVIGATION_ICONS } from '@/lib/navigation-icons';
 import {
   MobileQuickWheel,
   type MobileQuickWheelAction,
@@ -77,14 +81,11 @@ function CoordinatorLayoutInner({
   const router = useRouter();
 
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
-  const [currentCommittee, setCurrentCommittee] = useState<string>('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isMobileThemeOpen, setIsMobileThemeOpen] = useState(false);
   const [isMobileNavHidden, setIsMobileNavHidden] = useState(false);
   const { searchTerm, setSearchTerm } = useSearch();
-  const navScrollRef = useRef<HTMLDivElement>(null);
-  const [navPage, setNavPage] = useState(0);
 
   useEffect(() => {
     const handleVisibility = (event: Event) => {
@@ -113,7 +114,6 @@ function CoordinatorLayoutInner({
     const syncRoleAndPermissions = () => {
       const snapshot = getAuthorizationSnapshotCache();
       setCurrentRole(snapshot.role);
-      setCurrentCommittee(snapshot.committeeName || '');
       setPermTick(v => v + 1);
     };
 
@@ -190,17 +190,18 @@ function CoordinatorLayoutInner({
   const handleLogout = async () => {
     localStorage.removeItem('mock_role');
     localStorage.removeItem('mock_committee');
+    await unsubscribeBrowserPush();
     await logout();
     window.location.href = '/login';
   };
 
   const NAV_ITEMS = [
-    { name: "Dashboard", href: "/dashboard", icon: "space_dashboard", roles: ['Admin', 'Editor'] },
+    { name: "Dashboard", href: "/dashboard", icon: NAVIGATION_ICONS.dashboard, roles: ['Admin', 'Editor'] },
     { name: "Voluntarios", href: "/volunteers", icon: "group", roles: ['Admin', 'Editor', 'Lector'] },
     { name: currentRole === 'Lector' ? "Mi Perfil" : "Turnos", href: "/shifts", icon: currentRole === 'Lector' ? "person" : "checklist", roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Áreas", href: "/areas", icon: "location_on", roles: ['Admin', 'Editor'] },
     { name: "Escanear QR", href: "/check-in", icon: "qr_code_scanner", roles: ['Admin', 'Editor'] },
-    { name: "Solicitudes", href: "/replacements", icon: "published_with_changes", roles: ['Admin', 'Editor'] },
+    { name: "Solicitudes", href: "/replacements", icon: NAVIGATION_ICONS.requests, roles: ['Admin', 'Editor'] },
     { name: "Avisos", href: "/reminders", icon: "campaign", roles: ['Admin', 'Editor'] },
     { name: "Reportes", href: "/reports", icon: "analytics", roles: ['Admin', 'Editor'] },
     { name: "Usuarios", href: "/users", icon: "shield_person", roles: ['Admin'] },
@@ -208,7 +209,7 @@ function CoordinatorLayoutInner({
   ];
 
   const BOTTOM_ITEMS = [
-    { name: "Ajustes", href: "/settings", icon: "settings", roles: ['Admin', 'Editor'] },
+    { name: "Ajustes", href: "/settings", icon: NAVIGATION_ICONS.settings, roles: ['Admin', 'Editor'] },
   ];
 
   const visibleNavItems = NAV_ITEMS.filter(item => {
@@ -281,36 +282,7 @@ function CoordinatorLayoutInner({
     { name: "Tema", href: "#theme", icon: resolvedTheme === 'dark' ? 'dark_mode' : 'light_mode', roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Salir", href: "#logout", icon: "logout", roles: ['Admin', 'Editor', 'Lector'] },
   ];
-  const ITEMS_PER_PAGE = 5;
-  const totalNavPages = Math.ceil(allMobileNavItems.length / ITEMS_PER_PAGE);
-
-  const goToNavPage = useCallback((page: number) => {
-    const element = navScrollRef.current;
-    if (!element) return;
-    element.scrollTo({ left: page * element.clientWidth, behavior: 'smooth' });
-  }, []);
-
-  const checkNavScroll = useCallback(() => {
-    const element = navScrollRef.current;
-    if (!element) return;
-    setNavPage(Math.round(element.scrollLeft / element.clientWidth));
-  }, []);
-
-  useEffect(() => {
-    if (isCommandMode) return;
-    const element = navScrollRef.current;
-    if (!element) return;
-
-    checkNavScroll();
-    element.addEventListener('scroll', checkNavScroll, { passive: true });
-    const resizeObserver = new ResizeObserver(checkNavScroll);
-    resizeObserver.observe(element);
-
-    return () => {
-      element.removeEventListener('scroll', checkNavScroll);
-      resizeObserver.disconnect();
-    };
-  }, [checkNavScroll, allMobileNavItems.length, isCommandMode]);
+  const ITEMS_PER_PAGE = currentRole === 'Lector' ? 5 : 4;
 
   if (!mounted) {
     return (
@@ -325,7 +297,7 @@ function CoordinatorLayoutInner({
     );
   }
 
-  return (
+  const content = (
     <div className="h-screen bg-dark flex flex-col font-sans text-text overflow-hidden">
 
 
@@ -375,6 +347,7 @@ function CoordinatorLayoutInner({
                 </>
               )}
             </button>
+            {currentRole !== 'Lector' && <NotificationCenterTrigger compact={!sidebarOpen} className="mt-2" />}
           </div>
 
           {/* Scrollable nav content */}
@@ -466,6 +439,7 @@ function CoordinatorLayoutInner({
           style={{ scrollbarGutter: 'stable' }}
         >
           <div className="w-full h-full">
+            {currentRole !== 'Lector' && pathname !== '/settings' && <PushNotificationInvite />}
             {children}
           </div>
         </main>
@@ -476,6 +450,7 @@ function CoordinatorLayoutInner({
           items={quickWheelItems}
           hidden={isMobileNavHidden}
           onSearch={openGlobalSearch}
+          trailingAction={currentRole !== 'Lector' ? <NotificationCenterTrigger mobile /> : undefined}
           onSelect={(item) => {
             if (item.command === 'toggle-theme') {
               toggleTheme();
@@ -491,37 +466,22 @@ function CoordinatorLayoutInner({
         />
       ) : (
         !isMobileNavHidden && (
-          <div className="fixed bottom-6 left-0 right-0 z-50 px-4 lg:hidden animate-in fade-in duration-200">
+          <div className="fixed left-0 right-0 z-50 px-4 lg:hidden animate-in fade-in duration-200" style={{ bottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
           <MobileThemeMenu
             open={isMobileThemeOpen}
             preference={preference}
             onChange={setPreference}
             onClose={() => setIsMobileThemeOpen(false)}
           />
-          <div className="relative w-full">
-            {navPage > 0 && (
-              <button
-                type="button"
-                aria-label="Ver opciones anteriores"
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  goToNavPage(navPage - 1);
-                }}
-                className="absolute -left-3 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-dark2 text-text shadow-lg backdrop-blur-xl transition-all"
-                style={{ top: '50%', transform: 'translateY(-50%)' }}
-              >
-                <Icon name="chevron_left" size={18} />
-              </button>
-            )}
-
-            <div className="relative w-full overflow-hidden rounded-full">
+          <div className="flex items-center gap-3">
+          <div className="relative min-w-0 flex-1">
+            <div className="relative w-full overflow-hidden rounded-full p-1">
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 rounded-full border border-border bg-dark2/90 shadow-2xl backdrop-blur-xl dark:bg-dark2/80"
               />
               <div
-                ref={navScrollRef}
-                className="relative z-10 flex overflow-x-auto rounded-full bg-transparent p-1"
+                className="relative z-10 flex overflow-x-auto rounded-full bg-transparent"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', scrollSnapType: 'x mandatory' }}
               >
                 {allMobileNavItems.map((item, index) => {
@@ -530,7 +490,7 @@ function CoordinatorLayoutInner({
                   const isTheme = item.href === '#theme';
                   const isPageStart = index % ITEMS_PER_PAGE === 0;
                   const sharedStyle = {
-                    width: 'calc((100vw - 32px) / 5)',
+                    width: `${100 / ITEMS_PER_PAGE}%`,
                     scrollSnapAlign: isPageStart ? 'start' as const : undefined,
                   };
                   const tabColors: Record<string, { activeClass: string; iconClass: string }> = {
@@ -620,23 +580,12 @@ function CoordinatorLayoutInner({
                     </Link>
                   );
                 })}
+                <div aria-hidden="true" className="shrink-0" style={{ width: `${((ITEMS_PER_PAGE - allMobileNavItems.length % ITEMS_PER_PAGE) % ITEMS_PER_PAGE) * 100 / ITEMS_PER_PAGE}%` }} />
               </div>
             </div>
 
-            {navPage < totalNavPages - 1 && (
-              <button
-                type="button"
-                aria-label="Ver más opciones"
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  goToNavPage(navPage + 1);
-                }}
-                className="absolute -right-3 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-dark2 text-text shadow-lg backdrop-blur-xl transition-all"
-                style={{ top: '50%', transform: 'translateY(-50%)' }}
-              >
-                <Icon name="chevron_right" size={18} />
-              </button>
-            )}
+          </div>
+          {currentRole !== 'Lector' && <NotificationCenterTrigger mobile />}
           </div>
         </div>
       )
@@ -652,6 +601,7 @@ function CoordinatorLayoutInner({
       />
     </div>
   );
+  return currentRole !== 'Lector' ? <NotificationCenter>{content}</NotificationCenter> : content;
 }
 
 export default function CoordinatorLayout({

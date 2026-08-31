@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
+import { revokePushDevice } from '@/lib/push/device'
 import { SESSION_MAX_AGE_SECONDS, signSession } from '@/lib/auth'
 import { formatE164 } from '@/lib/whatsapp'
 import { getCurrentUserSession } from '@/lib/auth-helpers'
@@ -90,6 +91,7 @@ export async function updateInitialPin(userId: string, userType: 'profile' | 'vo
     return { error: "Error de sesión: Usuario no encontrado tras actualizar PIN." };
   }
 
+  await revokePushDevice();
   const cookieStore = await cookies();
   const committeeName = user.committees?.name || '';
 

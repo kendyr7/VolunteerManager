@@ -19,6 +19,7 @@ import {
   type ShiftChangeCoverageImpact,
 } from '@/lib/shift-coverage';
 import { createValidatedShiftChangeRequest } from '@/lib/services/shift-change-request.service';
+import { schedulePushDispatch } from '@/lib/push/service';
 
 function getAdminClient() {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -319,6 +320,8 @@ export async function approveShiftChangeRequestAction(requestId: string) {
         reviewed_by: reviewerId
       })
       .eq('id', requestId);
+
+    schedulePushDispatch();
 
     // 5. Create activity log entry for system history
     const volunteerFullName = `${vol.first_name || ''} ${vol.last_name || ''}`.trim();

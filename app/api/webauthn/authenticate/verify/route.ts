@@ -116,6 +116,7 @@ export async function POST(request: Request) {
           committee: committeeName,
         });
 
+        await (await import('@/lib/push/device')).revokePushDevice();
         cookieStore.set('session', sessionToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
@@ -150,6 +151,7 @@ export async function POST(request: Request) {
           committee: committeeName,
         });
 
+        await (await import('@/lib/push/device')).revokePushDevice();
         cookieStore.set('session', sessionToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',

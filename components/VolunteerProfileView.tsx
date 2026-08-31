@@ -1484,23 +1484,28 @@ export function VolunteerProfileView({
       ) : null}
 
       {/* REAGENDAMIENTO MODAL PARA VOLUNTARIO */}
-      {isRescheduleModalOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-dark2 border border-border rounded-3xl p-6 w-full max-w-md space-y-5 shadow-2xl relative">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-text flex items-center gap-2">
+      <Dialog.Root open={isRescheduleModalOpen} onOpenChange={setIsRescheduleModalOpen}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm" />
+          <Dialog.Popup
+            aria-describedby={undefined}
+            className="fixed left-1/2 top-1/2 z-[121] flex max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-border bg-dark2 shadow-2xl"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-5 py-4 sm:px-6">
+              <Dialog.Title className="text-base font-bold text-text flex items-center gap-2">
                 <span className="material-symbols-outlined text-[#4d7cfe]">published_with_changes</span>
                 Solicitar Reagendamiento
-              </h3>
-              <button
+              </Dialog.Title>
+              <Dialog.Close
                 type="button"
-                onClick={() => setIsRescheduleModalOpen(false)}
-                className="text-text-dim hover:text-text text-sm cursor-pointer"
+                aria-label="Cerrar solicitud de cambio de turno"
+                className="flex size-11 shrink-0 items-center justify-center rounded-full text-text-dim hover:bg-dark3 hover:text-text text-sm cursor-pointer"
               >
                 ✕
-              </button>
+              </Dialog.Close>
             </div>
 
+            <div className="min-h-0 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
             {submitSuccess ? (
               <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-2xl text-center">
                 {submitSuccess}
@@ -1751,8 +1756,13 @@ export function VolunteerProfileView({
                   </div>
                 )}
 
-                {/* Botón de Enviar */}
-                <div className="pt-4 border-t border-border flex items-center gap-3">
+              </div>
+            )}
+            </div>
+
+            {/* Keep submission reachable while the dates and reasons scroll. */}
+            {!submitSuccess && (
+                <div className="shrink-0 border-t border-border bg-dark2 px-5 py-4 sm:px-6 flex items-center gap-3">
                   <Button
                     type="button"
                     variant="outline"
@@ -1771,11 +1781,10 @@ export function VolunteerProfileView({
                     {isSubmitting ? 'Enviando...' : 'Enviar Solicitud'}
                   </Button>
                 </div>
-              </div>
             )}
-          </div>
-        </div>
-      )}
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

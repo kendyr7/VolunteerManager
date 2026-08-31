@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,7 @@ interface MobileQuickWheelProps {
   onSearch: () => void;
   onSelect: (item: MobileQuickWheelAction) => void;
   hidden?: boolean;
+  trailingAction?: ReactNode;
 }
 
 type OpenOrigin = 'gesture' | 'keyboard';
@@ -210,7 +212,7 @@ function vibrate(pattern: number | number[]) {
   }
 }
 
-export function MobileQuickWheel({ items, onSearch, onSelect, hidden = false }: MobileQuickWheelProps) {
+export function MobileQuickWheel({ items, onSearch, onSelect, hidden = false, trailingAction }: MobileQuickWheelProps) {
   const [eventHidden, setEventHidden] = useState(false);
 
   useEffect(() => {
@@ -967,6 +969,12 @@ export function MobileQuickWheel({ items, onSearch, onSelect, hidden = false }: 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {!isGloballyHidden && !isOpen && trailingAction && (
+        <div className="fixed left-[calc(50%+2.75rem)] z-50 flex h-[58px] items-center lg:hidden" style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+          {trailingAction}
+        </div>
+      )}
 
       <span id="mobile-quick-wheel-hint" className="sr-only">
         Toca para buscar. Mantén presionado, desliza hacia un acceso y suelta para abrirlo. Con teclado, presiona flecha arriba para mostrar los accesos.

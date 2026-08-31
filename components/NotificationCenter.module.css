@@ -1,0 +1,46 @@
+/* The project's base headings have important sizes. Scope these compact inbox
+   headings to the same layer so unrelated screens retain their typography. */
+@layer base {
+  .itemTitle {
+    font-size: 0.875rem !important;
+    line-height: 1.5;
+    color: var(--text);
+  }
+  .emptyTitle {
+    font-size: 1rem !important;
+    color: var(--text);
+  }
+  .dayTitle {
+    font-size: 0.875rem !important;
+    font-weight: 500;
+    line-height: 1.5;
+    color: #586383;
+  }
+  :global(.dark) .dayTitle {
+    color: #cbd5e1;
+  }
+}
+
+.unreadRow {
+  background: var(--dark2);
+  box-shadow: 0 5px 24px rgb(37 38 49 / 7%);
+}
+
+:global(.dark) .unreadRow {
+  background: color-mix(in srgb, var(--dark2), white 3%);
+  box-shadow: 0 5px 24px rgb(0 0 0 / 15%);
+}
+
+.rowHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (max-width: 359px) {
+  .rowHeading {
+    flex-direction: column;
+    gap: 2px;
+  }
+}

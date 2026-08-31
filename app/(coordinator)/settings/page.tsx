@@ -34,6 +34,7 @@ import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useMobileNavigationMode } from "@/lib/use-mobile-navigation-mode";
 import { ReminderCapacityProjectionCard } from "@/components/ReminderCapacityProjection";
 import { useSearchParams } from "next/navigation";
+import { PushNotificationSettings } from '@/components/PushNotificationSettings';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -395,12 +396,12 @@ export default function SettingsPage() {
   const [isSettingsSearchFocused, setIsSettingsSearchFocused] = useState(false);
 
   useEffect(() => {
-    if (requestedSection !== 'mobileNavigation') return;
-    window.history.replaceState(null, '', '/settings#settings-mobileNavigation');
+    if (requestedSection !== 'mobileNavigation' && requestedSection !== 'notifications') return;
+    window.history.replaceState(null, '', `/settings#settings-${requestedSection}`);
     const frame = window.requestAnimationFrame(() => {
-      setOpenSections(previous => ({ ...previous, mobileNavigation: true }));
+      setOpenSections(previous => ({ ...previous, [requestedSection]: true }));
       window.requestAnimationFrame(() => {
-        document.getElementById('settings-mobileNavigation')?.scrollIntoView({
+        document.getElementById(`settings-${requestedSection}`)?.scrollIntoView({
           behavior: 'smooth',
           block: 'start',
         });
@@ -411,6 +412,7 @@ export default function SettingsPage() {
 
   const searchableSettings = useMemo(() => {
     const sections = [
+      { id: 'notifications', title: 'Notificaciones operativas', description: 'Activar push, solicitudes y cobertura crítica', keywords: 'avisos alertas push dispositivo permisos notificaciones', icon: 'notifications_active' },
       {
         id: 'personal',
         title: 'Información personal',
@@ -914,6 +916,8 @@ export default function SettingsPage() {
       >
         {/* Full-width edge-to-edge settings container separated only by single border lines */}
         <motion.div variants={itemVariants} className="w-full bg-dark2 border-y sm:border border-border rounded-none sm:rounded-2xl overflow-hidden divide-y divide-border shadow-lg">
+
+          <PushNotificationSettings />
 
           {/* 1. Información Personal */}
           <div id="settings-personal" className="w-full scroll-mt-44 transition-all">
