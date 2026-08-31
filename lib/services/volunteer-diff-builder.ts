@@ -40,11 +40,11 @@ export const AUDITABLE_FIELDS = [
 type AuditableField = (typeof AUDITABLE_FIELDS)[number];
 
 const FIELD_LABELS: Record<AuditableField, string> = {
-  first_name:   'Nombre',
-  last_name:    'Apellido',
+  first_name:   'Nombres',
+  last_name:    'Apellidos',
   phone:        'Teléfono',
-  stake:        'Estaca',
-  neighborhood: 'Barrio',
+  stake:        'Estaca / Distrito',
+  neighborhood: 'Barrio / Rama',
   committee_id: 'Comité',
   age:          'Edad',
   status:       'Estado',

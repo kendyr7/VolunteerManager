@@ -17,6 +17,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { sendBulkVolunteerCredentialsAction, sendVolunteerCredentialsAction } from "@/app/actions/whatsapp";
 import { bulkImportVolunteersAction, getPendingImportExceptionsAction } from "@/app/actions/volunteer-actions";
 import { ImportPendingApprovals } from "@/components/ImportPendingApprovals";
+import { ImportVolunteerNameFields } from "@/components/ImportVolunteerNameFields";
+import { draftVolunteerName, normalizeChurchUnit, normalizeVolunteerText } from "@/lib/volunteer-identity";
 import {
   findPotentialVolunteerNameMatches,
   VolunteerNameCandidate,
@@ -27,6 +29,7 @@ interface ParsedVolunteer {
   rowNum: number;
   firstName: string;
   lastName: string;
+  nameNeedsReview?: boolean;
   age: string;
   ward: string;
   stake: string;
@@ -109,24 +112,22 @@ export default function ImportPage() {
     const isValidCommittee = isRoleAdmin || isMyCommittee;
 
     const ageRaw = (vol.age || '').trim();
-    const wardTrimmed = (vol.ward || '').trim();
-    const stakeTrimmed = (vol.stake || '').trim();
+    const wardTrimmed = normalizeChurchUnit(vol.ward, 'neighborhood');
+    const stakeTrimmed = normalizeChurchUnit(vol.stake, 'stake');
 
     let errorMsg = '';
-    if (!fullName) {
-      errorMsg = "El nombre es obligatorio.";
+    if (!vol.firstName.trim() || !vol.lastName.trim()) {
+      errorMsg = "Completa los nombres y apellidos en sus campos separados.";
+    } else if (vol.nameNeedsReview) {
+      errorMsg = "Revisa y confirma la separación de nombres y apellidos antes de importar.";
     } else if (!vol.phone) {
       errorMsg = "El número telefónico es obligatorio.";
     } else if (!phoneValidation.isValid) {
       errorMsg = phoneValidation.error || "El teléfono debe tener 8 dígitos.";
     } else if (ageRaw && /\D/.test(ageRaw)) {
       errorMsg = "No se aceptan letras ni caracteres en la Edad. Ingrese solo números.";
-    } else if (wardTrimmed && /^(barrio|rama)\b/i.test(wardTrimmed)) {
-      const matchWord = wardTrimmed.match(/^(barrio|rama)\b/i)?.[0] || 'Barrio/Rama';
-      errorMsg = `Remueva la palabra '${matchWord}' en el campo Barrio / Rama. Escriba solo el nombre.`;
-    } else if (stakeTrimmed && /^(estaca|distrito)\b/i.test(stakeTrimmed)) {
-      const matchWord = stakeTrimmed.match(/^(estaca|distrito)\b/i)?.[0] || 'Estaca';
-      errorMsg = `Remueva la palabra '${matchWord}' en el campo Estaca. Escriba solo el nombre.`;
+    } else if (/^(estaca|distrito)\b/i.test(wardTrimmed) || /^(barrio|rama)\b/i.test(stakeTrimmed)) {
+      errorMsg = "Revisa las unidades: el barrio o rama y la estaca o distrito parecen intercambiados.";
     } else if (!vol.committeeName) {
       errorMsg = "El nombre del comité es obligatorio.";
     } else if (!match) {
@@ -137,6 +138,8 @@ export default function ImportPage() {
 
     return {
       ...vol,
+      ward: wardTrimmed,
+      stake: stakeTrimmed,
       phone: localPhone || vol.phone,
       committeeName: match ? match.name : vol.committeeName,
       committeeId: (isValidCommittee && match && match.id) ? match.id : undefined,
@@ -174,13 +177,6 @@ export default function ImportPage() {
       );
       return updated;
     });
-  };
-
-  const handleUpdateName = (originalIndex: number, fullName: string) => {
-    const parts = fullName.trim().split(/\s+/);
-    const firstName = parts[0] || '';
-    const lastName = parts.slice(1).join(' ');
-    handleUpdateRow(originalIndex, { firstName, lastName });
   };
 
   const handleDeleteRow = (originalIndex: number) => {
@@ -228,14 +224,14 @@ export default function ImportPage() {
   const downloadExcelTemplate = async () => {
     const committeeExample = userCommittee || "Seguridad";
 
-    // Row data — 7 data cols + 1 note col
+    // Seven data columns, one spacer and one note column.
     const headerRow = [
-      "Nombres y Apellidos", "Edad", "Barrio / Rama", "Estaca", "Teléfono", "Comité",
-      "", // empty spacer col G
+      "Nombres", "Apellidos", "Edad", "Barrio / Rama", "Estaca / Distrito", "Teléfono", "Comité",
+      "", // empty spacer col H
       "Nota",
     ];
     const sampleRow = [
-      "Juan Pérez", "25", "Las Colinas", "Managua Sur", "88881111", committeeExample,
+      "Juan Carlos", "Pérez López", "25", "Las Colinas", "Managua Sur", "88881111", committeeExample,
       "",
       "⚠ EJEMPLO — PUEDES BORRAR ESTA FILA",
     ];
@@ -246,13 +242,14 @@ export default function ImportPage() {
     // --- Column widths ---
     ws['!cols'] = [
       { wch: 28 }, // A - Nombres
-      { wch: 8 },  // B - Edad
-      { wch: 20 }, // C - Barrio
-      { wch: 20 }, // D - Estaca
-      { wch: 16 }, // E - Teléfono
-      { wch: 20 }, // F - Comité
-      { wch: 2 },  // G - spacer
-      { wch: 40 }, // H - Nota
+      { wch: 28 }, // B - Apellidos
+      { wch: 8 },  // C - Edad
+      { wch: 20 }, // D - Barrio / Rama
+      { wch: 24 }, // E - Estaca / Distrito
+      { wch: 16 }, // F - Teléfono
+      { wch: 20 }, // G - Comité
+      { wch: 2 },  // H - spacer
+      { wch: 40 }, // I - Nota
     ];
 
     // --- Style header row (row 1) ---
@@ -264,7 +261,7 @@ export default function ImportPage() {
         bottom: { style: "medium", color: { rgb: "1D4ED8" } },
       },
     };
-    const headerCols = ["A", "B", "C", "D", "E", "F"];
+    const headerCols = ["A", "B", "C", "D", "E", "F", "G"];
     headerCols.forEach(col => {
       const cellRef = `${col}1`;
       if (ws[cellRef]) ws[cellRef].s = headerStyle;
@@ -276,21 +273,21 @@ export default function ImportPage() {
       fill: { fgColor: { rgb: "FEF3C7" } }, // amber-100 fill
       alignment: { horizontal: "left", vertical: "center" },
     };
-    const sampleCols = ["A", "B", "C", "D", "E", "F"];
+    const sampleCols = ["A", "B", "C", "D", "E", "F", "G"];
     sampleCols.forEach(col => {
       const cellRef = `${col}2`;
       if (ws[cellRef]) ws[cellRef].s = sampleStyle;
     });
 
-    // Style note column header (H1)
-    if (ws["H1"]) ws["H1"].s = {
+    // Style note column header (I1)
+    if (ws["I1"]) ws["I1"].s = {
       font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
       fill: { fgColor: { rgb: "374151" } }, // gray-700
       alignment: { horizontal: "center" },
     };
 
-    // Style note cell (H2)
-    if (ws["H2"]) ws["H2"].s = {
+    // Style note cell (I2)
+    if (ws["I2"]) ws["I2"].s = {
       font: { bold: true, color: { rgb: "92400E" }, sz: 10 },
       fill: { fgColor: { rgb: "FEF3C7" } },
       alignment: { horizontal: "left", vertical: "center" },
@@ -335,14 +332,17 @@ export default function ImportPage() {
 
         // Find headers matching standard fields
         const nameIdx = headers.findIndex(h => h.includes('nombre') || h.includes('voluntario') || h.includes('apellido') || h.includes('full name'));
+        const firstNameIdx = headers.findIndex(h => /^(nombres?|primer nombre|first[ _]name|given[ _]names?)$/.test(h));
+        const lastNameIdx = headers.findIndex(h => /^(apellidos?|last[ _]name|family[ _]names?|surname)$/.test(h));
+        const hasSeparateNames = firstNameIdx !== -1 && lastNameIdx !== -1;
         const ageIdx = headers.findIndex(h => h.includes('edad') || h.includes('año') || h.includes('age'));
-        const wardIdx = headers.findIndex(h => h.includes('barrio') || h.includes('ward') || h.includes('colonia') || h.includes('vecindario') || h.includes('localidad') || h.includes('direc'));
-        const stakeIdx = headers.findIndex(h => h.includes('estaca') || h.includes('stake'));
+        const wardIdx = headers.findIndex(h => h.includes('barrio') || h.includes('rama') || h.includes('ward') || h.includes('branch') || h.includes('colonia') || h.includes('vecindario') || h.includes('localidad') || h.includes('direc'));
+        const stakeIdx = headers.findIndex(h => h.includes('estaca') || h.includes('distrito') || h.includes('stake') || h.includes('district'));
         const phoneIdx = headers.findIndex(h => h.includes('tel') || h.includes('cel') || h.includes('phone') || h.includes('contacto') || h.includes('móvil') || h.includes('movil'));
         const committeeIdx = headers.findIndex(h => h.includes('comit') || h.includes('grupo') || h.includes('seccion') || h.includes('area'));
 
-        if (nameIdx === -1 || phoneIdx === -1) {
-          showToast("Columnas requeridas no encontradas. Asegúrese de incluir 'Nombres y Apellidos' y 'Teléfono'.", "error");
+        if ((!hasSeparateNames && nameIdx === -1) || phoneIdx === -1) {
+          showToast("Incluye las columnas 'Nombres', 'Apellidos' y 'Teléfono', o un 'Nombre completo' para revisar su separación.", "error");
           return;
         }
 
@@ -374,10 +374,10 @@ export default function ImportPage() {
           const isRowEmpty = row.every(cell => cell === undefined || cell === null || String(cell).trim() === '');
           if (isRowEmpty) continue;
 
-          const fullName = nameIdx !== -1 ? cleanVal(row[nameIdx]) : '';
-          const nameParts = fullName.split(/\s+/);
-          const firstName = nameParts.length > 0 ? nameParts[0] : '';
-          const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+          const names = hasSeparateNames
+            ? { firstName: normalizeVolunteerText(cleanVal(row[firstNameIdx])), lastName: normalizeVolunteerText(cleanVal(row[lastNameIdx])), nameNeedsReview: false }
+            : draftVolunteerName(cleanVal(row[nameIdx]));
+          const fullName = `${names.firstName} ${names.lastName}`.trim();
           const age = ageIdx !== -1 ? cleanVal(row[ageIdx]) : '';
           const ward = wardIdx !== -1 ? cleanVal(row[wardIdx]) : '';
           const stake = stakeIdx !== -1 ? cleanVal(row[stakeIdx]) : '';
@@ -386,8 +386,7 @@ export default function ImportPage() {
 
           const rawVol: ParsedVolunteer = {
             rowNum: i + 1,
-            firstName,
-            lastName,
+            ...names,
             age,
             ward,
             stake,
@@ -795,7 +794,7 @@ export default function ImportPage() {
                             <th className="px-2 py-3 text-center w-20">Edad</th>
                             <th className="px-3 py-3 w-40">Teléfono</th>
                             <th className="px-3 py-3 w-36">Barrio / Rama</th>
-                            <th className="px-3 py-3 w-36">Estaca</th>
+                            <th className="px-3 py-3 w-36">Estaca / Distrito</th>
                             <th className="px-3 py-3 w-44">Comité</th>
                             <th className="px-4 py-3 text-center w-52">Estado</th>
                             <th className="px-2 py-3 text-center w-10"></th>
@@ -821,13 +820,7 @@ export default function ImportPage() {
 
                                 {/* Nombre y Apellidos */}
                                 <td className="px-3 py-2.5">
-                                  <input
-                                    type="text"
-                                    value={`${vol.firstName || ''}${vol.lastName ? ' ' + vol.lastName : ''}`}
-                                    onChange={(e) => handleUpdateName(originalIndex, e.target.value)}
-                                    placeholder="Nombre completo"
-                                    className="w-full bg-dark3/60 border border-border focus:border-[#4d7cfe] text-text text-[12px] font-bold font-inter rounded-lg px-2.5 py-1.5 outline-none transition-all"
-                                  />
+                                  <ImportVolunteerNameFields {...vol} onChange={updates => handleUpdateRow(originalIndex, updates)} />
                                 </td>
 
                                 {/* Edad */}
@@ -884,7 +877,7 @@ export default function ImportPage() {
                                     type="text"
                                     value={vol.stake || ''}
                                     onChange={(e) => handleUpdateRow(originalIndex, { stake: e.target.value })}
-                                    placeholder="Estaca"
+                                    placeholder="Estaca / Distrito"
                                     className={cn(
                                       "w-full bg-dark3/60 border text-text text-[11px] font-bold font-inter rounded-lg px-2 py-1.5 outline-none transition-all",
                                       (vol.error?.toLowerCase().includes('estaca') || vol.error?.toLowerCase().includes('distrito'))
@@ -1005,14 +998,7 @@ export default function ImportPage() {
                             {/* Inputs: Name & Age */}
                             <div className="grid grid-cols-3 gap-2">
                               <div className="col-span-2">
-                                <label className="text-[9px] font-bold text-text-dim uppercase tracking-wider block mb-1">Nombre</label>
-                                <input
-                                  type="text"
-                                  value={`${vol.firstName || ''}${vol.lastName ? ' ' + vol.lastName : ''}`}
-                                  onChange={(e) => handleUpdateName(originalIndex, e.target.value)}
-                                  placeholder="Nombre completo"
-                                  className="w-full bg-dark3/60 border border-border text-text text-xs font-bold font-inter rounded-lg px-2.5 py-1.5 outline-none"
-                                />
+                                <ImportVolunteerNameFields {...vol} onChange={updates => handleUpdateRow(originalIndex, updates)} />
                               </div>
                               <div>
                                 <label className="text-[9px] font-bold text-text-dim uppercase tracking-wider block mb-1">Edad</label>
@@ -1072,7 +1058,7 @@ export default function ImportPage() {
                                   type="text"
                                   value={vol.stake || ''}
                                   onChange={(e) => handleUpdateRow(originalIndex, { stake: e.target.value })}
-                                  placeholder="Estaca"
+                                  placeholder="Estaca / Distrito"
                                   className="w-full bg-dark3/60 border border-border text-text text-xs font-bold rounded-lg px-2.5 py-1.5 outline-none"
                                 />
                               </div>

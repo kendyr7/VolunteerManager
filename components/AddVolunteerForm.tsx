@@ -6,6 +6,7 @@ import { validatePhone8Digits } from "@/lib/whatsapp";
 import { sendVolunteerCredentialsAction } from "@/app/actions/whatsapp";
 import { createVolunteerAction } from "@/app/actions/volunteer-actions";
 import { SharedPhoneWarning } from "@/components/SharedPhoneWarning";
+import { normalizeVolunteerIdentity, volunteerIdentityError } from "@/lib/volunteer-identity";
 
 interface AddVolunteerFormProps {
   committeesList?: { id: string; name: string }[];
@@ -15,7 +16,8 @@ interface AddVolunteerFormProps {
 }
 
 export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, showToast }: AddVolunteerFormProps) {
-  const [newName, setNewName] = useState('');
+  const [newFirstName, setNewFirstName] = useState('');
+  const [newLastName, setNewLastName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newAge, setNewAge] = useState('');
   const [newStake, setNewStake] = useState('');
@@ -26,7 +28,8 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
   const [phoneConflicts, setPhoneConflicts] = useState<string[]>([]);
 
   const resetForm = () => {
-    setNewName('');
+    setNewFirstName('');
+    setNewLastName('');
     setNewPhone('');
     setNewAge('');
     setNewStake('');
@@ -44,12 +47,12 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
 
   const submitVolunteer = async (allowSharedPhone = false) => {
 
-    const parts = newName.trim().split(/\s+/);
-    const first_name = parts[0] || '';
-    const last_name = parts.slice(1).join(' ') || '';
-
-    if (parts.length < 2 || !last_name) {
-      showToast("Por favor, introduce al menos un nombre y un apellido.", "error");
+    const identity = normalizeVolunteerIdentity({
+      firstName: newFirstName, lastName: newLastName, stake: newStake, neighborhood: newWard,
+    });
+    const identityError = volunteerIdentityError(identity);
+    if (identityError) {
+      showToast(identityError, "error");
       return;
     }
 
@@ -74,13 +77,10 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
 
     try {
       const result = await createVolunteerAction({
-        firstName: first_name,
-        lastName: last_name,
+        ...identity,
         phone: sanitizedPhone,
         age: ageNum,
         committeeId: newCommitteeId || null,
-        stake: newStake,
-        neighborhood: newWard,
         allowSharedPhone,
       });
 
@@ -128,8 +128,13 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
     <form onSubmit={handleAddVolunteer} className="flex flex-col h-full">
       <div data-mobile-drawer-scroll className="flex-1 overflow-y-auto px-6 py-4 space-y-6 overscroll-contain">
         <div className="space-y-2">
-            <label className="block text-xs font-extrabold text-text">Nombre y Apellido</label>
-            <Input required minLength={3} className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Juan Pérez" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <label htmlFor="volunteer-given-names" className="block text-xs font-extrabold text-text">Nombres</label>
+            <Input id="volunteer-given-names" autoComplete="given-name" required className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Juan Carlos" value={newFirstName} onChange={(e) => setNewFirstName(e.target.value)} aria-describedby="volunteer-name-help" />
+            <p id="volunteer-name-help" className="text-xs text-text">Incluye todos sus nombres; por ejemplo, María del Carmen.</p>
+        </div>
+        <div className="space-y-2">
+            <label htmlFor="volunteer-family-names" className="block text-xs font-extrabold text-text">Apellidos</label>
+            <Input id="volunteer-family-names" autoComplete="family-name" required className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Pérez López" value={newLastName} onChange={(e) => setNewLastName(e.target.value)} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
@@ -175,12 +180,12 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
           />
         )}
         <div className="space-y-2">
-            <label className="block text-xs font-extrabold text-text">Estaca</label>
-            <Input required className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Managua Sur" value={newStake} onChange={(e) => setNewStake(e.target.value)} />
+            <label htmlFor="volunteer-stake" className="block text-xs font-extrabold text-text">Estaca / Distrito</label>
+            <Input id="volunteer-stake" required className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Managua o Granada" value={newStake} onChange={(e) => setNewStake(e.target.value)} />
         </div>
         <div className="space-y-2">
-            <label className="block text-xs font-extrabold text-text">Barrio / Rama</label>
-            <Input required className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Barrio / Rama 1" value={newWard} onChange={(e) => setNewWard(e.target.value)} />
+            <label htmlFor="volunteer-ward" className="block text-xs font-extrabold text-text">Barrio / Rama</label>
+            <Input id="volunteer-ward" required className="h-10 rounded-lg border-border bg-dark3 text-text text-sm font-bold" placeholder="Ej. Ciudad Sandino" value={newWard} onChange={(e) => setNewWard(e.target.value)} />
         </div>
         <div className="space-y-2">
             <label className="block text-xs font-extrabold text-text">Comité</label>

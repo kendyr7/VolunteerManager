@@ -13,7 +13,7 @@ import { startAuthentication } from "@simplewebauthn/browser";
 import Image from "next/image";
 import { MobilePinLogin } from "./MobilePinLogin";
 import mobileStyles from "./mobile-login.module.css";
-import { loginDisplayName, rememberLoginPhone } from "@/lib/login-experience";
+import { loginDisplayName, normalizeLoginPhone, rememberLoginPhone } from "@/lib/login-experience";
 
 const isMobileDevice = () => {
   if (typeof window === 'undefined') return false;
@@ -116,14 +116,17 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
       setRememberMe(isRemembered);
 
       if (isRemembered) {
-        const savedPhone = localStorage.getItem("volunteer_phone");
-        if (savedPhone) {
+        const savedPhone = normalizeLoginPhone(localStorage.getItem("volunteer_phone") || "");
+        const savedName = localStorage.getItem("volunteer_name") || "";
+        if (savedPhone.length === 8) {
           setPhone(savedPhone);
-        }
-        const savedName = localStorage.getItem("volunteer_name");
-        if (savedName && savedPhone) {
-          setSavedUserMode(true);
+          setSavedUserMode(!!savedName);
           setSavedName(savedName);
+          // Migrate old +505/505 storage before mounting the mobile PIN step.
+          rememberLoginPhone(savedPhone, true, savedName);
+        } else {
+          setRememberMe(false);
+          rememberLoginPhone("", false);
         }
       } else {
         localStorage.removeItem("volunteer_name");
@@ -565,13 +568,15 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
                       id="phone"
                       type="tel"
                       inputMode="numeric"
-                      autoComplete="username tel"
-                      maxLength={8}
+                      autoComplete="tel-national"
+                      maxLength={20}
+                      minLength={8}
+                      pattern="[0-9]{8}"
                       placeholder="88888888"
                       required
                       value={phone}
                       onChange={(e) => {
-                        setPhone(e.target.value.replace(/\D/g, '').slice(0, 8));
+                        setPhone(normalizeLoginPhone(e.target.value).slice(0, 8));
                         setRequireProfileSelection(false);
                         setSelectedProfile(null);
                       }}

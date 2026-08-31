@@ -246,8 +246,8 @@ export default function ReportsPage() {
       setDrawerVolunteer({
         id: targetVolId || item.id,
         name: targetName,
-        first_name: item.first_name || targetName.split(' ')[0] || '',
-        last_name: item.last_name || targetName.split(' ').slice(1).join(' ') || '',
+        first_name: item.first_name ?? targetName,
+        last_name: item.last_name ?? '',
         committee: item.committee || item.committeeName || '',
         ward: item.ward || item.neighborhood || '',
         stake: item.stake || '',

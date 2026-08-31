@@ -69,7 +69,7 @@
 .heading p { margin-top: 0.625rem; color: var(--login-muted); font-size: 1rem; line-height: 1.4; text-wrap: balance; }
 .pinControl { position: relative; width: min(100%, 300px); margin: clamp(1.25rem, 3.5dvh, 2rem) auto 0; border-radius: 16px; }
 .pinControl > input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: text; font-size: 1rem; }
-.pinControl:focus-within { outline: 2px solid var(--login-accent); outline-offset: 6px; }
+.pinControl:focus-within:not([data-invalid="true"]) .pinSlot[data-current="true"] { box-shadow: inset 0 0 0 2px var(--login-muted); }
 .pinSlots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; pointer-events: none; }
 .pinSlot { display: grid; place-items: center; height: clamp(64px, 10dvh, 88px); border-radius: 999px; background: var(--login-slot); transition: background-color 160ms ease-out; }
 .pinSymbol { width: 22px; height: 22px; color: var(--login-accent-ink); opacity: 0.35; transition: transform 160ms ease-out, opacity 160ms ease-out, color 160ms ease-out; }
@@ -115,7 +115,8 @@
 .keypad .keyLabel { font-size: 0.6875rem; font-weight: 500; }
 .screen button { cursor: pointer; transition: background-color 160ms ease-out, transform 160ms ease-out; }
 .screen button:active:not(:disabled) { transform: scale(0.96); background-color: var(--login-slot); }
-.screen button:focus-visible, .screen input:focus-visible { outline: 2px solid var(--login-accent); outline-offset: 4px; }
+.screen button:focus-visible, .screen input[type="checkbox"]:focus-visible { outline: 2px solid var(--login-accent); outline-offset: 4px; }
+.phoneInput > input:focus, .pinControl > input:focus { outline: none; box-shadow: none; }
 .screen button:disabled { cursor: default; opacity: 0.45; }
 .screen input { accent-color: var(--login-accent-ink); }
 .legal { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 0.5rem; padding-top: 0.25rem; color: var(--login-muted); font-size: 0.6875rem; }
@@ -123,6 +124,7 @@
 .phoneForm { display: flex; flex: 1; flex-direction: column; justify-content: center; gap: 1.5rem; padding-block: 1.5rem; }
 .phoneField > label { display: block; font-size: 0.875rem; font-weight: 500; }
 .phoneInput { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; padding: 0 1rem; min-height: 56px; border: 1px solid var(--login-muted); border-radius: 12px; }
+.phoneInput:focus-within { border-color: var(--login-ink); box-shadow: inset 0 0 0 1px var(--login-ink); }
 .phoneInput > span { color: var(--login-muted); }
 .phoneInput > input { min-width: 0; width: 100%; height: 54px; font-size: 1.125rem; font-variant-numeric: tabular-nums; background: transparent; }
 .phoneInput > input::placeholder { color: var(--login-muted); }

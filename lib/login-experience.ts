@@ -27,11 +27,21 @@ export function recordLoginActivity(now = Date.now()): void {
   }
 }
 
+export function normalizeLoginPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  // Strip the country code only from a complete international number. An
+  // eight-digit local number that starts with 505 must remain unchanged.
+  if (digits.length === 11 && digits.startsWith("505")) return digits.slice(3);
+  if (digits.length === 13 && digits.startsWith("00505")) return digits.slice(5);
+  return digits;
+}
+
 export function rememberLoginPhone(phone: string, remember: boolean, name = ""): void {
+  const localPhone = normalizeLoginPhone(phone);
   try {
-    if (remember && /^\d{8}$/.test(phone)) {
+    if (remember && /^\d{8}$/.test(localPhone)) {
       window.localStorage.setItem("remember_me", "true");
-      window.localStorage.setItem("volunteer_phone", phone);
+      window.localStorage.setItem("volunteer_phone", localPhone);
       if (name) window.localStorage.setItem("volunteer_name", name);
       else window.localStorage.removeItem("volunteer_name");
     } else {

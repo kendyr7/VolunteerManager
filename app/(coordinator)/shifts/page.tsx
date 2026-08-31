@@ -577,9 +577,8 @@ export default function ShiftsPage() {
   }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, completedShiftsMap, contextCheckedInMap, getShiftRecord]);
 
   const handleStartEditProfile = (vol: VolunteerType) => {
-    const parts = (vol.name || '').trim().split(/\s+/);
-    const fn = (vol as any).first_name || (parts.length >= 2 ? parts.slice(0, Math.ceil(parts.length / 2)).join(' ') : parts[0] || '');
-    const ln = (vol as any).last_name || (parts.length >= 2 ? parts.slice(Math.ceil(parts.length / 2)).join(' ') : '');
+    const fn = (vol as any).first_name ?? vol.name ?? '';
+    const ln = (vol as any).last_name ?? '';
 
     setEditFirstName(fn);
     setEditLastName(ln);

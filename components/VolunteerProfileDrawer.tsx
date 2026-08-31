@@ -145,8 +145,8 @@ export function VolunteerProfileDrawer({
       ...target,
       id: target.id || targetId,
       name: target.name || target.volunteerName || `${target.first_name || ''} ${target.last_name || ''}`.trim(),
-      first_name: target.first_name || (target.name || target.volunteerName || '').split(' ')[0] || '',
-      last_name: target.last_name || (target.name || target.volunteerName || '').split(' ').slice(1).join(' ') || '',
+      first_name: target.first_name ?? target.name ?? target.volunteerName ?? '',
+      last_name: target.last_name ?? '',
       committee: commName,
       ward: resolvedWard,
       stake: target.stake || '',
@@ -255,9 +255,8 @@ export function VolunteerProfileDrawer({
         setDrawerMode(initialMode);
         setIsEditingShifts(false);
 
-        const parts = (activeVolunteer.name || `${activeVolunteer.first_name || ''} ${activeVolunteer.last_name || ''}`).trim().split(/\s+/);
-        const fn = activeVolunteer.first_name || (parts.length >= 2 ? parts.slice(0, Math.ceil(parts.length / 2)).join(' ') : parts[0] || '');
-        const ln = activeVolunteer.last_name || (parts.length >= 2 ? parts.slice(Math.ceil(parts.length / 2)).join(' ') : '');
+        const fn = activeVolunteer.first_name ?? activeVolunteer.name ?? '';
+        const ln = activeVolunteer.last_name ?? '';
 
         setEditFirstName(fn);
         setEditLastName(ln);
@@ -553,7 +552,7 @@ export function VolunteerProfileDrawer({
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block mb-1">
-                          Estaca:
+                          Estaca / Distrito:
                         </label>
                         <input
                           type="text"
@@ -564,7 +563,7 @@ export function VolunteerProfileDrawer({
                       </div>
                       <div>
                         <label className="text-[11px] font-bold text-text-dim uppercase tracking-wider block mb-1">
-                          Barrio:
+                          Barrio / Rama:
                         </label>
                         <input
                           type="text"

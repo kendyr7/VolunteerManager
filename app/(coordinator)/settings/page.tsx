@@ -14,6 +14,7 @@ import { startRegistration } from "@simplewebauthn/browser";
 import Fuse from "fuse.js";
 
 import { notifyPermissionsChanged } from "@/lib/permissions";
+import { normalizeLoginPhone } from "@/lib/login-experience";
 import {
   getCurrentAuthorizationAction,
   resetRolePermissionsAction,
@@ -613,7 +614,7 @@ export default function SettingsPage() {
       setEditRole(role);
       const userComm = user.committees?.name || '';
       setEditCommittee(userComm);
-      if (user.phone) localStorage.setItem('volunteer_phone', user.phone);
+      if (user.phone) localStorage.setItem('volunteer_phone', normalizeLoginPhone(user.phone));
 
       // Initial committee for config
       if (role === 'Editor') {

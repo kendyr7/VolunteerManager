@@ -22,6 +22,7 @@
  */
 
 import { getAdminSupabase } from '@/lib/supabase/admin';
+import { normalizeVolunteerIdentity, normalizeVolunteerText, volunteerIdentityError } from '@/lib/volunteer-identity';
 import { VolunteerDiffBuilder, VolunteerRow } from './volunteer-diff-builder';
 import { VolunteerAuditWriter, AuditActor, WriteEditAuditPayload } from './volunteer-audit-writer';
 import { getLocal8Digits, normalizePhoneE164 } from '@/lib/whatsapp';
@@ -187,6 +188,75 @@ export interface ResolvePendingImportExceptionResult extends MutationResult {
 }
 
 export class VolunteerMutationService {
+  /** Applies a name boundary explicitly approved in the local review report.
+   * Maintenance-only and not exposed through a Server Action.
+   */
+  static async applyReviewedNameCorrection(
+    volunteerId: string,
+    expected: { first_name: string; last_name: string | null },
+    reviewed: { first_name: string; last_name: string },
+    actor: AuditActor,
+    operationId: string
+  ): Promise<MutationResult> {
+    const next = {
+      first_name: normalizeVolunteerText(reviewed.first_name),
+      last_name: normalizeVolunteerText(reviewed.last_name),
+    };
+    if (!next.first_name || !next.last_name) {
+      return { success: false, error: 'La revisión debe incluir nombres y apellidos.' };
+    }
+    const changes = await VolunteerDiffBuilder.compute(expected, next);
+    if (!changes.length) return { success: true, skipped: true };
+    const supabase = await getAdminSupabase();
+    let query = supabase.from('volunteers').update(next).eq('id', volunteerId).eq('first_name', expected.first_name);
+    query = expected.last_name === null ? query.is('last_name', null) : query.eq('last_name', expected.last_name);
+    const { data, error } = await query.select('id').maybeSingle();
+    if (error) return { success: false, error: error.message };
+    if (!data) return { success: false, error: 'El nombre cambió desde la auditoría; no se sobrescribió.' };
+    await VolunteerAuditWriter.write({
+      actionType: 'Edición', volunteerId, actor, operationId, changes,
+      description: 'Aplicó la separación de nombres y apellidos confirmada en la revisión nominal',
+    });
+    return { success: true };
+  }
+
+  /** Maintenance-only formatting repair. Not exposed as a Server Action.
+   * Uses compare-and-swap so an audit snapshot cannot overwrite a newer edit.
+   * No phone, access, status, committee, shift, or attendance field is written.
+   */
+  static async normalizeAuditedIdentity(
+    volunteerId: string,
+    expected: { first_name: string; last_name: string | null; stake: string | null; neighborhood: string | null },
+    actor: AuditActor,
+    operationId: string
+  ): Promise<MutationResult> {
+    const normalized = normalizeVolunteerIdentity({
+      firstName: expected.first_name, lastName: expected.last_name || '',
+      stake: expected.stake, neighborhood: expected.neighborhood,
+    });
+    const next = {
+      first_name: normalized.firstName,
+      last_name: expected.last_name === null ? null : normalized.lastName,
+      stake: expected.stake === null ? null : normalized.stake ?? '',
+      neighborhood: expected.neighborhood === null ? null : normalized.neighborhood ?? '',
+    };
+    const changes = await VolunteerDiffBuilder.compute(expected, next);
+    if (!changes.length) return { success: true, skipped: true };
+    const supabase = await getAdminSupabase();
+    let query = supabase.from('volunteers').update(next).eq('id', volunteerId);
+    for (const [field, value] of Object.entries(expected)) {
+      query = value === null ? query.is(field, null) : query.eq(field, value);
+    }
+    const { data, error } = await query.select('id').maybeSingle();
+    if (error) return { success: false, error: error.message };
+    if (!data) return { success: false, error: 'El registro cambió desde la auditoría; no se sobrescribió.' };
+    await VolunteerAuditWriter.write({
+      actionType: 'Edición', volunteerId, actor, operationId, changes,
+      description: 'Normalizó el formato de nombres y unidades según auditoría; sin redistribuir nombres ni reasignar unidades',
+    });
+    return { success: true };
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
@@ -378,6 +448,9 @@ export class VolunteerMutationService {
     actor: AuditActor
   ): Promise<MutationResult> {
     try {
+      payload = normalizeVolunteerIdentity(payload);
+      const identityError = volunteerIdentityError(payload);
+      if (identityError) return { success: false, error: identityError };
       const supabase = await getAdminSupabase();
 
       // 1. Read the current state from DB
@@ -560,6 +633,9 @@ export class VolunteerMutationService {
     actor: AuditActor
   ): Promise<CreateVolunteerResult> {
     try {
+      payload = normalizeVolunteerIdentity(payload);
+      const identityError = volunteerIdentityError(payload);
+      if (identityError) return { success: false, error: identityError };
       const supabase = await getAdminSupabase();
 
       // 1. Validate phone format
@@ -681,7 +757,12 @@ export class VolunteerMutationService {
         committeeId: volunteer.committee_id || null,
       }));
 
-      for (const item of items) {
+      for (const rawItem of items) {
+        const item = normalizeVolunteerIdentity(rawItem);
+        if (volunteerIdentityError(item)) {
+          skippedCount++;
+          continue;
+        }
         const norm = normalizePhoneE164(item.phone);
         const local8 = getLocal8Digits(item.phone);
 
@@ -1045,14 +1126,18 @@ export class VolunteerMutationService {
         return { success: false, error: 'Selecciona una resolución válida para el número repetido.' };
       }
 
+      const pendingIdentity = normalizeVolunteerIdentity({
+        firstName: pending.first_name, lastName: pending.last_name || '',
+        stake: pending.stake, neighborhood: pending.neighborhood,
+      });
       const pin = generateTemporaryPin();
       const insertPayload: Record<string, unknown> = {
-        first_name: pending.first_name,
-        last_name: pending.last_name || '',
+        first_name: pendingIdentity.firstName,
+        last_name: pendingIdentity.lastName,
         phone: phoneToCreate,
         phone_normalized: phoneToCreate,
-        stake: pending.stake ?? null,
-        neighborhood: pending.neighborhood ?? null,
+        stake: pendingIdentity.stake,
+        neighborhood: pendingIdentity.neighborhood,
         committee_id: pending.committee_id ?? null,
         age: pending.age ?? null,
         pin,

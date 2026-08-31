@@ -118,7 +118,14 @@ let count = 0;
 function check(value, message) { assert.ok(value, message); count++; }
 const experience = load("lib/login-experience.ts");
 mocks["@/lib/login-experience"] = experience;
-const { LOGIN_ACTIVITY_KEY, LOGIN_INTRO_IDLE_MS, shouldShowTemple, recordLoginActivity, rememberLoginPhone } = experience;
+const { LOGIN_ACTIVITY_KEY, LOGIN_INTRO_IDLE_MS, shouldShowTemple, recordLoginActivity, rememberLoginPhone, normalizeLoginPhone } = experience;
+for (const value of ["00000000", "0000 0000", "50500000000", "+505 0000-0000", "(+505) 0000 0000", "00505 0000 0000"]) {
+  check(normalizeLoginPhone(value) === "00000000", "Complete Nicaragua phone formats normalize to the same local number");
+}
+check(normalizeLoginPhone("50501234") === "50501234", "A local eight-digit number starting with 505 is not shortened");
+check(normalizeLoginPhone("+1 202 555 0100") === "12025550100", "Unknown international prefixes are not guessed or truncated");
+rememberLoginPhone("+505 0000 0000", true, "Ana Prueba");
+check(storage.get("volunteer_phone") === "00000000" && storage.get("remember_me") === "true", "Saving an international phone preserves the remember preference and stores only eight digits");
 for (const invalid of [null, NaN, Infinity, -1, 0, now + 1000]) check(shouldShowTemple(invalid, now), "Unknown/invalid activity shows temple");
 check(!shouldShowTemple(now - LOGIN_INTRO_IDLE_MS + 1, now), "Recent visit skips temple");
 check(shouldShowTemple(now - LOGIN_INTRO_IDLE_MS, now), "Thirty minute boundary shows temple");
@@ -183,6 +190,21 @@ let available = [staff, volunteer], loginResult = {}, submitted = [];
 mocks["@/app/actions/login-profiles"] = { getLoginProfiles: async () => ({ profiles: available }) };
 mocks["@/app/actions/auth"] = { loginWithPin: async (_, data) => { submitted.push(Object.fromEntries(data)); return loginResult; } };
 const { LoginForm } = load("app/(auth)/login/LoginForm.tsx");
+for (const value of ["50500000000", "+505 0000 0000", "00505 0000 0000", "50501234"]) {
+  storage.set("remember_me", "true"); storage.set("volunteer_phone", value); storage.set("volunteer_name", "Ana Prueba");
+  const restored = mount(LoginForm, { mobile: true }); restored.render();
+  const props = find(restored.render(), node => node.type === "MobilePinLogin").props;
+  check(props.phone === normalizeLoginPhone(value) && props.rememberMe && props.name === "Ana Prueba", "Legacy stored number restores as eight digits and retains the saved identity");
+  check(storage.get("volunteer_phone") === props.phone, "Legacy storage is migrated to local format for subsequent visits");
+  props.onSubmitPin("9876"); await settle();
+  check(submitted.at(-1).phone === props.phone && submitted.at(-1).phone.length === 8, "Remembered phone is submitted without the country prefix");
+  restored.cleanup();
+}
+storage.set("remember_me", "true"); storage.set("volunteer_phone", "+1 202 555 0100");
+const invalidSavedPhone = mount(LoginForm, { mobile: true }); invalidSavedPhone.render();
+const invalidSavedProps = find(invalidSavedPhone.render(), node => node.type === "MobilePinLogin").props;
+check(invalidSavedProps.phone === "" && !invalidSavedProps.rememberMe && !storage.has("volunteer_phone"), "An unsupported saved number is not silently turned into a different person's number");
+invalidSavedPhone.cleanup();
 rememberLoginPhone("00000000", false);
 view = mount(LoginForm, { mobile: true }); view.render();
 const mobileProps = () => find(view.render(), node => node.type === "MobilePinLogin").props;
@@ -253,6 +275,15 @@ view.cleanup();
 view = mount(MobilePinLogin, { ...pinProps, rememberMe: false, phone: "" });
 check(find(view.render(), node => node.props?.className === "phoneForm"), "Unremembered number opens phone form");
 view.cleanup();
+let editedPhone = "";
+view = mount(MobilePinLogin, { ...pinProps, rememberMe: false, phone: "", onPhoneChange: value => { editedPhone = value; } });
+const phoneField = find(view.render(), node => node.props?.id === "mobile-phone");
+check(phoneField.props.maxLength >= 16 && phoneField.props.autoComplete === "tel-national", "Browser autofill can deliver the entire international number before normalization");
+for (const value of ["+505 0000 0000", "50500000000", "00505 0000 0000"]) {
+  phoneField.props.onChange({ target: { value } });
+  check(editedPhone === "00000000", "Mobile autofill and paste remove the complete 505 prefix before applying the eight-digit limit");
+}
+view.cleanup();
 
 // Hardware keyboard support in the responsive/mobile presentation.
 const bodyTarget = { closest: () => null };
@@ -286,6 +317,8 @@ function key(value, options = {}) {
 renderPin(); await settle();
 key("1"); tree = renderPin();
 check(hardwareProps.pin === "1", "Physical digits work without focusing the invisible PIN input");
+check(find(tree, node => node.props?.className === "pinSlots").props.children.filter(slot => slot.props["data-current"]).length === 1, "Only one PIN pill receives the discreet focus indicator");
+check(find(tree, node => node.props?.className === "pinSlots").props.children[1].props["data-current"], "Focus indicator follows the next PIN digit");
 const firstRevision = find(tree, node => node.type === "Square").key;
 key("2", { target: { inPinPanel: true, closest: () => null } }); tree = renderPin();
 check(hardwareProps.pin === "12", "Physical digits still work after focusing an on-screen keypad button");
@@ -328,6 +361,7 @@ hardwareProps.pinAccepted = true; hardwareProps.busy = true;
 tree = renderPin();
 check(find(tree, node => node.props?.className === "pinControl").props["data-valid"] === true, "Success styling is driven by confirmed authentication");
 check(find(tree, node => node.props?.className === "pinSlots").props.children.every(slot => slot.props["data-filled"]), "Success fills all four PIN shapes");
+check(find(tree, node => node.props?.className === "pinSlots").props.children.every(slot => !slot.props["data-current"]), "Successful verification hides the editing focus indicator");
 check(find(tree, node => node.props?.id === "mobile-pin-status").props.children === "PIN correcto", "Success is announced in words, not only color");
 key("Backspace"); renderPin();
 check(hardwareProps.pin === "5678", "Keyboard cannot edit during the green confirmation");

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Square, Asterisk, Triangle, Circle } from "lucide-react";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
+import { normalizeLoginPhone } from "@/lib/login-experience";
 import styles from "./mobile-login.module.css";
 
 type Profile = {
@@ -129,9 +130,9 @@ export function MobilePinLogin({
           <div className={styles.phoneInput}>
             <span aria-hidden="true">+505</span>
             <input id="mobile-phone" type="tel" inputMode="numeric" autoComplete="tel-national"
-              placeholder="8888 8888" maxLength={8} minLength={8} pattern="[0-9]{8}" required
+              placeholder="8888 8888" maxLength={20} minLength={8} pattern="[0-9]{8}" required
               value={phone} disabled={busy}
-              onChange={(event) => onPhoneChange(event.target.value.replace(/\D/g, "").slice(0, 8))} />
+              onChange={(event) => onPhoneChange(normalizeLoginPhone(event.target.value).slice(0, 8))} />
           </div>
           <label className={styles.remember}>
             <input type="checkbox" checked={rememberMe} disabled={busy}
@@ -202,7 +203,8 @@ export function MobilePinLogin({
                 onChange={(event) => changePin(event.target.value)} />
               <div className={styles.pinSlots} aria-hidden="true">
                 {[Square, Asterisk, Triangle, Circle].map((Symbol, index) => (
-                  <span key={index} className={styles.pinSlot} data-filled={pinAccepted || pin.length > index}>
+                  <span key={index} className={styles.pinSlot} data-filled={pinAccepted || pin.length > index}
+                    data-current={!busy && index === Math.min(pin.length, 3)}>
                     <Symbol key={symbolRevisions[index]} className={styles.pinSymbol} data-shape={index} strokeWidth={index === 1 ? 4 : 2.5} />
                   </span>
                 ))}

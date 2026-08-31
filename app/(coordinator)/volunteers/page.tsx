@@ -507,9 +507,8 @@ export default function VolunteersPage() {
       showToast("No tienes permiso para editar la información personal", "error");
       return;
     }
-    const parts = (vol.name || '').trim().split(/\s+/);
-    const fn = (vol as any).first_name || (parts.length >= 2 ? parts.slice(0, Math.ceil(parts.length / 2)).join(' ') : parts[0] || '');
-    const ln = (vol as any).last_name || (parts.length >= 2 ? parts.slice(Math.ceil(parts.length / 2)).join(' ') : '');
+    const fn = (vol as any).first_name ?? vol.name ?? '';
+    const ln = (vol as any).last_name ?? '';
 
     setEditFirstName(fn);
     setEditLastName(ln);
@@ -1036,9 +1035,9 @@ export default function VolunteersPage() {
                       type="button"
                       onClick={() => handleSort('stake')}
                       className="flex-[1.5] min-w-[140px] flex items-center justify-center gap-1.5 hover:text-text transition-colors shrink-0 cursor-pointer group px-2"
-                      title="Ordenar por Estaca"
+                      title="Ordenar por Estaca / Distrito"
                     >
-                      <span className={cn(sortField === 'stake' && "text-[#4d7cfe] font-extrabold")}>Estaca</span>
+                      <span className={cn(sortField === 'stake' && "text-[#4d7cfe] font-extrabold")}>Estaca / Distrito</span>
                       <span className={cn(
                         "material-symbols-outlined text-[14px] transition-all",
                         sortField === 'stake' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"

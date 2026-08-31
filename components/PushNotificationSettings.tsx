@@ -81,7 +81,7 @@ export function PushNotificationSettings() {
       if (!subscription) { subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: expected }); created = subscription; }
       await api('subscription', 'POST', subscription.toJSON());
       await load();
-      setNotice('Notificaciones activadas en este dispositivo. Puedes enviar una prueba.');
+      setNotice('Notificaciones activadas en este dispositivo.');
       window.dispatchEvent(new Event('push-settings-changed'));
     } catch (error) {
       if (created) await created.unsubscribe().catch(() => false);
@@ -113,12 +113,6 @@ export function PushNotificationSettings() {
     } catch (error) { setError(error instanceof Error ? error.message : 'No se pudieron guardar.'); }
     finally { setBusy(false); }
   };
-  const test = async () => {
-    setBusy(true); setError(''); setNotice('');
-    try { await api('test', 'POST'); setNotice('Prueba enviada al servicio push. Revisa las notificaciones del dispositivo; puede tardar unos segundos.'); }
-    catch (error) { setError(error instanceof Error ? error.message : 'No se pudo enviar la prueba.'); }
-    finally { setBusy(false); }
-  };
 
   return <section id="settings-notifications" aria-labelledby="push-settings-title" className="scroll-mt-44 p-4 sm:p-6 text-text">
     <div className="flex items-start gap-3">
@@ -139,12 +133,8 @@ export function PushNotificationSettings() {
       </div>}
       <div className="flex flex-wrap gap-2">
         {!state.active && !support && <button type="button" onClick={() => void enable()} disabled={busy} className={`min-h-11 rounded-lg bg-[#315ee0] px-4 text-sm font-bold text-white hover:bg-[#284ec2] disabled:opacity-60 ${focusStyle}`}>{busy ? 'Activando…' : 'Activar notificaciones'}</button>}
-        {state.active && <>
-          <button type="button" onClick={() => void test()} disabled={busy} className={`min-h-11 rounded-lg border border-border px-4 text-sm font-bold hover:bg-dark3 disabled:opacity-60 ${focusStyle}`}>Enviar prueba</button>
-        </>}
         {state.serverActive && <button type="button" onClick={() => void disable()} disabled={busy} className={`min-h-11 rounded-lg px-4 text-sm font-bold hover:bg-dark3 disabled:opacity-60 ${focusStyle}`}>Desactivar en este dispositivo</button>}
       </div>
-      <p className="text-xs leading-5 text-slate-600 dark:text-slate-300">El permiso es opcional. Al cerrar sesión se detienen los envíos a este dispositivo. Los avisos no muestran teléfonos ni motivos personales.</p>
     </div>}
     {error && <div role="alert" className="mt-4 text-sm text-red-700 dark:text-red-300"><p>{error}</p><button type="button" onClick={() => void load()} className={`mt-2 min-h-10 rounded px-2 font-bold underline ${focusStyle}`}>Volver a comprobar</button></div>}
     {notice && <p role="status" className="mt-4 text-sm leading-6 text-text">{notice}</p>}
