@@ -34,14 +34,14 @@ type ViewProps = {
 const NotificationTriggerContext = createContext({ count: 0, unavailable: false });
 
 // All navigation entry points share one dialog, unread count and polling loop.
-export function NotificationCenterTrigger({ compact = false, mobile = false, className = '' }: { compact?: boolean; mobile?: boolean; className?: string }) {
+export function NotificationCenterTrigger({ compact = false, mobile = false, dense = false, className = '' }: { compact?: boolean; mobile?: boolean; dense?: boolean; className?: string }) {
   const { count, unavailable } = useContext(NotificationTriggerContext);
   const iconOnly = compact || mobile;
   return <Dialog.Trigger aria-label={count ? `Notificaciones: ${count} sin leer` : 'Notificaciones'} title={iconOnly ? 'Notificaciones' : undefined}
-    className={`relative inline-flex min-h-11 shrink-0 items-center text-sm font-bold text-text transition-colors hover:bg-dark3 ${focus} ${mobile ? 'size-12 justify-center rounded-full border border-border bg-dark2' : compact ? 'w-full justify-center rounded-lg' : 'w-full gap-3 rounded-lg px-3'} ${className}`}>
-    <Icon name="notifications" />
+    className={`relative inline-flex min-h-11 shrink-0 items-center text-sm font-bold text-text transition-colors hover:bg-dark3 ${focus} ${mobile ? `${dense ? 'size-11' : 'size-12'} justify-center rounded-full border border-border bg-dark2` : compact ? 'w-full justify-center rounded-lg' : 'w-full gap-3 rounded-lg px-3'} ${className}`}>
+    {mobile && dense ? <span aria-hidden="true" className="material-symbols-outlined" style={{ fontSize: 20 }}>notifications</span> : <Icon name="notifications" />}
     {!iconOnly && <span className="min-w-0 flex-1 truncate text-left">Notificaciones</span>}
-    {count > 0 && <span aria-hidden="true" className={`flex min-w-5 items-center justify-center rounded-full bg-[#315ee0] px-1 text-[11px] leading-5 font-bold text-white ${iconOnly ? 'absolute -top-0.5 right-0' : ''}`}>{count > 99 ? '99+' : count}</span>}
+    {count > 0 && <span aria-hidden="true" className={`flex items-center justify-center rounded-full bg-[#315ee0] px-1 font-bold text-white ${mobile && dense ? 'min-w-4 text-[9px] leading-4' : 'min-w-5 text-[11px] leading-5'} ${iconOnly ? 'absolute -top-0.5 right-0' : ''}`}>{count > 99 ? '99+' : count}</span>}
     {unavailable && <span aria-hidden="true" className={`size-2 rounded-full bg-amber-600 ${iconOnly ? 'absolute right-1 top-1' : ''}`} />}
   </Dialog.Trigger>;
 }

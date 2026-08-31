@@ -1,0 +1,23 @@
+.scroller {
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  border-radius: 9999px;
+}
+
+.scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.item {
+  flex-basis: calc(100% / 3);
+  scroll-snap-align: start;
+}
+
+@media (min-width: 375px) {
+  .scroller:has(> :nth-child(4)) .item {
+    flex-basis: 25%;
+  }
+}

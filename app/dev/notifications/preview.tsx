@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { NotificationCenterView, NotificationCenterTrigger } from '@/components/NotificationCenter';
 import { MobileQuickWheel } from '@/components/MobileQuickWheel';
+import { MobileNavigationDock } from '@/components/MobileNavigationDock';
+import { MobileThemeMenu } from '@/components/mobile-theme-menu';
+import { useThemePreference } from '@/lib/use-theme-preference';
 import type { NotificationPage } from '@/lib/notifications/policy';
 
 const initial: NotificationPage = {
@@ -24,7 +27,24 @@ export function NotificationCenterPreview() {
   const [error, setError] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const [wheel, setWheel] = useState(false);
+  const [pathname, setPathname] = useState('/dashboard');
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [action, setAction] = useState('');
+  const [lector, setLector] = useState(false);
+  const { preference, resolvedTheme, setPreference } = useThemePreference();
   const navigation = [{ name: 'Inicio', icon: 'space_dashboard', href: '/dashboard' }, { name: 'Voluntarios', icon: 'group', href: '/volunteers' }, { name: 'Turnos', icon: 'checklist', href: '/shifts' }, { name: 'Solicitudes', icon: 'published_with_changes', href: '/replacements' }, { name: 'Ajustes', icon: 'settings', href: '/settings' }];
+  const dockItems = [
+    ...navigation.slice(0, 4),
+    { name: 'Áreas', icon: 'location_on', href: '/areas' },
+    { name: 'Escanear QR', icon: 'qr_code_scanner', href: '/check-in' },
+    { name: 'Avisos', icon: 'campaign', href: '/reminders' },
+    { name: 'Reportes', icon: 'analytics', href: '/reports' },
+    { name: 'Usuarios', icon: 'shield_person', href: '/users' },
+    { name: 'Importación', icon: 'cloud_upload', href: '/import' },
+    navigation[4],
+    { name: 'Tema', icon: resolvedTheme === 'dark' ? 'dark_mode' : 'light_mode', href: '#theme' },
+    { name: 'Salir', icon: 'logout', href: '#logout' },
+  ];
   return <NotificationCenterView open={open} onOpenChange={setOpen} page={{ ...page, items: page.items.filter(item => unread ? !item.read_at : Boolean(item.read_at)) }} loading={false} busy={false} error={error} notice={notice} unreadOnly={unread}
         onFilter={setUnread} onMore={() => {}} onRefresh={() => { setError(''); setNotice('Bandeja actualizada.'); }}
         onRead={item => { setPage(previous => ({ ...previous, unreadCount: item ? Math.max(0, previous.unreadCount - 1) : 0, items: previous.items.map(row => !item || row.id === item.id ? { ...row, read_at: initial.asOf } : row) })); setNotice('Lectura guardada en esta vista de prueba.'); }}
@@ -48,19 +68,22 @@ export function NotificationCenterPreview() {
       <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => document.documentElement.classList.add('dark')}>Vista oscura temporal</button>
       <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => setWheel(value => !value)}>Alternar navegación móvil</button>
       <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => setPage(previous => ({ ...previous, unreadCount: 120 }))}>Probar contador 99+</button>
+      <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => { setLector(value => !value); setPathname('/shifts'); }}>Alternar vista Lector</button>
     </div>
+    <p role="status" className="mt-4 text-sm">{action}</p>
     </main>
     {wheel ? <MobileQuickWheel items={navigation} onSearch={() => setNotice('Búsqueda de prueba')} onSelect={() => {}} trailingAction={<NotificationCenterTrigger mobile />} /> :
-      <div className="fixed inset-x-0 z-50 px-4 lg:hidden" style={{ bottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
-        <div className="flex items-center gap-3">
-          <div className="relative min-w-0 flex-1 overflow-hidden rounded-full border border-border bg-dark2 p-1">
-            <div className="flex overflow-x-auto rounded-full" style={{ scrollbarWidth: 'none', scrollSnapType: 'x mandatory' }}>
-              {[...navigation, ...navigation.slice(0, 3)].map((item, index) => <button key={index} className="flex shrink-0 flex-col items-center justify-center rounded-full px-0.5 py-2" style={{ width: '25%', scrollSnapAlign: index % 4 === 0 ? 'start' : undefined }}><span className="material-symbols-outlined mb-1 text-[20px]" aria-hidden="true">{item.icon}</span><span className="max-w-full truncate text-[9px] font-bold">{item.name}</span></button>)}
-            </div>
-          </div>
-          <NotificationCenterTrigger mobile />
-        </div>
-      </div>}
+      <MobileNavigationDock
+        items={lector ? [{ name: 'Mi Perfil', icon: 'person', href: '/shifts' }, ...dockItems.slice(-2)] : dockItems}
+        pathname={pathname}
+        notifications={lector ? undefined : <NotificationCenterTrigger mobile dense />}
+        themeMenu={<MobileThemeMenu open={themeOpen} preference={preference} onChange={setPreference} onClose={() => setThemeOpen(false)} />}
+        themeOpen={themeOpen}
+        onTheme={() => setThemeOpen(value => !value)}
+        onLogout={() => setAction('Cerrar sesión: acción recibida, sin cerrar ninguna cuenta.')}
+        onNavigate={event => { event.preventDefault(); setThemeOpen(false); setPathname(event.currentTarget.getAttribute('href')!); setAction('Navegación: ' + event.currentTarget.textContent); }}
+        onSearch={() => { setThemeOpen(false); setAction('Búsqueda: acción recibida. En la app abre la búsqueda global.'); }}
+      />}
     </div>
   </NotificationCenterView>;
 }

@@ -11,6 +11,7 @@ import { CoordinatorDataProvider } from "@/lib/coordinator-data-context";
 import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MobileThemeMenu } from "@/components/mobile-theme-menu";
+import { MobileNavigationDock } from '@/components/MobileNavigationDock';
 import { useThemePreference } from "@/lib/use-theme-preference";
 import { useMobileNavigationMode } from "@/lib/use-mobile-navigation-mode";
 import { PushNotificationInvite } from '@/components/PushNotificationSettings';
@@ -277,12 +278,13 @@ function CoordinatorLayoutInner({
       actions: quickWheelActions[item.href as (typeof QUICK_WHEEL_ROUTES)[number]],
     }));
   const allMobileNavItems = [
-    ...visibleNavItems,
+    ...['/dashboard', '/volunteers', '/shifts', '/replacements']
+      .flatMap(href => visibleNavItems.filter(item => item.href === href)),
+    ...visibleNavItems.filter(item => !['/dashboard', '/volunteers', '/shifts', '/replacements'].includes(item.href)),
     ...visibleBottomItems,
     { name: "Tema", href: "#theme", icon: resolvedTheme === 'dark' ? 'dark_mode' : 'light_mode', roles: ['Admin', 'Editor', 'Lector'] },
     { name: "Salir", href: "#logout", icon: "logout", roles: ['Admin', 'Editor', 'Lector'] },
-  ];
-  const ITEMS_PER_PAGE = currentRole === 'Lector' ? 5 : 4;
+  ].map(item => item.href === '/dashboard' ? { ...item, name: 'Inicio' } : item);
 
   if (!mounted) {
     return (
@@ -465,131 +467,19 @@ function CoordinatorLayoutInner({
           }}
         />
       ) : (
-        !isMobileNavHidden && (
-          <div className="fixed left-0 right-0 z-50 px-4 lg:hidden animate-in fade-in duration-200" style={{ bottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
-          <MobileThemeMenu
-            open={isMobileThemeOpen}
-            preference={preference}
-            onChange={setPreference}
-            onClose={() => setIsMobileThemeOpen(false)}
-          />
-          <div className="flex items-center gap-3">
-          <div className="relative min-w-0 flex-1">
-            <div className="relative w-full overflow-hidden rounded-full p-1">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 rounded-full border border-border bg-dark2/90 shadow-2xl backdrop-blur-xl dark:bg-dark2/80"
-              />
-              <div
-                className="relative z-10 flex overflow-x-auto rounded-full bg-transparent"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', scrollSnapType: 'x mandatory' }}
-              >
-                {allMobileNavItems.map((item, index) => {
-                  const isActive = pathname.startsWith(item.href) && !item.href.startsWith('#');
-                  const isLogout = item.href === '#logout';
-                  const isTheme = item.href === '#theme';
-                  const isPageStart = index % ITEMS_PER_PAGE === 0;
-                  const sharedStyle = {
-                    width: `${100 / ITEMS_PER_PAGE}%`,
-                    scrollSnapAlign: isPageStart ? 'start' as const : undefined,
-                  };
-                  const tabColors: Record<string, { activeClass: string; iconClass: string }> = {
-                    "/dashboard": { activeClass: "bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/40 shadow-[0_0_14px_rgba(77,124,254,0.2)]", iconClass: "text-[#4d7cfe]" },
-                    "/volunteers": { activeClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 shadow-[0_0_14px_rgba(16,185,129,0.2)]", iconClass: "text-emerald-600 dark:text-emerald-400" },
-                    "/shifts": { activeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/40 shadow-[0_0_14px_rgba(245,158,11,0.2)]", iconClass: "text-amber-600 dark:text-amber-400" },
-                    "/areas": { activeClass: "bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/40 shadow-[0_0_14px_rgba(20,184,166,0.2)]", iconClass: "text-teal-600 dark:text-teal-400" },
-                    "/check-in": { activeClass: "bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/40 shadow-[0_0_14px_rgba(236,72,153,0.2)]", iconClass: "text-pink-600 dark:text-pink-400" },
-                    "/reminders": { activeClass: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/40 shadow-[0_0_14px_rgba(139,92,246,0.2)]", iconClass: "text-purple-600 dark:text-purple-400" },
-                    "/replacements": { activeClass: "bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/40 shadow-[0_0_14px_rgba(20,184,166,0.2)]", iconClass: "text-teal-600 dark:text-teal-400" },
-                    "/reports": { activeClass: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/40 shadow-[0_0_14px_rgba(6,182,212,0.2)]", iconClass: "text-cyan-600 dark:text-cyan-400" },
-                    "/users": { activeClass: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/40 shadow-[0_0_14px_rgba(59,130,246,0.2)]", iconClass: "text-blue-600 dark:text-blue-400" },
-                    "/import": { activeClass: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/40 shadow-[0_0_14px_rgba(249,115,22,0.2)]", iconClass: "text-orange-600 dark:text-orange-400" },
-                    "/settings": { activeClass: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/40 shadow-[0_0_14px_rgba(99,102,241,0.2)]", iconClass: "text-indigo-600 dark:text-indigo-400" },
-                  };
-                  const tabColor = tabColors[item.href] ?? {
-                    activeClass: "border border-border bg-dark3 text-text",
-                    iconClass: "text-text",
-                  };
-                  const sharedClass = cn(
-                    "relative flex shrink-0 flex-col items-center justify-center rounded-full px-0.5 py-2 transition-all duration-300",
-                    isActive ? tabColor.activeClass : "text-text-dim hover:bg-dark3/50 hover:text-text"
-                  );
+        !isMobileNavHidden && <MobileNavigationDock
+          items={allMobileNavItems}
+          pathname={pathname}
+          notifications={currentRole !== 'Lector' ? <NotificationCenterTrigger mobile dense /> : undefined}
+          themeMenu={<MobileThemeMenu open={isMobileThemeOpen} preference={preference} onChange={setPreference} onClose={() => setIsMobileThemeOpen(false)} />}
+          themeOpen={isMobileThemeOpen}
+          onTheme={() => setIsMobileThemeOpen(open => !open)}
+          onLogout={handleLogout}
+          onNavigate={() => setIsMobileThemeOpen(false)}
+          onSearch={() => { setIsMobileThemeOpen(false); openGlobalSearch(); }}
+        />
+      )}
 
-                  if (isLogout) {
-                    return (
-                      <button
-                        key="logout"
-                        type="button"
-                        onClick={handleLogout}
-                        style={sharedStyle}
-                        className={cn(sharedClass, "text-red-500 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400")}
-                      >
-                        <Icon name="logout" size={20} className="mb-1 text-red-500 dark:text-red-400" />
-                        <span className="max-w-full truncate whitespace-nowrap font-inter text-[9px] font-bold sm:text-[10px]">Salir</span>
-                      </button>
-                    );
-                  }
-
-                  if (isTheme) {
-                    return (
-                      <button
-                        key="theme"
-                        type="button"
-                        onClick={() => setIsMobileThemeOpen(open => !open)}
-                        aria-expanded={isMobileThemeOpen}
-                        aria-label="Cambiar apariencia"
-                        style={sharedStyle}
-                        className={cn(
-                          sharedClass,
-                          isMobileThemeOpen && "border border-[#4d7cfe]/40 bg-[#4d7cfe]/15 text-[#4d7cfe]"
-                        )}
-                      >
-                        <Icon
-                          name={resolvedTheme === 'dark' ? 'dark_mode' : 'light_mode'}
-                          size={20}
-                          className={cn("mb-1", isMobileThemeOpen ? "text-[#4d7cfe]" : "text-text-dim")}
-                        />
-                        <span className="whitespace-nowrap font-inter text-[9px] font-semibold sm:text-[10px]">Tema</span>
-                      </button>
-                    );
-                  }
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      prefetch={false}
-                      onClick={() => setIsMobileThemeOpen(false)}
-                      style={sharedStyle}
-                      className={sharedClass}
-                    >
-                      <Icon
-                        name={item.icon}
-                        size={20}
-                        className={cn(
-                          "mb-1 transition-transform duration-200",
-                          isActive ? `${tabColor.iconClass} scale-110` : "text-text-dim"
-                        )}
-                      />
-                      <span className={cn(
-                        "max-w-full truncate whitespace-nowrap font-inter text-[9px] sm:text-[10px]",
-                        isActive ? "font-extrabold" : "font-semibold"
-                      )}>
-                        {item.name}
-                      </span>
-                    </Link>
-                  );
-                })}
-                <div aria-hidden="true" className="shrink-0" style={{ width: `${((ITEMS_PER_PAGE - allMobileNavItems.length % ITEMS_PER_PAGE) % ITEMS_PER_PAGE) * 100 / ITEMS_PER_PAGE}%` }} />
-              </div>
-            </div>
-
-          </div>
-          {currentRole !== 'Lector' && <NotificationCenterTrigger mobile />}
-          </div>
-        </div>
-      )
-    )}
 
       <GlobalCommandPalette
         open={isGlobalSearchOpen}
