@@ -4,6 +4,7 @@ import { randomUUID, createECDH } from 'node:crypto';
 import vm from 'node:vm';
 import { createJiti } from 'jiti';
 import { PGlite } from '@electric-sql/pglite';
+import sharp from 'sharp';
 
 // Entire suite runs locally with synthetic identities. No .env, network or production writes.
 const jiti = createJiti(import.meta.url, { alias: { '@': process.cwd() } });
@@ -122,6 +123,27 @@ let pending;
 handlers.get('push')({ data: { json: () => ({ title: 'Solicitud', body: 'Revisar', tag: 'one', url: 'https://evil.test' }) }, waitUntil: task => { pending = task; } });
 await pending;
 ok(shown[0].options.data.url === 'https://example.test/dashboard', 'Push cannot inject external URL');
+ok(shown[0].options.icon === '/app-icon-192.png', 'Expanded notification keeps the full-color app icon');
+ok(shown[0].options.badge === '/notification-badge-96.png', 'Status bar uses a dedicated monochrome badge');
+const badge = sharp(await readFile(new URL('../public/notification-badge-96.png', import.meta.url)));
+const badgeMetadata = await badge.metadata();
+ok(badgeMetadata.width === 96 && badgeMetadata.height === 96 && badgeMetadata.hasAlpha, 'Badge is 96px PNG with alpha');
+const { data: badgePixels, info: badgeInfo } = await badge.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+let visiblePixels = 0;
+let allVisiblePixelsWhite = true;
+let transparentEdge = true;
+for (let y = 0; y < badgeInfo.height; y++) {
+  for (let x = 0; x < badgeInfo.width; x++) {
+    const offset = (y * badgeInfo.width + x) * 4;
+    if (badgePixels[offset + 3] > 0) {
+      visiblePixels++;
+      if (badgePixels[offset] !== 255 || badgePixels[offset + 1] !== 255 || badgePixels[offset + 2] !== 255) allVisiblePixelsWhite = false;
+      if (x === 0 || y === 0 || x === badgeInfo.width - 1 || y === badgeInfo.height - 1) transparentEdge = false;
+    }
+  }
+}
+ok(visiblePixels > 0 && visiblePixels < badgeInfo.width * badgeInfo.height / 2, 'Badge is a visible silhouette, not an opaque square');
+ok(allVisiblePixelsWhite && transparentEdge, 'Badge preserves white mark and transparent padding');
 handlers.get('push')({ data: { json: () => { throw new Error('invalid'); } }, waitUntil: task => { pending = task; } });
 await pending;
 ok(shown[1].title === 'Volunteer Manager', 'Malformed payload remains user-visible');

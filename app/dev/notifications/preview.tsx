@@ -6,6 +6,7 @@ import { MobileQuickWheel } from '@/components/MobileQuickWheel';
 import { MobileNavigationDock } from '@/components/MobileNavigationDock';
 import { MobileThemeMenu } from '@/components/mobile-theme-menu';
 import { useThemePreference } from '@/lib/use-theme-preference';
+import { Toast } from '@/components/ui/toast';
 import type { NotificationPage } from '@/lib/notifications/policy';
 
 const initial: NotificationPage = {
@@ -31,6 +32,7 @@ export function NotificationCenterPreview() {
   const [themeOpen, setThemeOpen] = useState(false);
   const [action, setAction] = useState('');
   const [lector, setLector] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; visible: boolean }>({ message: '', type: 'success', visible: false });
   const { preference, resolvedTheme, setPreference } = useThemePreference();
   const navigation = [{ name: 'Inicio', icon: 'space_dashboard', href: '/dashboard' }, { name: 'Voluntarios', icon: 'group', href: '/volunteers' }, { name: 'Turnos', icon: 'checklist', href: '/shifts' }, { name: 'Solicitudes', icon: 'published_with_changes', href: '/replacements' }, { name: 'Ajustes', icon: 'settings', href: '/settings' }];
   const dockItems = [
@@ -69,9 +71,13 @@ export function NotificationCenterPreview() {
       <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => setWheel(value => !value)}>Alternar navegación móvil</button>
       <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => setPage(previous => ({ ...previous, unreadCount: 120 }))}>Probar contador 99+</button>
       <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => { setLector(value => !value); setPathname('/shifts'); }}>Alternar vista Lector</button>
+      <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => setToast({ message: 'Turnos actualizados · ejemplo sin guardar datos', type: 'success', visible: true })}>Probar toast de éxito</button>
+      <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => setToast({ message: 'No se pudo guardar · ejemplo de error', type: 'error', visible: true })}>Probar toast de error</button>
+      <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => setToast({ message: 'Información de prueba', type: 'info', visible: true })}>Probar toast informativo</button>
     </div>
     <p role="status" className="mt-4 text-sm">{action}</p>
     </main>
+    <Toast message={toast.message} type={toast.type} isVisible={toast.visible} onClose={() => setToast(previous => ({ ...previous, visible: false }))} />
     {wheel ? <MobileQuickWheel items={navigation} onSearch={() => setNotice('Búsqueda de prueba')} onSelect={() => {}} trailingAction={<NotificationCenterTrigger mobile />} /> :
       <MobileNavigationDock
         items={lector ? [{ name: 'Mi Perfil', icon: 'person', href: '/shifts' }, ...dockItems.slice(-2)] : dockItems}

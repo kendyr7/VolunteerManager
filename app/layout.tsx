@@ -21,7 +21,8 @@ const metadataBaseUrl = configuredAppUrl
       : "http://localhost:3000";
 
 export const viewport: Viewport = {
-  themeColor: "#4d7cfe",
+  // Initial server-rendered theme; BrowserThemeColor follows the active CSS theme.
+  themeColor: "#050505",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -70,6 +71,7 @@ import { AutoLogout } from "@/components/AutoLogout";
 import { TokenProvider } from "@/components/TokenProvider";
 import { UnofficialSiteBanner } from "@/components/UnofficialSiteBanner";
 import { AppInstallPrompt } from "@/components/AppInstallPrompt";
+import { BrowserThemeColor } from "@/components/BrowserThemeColor";
 import { cookies } from "next/headers";
 
 export default async function RootLayout({
@@ -96,6 +98,7 @@ export default async function RootLayout({
         <link rel="preload" href="/material-symbols-outlined.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       </head>
       <body className="min-h-full flex flex-col font-sans bg-dark text-text tracking-[-0.01em]" suppressHydrationWarning>
+        <BrowserThemeColor />
         <TokenProvider token={sessionToken} />
         <AutoLogout />
         <UnofficialSiteBanner initialAcknowledged={hasAcknowledgedUnofficialSite} />

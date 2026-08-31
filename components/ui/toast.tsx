@@ -3,6 +3,7 @@
 import * as React from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { startStatusBarFeedback } from "@/lib/status-bar-feedback"
 
 interface ToastProps {
   message: string
@@ -52,6 +53,11 @@ export function Toast({
   const remainingRef = React.useRef(0)
   const displayDuration = duration ?? (actionLabel && onAction ? 8000 : type === 'error' ? 6500 : 4500)
   const visual = TOAST_STYLES[type]
+
+  // Companion system-bar feedback only; toast rendering and timing stay intact.
+  React.useEffect(() => {
+    if (isVisible) return startStatusBarFeedback(type)
+  }, [isVisible, message, type])
 
   React.useEffect(() => {
     closeRef.current = onClose

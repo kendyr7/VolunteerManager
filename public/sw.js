@@ -23,7 +23,7 @@ self.addEventListener('push', (event) => {
   try { payload = event.data?.json() || {}; } catch { /* Always show a visible notification. */ }
   const title = typeof payload.title === 'string' ? payload.title.slice(0, 100) : 'Volunteer Manager';
   const body = typeof payload.body === 'string' ? payload.body.slice(0, 300) : 'Tienes un aviso pendiente. Abre la app para revisarlo.';
-  event.waitUntil(Promise.all([self.registration.showNotification(title, { body, icon: '/app-icon-192.png', badge: '/icon-192.png',
+  event.waitUntil(Promise.all([self.registration.showNotification(title, { body, icon: '/app-icon-192.png', badge: '/notification-badge-96.png',
     tag: typeof payload.tag === 'string' ? payload.tag.slice(0, 200) : 'volunteer-manager',
     data: { url: safeNotificationUrl(payload.url) },
   }), self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windows => {

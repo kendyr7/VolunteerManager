@@ -1,5 +1,4 @@
 import sharp from 'sharp';
-import fs from 'fs';
 import path from 'path';
 
 const LOGO_PATHS = `
@@ -40,7 +39,8 @@ function generateSvgIcon(size) {
 async function buildIcons() {
   const publicDir = path.join(process.cwd(), 'public');
 
-  const targets = [
+  // Use --badge-only to leave installed-app and launcher artwork untouched.
+  const targets = process.argv.includes('--badge-only') ? [] : [
     { size: 512, filename: 'app-icon-512.png' },
     { size: 192, filename: 'app-icon-192.png' },
     { size: 192, filename: 'icon-192.png' }
@@ -54,6 +54,17 @@ async function buildIcons() {
       .toFile(outPath);
     console.log(`Successfully generated ${t.filename} (${t.size}x${t.size})`);
   }
+
+  // Android uses the alpha channel as a stencil in its status bar. Render the
+  // original vector mark only: no opaque background, gradient or drop shadow.
+  const size = 96;
+  const padding = 8;
+  const scale = (size - padding * 2) / 543.06;
+  const badge = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <g transform="translate(${padding}, ${padding}) scale(${scale})">${LOGO_PATHS}</g>
+  </svg>`;
+  await sharp(Buffer.from(badge)).png().toFile(path.join(publicDir, 'notification-badge-96.png'));
+  console.log('Successfully generated notification-badge-96.png (96x96, transparent)');
 }
 
 buildIcons().catch(err => {

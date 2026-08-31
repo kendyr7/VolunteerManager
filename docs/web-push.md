@@ -85,6 +85,16 @@ Opcionalmente, un Database Webhook de Supabase sobre **INSERT en `public.push_ev
 
 Ejecutar `npm run test:push` y `npm run build`. La suite usa identidades ficticias y PostgreSQL en memoria: no carga `.env`, no modifica Supabase y no envía notificaciones reales.
 
+### Icono pequeño y color de la barra del teléfono
+
+- El service worker usa `/notification-badge-96.png` como `badge`: logo blanco de 96×96 con fondo transparente para evitar el bloque blanco en Android. El icono grande y los iconos de instalación mantienen su diseño a color.
+- Para regenerar solo ese recurso desde el logo vectorial original: `node scripts/generate-pwa-icons.mjs --badge-only`. No sobrescribe los iconos de instalación.
+- `BrowserThemeColor` toma el fondo `--dark` del tema CSS activo y sincroniza `theme-color`, incluso después de navegar: `#f8fafb` en claro y `#050505` en oscuro. El manifiesto usa el fondo oscuro inicial; el navegador/SO decide cómo aplica estos colores a sus barras.
+- Los toasts existentes también activan una señal temporal en `theme-color`: éxito verde (`#047857`) 2 segundos, error rojo (`#be123c`) 3 segundos e información azul (`#315ee0`) 2 segundos. No se cambia el diseño, duración, pausa, cierre ni acciones del toast. Al vencer la señal o cerrar/desmontar el aviso, vuelve al fondo del tema actual. El aviso más reciente prevalece; se limpia la señal al ocultar la app y no se reproducen señales antiguas al regresar.
+- `/dev/notifications` incluye ejemplos de los tres tipos con el componente real, sin guardar datos ni realizar acciones operativas. El toast permanece como confirmación principal, incluso cuando el navegador no aplica el color de la barra.
+- Después del despliegue, abrir o recargar la app y probar con una notificación nueva. Los avisos ya mostrados no cambian de icono retroactivamente y la actualización del manifiesto instalado puede tardar.
+- Verificar también `node scripts/test-browser-theme-color.mjs`: temas, cambios de metadatos al navegar, desconexión de observadores y colores iniciales del manifiesto. Confirmar visualmente la barra de estado en un Android real; la vista móvil de escritorio no reproduce esa barra del SO.
+
 Prueba manual, con cuentas y solicitudes de prueba autorizadas:
 
 1. Activar dos dispositivos de un coordinador del comité A y uno del B. Enviar prueba en cada uno, también con la app en segundo plano.
