@@ -1,0 +1,179 @@
+.screen {
+  --login-bg: #f8fafc;
+  --login-ink: #252631;
+  --login-muted: #526177;
+  --login-accent: #4d7cfe;
+  --login-accent-ink: #315ed3;
+  --login-slot: #e8eefc;
+  --login-error: #b42345;
+  --login-error-bg: #fbe7ed;
+  --login-success: #167347;
+  --login-success-bg: #34d399;
+  --login-success-ink: #063d29;
+  min-height: 100dvh;
+  background: var(--login-bg);
+  color: var(--login-ink);
+}
+
+:global(.dark) .screen {
+  --login-bg: #050a15;
+  --login-ink: #f8fafc;
+  --login-muted: #a8b6ce;
+  --login-accent-ink: #8eacff;
+  --login-slot: #132243;
+  --login-error: #ff94af;
+  --login-error-bg: #3b2033;
+  --login-success: #6ee7b7;
+}
+
+.swipeViewport { position: fixed; inset: 0; overflow: hidden; min-height: 0; touch-action: pan-y pinch-zoom; }
+.swipeTrack { display: flex; width: 200%; height: 100%; transform: translateX(0); transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1); }
+.swipeTrack[data-page="1"] { transform: translateX(-50%); }
+.swipeTrack[data-ready="false"] { visibility: hidden; }
+.swipeTrack[data-animate="false"] { transition: none; }
+.heroPanel, .loginPanel { position: relative; width: 50%; height: 100%; flex-shrink: 0; overflow-y: auto; overscroll-behavior: contain; }
+.heroPanel { background: #050a15; color: white; display: flex; flex-direction: column; justify-content: flex-end; }
+.heroImage { object-fit: cover; }
+.heroShade { position: absolute; inset: 0; background: linear-gradient(to top, #050a15e6, #050a1533 60%, transparent); }
+.heroContent { position: relative; padding: 1.5rem max(1.25rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left)); }
+.heroContinue { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 54px; margin-top: 1rem; padding: 0.75rem 1.25rem; background: #4d7cfe; color: #07132e; border-radius: 12px; font-weight: 600; }
+.screen .heroContinue:active { background: #6c93ff; }
+.swipeHint { text-align: center; margin-top: 0.75rem; font-size: 0.75rem; color: #e1e8f6; }
+.loginPanel { isolation: isolate; background: var(--login-bg); }
+.loginPanel:focus { outline: none; }
+.animatedBackground { position: absolute; inset: 0; z-index: -1; opacity: 0.65; pointer-events: none; }
+.backToTemple { display: flex; align-items: center; align-self: flex-start; gap: 0.375rem; min-height: 44px; margin-bottom: 0.75rem; color: var(--login-muted); font-size: 0.875rem; }
+.backToTemple > span { font-size: 18px; }
+.welcomeLogo { width: 64px; height: 64px; margin: 0 auto 1.5rem; color: var(--login-accent-ink); }
+.welcomeLogo > svg { color: inherit; }
+.changeProfile { min-height: 44px; margin-top: 0.25rem; align-self: flex-start; color: var(--login-accent-ink); font-size: 0.8125rem; text-decoration: underline; text-underline-offset: 3px; text-align: left; }
+
+.body {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 440px);
+  min-height: 100%;
+  margin-inline: auto;
+  padding: max(1rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right)) max(0.5rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left));
+}
+
+.formHost, .pinForm { display: flex; flex: 1; flex-direction: column; }
+.account { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.identity { min-width: 0; }
+.identity p { font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+.identity > span { display: block; margin-top: 0.25rem; color: var(--login-muted); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.changeButton { min-height: 44px; padding: 0.625rem 1rem; border-radius: 999px; background: var(--login-slot); font-size: 0.875rem; font-weight: 500; flex-shrink: 0; }
+.pinEntry { margin-block: auto; padding-top: clamp(1.25rem, 4dvh, 2.75rem); }
+.heading { text-align: center; }
+.heading h1 { color: var(--login-ink); font-weight: 700; line-height: 1.15; letter-spacing: -0.025em; text-wrap: balance; overflow-wrap: anywhere; }
+.heading p { margin-top: 0.625rem; color: var(--login-muted); font-size: 1rem; line-height: 1.4; text-wrap: balance; }
+.pinControl { position: relative; width: min(100%, 300px); margin: clamp(1.25rem, 3.5dvh, 2rem) auto 0; border-radius: 16px; }
+.pinControl > input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: text; font-size: 1rem; }
+.pinControl:focus-within { outline: 2px solid var(--login-accent); outline-offset: 6px; }
+.pinSlots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; pointer-events: none; }
+.pinSlot { display: grid; place-items: center; height: clamp(64px, 10dvh, 88px); border-radius: 999px; background: var(--login-slot); transition: background-color 160ms ease-out; }
+.pinSymbol { width: 22px; height: 22px; color: var(--login-accent-ink); opacity: 0.35; transition: transform 160ms ease-out, opacity 160ms ease-out, color 160ms ease-out; }
+.pinSymbol:not([data-shape="1"]) { fill: currentColor; }
+.pinSymbol[data-shape="1"] { width: 26px; height: 26px; }
+.pinSlot[data-filled="true"] .pinSymbol { opacity: 1; transform: scale(1.12); animation: pinSymbolPop 340ms cubic-bezier(0.22, 1, 0.36, 1); }
+.pinSlot[data-filled="true"] .pinSymbol[data-shape="1"] { transform: rotate(360deg) scale(1.12); animation: pinAsteriskSpin 460ms cubic-bezier(0.22, 1, 0.36, 1); }
+.pinSymbol[data-shape="2"] { --pin-turn: -22deg; }
+@keyframes pinSymbolPop {
+  0% { transform: translateY(0) rotate(0) scale(0.9); }
+  40% { transform: translateY(-8px) rotate(var(--pin-turn, 18deg)) scale(1.18); }
+  76% { transform: translateY(1px) rotate(-3deg) scale(1.06); }
+  100% { transform: translateY(0) rotate(0) scale(1.12); }
+}
+@keyframes pinAsteriskSpin {
+  0% { transform: translateY(0) rotate(0) scale(0.9); }
+  45% { transform: translateY(-10px) rotate(180deg) scale(1.2); }
+  78% { transform: translateY(1px) rotate(330deg) scale(1.06); }
+  100% { transform: translateY(0) rotate(360deg) scale(1.12); }
+}
+.pinControl[data-invalid="true"] { animation: pinShake 360ms ease-out; }
+.pinControl[data-invalid="true"] .pinSlot { background: var(--login-error-bg); }
+.pinControl[data-invalid="true"] .pinSymbol { color: var(--login-error); opacity: 1; animation: none; }
+.pinControl[data-invalid="true"] .pinSymbol[data-shape="1"] { animation: none; }
+.pinControl[data-valid="true"] .pinSlot { background: var(--login-success-bg); }
+.pinControl[data-valid="true"] .pinSymbol { color: var(--login-success-ink); opacity: 1; }
+@keyframes pinShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+.status, .error { min-height: 2.5rem; margin-top: 0.75rem; font-size: 0.8125rem; line-height: 1.4; text-align: center; text-wrap: pretty; }
+.status { color: var(--login-muted); }
+.status[data-valid="true"] { color: var(--login-success); }
+.error { color: var(--login-error); }
+.keypad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.25rem 0.75rem; padding-block: 0.25rem; }
+.keypad > button { display: flex; align-items: center; justify-content: center; min-height: clamp(48px, 7.8dvh, 78px); border-radius: 16px; font-size: 1.875rem; font-weight: 500; font-variant-numeric: tabular-nums; touch-action: manipulation; }
+.keypad > .biometricKey, .keypad > .deleteKey { flex-direction: column; gap: 0.125rem; }
+.biometricKey { color: var(--login-accent-ink); }
+.deleteKey { color: var(--login-muted); }
+.biometricKey > :first-child { font-size: 30px; }
+.deleteKey > :first-child { font-size: 24px; }
+.keypad .keyLabel { font-size: 0.6875rem; font-weight: 500; }
+.screen button { cursor: pointer; transition: background-color 160ms ease-out, transform 160ms ease-out; }
+.screen button:active:not(:disabled) { transform: scale(0.96); background-color: var(--login-slot); }
+.screen button:focus-visible, .screen input:focus-visible { outline: 2px solid var(--login-accent); outline-offset: 4px; }
+.screen button:disabled { cursor: default; opacity: 0.45; }
+.screen input { accent-color: var(--login-accent-ink); }
+.legal { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 0.5rem; padding-top: 0.25rem; color: var(--login-muted); font-size: 0.6875rem; }
+.legal button { min-height: 44px; padding-inline: 0.375rem; }
+.phoneForm { display: flex; flex: 1; flex-direction: column; justify-content: center; gap: 1.5rem; padding-block: 1.5rem; }
+.phoneField > label { display: block; font-size: 0.875rem; font-weight: 500; }
+.phoneInput { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; padding: 0 1rem; min-height: 56px; border: 1px solid var(--login-muted); border-radius: 12px; }
+.phoneInput > span { color: var(--login-muted); }
+.phoneInput > input { min-width: 0; width: 100%; height: 54px; font-size: 1.125rem; font-variant-numeric: tabular-nums; background: transparent; }
+.phoneInput > input::placeholder { color: var(--login-muted); }
+.phoneField > .remember { display: flex; align-items: center; gap: 0.625rem; min-height: 44px; margin-top: 0.5rem; color: var(--login-muted); }
+.remember input { width: 18px; height: 18px; }
+.continueButton { display: flex; align-items: center; justify-content: center; gap: 0.75rem; min-height: 52px; border-radius: 12px; background: var(--login-accent); color: #07132e; font-weight: 600; }
+.screen .continueButton:active:not(:disabled) { background: #6c93ff; }
+.help { color: var(--login-muted); font-size: 0.875rem; line-height: 1.5; text-align: center; text-wrap: balance; }
+.profileSection { padding-block: 2rem; }
+.profiles { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.5rem; }
+.profiles button { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border-radius: 12px; background: var(--login-slot); text-align: left; }
+.profiles strong, .profiles small { display: block; overflow-wrap: anywhere; }
+.profiles small { margin-top: 0.25rem; color: var(--login-muted); }
+
+@media (hover: hover) {
+  .keypad > button:hover:not(:disabled), .changeButton:hover:not(:disabled) { background: var(--login-slot); }
+  .legal button:hover { color: var(--login-accent-ink); }
+}
+
+@media (max-height: 680px) {
+  .body { padding-top: max(0.5rem, env(safe-area-inset-top)); }
+  .backToTemple { margin-bottom: 0.25rem; }
+  .pinEntry { padding-top: 1rem; }
+  .pinControl { margin-top: 1rem; }
+  .pinSlot { height: 60px; }
+  .status, .error { margin-top: 0.5rem; min-height: 2rem; }
+  .keypad > button { min-height: 48px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen button, .pinSlot, .pinSymbol, .swipeTrack { transition: none; }
+  .pinControl[data-invalid="true"] { animation: none; }
+  .pinSlot[data-filled="true"] .pinSymbol,
+  .pinSlot[data-filled="true"] .pinSymbol[data-shape="1"] { animation: none; transform: none; }
+  .animatedBackground * { animation: none !important; }
+  .welcomeLogo svg * { opacity: 1 !important; fill-opacity: 1 !important; stroke-dashoffset: 0 !important; }
+}
+
+@media (max-height: 600px) {
+  .body { padding-top: max(0.5rem, env(safe-area-inset-top)); }
+  .pinEntry { padding-top: 0.5rem; }
+  .heading p { margin-top: 0.375rem; }
+  .pinControl { margin-top: 0.75rem; }
+  .status { min-height: 1.25rem; }
+  .legal { padding-top: 0; }
+}
+
+/* The shared base layer fixes all h1 sizes with !important. Override only this login. */
+@layer base {
+  .screen .heading h1 { font-size: 2rem !important; }
+  @media (max-height: 680px) {
+    .screen .heading h1 { font-size: 1.75rem !important; }
+  }
+}

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { loginWithPin } from "@/app/actions/auth";
+import { getLoginProfiles } from "@/app/actions/login-profiles";
 import { updateInitialPin } from "@/app/actions/update-pin";
 import { Label } from "@/components/ui/label";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,6 +11,9 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { createPortal } from "react-dom";
 import { startAuthentication } from "@simplewebauthn/browser";
 import Image from "next/image";
+import { MobilePinLogin } from "./MobilePinLogin";
+import mobileStyles from "./mobile-login.module.css";
+import { loginDisplayName, rememberLoginPhone } from "@/lib/login-experience";
 
 const isMobileDevice = () => {
   if (typeof window === 'undefined') return false;
@@ -19,10 +23,43 @@ const isMobileDevice = () => {
   return isMobileUA || (isTouch && window.innerWidth < 1024);
 };
 
-export function LoginForm() {
+export function LoginForm({ mobile = false }: { mobile?: boolean }) {
   const router = useRouter();
+  const authAttemptRef = useRef(false);
+  const activeRef = useRef(true);
+  const cancelPinSuccessRef = useRef<(() => void) | null>(null);
   const [isSubmittingPin, setIsSubmittingPin] = useState(false);
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
+  const [isLookingUpProfile, setIsLookingUpProfile] = useState(false);
+  const [pinRejected, setPinRejected] = useState(false);
+  const [pinAccepted, setPinAccepted] = useState(false);
+
+  useEffect(() => {
+    activeRef.current = true;
+    return () => {
+      activeRef.current = false;
+      cancelPinSuccessRef.current?.();
+      cancelPinSuccessRef.current = null;
+    };
+  }, []);
+
+  const showPinSuccess = () => {
+    if (!activeRef.current) return Promise.resolve(false);
+    if (!mobile) return Promise.resolve(true);
+    setPinAccepted(true);
+    // Only a verified PIN gets this short confirmation. Failed attempts and
+    // profile selection never wait for an animation or show a success state.
+    return new Promise<boolean>(resolve => {
+      const timer = setTimeout(() => {
+        cancelPinSuccessRef.current = null;
+        resolve(true);
+      }, 420);
+      cancelPinSuccessRef.current = () => {
+        clearTimeout(timer);
+        resolve(false);
+      };
+    });
+  };
 
   // Unified Login Fields
   const [phone, setPhone] = useState("");
@@ -62,35 +99,39 @@ export function LoginForm() {
 
   // Auto-dismiss error banner after 4 seconds
   useEffect(() => {
-    if (error) {
+    if (error && !mobile) {
       const timer = setTimeout(() => {
         setError(null);
       }, 4000);
       return () => clearTimeout(timer);
     }
-  }, [error]);
+  }, [error, mobile]);
 
   useEffect(() => {
     const mobileCheck = isMobileDevice();
     setIsMobile(mobileCheck);
 
-    const isRemembered = localStorage.getItem("remember_me") === "true";
-    setRememberMe(isRemembered);
+    try {
+      const isRemembered = localStorage.getItem("remember_me") === "true";
+      setRememberMe(isRemembered);
 
-    if (isRemembered) {
-      const savedPhone = localStorage.getItem("volunteer_phone");
-      if (savedPhone) {
-        setPhone(savedPhone);
+      if (isRemembered) {
+        const savedPhone = localStorage.getItem("volunteer_phone");
+        if (savedPhone) {
+          setPhone(savedPhone);
+        }
+        const savedName = localStorage.getItem("volunteer_name");
+        if (savedName && savedPhone) {
+          setSavedUserMode(true);
+          setSavedName(savedName);
+        }
+      } else {
+        localStorage.removeItem("volunteer_name");
+        localStorage.removeItem("volunteer_phone");
+        setSavedUserMode(false);
       }
-      const savedName = localStorage.getItem("volunteer_name");
-      if (savedName && savedPhone) {
-        setSavedUserMode(true);
-        setSavedName(savedName);
-      }
-    } else {
-      localStorage.removeItem("volunteer_name");
-      localStorage.removeItem("volunteer_phone");
-      setSavedUserMode(false);
+    } catch {
+      // Storage may be blocked; the normal login must remain available.
     }
 
     if (typeof window !== 'undefined') {
@@ -105,6 +146,7 @@ export function LoginForm() {
 
   // Check if current phone has registered passkeys (huella/Face ID)
   useEffect(() => {
+    if (mobile) return;
     if (!phone || phone.length < 8) {
       setHasPasskey(false);
       return;
@@ -125,21 +167,27 @@ export function LoginForm() {
       });
 
     return () => { isSubscribed = false; };
-  }, [phone, savedUserMode]);
+  }, [phone, savedUserMode, mobile]);
 
   const handleBiometricLogin = async () => {
+    if (authAttemptRef.current || isRedirecting) return;
     if (!phone || phone.length < 8) {
       setError("Ingresa tu número de teléfono primero para autenticarte con Passkey.");
       return;
     }
     
+    authAttemptRef.current = true;
     setError(null);
+    setPinRejected(false);
     setIsBiometricLoading(true);
     try {
       const resp = await fetch('/api/webauthn/authenticate/generate-options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
+        body: JSON.stringify({ phone, ...(mobile && selectedProfile ? {
+          selectedUserId: selectedProfile.id,
+          selectedUserType: selectedProfile.type,
+        } : {}) })
       });
       
       if (!resp.ok) {
@@ -175,41 +223,53 @@ export function LoginForm() {
       } else {
         setError(err.message || "Huella o Passkey no reconocida. Inténtelo con su PIN.");
       }
+    } finally {
+      authAttemptRef.current = false;
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    await submitPin(pin);
+  };
+
+  const submitPin = async (pinValue: string, profile = selectedProfile) => {
+    if (authAttemptRef.current || isRedirecting) return;
     setError(null);
+    setPinRejected(false);
+    setPinAccepted(false);
 
     if (phone.length < 8) {
       setError("El número de teléfono debe tener 8 dígitos.");
       return;
     }
 
-    if (pin.length !== 4) {
+    if (pinValue.length !== 4) {
       setError("El PIN debe tener exactamente 4 dígitos.");
       return;
     }
 
+    authAttemptRef.current = true;
     setIsSubmittingPin(true);
     try {
       const formData = new FormData();
       formData.append("phone", phone);
-      formData.append("pin", pin);
-      if (selectedProfile) {
-        formData.append("selectedUserId", selectedProfile.id);
-        formData.append("selectedUserType", selectedProfile.type);
+      formData.append("pin", pinValue);
+      if (profile) {
+        formData.append("selectedUserId", profile.id);
+        formData.append("selectedUserType", profile.type);
       }
 
       const result = await loginWithPin({}, formData);
 
       if (result.require_profile_selection && result.profiles) {
+        setSelectedProfile(null);
         setCandidateProfiles(result.profiles);
         setRequireProfileSelection(true);
         setIsSubmittingPin(false);
       } else if (result.error) {
         setError(result.error);
+        setPinRejected(true);
         setPin("");
         setIsSubmittingPin(false);
       } else if (result.force_pin_change) {
@@ -217,14 +277,49 @@ export function LoginForm() {
         setNeedsNewPin(true);
         setIsSubmittingPin(false);
       } else if (result.success) {
-        finishLogin(result);
+        if (await showPinSuccess()) finishLogin(result);
       } else {
         setIsSubmittingPin(false);
       }
     } catch (err: any) {
       console.error("Login error:", err);
       setError("Error de conexión con el servidor. Inténtalo de nuevo.");
+      if (mobile) setPin("");
       setIsSubmittingPin(false);
+    } finally {
+      authAttemptRef.current = false;
+    }
+  };
+
+  const lookupMobileProfiles = async () => {
+    if (authAttemptRef.current || isRedirecting) return false;
+    authAttemptRef.current = true;
+    setIsLookingUpProfile(true);
+    setError(null);
+    setPinRejected(false);
+    setPin("");
+    try {
+      const result = await getLoginProfiles(phone);
+      if (result.error || !result.profiles?.length) {
+        setError(result.error || "No pudimos encontrar tu perfil.");
+        return false;
+      }
+      setCandidateProfiles(result.profiles);
+      // Let the PIN distinguish a coordinator from a volunteer. The server
+      // asks for a person only when volunteer credentials are shared.
+      setRequireProfileSelection(false);
+      const person = result.profiles[0];
+      setSelectedProfile(result.profiles.length === 1 ? {
+        id: person.id, name: `${person.firstName} ${person.lastName}`.trim(), type: person.userType,
+      } : null);
+      rememberLoginPhone(phone, rememberMe, loginDisplayName(result.profiles, savedName));
+      return true;
+    } catch {
+      setError("No pudimos consultar tu perfil. Revisa tu conexión e inténtalo de nuevo.");
+      return false;
+    } finally {
+      authAttemptRef.current = false;
+      setIsLookingUpProfile(false);
     }
   };
 
@@ -269,41 +364,94 @@ export function LoginForm() {
   const finishLogin = (result: any) => {
     setIsRedirecting(true);
 
-    if (rememberMe) {
-      localStorage.setItem("remember_me", "true");
-      localStorage.setItem("volunteer_phone", phone || result.phone);
-      if (result.name) {
-        localStorage.setItem("volunteer_name", result.name);
+    rememberLoginPhone(phone || result.phone, rememberMe, result.name);
+    try {
+      if (!localStorage.getItem("preferred_auth_method")) {
+        localStorage.setItem("preferred_auth_method", "pin");
       }
-    } else {
-      localStorage.removeItem("remember_me");
-      localStorage.removeItem("volunteer_phone");
-      localStorage.removeItem("volunteer_name");
-    }
-    if (!localStorage.getItem("preferred_auth_method")) {
-      localStorage.setItem("preferred_auth_method", "pin");
-    }
-    if (result.role) {
-      localStorage.setItem("mock_role", result.role);
-    }
-    if (result.committee) {
-      localStorage.setItem("mock_committee", result.committee);
+      if (result.role) {
+        localStorage.setItem("mock_role", result.role);
+      }
+      if (result.committee) {
+        localStorage.setItem("mock_committee", result.committee);
+      }
+    } catch {
+      // The authenticated session does not depend on optional local storage.
     }
     
     window.location.href = result.redirectTo || "/calendar";
   };
 
   return (
-    <div className="relative">
+    <div className={mobile ? mobileStyles.formHost : "relative"}>
       {isRedirecting && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] bg-dark flex items-center justify-center animate-in fade-in duration-200">
+        <div role="status" aria-label="Cargando tu espacio" className="fixed inset-0 z-[9999] bg-dark flex items-center justify-center animate-in fade-in duration-200">
           <AnimatedLogo className="w-16 h-16 md:w-20 md:h-20 text-text" isLooping={true} />
         </div>,
         document.body
       )}
 
       <AnimatePresence mode="wait">
-        {!needsNewPin ? (
+        {mobile && !needsNewPin ? (
+          isMounted ? <MobilePinLogin
+            key="mobile-login"
+            phone={phone}
+            pin={pin}
+            name={selectedProfile?.name || loginDisplayName(candidateProfiles, savedUserMode ? savedName : "") || (!candidateProfiles.length && savedUserMode ? savedName : "")}
+            rememberMe={rememberMe}
+            busy={isSubmittingPin || isBiometricLoading || isRedirecting || isLookingUpProfile}
+            lookingUpProfile={isLookingUpProfile}
+            biometricLoading={isBiometricLoading}
+            error={error}
+            pinRejected={pinRejected}
+            pinAccepted={pinAccepted}
+            onContinuePhone={lookupMobileProfiles}
+            canChangeProfile={candidateProfiles.length > 1 && !!selectedProfile}
+            onChangeProfile={() => {
+              setPin(""); setError(null); setPinRejected(false);
+              setSelectedProfile(null); setRequireProfileSelection(true);
+            }}
+            profiles={requireProfileSelection && !selectedProfile ? candidateProfiles : []}
+            onPhoneChange={(value) => {
+              setPhone(value);
+              setPin("");
+              setError(null);
+              setRequireProfileSelection(false);
+              setSelectedProfile(null);
+              setCandidateProfiles([]);
+            }}
+            onPinChange={(value) => { setPin(value); setError(null); setPinRejected(false); }}
+            onRememberChange={(value) => {
+              setRememberMe(value);
+              rememberLoginPhone(phone, value, loginDisplayName(candidateProfiles, savedName));
+            }}
+            onChangeAccount={() => {
+              setSavedUserMode(false);
+              setSavedName("");
+              setPhone("");
+              setPin("");
+              setError(null);
+              setSelectedProfile(null);
+              setRequireProfileSelection(false);
+              setCandidateProfiles([]);
+              setPinRejected(false);
+              setRememberMe(false);
+              localStorage.removeItem("volunteer_name");
+              localStorage.removeItem("volunteer_phone");
+              localStorage.removeItem("remember_me");
+            }}
+            onSubmitPin={(value) => { void submitPin(value); }}
+            onBiometricLogin={handleBiometricLogin}
+            onSelectProfile={(profile) => {
+              const choice = { id: profile.id, name: `${profile.firstName} ${profile.lastName}`.trim(), type: profile.userType };
+              setSelectedProfile(choice);
+              setRequireProfileSelection(false);
+              setError(null);
+              setPinRejected(false);
+              if (pin.length === 4) void submitPin(pin, choice);
+            }}
+          /> : <p role="status" className={mobileStyles.status}>Preparando tu acceso…</p>
+        ) : !needsNewPin ? (
           <motion.form 
             key="login"
             initial={{ opacity: 0, x: -20 }}

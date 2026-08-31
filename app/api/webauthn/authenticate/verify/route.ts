@@ -30,7 +30,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Falta el desafío de sesión' }, { status: 400 });
     }
 
-    const { userId, userType, phone } = JSON.parse(authUserInfo);
+    const pendingAuth = JSON.parse(authUserInfo);
+    const phone = pendingAuth.phone;
+    // Keep support for single-account challenges already in flight.
+    const candidates: Array<{ userId: string; userType: 'profile' | 'volunteer' }> =
+      pendingAuth.candidates || [{ userId: pendingAuth.userId, userType: pendingAuth.userType }];
     
     const supabase = await getAdminSupabase();
     
@@ -39,12 +43,18 @@ export async function POST(request: Request) {
       .from('passkeys')
       .select('*')
       .eq('credential_id', body.id)
-      .eq('user_id', userId)
+      .in('user_id', candidates.map(candidate => candidate.userId))
       .maybeSingle();
 
     if (!passkey) {
       return NextResponse.json({ error: 'Credencial no encontrada o no pertenece al usuario' }, { status: 400 });
     }
+
+    const owner = candidates.find(candidate => candidate.userId === passkey.user_id);
+    if (!owner) {
+      return NextResponse.json({ error: 'La credencial no pertenece a este intento de acceso' }, { status: 400 });
+    }
+    const { userId, userType } = owner;
 
     // Use fixed env-var rpID — critical for cross-env compatibility
     const rpID = process.env.WEBAUTHN_RP_ID || 'localhost';

@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { LoginForm } from "./LoginForm";
 import { motion, AnimatePresence } from "framer-motion";
 import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn } from "@/lib/utils";
+import mobileStyles from "./mobile-login.module.css";
+import { MobileLoginShell } from "./MobileLoginShell";
 
 const TEMPLE_QUOTES = [
   {
@@ -118,6 +120,9 @@ function PrivacyTermsModal({
 
       {/* Modal Container — 100% Fullscreen */}
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-label={isPrivacy ? "Política de Privacidad" : "Términos de Uso"}
         initial={{ opacity: 0, scale: 0.97, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 10 }}
@@ -262,13 +267,8 @@ function PrivacyTermsModal({
 }
 
 export function LoginPageClient() {
-  const [page, setPage] = useState(0);
   const [isDark, setIsDark] = useState(true);
   const [activeLegalModal, setActiveLegalModal] = useState<'privacy' | 'terms' | null>(null);
-  const [autoSecondsLeft, setAutoSecondsLeft] = useState(10);
-  const [hasManuallySwitched, setHasManuallySwitched] = useState(false);
-  const touchStartXRef = useRef<number | null>(null);
-  const touchStartYRef = useRef<number | null>(null);
 
   useEffect(() => {
     const applyTheme = (dark: boolean) => {
@@ -297,65 +297,6 @@ export function LoginPageClient() {
     return () => mediaQuery.removeEventListener("change", listener);
   }, []);
 
-  const goToPage = useCallback((newPage: number) => {
-    setHasManuallySwitched(true);
-    setPage(newPage);
-  }, []);
-
-  // 10-second automatic advance from Hero Image to Login Form
-  useEffect(() => {
-    if (page !== 0 || hasManuallySwitched) return;
-
-    const interval = setInterval(() => {
-      setAutoSecondsLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          setPage(1);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [page, hasManuallySwitched]);
-
-  const handlePanEnd = useCallback(
-    (_e: any, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
-      const threshold = 30;
-      const velocityThreshold = 120;
-
-      if (Math.abs(info.offset.x) > Math.abs(info.offset.y) * 0.9) {
-        if ((info.offset.x < -threshold || info.velocity.x < -velocityThreshold) && page === 0) {
-          goToPage(1);
-        } else if ((info.offset.x > threshold || info.velocity.x > velocityThreshold) && page === 1) {
-          goToPage(0);
-        }
-      }
-    },
-    [page, goToPage],
-  );
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartXRef.current = e.touches[0].clientX;
-    touchStartYRef.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
-    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
-    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
-
-    if (Math.abs(deltaX) > 30 && Math.abs(deltaX) > Math.abs(deltaY) * 1.1) {
-      if (deltaX < 0 && page === 0) {
-        goToPage(1);
-      } else if (deltaX > 0 && page === 1) {
-        goToPage(0);
-      }
-    }
-    touchStartXRef.current = null;
-    touchStartYRef.current = null;
-  };
 
   const templeImageSrc = isDark ? "/templodark.jpg" : "/templo.jpg";
 
@@ -426,147 +367,14 @@ export function LoginPageClient() {
         </div>
       </div>
 
-      {/* ── Mobile layout (<md) ── */}
-      <div 
-        className="md:hidden fixed inset-0 overflow-hidden bg-black select-none"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
-        <motion.div
-          animate={{ x: page === 0 ? "0%" : "-50%" }}
-          transition={{ type: "spring", damping: 30, stiffness: 280 }}
-          onPanEnd={handlePanEnd}
-          className="flex h-full w-[200%]"
-        >
-          {/* ── Page 0 — Hero image + quote + Prominent CTA ── */}
-          <div className="relative h-full w-1/2 shrink-0 bg-black touch-pan-y flex flex-col justify-end">
-            <Image
-              src={templeImageSrc}
-              alt="Templo de Managua"
-              fill
-              className="object-cover transition-opacity duration-500"
-              priority
-            />
-            {/* Subtle dark gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent z-10 pointer-events-none" />
-
-            <div className="relative z-20 p-4 sm:p-6 space-y-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
-              <TempleQuoteRotator isMobile />
-
-              {/* Direct Call to Action button */}
-              <button
-                type="button"
-                onClick={() => goToPage(1)}
-                className="w-full flex items-center justify-between py-3.5 px-5 rounded-2xl bg-gradient-to-r from-[#4d7cfe] via-[#2563eb] to-[#1d4ed8] hover:from-[#3b66e0] hover:to-blue-700 text-white font-inter font-extrabold text-sm shadow-[0_12px_28px_rgba(77,124,254,0.45)] border border-white/20 active:scale-[0.98] transition-all cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="material-symbols-outlined text-[20px] text-white">login</span>
-                  <span>Continuar a Iniciar Sesión</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {!hasManuallySwitched && autoSecondsLeft > 0 && (
-                    <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full text-white/90">
-                      Auto ({autoSecondsLeft}s)
-                    </span>
-                  )}
-                  <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
-                    arrow_forward
-                  </span>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* ── Page 1 — Login form ── */}
-          <div className={`relative h-full w-1/2 shrink-0 overflow-y-auto touch-pan-y ${isDark ? 'bg-[#050a15]' : 'bg-slate-50'}`}>
-            <MeshGradientBackground
-              colors={isDark ? ["#4d7cfe", "#1e3a8a", "#0ea5e9", "#2563eb"] : ["#60a5fa", "#3b82f6", "#93c5fd", "#2563eb"]}
-              backgroundColor={isDark ? "#050a15" : "#f8fafc"}
-            />
-            <div className="relative z-10 flex min-h-full flex-col justify-center px-6 py-14 pt-16">
-              <div className="mx-auto w-full max-w-sm">
-                <div className="mb-8 flex flex-col items-center text-center">
-                  <AnimatedLogo className={`w-14 h-14 mb-4 ${isDark ? 'text-white' : 'text-[#4d7cfe]'}`} />
-                  <div className={`text-[16px] tracking-wider mb-1 uppercase whitespace-nowrap font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    Bienvenido de nuevo
-                  </div>
-                  <p className={`font-inter font-bold text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                    Gestión de Voluntarios &bull; Templo de Managua
-                  </p>
-                </div>
-
-                <LoginForm />
-
-                <div className={`mt-10 pt-8 border-t text-center ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                  <p className={`text-sm font-inter font-bold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                    ¿Tienes problemas para ingresar? <br />
-                    <button className="text-[#0084d1] font-inter font-bold hover:underline mt-1">
-                      Contacta a tu coordinador de comité
-                    </button>
-                  </p>
-                  <div className={`mt-4 pt-4 border-t flex items-center justify-center gap-3 text-xs font-inter font-bold ${isDark ? 'border-slate-800/60 text-slate-400' : 'border-slate-200 text-slate-600'}`}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveLegalModal('privacy')}
-                      className="hover:text-[#4d7cfe] transition-colors cursor-pointer"
-                    >
-                      Política de Privacidad
-                    </button>
-                    <span>&bull;</span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveLegalModal('terms')}
-                      className="hover:text-[#4d7cfe] transition-colors cursor-pointer"
-                    >
-                      Términos de Uso
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Top bar: Glass Segmented Navigation Switcher + Hint */}
-        <div className="absolute top-4 sm:top-6 inset-x-4 sm:inset-x-6 z-30 flex items-center justify-between pointer-events-none">
-          {page === 0 && (
-            <div className="flex items-center gap-1.5 text-white/70 text-[11px] font-bold tracking-wide pointer-events-auto drop-shadow-md">
-              <span className="material-symbols-outlined text-[16px] animate-pulse text-[#4d7cfe]">swipe</span>
-              <span>Desliza o espera {autoSecondsLeft}s</span>
-            </div>
-          )}
-          <div className="flex items-center gap-1 rounded-full p-1 bg-black/60 backdrop-blur-xl border border-white/20 shadow-lg pointer-events-auto ml-auto">
-            <button
-              type="button"
-              onClick={() => goToPage(0)}
-              title="Ver mensaje del templo"
-              className={cn(
-                "px-3 py-1 rounded-full text-xs font-inter font-bold transition-all flex items-center gap-1.5 cursor-pointer",
-                page === 0
-                  ? "bg-white text-slate-950 shadow-md font-extrabold"
-                  : "text-white/70 hover:text-white"
-              )}
-            >
-              <span className="material-symbols-outlined text-[14px]">image</span>
-              <span>Templo</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => goToPage(1)}
-              title="Iniciar sesión"
-              className={cn(
-                "px-3 py-1 rounded-full text-xs font-inter font-bold transition-all flex items-center gap-1.5 cursor-pointer",
-                page === 1
-                  ? "bg-[#4d7cfe] text-white shadow-md font-extrabold"
-                  : "text-white/70 hover:text-white"
-              )}
-            >
-              <span className="material-symbols-outlined text-[14px]">login</span>
-              <span>Ingresar</span>
-            </button>
-          </div>
-        </div>
-      </div>
+      <MobileLoginShell isDark={isDark} hero={<TempleQuoteRotator isMobile />}>
+        <LoginForm mobile />
+        <nav className={mobileStyles.legal} aria-label="Información legal">
+          <button type="button" onClick={() => setActiveLegalModal('privacy')}>Privacidad</button>
+          <span aria-hidden="true">·</span>
+          <button type="button" onClick={() => setActiveLegalModal('terms')}>Términos de uso</button>
+        </nav>
+      </MobileLoginShell>
 
       {/* ── Privacy / Terms Legal Modal ── */}
       <AnimatePresence>

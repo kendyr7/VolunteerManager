@@ -9,6 +9,7 @@ type RateLimitOptions = {
   identifier: string;
   limit: number;
   windowSeconds: number;
+  signal?: AbortSignal;
 };
 
 export type RateLimitResult = {
@@ -43,14 +44,17 @@ export async function consumeAuthRateLimit({
   identifier,
   limit,
   windowSeconds,
+  signal,
 }: RateLimitOptions): Promise<RateLimitResult> {
   const supabase = await getAdminSupabase();
   const bucketKey = hashIdentifier(scope, identifier);
-  const { data, error } = await supabase.rpc('consume_auth_rate_limit', {
+  const request = supabase.rpc('consume_auth_rate_limit', {
     p_bucket_key: bucketKey,
     p_limit: limit,
     p_window_seconds: windowSeconds,
   });
+  if (signal) request.abortSignal(signal);
+  const { data, error } = await request;
 
   if (error) {
     console.error('[AUTH_RATE_LIMIT] Could not consume rate-limit bucket:', error.message);

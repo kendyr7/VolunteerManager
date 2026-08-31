@@ -56,10 +56,19 @@ export async function POST(request: Request) {
     const { data: profiles } = await supabase.from('profiles').select('id').in('phone', targetPhones);
     const { data: volunteers } = await supabase.from('volunteers').select('id').in('phone', targetPhones).neq('status', 'archived');
 
-    const candidateUsers = [
+    const matchedUsers = [
       ...(profiles || []).map(p => ({ id: p.id, type: 'profile' as const })),
       ...(volunteers || []).map(v => ({ id: v.id, type: 'volunteer' as const })),
     ];
+
+    const hasSelection = body.selectedUserId !== undefined || body.selectedUserType !== undefined;
+    if (hasSelection && (typeof body.selectedUserId !== 'string' || !['profile', 'volunteer'].includes(body.selectedUserType))) {
+      return NextResponse.json({ error: 'Selecciona un perfil válido.' }, { status: 400 });
+    }
+    // A shared phone must never offer another person's credentials after selection.
+    const candidateUsers = hasSelection
+      ? matchedUsers.filter(user => user.id === body.selectedUserId && user.type === body.selectedUserType)
+      : matchedUsers;
 
     if (candidateUsers.length === 0) {
       return NextResponse.json({ error: 'Usuario no encontrado con ese teléfono' }, { status: 404 });
@@ -77,10 +86,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No tienes huellas o dispositivos registrados' }, { status: 400 });
     }
 
-    const activeUserId = passkeys[0].user_id;
-    const activeUserObj = candidateUsers.find(u => u.id === activeUserId) || candidateUsers[0];
-    const userId = activeUserObj.id;
-    const userType = activeUserObj.type;
+    // The returned credential, not query order, determines which account is
+    // authenticated when a coordinator and a volunteer share a phone.
+    const credentialOwners = candidateUsers
+      .filter(user => passkeys.some(passkey => passkey.user_id === user.id))
+      .map(user => ({ userId: user.id, userType: user.type }));
 
     const rpID = process.env.WEBAUTHN_RP_ID || 'localhost';
 
@@ -105,7 +115,10 @@ export async function POST(request: Request) {
       path: '/',
     });
 
-    cookieStore.set('webauthn_auth_user', JSON.stringify({ userId, userType, phone: rawPhoneInput }), {
+    cookieStore.set('webauthn_auth_user', JSON.stringify({
+      ...(credentialOwners.length === 1 ? credentialOwners[0] : { candidates: credentialOwners }),
+      phone: rawPhoneInput,
+    }), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

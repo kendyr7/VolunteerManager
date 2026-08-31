@@ -68,6 +68,7 @@ export const metadata: Metadata = {
 };
 
 import { AutoLogout } from "@/components/AutoLogout";
+import { LoginActivityTracker } from "@/components/LoginActivityTracker";
 import { TokenProvider } from "@/components/TokenProvider";
 import { UnofficialSiteBanner } from "@/components/UnofficialSiteBanner";
 import { AppInstallPrompt } from "@/components/AppInstallPrompt";
@@ -101,6 +102,7 @@ export default async function RootLayout({
         <BrowserThemeColor />
         <TokenProvider token={sessionToken} />
         <AutoLogout />
+        <LoginActivityTracker />
         <UnofficialSiteBanner initialAcknowledged={hasAcknowledgedUnofficialSite} />
         <AppInstallPrompt />
         {children}
