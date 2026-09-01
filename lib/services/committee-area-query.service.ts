@@ -148,6 +148,7 @@ export class CommitteeAreaQueryService {
       (query) => query.eq('committee_id', selectedCommittee.id).order('sort_order').order('name')
     );
     const areaIds = areaRows.map((area) => area.id);
+    const validAreaIds = new Set(areaIds);
 
     const volunteerRows = await fetchAllRowsStrict<AreaVolunteerRow>(
       supabase,
@@ -190,7 +191,9 @@ export class CommitteeAreaQueryService {
 
     const assignedByArea = new Map<string, number>();
     for (const shift of shiftRows) {
-      if (shift.area_id) assignedByArea.set(shift.area_id, (assignedByArea.get(shift.area_id) || 0) + 1);
+      if (shift.area_id && validAreaIds.has(shift.area_id)) {
+        assignedByArea.set(shift.area_id, (assignedByArea.get(shift.area_id) || 0) + 1);
+      }
     }
     const requiredByArea = new Map<string, number>();
     for (const requirement of requirementRows) {
@@ -245,7 +248,8 @@ export class CommitteeAreaQueryService {
         volunteerId: shift.volunteer_id,
         dayKey: shift.day_key,
         shiftKey: shift.shift_key,
-        areaId: shift.area_id,
+        // Never expose a stale or corrupted cross-committee area in this module.
+        areaId: shift.area_id && validAreaIds.has(shift.area_id) ? shift.area_id : null,
       })),
       eventDays,
     };

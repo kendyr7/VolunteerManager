@@ -274,6 +274,78 @@ export class VolunteerMutationService {
     return data?.name ?? null;
   }
 
+  /**
+   * Defense in depth for deployments where the database reconciliation trigger
+   * has not been applied yet. A committee transfer must never leave a volunteer
+   * carrying operational areas owned by the previous committee.
+   */
+  private static async clearIncompatibleShiftAreas(
+    supabase: Awaited<ReturnType<typeof getAdminSupabase>>,
+    volunteerId: string,
+    targetCommitteeId: string | null,
+    actor: AuditActor
+  ): Promise<{ success: boolean; error?: string }> {
+    const { data: shifts, error: shiftsError } = await supabase
+      .from('shifts')
+      .select('id, day_key, shift_key, area_id')
+      .eq('volunteer_id', volunteerId)
+      .not('area_id', 'is', null);
+    if (shiftsError) return { success: false, error: shiftsError.message };
+    if (!shifts?.length) return { success: true };
+
+    const areaIds = Array.from(new Set(
+      shifts.map((shift) => shift.area_id).filter((areaId): areaId is string => Boolean(areaId))
+    ));
+    const { data: areas, error: areasError } = await supabase
+      .from('committee_areas')
+      .select('id, name, committee_id')
+      .in('id', areaIds);
+    if (areasError) return { success: false, error: areasError.message };
+
+    const areaById = new Map((areas || []).map((area) => [area.id, area]));
+    const incompatible = shifts.filter((shift) => {
+      const area = shift.area_id ? areaById.get(shift.area_id) : null;
+      return Boolean(area) && area!.committee_id !== targetCommitteeId;
+    });
+    if (incompatible.length === 0) return { success: true };
+
+    const { data: cleared, error: clearError } = await supabase
+      .from('shifts')
+      .update({ area_id: null })
+      .in('id', incompatible.map((shift) => shift.id))
+      .select('*');
+    if (clearError || !cleared || cleared.length !== incompatible.length) {
+      return {
+        success: false,
+        error: clearError?.message || 'No se pudieron retirar todas las áreas del comité anterior.',
+      };
+    }
+
+    await VolunteerAuditWriter.write(incompatible.map((shift) => {
+      const previousArea = shift.area_id ? areaById.get(shift.area_id) : null;
+      return {
+        actionType: 'Seguridad' as const,
+        volunteerId,
+        description: `Retiró el área "${previousArea?.name || 'Área anterior'}" del turno ${shift.shift_key} de ${shift.day_key} al cambiar de comité`,
+        actor,
+        context: {
+          operation: 'committee_transfer_area_cleanup',
+          shiftId: shift.id,
+          dayKey: shift.day_key,
+          shiftKey: shift.shift_key,
+          previousAreaId: shift.area_id,
+          previousAreaCommitteeId: previousArea?.committee_id || null,
+          targetCommitteeId,
+        },
+      };
+    }));
+
+    for (const shift of cleared) {
+      broadcastShiftSync({ eventType: 'UPDATE', table: 'shifts', record: shift });
+    }
+    return { success: true };
+  }
+
   private static async findActivePhoneConflict(
     supabase: Awaited<ReturnType<typeof getAdminSupabase>>,
     phoneInput: string,
@@ -593,6 +665,36 @@ export class VolunteerMutationService {
           details: `DATABASE UPDATE FAILED: ${updateError.message}`,
         });
         return { success: false, error: updateError.message };
+      }
+
+      const committeeChanged = previous.committee_id !== incoming.committee_id;
+      if (committeeChanged) {
+        const reconciliation = await this.clearIncompatibleShiftAreas(
+          supabase,
+          volunteerId,
+          incoming.committee_id,
+          actor
+        );
+        if (!reconciliation.success) {
+          // Restore the full previous profile so a failed reconciliation cannot
+          // leave a partial committee transfer or unrelated profile changes.
+          const { error: rollbackError } = await supabase
+            .from('volunteers')
+            .update(previous)
+            .eq('id', volunteerId);
+          console.error(
+            '[VolunteerMutationService.updateProfile] Area reconciliation failed after committee change:',
+            reconciliation.error,
+            'Committee rollback error:',
+            rollbackError
+          );
+          return {
+            success: false,
+            error: rollbackError
+              ? 'No se pudieron reconciliar las áreas del comité anterior. Revisa el voluntario antes de continuar.'
+              : 'No se pudo completar el cambio de comité porque quedaron áreas incompatibles.',
+          };
+        }
       }
 
       realtimeDebugLogger.addLog({
