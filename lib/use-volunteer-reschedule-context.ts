@@ -1,31 +1,48 @@
 'use client'
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fetchVolunteerRescheduleContextAction,
   type VolunteerRescheduleContext,
+  type VolunteerRescheduleContextResult,
 } from '@/app/actions/shift-change-actions';
 
 export function useVolunteerRescheduleContext(volunteerId: string) {
-  const [ctx, setCtx] = useState<VolunteerRescheduleContext | null>(null);
+  const [loaded, setLoaded] = useState<{
+    volunteerId: string;
+    context: VolunteerRescheduleContextResult;
+  } | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const requestIdRef = useRef(0);
 
-  useEffect(() => {
-    let active = true;
+  const refresh = useCallback(async () => {
     if (!volunteerId) {
-      setCtx(null);
-      return;
+      setIsRefreshing(false);
+      return null;
     }
-    setCtx(null);
-    (async () => {
-      const res = await fetchVolunteerRescheduleContextAction(volunteerId);
-      if (active) setCtx(res);
-    })();
-    return () => {
-      active = false;
-    };
+
+    const requestId = ++requestIdRef.current;
+    setIsRefreshing(true);
+    const result = await fetchVolunteerRescheduleContextAction(volunteerId);
+    if (requestId === requestIdRef.current) {
+      setLoaded({ volunteerId, context: result });
+      setIsRefreshing(false);
+    }
+    return result;
   }, [volunteerId]);
 
-  return ctx;
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      void refresh();
+    }, 0);
+    return () => {
+      clearTimeout(timeoutId);
+      requestIdRef.current += 1;
+    };
+  }, [refresh, volunteerId]);
+
+  const ctx = loaded?.volunteerId === volunteerId ? loaded.context : null;
+  return { context: ctx, isRefreshing, refresh };
 }
 
 export function isVolunteerShiftCompleted(
@@ -54,12 +71,14 @@ export function getVolunteerShiftCapacity(
   shiftKey: string
 ) {
   const commName = ctx?.committeeName || 'Sin comité';
-  const maxReq = ctx?.requirementsByCommittee[commName]?.[shiftKey] ?? 0;
-  const count = ctx?.assignmentCountsByShift[dayKey]?.[shiftKey]?.[commName] ?? 0;
+  const slot = ctx?.capacityByShift[dayKey]?.[shiftKey];
+  const maxReq = slot?.required ?? 0;
+  const count = slot?.count ?? 0;
   return {
     committeeName: commName,
     count,
     maxReq,
+    available: maxReq > 0 ? Math.max(maxReq - count, 0) : null,
     isFull: maxReq > 0 && count >= maxReq,
   };
 }

@@ -35,6 +35,9 @@ interface AreaVolunteerRow {
   first_name: string | null;
   last_name: string | null;
   age: number | null;
+  neighborhood: string | null;
+  stake: string | null;
+  phone: string | null;
 }
 
 interface AreaCommitteeRow {
@@ -82,6 +85,9 @@ export interface AreaVolunteer {
   id: string;
   name: string;
   age: number | null;
+  neighborhood: string | null;
+  stake: string | null;
+  phone: string | null;
 }
 
 export interface AreaShiftAssignment {
@@ -153,7 +159,7 @@ export class CommitteeAreaQueryService {
     const volunteerRows = await fetchAllRowsStrict<AreaVolunteerRow>(
       supabase,
       'volunteers',
-      'id, first_name, last_name, age',
+      'id, first_name, last_name, age, neighborhood, stake, phone',
       (query) => query.eq('committee_id', selectedCommittee.id).or('status.is.null,status.neq.archived').order('first_name').order('last_name')
     );
     const volunteerIds = volunteerRows.map((volunteer) => volunteer.id);
@@ -242,6 +248,9 @@ export class CommitteeAreaQueryService {
         id: volunteer.id,
         name: `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || 'Voluntario',
         age: volunteer.age === null ? null : Number(volunteer.age),
+        neighborhood: volunteer.neighborhood,
+        stake: volunteer.stake,
+        phone: volunteer.phone,
       })),
       assignments: shiftRows.map((shift) => ({
         id: shift.id,

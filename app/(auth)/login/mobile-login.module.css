@@ -60,7 +60,7 @@
 .formHost, .pinForm { display: flex; flex: 1; flex-direction: column; }
 .account { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .identity { min-width: 0; }
-.identity p { font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+.identity p { font-size: 0.9375rem; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; white-space: nowrap; }
 .identity > span { display: block; margin-top: 0.25rem; color: var(--login-muted); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
 .changeButton { min-height: 44px; padding: 0.625rem 1rem; border-radius: 999px; background: var(--login-slot); font-size: 0.875rem; font-weight: 500; flex-shrink: 0; }
 .pinEntry { margin-block: auto; padding-top: clamp(1.25rem, 4dvh, 2.75rem); }
@@ -152,6 +152,12 @@
   .pinSlot { height: 60px; }
   .status, .error { margin-top: 0.5rem; min-height: 2rem; }
   .keypad > button { min-height: 48px; }
+}
+
+@media (max-width: 340px) {
+  .account { gap: 0.5rem; }
+  .identity p { font-size: 0.8125rem; }
+  .changeButton { padding-inline: 0.75rem; font-size: 0.8125rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

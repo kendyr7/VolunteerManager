@@ -25,7 +25,7 @@ import type {
   AreaManagementItem,
   AreaVolunteer,
 } from '@/lib/services/committee-area-query.service';
-import { cn } from '@/lib/utils';
+import { cn, normalizeSearch } from '@/lib/utils';
 
 type ShiftKey = 'T1' | 'T2' | 'T3' | 'T4';
 type RequirementMap = Record<string, number>;
@@ -384,17 +384,32 @@ function AssignmentPanel({
     [data.assignments, dayKey, shiftKey, volunteersById]
   );
 
-  const normalizedSearch = search.trim().toLocaleLowerCase('es');
+  const searchTerms = useMemo(
+    () => normalizeSearch(search).split(/[\s,]+/).filter(Boolean),
+    [search]
+  );
   const filteredAssignments = useMemo(() => {
     return slotAssignments.filter((assignment) => {
-      if (normalizedSearch && !assignment.volunteer!.name.toLocaleLowerCase('es').includes(normalizedSearch)) {
-        return false;
+      if (searchTerms.length > 0) {
+        const volunteer = assignment.volunteer!;
+        const areaName = assignment.areaId ? areasById.get(assignment.areaId)?.name : '';
+        const compactPhone = (volunteer.phone || '').replace(/\D/g, '');
+        const searchIndex = normalizeSearch([
+          volunteer.name,
+          volunteer.neighborhood,
+          volunteer.stake,
+          volunteer.phone,
+          compactPhone,
+          areaName,
+        ].filter(Boolean).join(' '));
+
+        if (!searchTerms.every((term) => searchIndex.includes(term))) return false;
       }
       if (statusFilter === 'unassigned') return !assignment.areaId;
       if (statusFilter === 'assigned') return Boolean(assignment.areaId);
       return true;
     });
-  }, [slotAssignments, normalizedSearch, statusFilter]);
+  }, [areasById, searchTerms, slotAssignments, statusFilter]);
 
   const visibleIds = filteredAssignments.map((assignment) => assignment.id);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
@@ -558,8 +573,8 @@ function AssignmentPanel({
               value={search}
               onValueChange={setSearch}
               onImmediateSearch={setSearch}
-              placeholder="Buscar voluntario por nombre..."
-              ariaLabel="Buscar voluntario"
+              placeholder="Buscar nombre, barrio, estaca, teléfono o área..."
+              ariaLabel="Buscar por nombre, barrio o rama, estaca, teléfono o área asignada"
             />
           </div>
 

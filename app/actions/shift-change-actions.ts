@@ -11,7 +11,11 @@ import {
   requireVolunteerSelfOrCapability,
 } from '@/lib/authorization';
 import { hasCapability } from '@/lib/role-permissions';
-import { isShiftAvailableForDay } from '@/lib/dates';
+import {
+  formatDateShort,
+  getOperationalEventDays,
+  isShiftAvailableForDay,
+} from '@/lib/dates';
 import {
   getCommitteeCoverageSnapshot,
   getCoverageLevel,
@@ -488,8 +492,7 @@ export async function fetchVolunteerShiftChangeRequestsAction(volunteerId: strin
 
 export interface VolunteerRescheduleContext {
   committeeName: string;
-  requirementsByCommittee: Record<string, Record<string, number>>;
-  assignmentCountsByShift: Record<string, Record<string, Record<string, number>>>;
+  capacityByShift: Record<string, Record<string, { count: number; required: number }>>;
   ownShifts: {
     day_key: string;
     shift_key: string;
@@ -498,91 +501,87 @@ export interface VolunteerRescheduleContext {
   }[];
 }
 
+export type VolunteerRescheduleContextResult = VolunteerRescheduleContext & {
+  success: boolean;
+  error?: string;
+};
+
+interface VolunteerOwnShiftRow {
+  day_key: string;
+  shift_key: string;
+  checked_in?: boolean | null;
+  checked_in_at?: string | null;
+  checked_out?: boolean | null;
+  checked_out_at?: string | null;
+}
+
 export async function fetchVolunteerRescheduleContextAction(
   volunteerId: string
-): Promise<{ success: boolean } & VolunteerRescheduleContext> {
+): Promise<VolunteerRescheduleContextResult> {
   try {
     await requireVolunteerSelfOrCapability('reschedule_volunteer', volunteerId);
     const supabase = getAdminClient();
 
-    const [volRes, committeesRes, reqsRes, shiftsRes, volunteersRes] = await Promise.all([
-      supabase
-        .from('volunteers')
-        .select('id, first_name, last_name, committee_id')
-        .eq('id', volunteerId)
-        .maybeSingle(),
-      supabase
-        .from('committees')
-        .select('id, name')
-        .or('status.is.null,status.neq.archived'),
-      supabase
-        .from('committee_shift_requirements')
-        .select('committee_id, shift_key, required'),
+    const { data: volunteer, error: volunteerError } = await supabase
+      .from('volunteers')
+      .select('id, committee_id, committees(name)')
+      .eq('id', volunteerId)
+      .maybeSingle();
+
+    if (volunteerError) throw volunteerError;
+    if (!volunteer) throw new Error('No se encontró el perfil del voluntario.');
+
+    const dayKeys = getOperationalEventDays().map(formatDateShort);
+    const [coverage, ownShiftsResult] = await Promise.all([
+      volunteer.committee_id
+        ? getCommitteeCoverageSnapshot(supabase, volunteer.committee_id, dayKeys)
+        : Promise.resolve({ assignments: [], slots: [] }),
       supabase
         .from('shifts')
-        .select(
-          'volunteer_id, day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at'
-        ),
-      supabase.from('volunteers').select('id, committee_id'),
+        .select('day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at')
+        .eq('volunteer_id', volunteerId)
+        .in('day_key', dayKeys),
     ]);
 
-    const committeeMap: Record<string, string> = {};
-    (committeesRes.data || []).forEach((c: any) => {
-      committeeMap[c.id] = c.name;
+    if (ownShiftsResult.error) throw ownShiftsResult.error;
+
+    const capacityByShift: VolunteerRescheduleContext['capacityByShift'] = {};
+    coverage.slots.forEach(slot => {
+      if (!capacityByShift[slot.dayKey]) capacityByShift[slot.dayKey] = {};
+      capacityByShift[slot.dayKey][slot.shiftKey] = {
+        count: slot.count,
+        required: slot.required,
+      };
     });
 
-    const requirementsByCommittee: Record<string, Record<string, number>> = {};
-    (reqsRes.data || []).forEach((r: any) => {
-      const commName = committeeMap[r.committee_id];
-      if (!commName) return;
-      if (!requirementsByCommittee[commName]) requirementsByCommittee[commName] = {};
-      requirementsByCommittee[commName][r.shift_key] = r.required;
-    });
+    const ownShifts = ((ownShiftsResult.data || []) as VolunteerOwnShiftRow[]).map(shift => ({
+      day_key: shift.day_key,
+      shift_key: shift.shift_key,
+      checked_in: Boolean(shift.checked_in || shift.checked_in_at),
+      checked_out: Boolean(shift.checked_out || shift.checked_out_at),
+    }));
 
-    const volCommitteeMap: Record<string, string> = {};
-    (volunteersRes.data || []).forEach((v: any) => {
-      volCommitteeMap[v.id] = committeeMap[v.committee_id] || 'Sin comité';
-    });
-
-    const assignmentCountsByShift: Record<
-      string,
-      Record<string, Record<string, number>>
-    > = {};
-    const ownShifts: VolunteerRescheduleContext['ownShifts'] = [];
-
-    (shiftsRes.data || []).forEach((s: any) => {
-      const commName = volCommitteeMap[s.volunteer_id] || 'Sin comité';
-      if (!assignmentCountsByShift[s.day_key]) assignmentCountsByShift[s.day_key] = {};
-      if (!assignmentCountsByShift[s.day_key][s.shift_key]) assignmentCountsByShift[s.day_key][s.shift_key] = {};
-      assignmentCountsByShift[s.day_key][s.shift_key][commName] =
-        (assignmentCountsByShift[s.day_key][s.shift_key][commName] || 0) + 1;
-
-      if (s.volunteer_id === volunteerId) {
-        ownShifts.push({
-          day_key: s.day_key,
-          shift_key: s.shift_key,
-          checked_in: !!(s.checked_in || s.checked_in_at),
-          checked_out: !!(s.checked_out || s.checked_out_at),
-        });
-      }
-    });
-
-    const committeeName = committeeMap[volRes.data?.committee_id] || 'Sin comité';
+    const committeeRelation = volunteer.committees as
+      | { name?: string | null }
+      | Array<{ name?: string | null }>
+      | null;
+    const committeeName = (
+      Array.isArray(committeeRelation) ? committeeRelation[0]?.name : committeeRelation?.name
+    ) || 'Sin comité';
 
     return {
       success: true,
       committeeName,
-      requirementsByCommittee,
-      assignmentCountsByShift,
+      capacityByShift,
       ownShifts,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error in fetchVolunteerRescheduleContextAction:', err);
     return {
       success: false,
+      error: err instanceof Error ? err.message : 'No se pudo consultar la disponibilidad.',
       committeeName: '',
-      requirementsByCommittee: {},
-      assignmentCountsByShift: {},
+      capacityByShift: {},
       ownShifts: [],
     };
   }

@@ -429,7 +429,11 @@ export function VolunteerProfileView({
   }, [dbShiftRecords, auditLogs, isShiftCheckedOut, externalCheckedInMap, localCheckedInMap, volunteer.id]);
 
   // Contexto de validación para reagendamiento (turnos propios + capacidad por comité)
-  const rescheduleCtx = useVolunteerRescheduleContext(volunteer.id);
+  const {
+    context: rescheduleCtx,
+    isRefreshing: isRescheduleContextRefreshing,
+    refresh: refreshRescheduleContext,
+  } = useVolunteerRescheduleContext(volunteer.id);
 
   // Reagendamiento State
   const [activeShiftTooltipKey, setActiveShiftTooltipKey] = useState<string | null>(null);
@@ -446,6 +450,10 @@ export function VolunteerProfileView({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isRescheduleModalOpen) void refreshRescheduleContext();
+  }, [isRescheduleModalOpen, refreshRescheduleContext]);
 
   const sourceShiftCompleted = !!(sourceDayKey && sourceShiftKey && isVolunteerShiftCompleted(rescheduleCtx, sourceDayKey, sourceShiftKey));
 
@@ -660,6 +668,7 @@ export function VolunteerProfileView({
       }, 2000);
     } else {
       setSubmitError(res.error || "Ocurrió un error al enviar la solicitud.");
+      await refreshRescheduleContext();
     }
     setIsSubmitting(false);
   };
@@ -1632,6 +1641,7 @@ export function VolunteerProfileView({
                                 setTargetDayKey(d.key);
                                 setTargetShiftKey('');
                                 setRequestReason('');
+                                void refreshRescheduleContext();
                               }}
                               className={`relative overflow-hidden flex flex-col items-center justify-center p-2 rounded-xl border transition-all bg-dark3 cursor-pointer ${
                                 isSelected
@@ -1661,7 +1671,8 @@ export function VolunteerProfileView({
                             const tAssigned = !isSameShift && isVolunteerShiftAssigned(rescheduleCtx, targetDayKey, t);
                             const capInfo = getVolunteerShiftCapacity(rescheduleCtx, targetDayKey, t);
                             const isFull = capInfo.isFull;
-                            const isBtnDisabled = isSameShift || tCompleted || tAssigned || isFull;
+                            const availabilityUnavailable = !rescheduleCtx?.success;
+                            const isBtnDisabled = isSameShift || tCompleted || tAssigned || isFull || isRescheduleContextRefreshing || availabilityUnavailable;
                             return (
                               <button
                                 key={t}
@@ -1685,11 +1696,15 @@ export function VolunteerProfileView({
                                   <span className="block text-[8px] text-text-dim/60 font-normal leading-none">Completado</span>
                                 ) : tAssigned ? (
                                   <span className="block text-[8px] text-amber-400 font-bold leading-none">Asignado</span>
+                                ) : isRescheduleContextRefreshing ? (
+                                  <span className="block text-[8px] text-text-dim/70 font-normal leading-none">Actualizando…</span>
+                                ) : availabilityUnavailable ? (
+                                  <span className="block text-[8px] text-rose-400 font-bold leading-none">No disponible</span>
                                 ) : isFull ? (
                                   <span className="block text-[8px] text-amber-400 font-bold leading-none">Lleno ({capInfo.count}/{capInfo.maxReq})</span>
                                 ) : (
                                   <span className="block text-[8px] text-text-dim/70 font-normal leading-none">
-                                    {capInfo.maxReq > 0 ? `${capInfo.count} / ${capInfo.maxReq}` : `${capInfo.count} asig.`}
+                                    {capInfo.available !== null ? `${capInfo.count} ocupados · ${capInfo.available} libres` : `${capInfo.count} asignados`}
                                   </span>
                                 )}
                               </button>
@@ -1774,7 +1789,7 @@ export function VolunteerProfileView({
 
                   <Button
                     type="button"
-                    disabled={!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey || !requestReason.trim() || isSubmitting || sourceShiftCompleted || targetShiftStatus.isSource || targetShiftStatus.isCompleted || targetShiftStatus.isAssigned || targetCapacity.isFull}
+                    disabled={!sourceDayKey || !sourceShiftKey || !targetDayKey || !targetShiftKey || !requestReason.trim() || isSubmitting || isRescheduleContextRefreshing || !rescheduleCtx?.success || sourceShiftCompleted || targetShiftStatus.isSource || targetShiftStatus.isCompleted || targetShiftStatus.isAssigned || targetCapacity.isFull}
                     onClick={handleSendRescheduleRequest}
                     className="flex-1 bg-[#4d7cfe] hover:bg-[#3b66e0] disabled:bg-dark3 disabled:text-text-dim disabled:border-border text-white rounded-full h-11 text-xs font-bold shadow-lg active:scale-95 transition-all cursor-pointer"
                   >
