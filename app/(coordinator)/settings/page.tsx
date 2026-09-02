@@ -465,13 +465,6 @@ export default function SettingsPage() {
         keywords: 'roles políticas autorización dashboard turnos reportes whatsapp importar qr usuarios',
         icon: 'admin_panel_settings',
       },
-      {
-        id: 'requirements',
-        title: 'Requerimientos por turno',
-        description: 'Capacidad mínima y cantidad de personal por horario',
-        keywords: 'cupos necesidades t1 t2 t3 t4 comités sincronizar voluntarios',
-        icon: 'groups',
-      },
     ];
 
     if (isMobile) {
@@ -484,23 +477,33 @@ export default function SettingsPage() {
       });
     }
 
-    if (canManageCommittees || currentRole === 'Admin') {
+    if (canManageCommittees) {
       sections.push(
+        {
+          id: 'requirements',
+          title: 'Requerimientos por turno',
+          description: 'Capacidad mínima y cantidad de personal por horario',
+          keywords: 'cupos necesidades t1 t2 t3 t4 comités sincronizar voluntarios',
+          icon: 'groups',
+        },
         {
           id: 'committeeMgmt',
           title: 'Gestión de comités',
           description: 'Crear, archivar y restaurar comités',
           keywords: 'nuevo agregar eliminar desarchivar activos archivados parqueo',
           icon: 'groups',
-        },
-        {
-          id: 'reminderCapacity',
-          title: 'Capacidad de recordatorios',
-          description: 'Proyección, redistribución y límite de WhatsApp',
-          keywords: 'whatsapp recordatorios mensajes límite capacidad cron envíos reubicar 24 horas',
-          icon: 'monitoring',
         }
       );
+    }
+
+    if (currentRole === 'Admin') {
+      sections.push({
+        id: 'reminderCapacity',
+        title: 'Capacidad de recordatorios',
+        description: 'Proyección, redistribución y límite de WhatsApp',
+        keywords: 'whatsapp recordatorios mensajes límite capacidad cron envíos reubicar 24 horas',
+        icon: 'monitoring',
+      });
     }
 
     if (canViewActivityLogs) {

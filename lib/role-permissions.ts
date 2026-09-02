@@ -222,6 +222,18 @@ const OWN_AREA_CAPABILITIES = new Set<Capability>([
   'manage_area_requirements',
 ]);
 
+const CAPABILITY_PREREQUISITES: Partial<Record<Capability, Capability>> = {
+  view_all_volunteers: 'view_volunteers',
+  view_volunteer_profile: 'view_volunteers',
+  edit_volunteer_personal_info: 'view_volunteer_profile',
+  reschedule_volunteer: 'view_volunteer_profile',
+  view_global_reports: 'view_reports',
+  manage_committee_areas: 'view_area_coverage',
+  assign_volunteer_areas: 'view_area_coverage',
+  manage_area_requirements: 'view_area_coverage',
+  manage_permissions: 'view_settings',
+};
+
 export function hasCapability(
   snapshot: AuthorizationSnapshot,
   capability: Capability,
@@ -235,6 +247,10 @@ export function hasCapability(
   if (!configurableRole) return false;
   const key = ROLE_PERMISSION_KEYS[configurableRole][capability];
   if (!snapshot.permissions[key]) return false;
+  const prerequisite = CAPABILITY_PREREQUISITES[capability];
+  if (prerequisite && !snapshot.permissions[ROLE_PERMISSION_KEYS[configurableRole][prerequisite]]) {
+    return false;
+  }
 
   if (
     configurableRole === 'committee'

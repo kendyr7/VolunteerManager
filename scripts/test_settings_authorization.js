@@ -2,6 +2,7 @@
 const jiti = require('jiti')(process.cwd(), { alias: { '@': process.cwd() } });
 const {
   CONFIGURABLE_PERMISSION_DEFAULTS,
+  ROLE_PERMISSION_KEYS,
   hasCapability,
 } = jiti('./lib/role-permissions');
 
@@ -34,10 +35,30 @@ assert(hasCapability(admin, 'view_settings'), 'Admin puede abrir ajustes');
 assert(hasCapability(admin, 'manage_permissions'), 'Admin puede administrar permisos');
 assert(hasCapability(admin, 'view_activity_logs'), 'Admin puede consultar auditoria');
 
+const restrictedAdmin = snapshot({
+  role: 'Admin',
+  coordinatorType: null,
+  committeeId: null,
+  permissions: {
+    ...CONFIGURABLE_PERMISSION_DEFAULTS,
+    [ROLE_PERMISSION_KEYS.admin.view_dashboard]: false,
+  },
+});
+assert(!hasCapability(restrictedAdmin, 'view_dashboard'), 'Los permisos de Administrador también se pueden revocar');
+
 const committeeCoordinator = snapshot({});
 assert(hasCapability(committeeCoordinator, 'view_settings'), 'Coordinador de comite puede abrir ajustes');
 assert(!hasCapability(committeeCoordinator, 'manage_permissions'), 'Coordinador de comite no administra permisos');
 assert(!hasCapability(committeeCoordinator, 'view_activity_logs'), 'Coordinador de comite no consulta auditoria global');
+
+const elevatedCommitteeCoordinator = snapshot({
+  permissions: {
+    ...CONFIGURABLE_PERMISSION_DEFAULTS,
+    [ROLE_PERMISSION_KEYS.committee.manage_platform_users]: true,
+  },
+});
+assert(hasCapability(elevatedCommitteeCoordinator, 'manage_platform_users'), 'Un permiso habilitado para Comité se aplica realmente');
+assert(!hasCapability(committeeCoordinator, 'view_volunteer_profile', 'committee-b'), 'El alcance de Comité permanece limitado aunque el permiso esté activo');
 
 const volunteer = snapshot({
   userType: 'volunteer',

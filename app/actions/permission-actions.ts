@@ -38,25 +38,34 @@ export async function updateRolePermissionAction(
       ROLE_PERMISSION_KEYS.technology.manage_permissions,
       ROLE_PERMISSION_KEYS.committee.manage_permissions,
     ];
+    const settingsKeys: ConfigurablePermissionKey[] = [
+      ROLE_PERMISSION_KEYS.admin.view_settings,
+      ROLE_PERMISSION_KEYS.technology.view_settings,
+      ROLE_PERMISSION_KEYS.committee.view_settings,
+    ];
+    const lockoutSensitiveKeys = [...permissionManagerKeys, ...settingsKeys];
 
-    if (!enabled && permissionManagerKeys.includes(key)) {
+    if (!enabled && lockoutSensitiveKeys.includes(key)) {
       const { data: managerRows, error: managerRowsError } = await supabase
         .from('system_settings')
         .select('key, value')
-        .in('key', permissionManagerKeys);
+        .in('key', lockoutSensitiveKeys);
       if (managerRowsError) {
         return { success: false as const, error: managerRowsError.message };
       }
 
-      const savedManagers = new Map((managerRows || []).map(row => [row.key, row.value === 'true']));
-      const anotherRoleCanManage = permissionManagerKeys.some(managerKey => {
-        if (managerKey === key) return false;
-        return savedManagers.get(managerKey) ?? CONFIGURABLE_PERMISSION_DEFAULTS[managerKey];
+      const savedPermissions = new Map((managerRows || []).map(row => [row.key, row.value === 'true']));
+      const valueAfterChange = (permissionKey: ConfigurablePermissionKey) => {
+        if (permissionKey === key) return false;
+        return savedPermissions.get(permissionKey) ?? CONFIGURABLE_PERMISSION_DEFAULTS[permissionKey];
+      };
+      const anotherRoleCanManage = permissionManagerKeys.some((managerKey, index) => {
+        return valueAfterChange(managerKey) && valueAfterChange(settingsKeys[index]);
       });
       if (!anotherRoleCanManage) {
         return {
           success: false as const,
-          error: 'Primero habilita “Gestionar permisos por rol” para otro rol. El sistema no puede quedar sin un responsable de permisos.',
+          error: 'Primero deja habilitados “Ver ajustes” y “Gestionar permisos por rol” para otro rol. El sistema no puede quedar sin un responsable de permisos.',
         };
       }
     }
@@ -85,7 +94,7 @@ export async function updateRolePermissionAction(
         key,
         permissionLabel,
         targetRole: targetRoleLabel,
-        previous: previous?.value === 'true',
+        previous: actor.permissions[key],
         enabled,
       }),
       target_id: actor.userId,
