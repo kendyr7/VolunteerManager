@@ -1,24 +1,6 @@
 export type AppRole = 'Admin' | 'Editor' | 'Lector';
 export type CoordinatorType = 'technology' | 'committee';
 
-export type ConfigurablePermissionKey =
-  | 'role.technology.view_dashboard'
-  | 'role.technology.view_volunteers'
-  | 'role.technology.edit_personal_info'
-  | 'role.technology.reschedule_volunteers'
-  | 'role.technology.register_missing_attendance'
-  | 'role.technology.correct_attendance_times'
-  | 'role.technology.view_notices'
-  | 'role.technology.view_requests'
-  | 'role.technology.view_global_reports'
-  | 'role.technology.scan_qr_attendance'
-  | 'role.technology.create_volunteers'
-  | 'role.technology.import_volunteers'
-  | 'role.technology.manage_area_coverage'
-  | 'role.committee.view_notices'
-  | 'role.committee.view_requests'
-  | 'role.committee.view_global_reports';
-
 export type Capability =
   | 'view_settings'
   | 'view_activity_logs'
@@ -46,6 +28,138 @@ export type Capability =
   | 'manage_permissions'
   | 'manage_committees';
 
+export type ConfigurableRole = 'admin' | 'technology' | 'committee';
+
+export const CAPABILITY_LABELS: Record<Capability, string> = {
+  view_settings: 'Ver ajustes',
+  view_activity_logs: 'Ver historial de actividades',
+  view_dashboard: 'Ver Dashboard',
+  view_volunteers: 'Ver voluntarios',
+  view_all_volunteers: 'Ver voluntarios de todos los comités',
+  view_volunteer_profile: 'Abrir perfiles de voluntarios',
+  edit_volunteer_personal_info: 'Editar información personal',
+  reschedule_volunteer: 'Reagendar turnos',
+  scan_qr_attendance: 'Escanear QR y registrar entrada o salida',
+  register_missing_attendance: 'Registrar asistencia o entrada faltante',
+  correct_attendance_times: 'Corregir horarios manualmente',
+  create_volunteer: 'Crear voluntarios',
+  import_volunteers: 'Importar voluntarios',
+  archive_volunteer: 'Archivar voluntarios',
+  view_notices: 'Ver y enviar avisos',
+  view_requests: 'Ver y gestionar solicitudes',
+  view_reports: 'Ver reportes del alcance propio',
+  view_global_reports: 'Ver reportes globales',
+  view_area_coverage: 'Ver áreas y cobertura',
+  manage_committee_areas: 'Crear y editar áreas',
+  assign_volunteer_areas: 'Asignar voluntarios a áreas',
+  manage_area_requirements: 'Configurar requerimientos de áreas',
+  manage_platform_users: 'Gestionar usuarios de la plataforma',
+  manage_permissions: 'Gestionar permisos por rol',
+  manage_committees: 'Gestionar comités',
+};
+
+function permissionKey<R extends ConfigurableRole, C extends Capability>(role: R, capability: C) {
+  return `role.${role}.${capability}` as const;
+}
+
+function createRolePermissionKeys<R extends ConfigurableRole>(role: R) {
+  return Object.fromEntries(
+    (Object.keys(CAPABILITY_LABELS) as Capability[]).map(capability => [
+      capability,
+      permissionKey(role, capability),
+    ])
+  ) as { [K in Capability]: `role.${R}.${K}` };
+}
+
+export const ROLE_PERMISSION_KEYS = {
+  admin: createRolePermissionKeys('admin'),
+  technology: createRolePermissionKeys('technology'),
+  committee: createRolePermissionKeys('committee'),
+} as const;
+
+type PermissionKeyMap = (typeof ROLE_PERMISSION_KEYS)[ConfigurableRole];
+export type ConfigurablePermissionKey = PermissionKeyMap[Capability];
+
+const technologyEnabledByDefault = new Set<Capability>([
+  'view_settings',
+  'view_dashboard',
+  'view_volunteers',
+  'view_all_volunteers',
+  'view_volunteer_profile',
+  'edit_volunteer_personal_info',
+  'reschedule_volunteer',
+  'scan_qr_attendance',
+  'create_volunteer',
+  'import_volunteers',
+  'view_notices',
+  'view_requests',
+  'view_reports',
+  'view_global_reports',
+]);
+
+const committeeEnabledByDefault = new Set<Capability>([
+  'view_settings',
+  'view_dashboard',
+  'view_volunteers',
+  'view_volunteer_profile',
+  'reschedule_volunteer',
+  'view_notices',
+  'view_requests',
+  'view_reports',
+  'view_area_coverage',
+  'manage_committee_areas',
+  'assign_volunteer_areas',
+  'manage_area_requirements',
+]);
+
+function buildPermissionRecord<T>(
+  valueFor: (role: ConfigurableRole, capability: Capability) => T
+): Record<ConfigurablePermissionKey, T> {
+  const entries: [ConfigurablePermissionKey, T][] = [];
+  for (const role of Object.keys(ROLE_PERMISSION_KEYS) as ConfigurableRole[]) {
+    for (const capability of Object.keys(CAPABILITY_LABELS) as Capability[]) {
+      entries.push([ROLE_PERMISSION_KEYS[role][capability], valueFor(role, capability)]);
+    }
+  }
+  return Object.fromEntries(entries) as Record<ConfigurablePermissionKey, T>;
+}
+
+export const CONFIGURABLE_PERMISSION_DEFAULTS = buildPermissionRecord((role, capability) => {
+  if (role === 'admin') return true;
+  if (role === 'technology') return technologyEnabledByDefault.has(capability);
+  return committeeEnabledByDefault.has(capability);
+});
+
+export const CONFIGURABLE_PERMISSION_KEYS = Object.keys(
+  CONFIGURABLE_PERMISSION_DEFAULTS
+) as ConfigurablePermissionKey[];
+
+export const CONFIGURABLE_PERMISSION_LABELS = buildPermissionRecord(
+  (_role, capability) => CAPABILITY_LABELS[capability]
+);
+
+// These aliases preserve the choices saved by the previous, less granular matrix.
+// A new explicit value always wins over its legacy fallback.
+export const LEGACY_PERMISSION_FALLBACKS: Partial<Record<ConfigurablePermissionKey, string>> = {
+  [ROLE_PERMISSION_KEYS.technology.view_all_volunteers]: 'role.technology.view_volunteers',
+  [ROLE_PERMISSION_KEYS.technology.view_volunteer_profile]: 'role.technology.view_volunteers',
+  [ROLE_PERMISSION_KEYS.technology.edit_volunteer_personal_info]: 'role.technology.edit_personal_info',
+  [ROLE_PERMISSION_KEYS.technology.reschedule_volunteer]: 'role.technology.reschedule_volunteers',
+  [ROLE_PERMISSION_KEYS.technology.create_volunteer]: 'role.technology.create_volunteers',
+  [ROLE_PERMISSION_KEYS.technology.view_reports]: 'role.technology.view_global_reports',
+  [ROLE_PERMISSION_KEYS.technology.view_area_coverage]: 'role.technology.manage_area_coverage',
+  [ROLE_PERMISSION_KEYS.technology.manage_committee_areas]: 'role.technology.manage_area_coverage',
+  [ROLE_PERMISSION_KEYS.technology.assign_volunteer_areas]: 'role.technology.manage_area_coverage',
+  [ROLE_PERMISSION_KEYS.technology.manage_area_requirements]: 'role.technology.manage_area_coverage',
+};
+
+export function configurablePermissionRoleLabel(key: ConfigurablePermissionKey): string {
+  if (key.startsWith('role.admin.')) return 'Administrador';
+  return key.startsWith('role.technology.')
+    ? 'Coordinador de tecnología'
+    : 'Coordinador de comité';
+}
+
 export interface AuthorizationSnapshot {
   authenticated: boolean;
   userId: string | null;
@@ -56,54 +170,6 @@ export interface AuthorizationSnapshot {
   committeeId: string | null;
   committeeName: string | null;
   permissions: Record<ConfigurablePermissionKey, boolean>;
-}
-
-export const CONFIGURABLE_PERMISSION_DEFAULTS: Record<ConfigurablePermissionKey, boolean> = {
-  'role.technology.view_dashboard': true,
-  'role.technology.view_volunteers': true,
-  'role.technology.edit_personal_info': true,
-  'role.technology.reschedule_volunteers': true,
-  'role.technology.register_missing_attendance': false,
-  'role.technology.correct_attendance_times': false,
-  'role.technology.view_notices': true,
-  'role.technology.view_requests': true,
-  'role.technology.view_global_reports': true,
-  'role.technology.scan_qr_attendance': true,
-  'role.technology.create_volunteers': true,
-  'role.technology.import_volunteers': true,
-  'role.technology.manage_area_coverage': false,
-  'role.committee.view_notices': true,
-  'role.committee.view_requests': true,
-  'role.committee.view_global_reports': false,
-};
-
-export const CONFIGURABLE_PERMISSION_KEYS = Object.keys(
-  CONFIGURABLE_PERMISSION_DEFAULTS
-) as ConfigurablePermissionKey[];
-
-export const CONFIGURABLE_PERMISSION_LABELS: Record<ConfigurablePermissionKey, string> = {
-  'role.technology.view_dashboard': 'Ver Dashboard',
-  'role.technology.view_volunteers': 'Ver voluntarios',
-  'role.technology.edit_personal_info': 'Editar información personal',
-  'role.technology.reschedule_volunteers': 'Reagendar turnos',
-  'role.technology.register_missing_attendance': 'Registrar asistencia o entrada faltante',
-  'role.technology.correct_attendance_times': 'Corregir horarios manualmente',
-  'role.technology.view_notices': 'Ver y enviar avisos',
-  'role.technology.view_requests': 'Ver y gestionar solicitudes',
-  'role.technology.view_global_reports': 'Ver reportes globales',
-  'role.technology.scan_qr_attendance': 'Escanear QR y registrar entrada o salida',
-  'role.technology.create_volunteers': 'Crear voluntarios',
-  'role.technology.import_volunteers': 'Importar voluntarios',
-  'role.technology.manage_area_coverage': 'Gestionar áreas y cobertura',
-  'role.committee.view_notices': 'Ver y enviar avisos',
-  'role.committee.view_requests': 'Ver y gestionar solicitudes',
-  'role.committee.view_global_reports': 'Ver reportes globales',
-};
-
-export function configurablePermissionRoleLabel(key: ConfigurablePermissionKey): string {
-  return key.startsWith('role.technology.')
-    ? 'Coordinador de tecnología'
-    : 'Coordinador de comité';
 }
 
 export const EMPTY_AUTHORIZATION_SNAPSHOT: AuthorizationSnapshot = {
@@ -137,106 +203,51 @@ export function roleDisplayName(snapshot: Pick<AuthorizationSnapshot, 'role' | '
     : 'Coordinador de comité';
 }
 
+function configurableRoleFor(snapshot: AuthorizationSnapshot): ConfigurableRole | null {
+  if (snapshot.role === 'Admin') return 'admin';
+  if (snapshot.role !== 'Editor') return null;
+  return snapshot.coordinatorType === 'technology' ? 'technology' : 'committee';
+}
+
+const OWN_COMMITTEE_CAPABILITIES = new Set<Capability>([
+  'view_volunteer_profile',
+  'edit_volunteer_personal_info',
+  'reschedule_volunteer',
+]);
+
+const OWN_AREA_CAPABILITIES = new Set<Capability>([
+  'view_area_coverage',
+  'manage_committee_areas',
+  'assign_volunteer_areas',
+  'manage_area_requirements',
+]);
+
 export function hasCapability(
   snapshot: AuthorizationSnapshot,
   capability: Capability,
   targetCommitteeId?: string | null
 ): boolean {
-  if (!snapshot.authenticated) return false;
-  if (snapshot.role === 'Admin') return true;
-
-  if (snapshot.userType === 'volunteer' || snapshot.role === 'Lector') {
+  if (!snapshot.authenticated || snapshot.userType === 'volunteer' || snapshot.role === 'Lector') {
     return false;
   }
 
-  if (snapshot.coordinatorType === 'technology') {
-    switch (capability) {
-      case 'view_settings':
-        return true;
-      case 'view_activity_logs':
-        return false;
-      case 'view_dashboard':
-        return snapshot.permissions['role.technology.view_dashboard'];
-      case 'view_volunteers':
-      case 'view_all_volunteers':
-      case 'view_volunteer_profile':
-        return snapshot.permissions['role.technology.view_volunteers'];
-      case 'reschedule_volunteer':
-        return snapshot.permissions['role.technology.reschedule_volunteers'];
-      case 'scan_qr_attendance':
-        return snapshot.permissions['role.technology.scan_qr_attendance'];
-      case 'create_volunteer':
-        return snapshot.permissions['role.technology.create_volunteers'];
-      case 'import_volunteers':
-        return snapshot.permissions['role.technology.import_volunteers'];
-      case 'edit_volunteer_personal_info':
-        return snapshot.permissions['role.technology.edit_personal_info'];
-      case 'register_missing_attendance':
-        return snapshot.permissions['role.technology.register_missing_attendance'];
-      case 'correct_attendance_times':
-        return snapshot.permissions['role.technology.correct_attendance_times'];
-      case 'view_notices':
-        return snapshot.permissions['role.technology.view_notices'];
-      case 'view_requests':
-        return snapshot.permissions['role.technology.view_requests'];
-      case 'view_global_reports':
-      case 'view_reports':
-        return snapshot.permissions['role.technology.view_global_reports'];
-      case 'view_area_coverage':
-      case 'manage_committee_areas':
-      case 'assign_volunteer_areas':
-      case 'manage_area_requirements':
-        return Boolean(targetCommitteeId)
-          && targetCommitteeId === snapshot.committeeId
-          && snapshot.permissions['role.technology.manage_area_coverage'];
-      case 'archive_volunteer':
-      case 'manage_platform_users':
-      case 'manage_permissions':
-      case 'manage_committees':
-        return false;
-    }
+  const configurableRole = configurableRoleFor(snapshot);
+  if (!configurableRole) return false;
+  const key = ROLE_PERMISSION_KEYS[configurableRole][capability];
+  if (!snapshot.permissions[key]) return false;
+
+  if (
+    configurableRole === 'committee'
+    && OWN_COMMITTEE_CAPABILITIES.has(capability)
+    && targetCommitteeId
+    && targetCommitteeId !== snapshot.committeeId
+  ) {
+    return false;
   }
 
-  if (snapshot.coordinatorType === 'committee') {
-    const isOwnCommittee = !targetCommitteeId || targetCommitteeId === snapshot.committeeId;
-    const isExplicitOwnCommittee = Boolean(targetCommitteeId) && targetCommitteeId === snapshot.committeeId;
-    switch (capability) {
-      case 'view_settings':
-        return true;
-      case 'view_activity_logs':
-        return false;
-      case 'view_dashboard':
-      case 'view_volunteers':
-      case 'view_reports':
-        return true;
-      case 'view_volunteer_profile':
-      case 'reschedule_volunteer':
-        return isOwnCommittee;
-      case 'view_notices':
-        return snapshot.permissions['role.committee.view_notices'];
-      case 'view_requests':
-        return snapshot.permissions['role.committee.view_requests'];
-      case 'view_global_reports':
-        return snapshot.permissions['role.committee.view_global_reports'];
-      case 'view_area_coverage':
-      case 'manage_committee_areas':
-      case 'assign_volunteer_areas':
-      case 'manage_area_requirements':
-        return isExplicitOwnCommittee;
-      case 'view_all_volunteers':
-      case 'edit_volunteer_personal_info':
-      case 'scan_qr_attendance':
-      case 'register_missing_attendance':
-      case 'correct_attendance_times':
-      case 'create_volunteer':
-      case 'import_volunteers':
-      case 'archive_volunteer':
-      case 'manage_platform_users':
-      case 'manage_permissions':
-      case 'manage_committees':
-        return false;
-    }
+  if (configurableRole !== 'admin' && OWN_AREA_CAPABILITIES.has(capability)) {
+    return Boolean(targetCommitteeId) && targetCommitteeId === snapshot.committeeId;
   }
 
-  return false;
+  return true;
 }

@@ -91,6 +91,12 @@ const mocks = {
   "react-dom": { createPortal: child => child },
   "@simplewebauthn/browser": { startAuthentication: async () => ({}) },
   "@/app/actions/update-pin": { updateInitialPin: async () => ({}) },
+  "@/app/actions/dashboard": { getDashboardOperationalDataAction: async () => ({}) },
+  "@/lib/dashboard-session-cache": {
+    DASHBOARD_SIMULATION_STORAGE_KEY: "dashboard-simulation-test",
+    clearPreparedDashboardSession: () => {},
+    writePreparedDashboardSession: () => {},
+  },
 };
 function load(path) {
   const output = ts.transpileModule(readFileSync(path, "utf8"), {

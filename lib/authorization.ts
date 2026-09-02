@@ -8,6 +8,7 @@ import {
   CONFIGURABLE_PERMISSION_KEYS,
   ConfigurablePermissionKey,
   EMPTY_AUTHORIZATION_SNAPSHOT,
+  LEGACY_PERMISSION_FALLBACKS,
   hasCapability,
   normalizeAppRole,
   normalizeCoordinatorType,
@@ -22,21 +23,28 @@ export class AuthorizationError extends Error {
 
 async function loadConfiguredPermissions(): Promise<Record<ConfigurablePermissionKey, boolean>> {
   const permissions = { ...CONFIGURABLE_PERMISSION_DEFAULTS };
+  const legacyKeys = [...new Set(Object.values(LEGACY_PERMISSION_FALLBACKS))];
   const supabase = await getAdminSupabase();
   const { data, error } = await supabase
     .from('system_settings')
     .select('key, value')
-    .in('key', CONFIGURABLE_PERMISSION_KEYS);
+    .in('key', [...CONFIGURABLE_PERMISSION_KEYS, ...legacyKeys]);
 
   if (error) {
     console.error('[AUTHORIZATION] Could not load role permissions:', error.message);
     return permissions;
   }
 
+  const savedValues = new Map((data || []).map(row => [row.key, row.value === 'true']));
   for (const row of data || []) {
     if (CONFIGURABLE_PERMISSION_KEYS.includes(row.key as ConfigurablePermissionKey)) {
       permissions[row.key as ConfigurablePermissionKey] = row.value === 'true';
     }
+  }
+  for (const [key, legacyKey] of Object.entries(LEGACY_PERMISSION_FALLBACKS)) {
+    if (!legacyKey || savedValues.has(key)) continue;
+    const legacyValue = savedValues.get(legacyKey);
+    if (legacyValue !== undefined) permissions[key as ConfigurablePermissionKey] = legacyValue;
   }
   return permissions;
 }

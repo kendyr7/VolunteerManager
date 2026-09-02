@@ -27,6 +27,8 @@ import { VolunteerDiffBuilder, VolunteerRow } from './volunteer-diff-builder';
 import { VolunteerAuditWriter, AuditActor, WriteEditAuditPayload } from './volunteer-audit-writer';
 import { getLocal8Digits, normalizePhoneE164 } from '@/lib/whatsapp';
 import { generateTemporaryPin } from '@/lib/pin-security';
+import { clearAuthRateLimit } from '@/lib/auth-rate-limit';
+import { after } from 'next/server';
 import {
   findPotentialVolunteerNameMatches,
   VolunteerNameCandidate,
@@ -1515,36 +1517,44 @@ export class VolunteerMutationService {
   static async resetPin(volunteerId: string, actor: AuditActor): Promise<MutationResult> {
     try {
       const supabase = await getAdminSupabase();
-
-      const { data: volunteer, error: fetchErr } = await supabase
-        .from('volunteers')
-        .select('id')
-        .eq('id', volunteerId)
-        .maybeSingle();
-
-      if (fetchErr || !volunteer) {
-        return { success: false, error: 'No se encontró el voluntario para resetear PIN.' };
-      }
-
-      const { error: updateErr } = await supabase
+      const { data: volunteer, error: updateErr } = await supabase
         .from('volunteers')
         .update({ pin: generateTemporaryPin() })
-        .eq('id', volunteerId);
+        .eq('id', volunteerId)
+        .select('id, phone')
+        .maybeSingle();
 
-      if (updateErr) {
+      if (updateErr || !volunteer) {
         console.error('[VolunteerMutationService.resetPin] Update failed:', updateErr);
-        return { success: false, error: 'Error al resetear el PIN.' };
+        return {
+          success: false,
+          error: volunteer ? 'Error al resetear el PIN.' : 'No se encontró el voluntario para resetear PIN.',
+        };
       }
 
-      // Audit log (NEVER includes the PIN value itself)
-      await VolunteerAuditWriter.write({
-        actionType:  'Seguridad',
-        volunteerId,
-        description: 'Restableció el PIN del voluntario',
-        actor,
-        context: {
-          operation: 'pin_reset',
-        },
+      const phoneRateLimitKey = normalizePhoneE164(volunteer.phone);
+      const localPhone = getLocal8Digits(volunteer.phone);
+      if (phoneRateLimitKey || localPhone) {
+        await Promise.all([
+          phoneRateLimitKey
+            ? clearAuthRateLimit('login-phone', phoneRateLimitKey)
+            : Promise.resolve(),
+          localPhone
+            ? clearAuthRateLimit('login-lookup-phone', localPhone)
+            : Promise.resolve(),
+        ]);
+      }
+
+      after(() => {
+        void VolunteerAuditWriter.write({
+          actionType:  'Seguridad',
+          volunteerId,
+          description: 'Restableció el PIN del voluntario',
+          actor,
+          context: {
+            operation: 'pin_reset',
+          },
+        });
       });
 
       return { success: true };

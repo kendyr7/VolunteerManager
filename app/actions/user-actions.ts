@@ -6,8 +6,10 @@ import { getAdminSupabase } from '@/lib/supabase/admin';
 import { requireCapability } from '@/lib/authorization';
 import { CoordinatorType } from '@/lib/role-permissions';
 import { sendVolunteerWelcomeTemplate } from '@/lib/whatsapp-api';
-import { formatE164 } from '@/lib/whatsapp';
+import { formatE164, getLocal8Digits } from '@/lib/whatsapp';
 import { generateTemporaryPin } from '@/lib/pin-security';
+import { clearAuthRateLimit } from '@/lib/auth-rate-limit';
+import { after } from 'next/server';
 
 type PlatformRole = 'Admin' | 'Editor' | 'Lector';
 
@@ -226,19 +228,41 @@ export async function resetPlatformUserPinAction(userId: string) {
   try {
     const actor = await requireCapability('manage_platform_users');
     const supabase = await getAdminSupabase();
-    const { data: user } = await supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle();
-    const { error } = await supabase
+    const { data: user, error } = await supabase
       .from('profiles')
       .update({ pin: generateTemporaryPin() })
-      .eq('id', userId);
-    if (error) return { success: false as const, error: error.message };
-    await supabase.from('activity_logs').insert({
-      user_name: actor.name,
-      user_role: actor.role,
-      action_type: 'Seguridad',
-      description: `Restableció el PIN de ${user?.full_name || 'un usuario'}`,
-      details: JSON.stringify({ userId }),
-      target_id: userId,
+      .eq('id', userId)
+      .select('id, full_name, phone')
+      .maybeSingle();
+    if (error || !user) {
+      return { success: false as const, error: error?.message || 'No se encontró el usuario.' };
+    }
+
+    const phoneRateLimitKey = formatE164(user.phone || '');
+    const localPhone = getLocal8Digits(user.phone || '');
+    if (phoneRateLimitKey || localPhone) {
+      await Promise.all([
+        phoneRateLimitKey
+          ? clearAuthRateLimit('login-phone', phoneRateLimitKey)
+          : Promise.resolve(),
+        localPhone
+          ? clearAuthRateLimit('login-lookup-phone', localPhone)
+          : Promise.resolve(),
+      ]);
+    }
+
+    after(async () => {
+      const { error: auditError } = await supabase.from('activity_logs').insert({
+        user_name: actor.name,
+        user_role: actor.role,
+        action_type: 'Seguridad',
+        description: `Restableció el PIN de ${user.full_name || 'un usuario'}`,
+        details: JSON.stringify({ userId }),
+        target_id: userId,
+      });
+      if (auditError) {
+        console.error('[resetPlatformUserPinAction] Audit log failed:', auditError.message);
+      }
     });
     return { success: true as const };
   } catch (error) {

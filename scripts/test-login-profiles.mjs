@@ -109,6 +109,10 @@ async function login(phone, id, pin = "1234", type = "volunteer") {
   return loginWithPin({}, data);
 }
 check((await login("00000000", "one")).force_pin_change, "Selected account accepts its own phone and PIN");
+const pinAttemptLimit = limits.find(item => item.scope === "login-phone")?.limit;
+const ipAttemptLimit = limits.find(item => item.scope === "login-ip")?.limit;
+check(pinAttemptLimit === 4, "Allow four complete PIN attempts before applying the phone wait period");
+check(ipAttemptLimit >= 40, "Shared connections do not prematurely exhaust a person's four PIN attempts");
 check((await login("11111111", "one")).error, "A selected ID cannot bypass phone ownership");
 check((await login("00000000", "two")).error, "A relative's PIN cannot authenticate the selected person");
 check((await login("00000000", "archived")).error, "Archived volunteers cannot authenticate by selected ID");

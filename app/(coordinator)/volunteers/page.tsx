@@ -29,6 +29,7 @@ import {
   canViewVolunteers,
   getAuthorizationSnapshotCache,
 } from "@/lib/permissions";
+import { hasCapability } from '@/lib/role-permissions';
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
@@ -474,7 +475,7 @@ export default function VolunteersPage() {
       const snapshot = getAuthorizationSnapshotCache();
       setCurrentRole(snapshot.role);
       setCurrentCommittee(snapshot.committeeName || '');
-      setCanViewAllVolunteers(snapshot.role === 'Admin' || snapshot.coordinatorType === 'technology');
+      setCanViewAllVolunteers(hasCapability(snapshot, 'view_all_volunteers'));
       setPermissionRevision(value => value + 1);
       setMounted(true);
     };
@@ -667,8 +668,8 @@ export default function VolunteersPage() {
   const committees = committeesList.map(c => c.name);
 
   const roleFilteredVolunteers = volunteers.filter(v => {
-    if (currentRole === 'Admin') return true;
-    if (currentRole === 'Editor') return v.committee === currentCommittee;
+    if (canViewAllVolunteers) return true;
+    if (currentRole === 'Admin' || currentRole === 'Editor') return v.committee === currentCommittee;
     if (currentRole === 'Lector') return false; // Lector doesn't see directory
     return false;
   });

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { loginWithPin } from "@/app/actions/auth";
+import { getDashboardOperationalDataAction } from "@/app/actions/dashboard";
 import { getLoginProfiles } from "@/app/actions/login-profiles";
 import { updateInitialPin } from "@/app/actions/update-pin";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,11 @@ import Image from "next/image";
 import { MobilePinLogin } from "./MobilePinLogin";
 import mobileStyles from "./mobile-login.module.css";
 import { loginDisplayName, normalizeLoginPhone, rememberLoginPhone } from "@/lib/login-experience";
+import {
+  clearPreparedDashboardSession,
+  DASHBOARD_SIMULATION_STORAGE_KEY,
+  writePreparedDashboardSession,
+} from "@/lib/dashboard-session-cache";
 
 const isMobileDevice = () => {
   if (typeof window === 'undefined') return false;
@@ -215,7 +221,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
       
       if (verifyData.verified) {
         localStorage.setItem("preferred_auth_method", "biometrics");
-        finishLogin(verifyData);
+        await finishLogin(verifyData);
       } else {
         setError('La huella no pudo ser verificada.');
       }
@@ -280,7 +286,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
         setNeedsNewPin(true);
         setIsSubmittingPin(false);
       } else if (result.success) {
-        if (await showPinSuccess()) finishLogin(result);
+        if (await showPinSuccess()) await finishLogin(result);
       } else {
         setIsSubmittingPin(false);
       }
@@ -353,7 +359,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
         setError(result.error);
         setIsSubmittingPin(false);
       } else if (result.success) {
-        finishLogin(result);
+        await finishLogin(result);
       } else {
         setIsSubmittingPin(false);
       }
@@ -364,7 +370,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
     }
   };
 
-  const finishLogin = (result: any) => {
+  const finishLogin = async (result: any) => {
     setIsRedirecting(true);
 
     rememberLoginPhone(phone || result.phone, rememberMe, result.name);
@@ -380,6 +386,23 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
       }
     } catch {
       // The authenticated session does not depend on optional local storage.
+    }
+
+    clearPreparedDashboardSession();
+    if ((result.redirectTo || '') === '/dashboard') {
+      try {
+        const includeSimulation = localStorage.getItem(DASHBOARD_SIMULATION_STORAGE_KEY) === 'true';
+        const prepared = await getDashboardOperationalDataAction('todos', includeSimulation, true, 'instant');
+        if (prepared.data) {
+          writePreparedDashboardSession({
+            includeSimulation,
+            data: prepared.data,
+            insight: prepared.insight || null,
+          });
+        }
+      } catch {
+        // Preparation is an optimization. Login must continue if it is unavailable.
+      }
     }
     
     window.location.href = result.redirectTo || "/calendar";
@@ -511,7 +534,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
                                   setNeedsNewPin(true);
                                   setIsSubmittingPin(false);
                                 } else if (result.success) {
-                                  finishLogin(result);
+                                  await finishLogin(result);
                                 } else {
                                   setIsSubmittingPin(false);
                                 }

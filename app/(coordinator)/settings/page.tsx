@@ -21,8 +21,10 @@ import {
   updateRolePermissionAction,
 } from "@/app/actions/permission-actions";
 import {
+  Capability,
   CONFIGURABLE_PERMISSION_DEFAULTS,
   ConfigurablePermissionKey,
+  ROLE_PERMISSION_KEYS,
   hasCapability,
 } from "@/lib/role-permissions";
 import { changeUserPin } from "@/app/actions/update-pin";
@@ -119,6 +121,7 @@ export default function SettingsPage() {
   const { mode: mobileNavigationMode, setMode: setMobileNavigationMode } = useMobileNavigationMode();
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Lector');
   const [canManagePermissions, setCanManagePermissions] = useState(false);
+  const [canManageCommittees, setCanManageCommittees] = useState(false);
   const [canViewActivityLogs, setCanViewActivityLogs] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [committees, setCommittees] = useState<{ id: string, name: string, status?: string | null }[]>([]);
@@ -183,29 +186,54 @@ export default function SettingsPage() {
     name: string;
     description: string;
     icon: string;
-    technology: boolean | ConfigurablePermissionKey;
-    committee: boolean | ConfigurablePermissionKey;
-    volunteer?: boolean;
+    capability: Capability;
+    admin: ConfigurablePermissionKey;
+    technology: ConfigurablePermissionKey;
+    committee: ConfigurablePermissionKey;
+    volunteer: false;
   };
 
-  const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = [
-    { id: "dashboard", name: "Ver Dashboard", description: "Métricas dentro del alcance del rol", icon: "space_dashboard", technology: "role.technology.view_dashboard", committee: true },
-    { id: "volunteers", name: "Ver voluntarios", description: "Tecnología ve la lista global; Comité solo su comité", icon: "group", technology: "role.technology.view_volunteers", committee: true, volunteer: false },
-    { id: "personal_info", name: "Editar información personal", description: "Disponible para Tecnología cuando un Administrador lo habilita", icon: "edit_note", technology: "role.technology.edit_personal_info", committee: false },
-    { id: "shift_edit", name: "Reagendar turnos", description: "Tecnología puede reagendar globalmente; Comité solo dentro de su comité", icon: "edit_calendar", technology: "role.technology.reschedule_volunteers", committee: true },
-    { id: "area_coverage", name: "Gestionar áreas y cobertura", description: "Crea áreas, asigna voluntarios y revisa cobertura únicamente dentro del comité propio", icon: "location_on", technology: "role.technology.manage_area_coverage", committee: true },
-    { id: "notices", name: "Ver y enviar avisos", description: "Acceso al módulo de avisos dentro del alcance del rol", icon: "campaign", technology: "role.technology.view_notices", committee: "role.committee.view_notices" },
-    { id: "requests", name: "Ver y gestionar solicitudes", description: "Acceso al flujo de solicitudes dentro del alcance del rol", icon: "published_with_changes", technology: "role.technology.view_requests", committee: "role.committee.view_requests" },
-    { id: "reports", name: "Ver reportes del alcance propio", description: "Comité ve por defecto únicamente los reportes de su comité", icon: "analytics", technology: false, committee: true },
-    { id: "global_reports", name: "Ver reportes globales", description: "No concede acceso a perfiles que estén fuera del comité asignado", icon: "monitoring", technology: "role.technology.view_global_reports", committee: "role.committee.view_global_reports" },
-    { id: "qr_checkin", name: "Escanear QR y registrar entrada o salida", description: "Disponible para Tecnología cuando un Administrador lo habilita", icon: "qr_code_scanner", technology: "role.technology.scan_qr_attendance", committee: false },
-    { id: "attendance_missing", name: "Registrar asistencia o entrada faltante", description: "Excepción administrativa configurable para Tecnología", icon: "event_available", technology: "role.technology.register_missing_attendance", committee: false },
-    { id: "attendance_correction", name: "Corregir horarios manualmente", description: "Ajustes auditados de entrada o salida", icon: "edit_calendar", technology: "role.technology.correct_attendance_times", committee: false },
-    { id: "create_volunteer", name: "Crear voluntarios", description: "Disponible para Tecnología cuando un Administrador lo habilita", icon: "person_add", technology: "role.technology.create_volunteers", committee: false },
-    { id: "import_data", name: "Importar voluntarios", description: "Disponible para Tecnología cuando un Administrador lo habilita", icon: "cloud_upload", technology: "role.technology.import_volunteers", committee: false },
-    { id: "archive_volunteer", name: "Archivar voluntarios", description: "Exclusivo de Administradores", icon: "archive", technology: false, committee: false },
-    { id: "manage_users", name: "Gestionar usuarios y permisos", description: "Exclusivo de Administradores desde /users y /settings", icon: "shield_person", technology: false, committee: false },
+  const permissionDefinitions: Array<{
+    id: string;
+    capability: Capability;
+    name: string;
+    description: string;
+    icon: string;
+  }> = [
+    { id: 'dashboard', capability: 'view_dashboard', name: 'Ver Dashboard', description: 'Abre las métricas disponibles para el alcance del rol.', icon: 'space_dashboard' },
+    { id: 'settings', capability: 'view_settings', name: 'Ver ajustes', description: 'Abre la configuración personal y las secciones permitidas.', icon: 'settings' },
+    { id: 'activity', capability: 'view_activity_logs', name: 'Ver historial de actividades', description: 'Consulta la auditoría de cambios y operaciones del sistema.', icon: 'history' },
+    { id: 'volunteers', capability: 'view_volunteers', name: 'Ver voluntarios', description: 'Abre el directorio de voluntarios dentro del alcance disponible.', icon: 'group' },
+    { id: 'all_volunteers', capability: 'view_all_volunteers', name: 'Ver voluntarios de todos los comités', description: 'Amplía el directorio y los datos relacionados a todos los comités.', icon: 'groups' },
+    { id: 'volunteer_profile', capability: 'view_volunteer_profile', name: 'Abrir perfiles de voluntarios', description: 'Permite consultar el detalle de un voluntario dentro del alcance del rol.', icon: 'person_search' },
+    { id: 'personal_info', capability: 'edit_volunteer_personal_info', name: 'Editar información personal', description: 'Modifica nombre, teléfono y otros datos del perfil permitido.', icon: 'edit_note' },
+    { id: 'shift_edit', capability: 'reschedule_volunteer', name: 'Reagendar turnos', description: 'Cambia la programación de voluntarios dentro del alcance del rol.', icon: 'edit_calendar' },
+    { id: 'area_coverage', capability: 'view_area_coverage', name: 'Ver áreas y cobertura', description: 'Abre la cobertura del comité asignado; no amplía el alcance del coordinador.', icon: 'location_on' },
+    { id: 'manage_areas', capability: 'manage_committee_areas', name: 'Crear y editar áreas', description: 'Gestiona las áreas únicamente dentro del comité asignado.', icon: 'edit_location_alt' },
+    { id: 'assign_areas', capability: 'assign_volunteer_areas', name: 'Asignar voluntarios a áreas', description: 'Distribuye voluntarios entre áreas del comité asignado.', icon: 'person_pin_circle' },
+    { id: 'area_requirements', capability: 'manage_area_requirements', name: 'Configurar requerimientos de áreas', description: 'Define la cobertura mínima de las áreas del comité asignado.', icon: 'rule_settings' },
+    { id: 'notices', capability: 'view_notices', name: 'Ver y enviar avisos', description: 'Accede al módulo de avisos dentro del alcance disponible.', icon: 'campaign' },
+    { id: 'requests', capability: 'view_requests', name: 'Ver y gestionar solicitudes', description: 'Accede al flujo de solicitudes dentro del alcance disponible.', icon: 'published_with_changes' },
+    { id: 'reports', capability: 'view_reports', name: 'Ver reportes del alcance propio', description: 'Consulta reportes sin ampliar el alcance asignado al rol.', icon: 'analytics' },
+    { id: 'global_reports', capability: 'view_global_reports', name: 'Ver reportes globales', description: 'Incluye métricas consolidadas de todos los comités.', icon: 'monitoring' },
+    { id: 'qr_checkin', capability: 'scan_qr_attendance', name: 'Escanear QR y registrar entrada o salida', description: 'Usa el escáner para registrar asistencia.', icon: 'qr_code_scanner' },
+    { id: 'attendance_missing', capability: 'register_missing_attendance', name: 'Registrar asistencia o entrada faltante', description: 'Agrega manualmente una asistencia que no fue registrada.', icon: 'event_available' },
+    { id: 'attendance_correction', capability: 'correct_attendance_times', name: 'Corregir horarios manualmente', description: 'Ajusta entradas o salidas y deja registro de auditoría.', icon: 'more_time' },
+    { id: 'create_volunteer', capability: 'create_volunteer', name: 'Crear voluntarios', description: 'Registra voluntarios individualmente.', icon: 'person_add' },
+    { id: 'import_data', capability: 'import_volunteers', name: 'Importar voluntarios', description: 'Registra voluntarios mediante una importación masiva.', icon: 'cloud_upload' },
+    { id: 'archive_volunteer', capability: 'archive_volunteer', name: 'Archivar voluntarios', description: 'Retira o restaura voluntarios sin borrar su historial.', icon: 'archive' },
+    { id: 'manage_users', capability: 'manage_platform_users', name: 'Gestionar usuarios de la plataforma', description: 'Crea, edita, archiva y restablece el acceso de coordinadores.', icon: 'shield_person' },
+    { id: 'manage_permissions', capability: 'manage_permissions', name: 'Gestionar permisos por rol', description: 'Modifica esta matriz; siempre debe quedar al menos un rol habilitado.', icon: 'admin_panel_settings' },
+    { id: 'manage_committees', capability: 'manage_committees', name: 'Gestionar comités', description: 'Crea, archiva y configura comités y sus requerimientos generales.', icon: 'account_tree' },
   ];
+
+  const SYSTEM_PERMISSIONS_MATRIX: PermissionMatrixRow[] = permissionDefinitions.map(permission => ({
+    ...permission,
+    admin: ROLE_PERMISSION_KEYS.admin[permission.capability],
+    technology: ROLE_PERMISSION_KEYS.technology[permission.capability],
+    committee: ROLE_PERMISSION_KEYS.committee[permission.capability],
+    volunteer: false,
+  }));
 
   const sortedDesktopPermissionRows = useMemo(() => {
     return [...SYSTEM_PERMISSIONS_MATRIX].sort((left, right) => {
@@ -216,7 +244,7 @@ export default function SettingsPage() {
 
   const handleCreateCommittee = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentRole !== 'Admin') return;
+    if (!canManageCommittees) return;
     if (!newCommitteeName.trim()) return;
 
     setIsCreatingCommittee(true);
@@ -233,7 +261,7 @@ export default function SettingsPage() {
   };
 
   const handleConfirmArchiveCommittee = async () => {
-    if (!archiveModal.committee || currentRole !== 'Admin') return;
+    if (!archiveModal.committee || !canManageCommittees) return;
 
     setIsArchivingCommittee(true);
     const res = await archiveCommitteeAction(
@@ -257,7 +285,7 @@ export default function SettingsPage() {
   };
 
   const handleUnarchiveCommittee = async (comm: { id: string; name: string }) => {
-    if (currentRole !== 'Admin') return;
+    if (!canManageCommittees) return;
     const res = await unarchiveCommitteeAction(comm.id);
     if (res.error) {
       showToast(res.error, "error");
@@ -280,9 +308,11 @@ export default function SettingsPage() {
         setPermissionsMap(result.snapshot.permissions);
         setCurrentRole(result.snapshot.role);
         setCanManagePermissions(hasCapability(result.snapshot, 'manage_permissions'));
+        setCanManageCommittees(hasCapability(result.snapshot, 'manage_committees'));
         setCanViewActivityLogs(hasCapability(result.snapshot, 'view_activity_logs'));
       } else {
         setCanManagePermissions(false);
+        setCanManageCommittees(false);
         setCanViewActivityLogs(false);
       }
     });
@@ -301,8 +331,8 @@ export default function SettingsPage() {
   }, [loadMatrixPermissions]);
 
   const handleToggleMatrixPermission = async (key: ConfigurablePermissionKey, name: string, roleLabel: string) => {
-    if (currentRole !== 'Admin') {
-      showToast("Solo los administradores pueden cambiar los permisos del sistema", "error");
+    if (!canManagePermissions) {
+      showToast("No tienes permiso para cambiar los permisos del sistema", "error");
       return;
     }
     const currentVal = permissionsMap[key] ?? CONFIGURABLE_PERMISSION_DEFAULTS[key];
@@ -319,7 +349,7 @@ export default function SettingsPage() {
   };
 
   const handleResetPermissions = async () => {
-    if (currentRole !== 'Admin') return;
+    if (!canManagePermissions) return;
     const result = await resetRolePermissionsAction();
     if (!result.success) {
       showToast(result.error || "No se pudieron restablecer los permisos", "error");
@@ -339,7 +369,7 @@ export default function SettingsPage() {
     const enabled = configurableKey
       ? (permissionsMap[configurableKey] ?? CONFIGURABLE_PERMISSION_DEFAULTS[configurableKey])
       : cell === true;
-    const canToggle = currentRole === 'Admin' && configurableKey !== null;
+    const canToggle = canManagePermissions && configurableKey !== null;
 
     if (!canToggle) {
       return (
@@ -348,7 +378,7 @@ export default function SettingsPage() {
             "w-9 h-5 rounded-full p-[2px] flex items-center shrink-0 opacity-70",
             enabled ? "bg-emerald-500" : "bg-orange-500/35 border border-orange-500/20"
           )}
-          title={configurableKey ? "Solo Administradores pueden modificar este permiso" : "Política fija del rol"}
+          title={configurableKey ? "No tienes permiso para modificar esta configuración" : "Los permisos de voluntario no se pueden modificar"}
         >
           <span className={cn("w-4 h-4 rounded-full bg-white shadow-sm block", enabled && "translate-x-4")} />
         </div>
@@ -454,7 +484,7 @@ export default function SettingsPage() {
       });
     }
 
-    if (currentRole === 'Admin') {
+    if (canManageCommittees || currentRole === 'Admin') {
       sections.push(
         {
           id: 'committeeMgmt',
@@ -484,7 +514,7 @@ export default function SettingsPage() {
     }
 
     return sections;
-  }, [canViewActivityLogs, currentRole, isMobile]);
+  }, [canManageCommittees, canViewActivityLogs, currentRole, isMobile]);
 
   const settingsSearchResults = useMemo(() => {
     const query = settingsSearch.trim();
@@ -1274,11 +1304,11 @@ export default function SettingsPage() {
                 <div className="space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
                     <p className="text-[10px] text-text-dim">
-                      {currentRole === 'Admin'
-                        ? 'Activa o desactiva los permisos configurables para cada tipo de Coordinador.'
-                        : 'Solo los Administradores pueden modificar esta configuración.'}
+                      {canManagePermissions
+                        ? 'Activa o desactiva cualquier permiso para Administradores y Coordinadores. Los permisos de Voluntario permanecen bloqueados.'
+                        : 'Puedes consultar la matriz, pero tu rol no puede modificarla.'}
                     </p>
-                    {currentRole === 'Admin' ? (
+                    {canManagePermissions ? (
                       <Button
                         type="button"
                         onClick={handleResetPermissions}
@@ -1307,10 +1337,10 @@ export default function SettingsPage() {
                         </div>
                         <div className="grid grid-cols-4 gap-1.5 pt-2.5 border-t border-border/50 text-center">
                           {([
-                            ['Admin', true],
+                            ['Admin', row.admin],
                             ['Tecnología', row.technology],
                             ['Comité', row.committee],
-                            ['Voluntario', row.volunteer ?? false],
+                            ['Voluntario', row.volunteer],
                           ] as const).map(([label, cell]) => (
                             <div key={label} className="flex flex-col items-center gap-1.5">
                               <span className="text-[8px] font-bold text-text-dim uppercase tracking-tight">{label}</span>
@@ -1348,10 +1378,10 @@ export default function SettingsPage() {
                                 </div>
                               </div>
                             </td>
-                            <td className="py-3 px-3"><div className="flex justify-center">{renderPermissionControl(true, row.name, 'Admin')}</div></td>
+                            <td className="py-3 px-3"><div className="flex justify-center">{renderPermissionControl(row.admin, row.name, 'Admin')}</div></td>
                             <td className="py-3 px-3"><div className="flex justify-center">{renderPermissionControl(row.technology, row.name, 'Tecnología')}</div></td>
                             <td className="py-3 px-3"><div className="flex justify-center">{renderPermissionControl(row.committee, row.name, 'Comité')}</div></td>
-                            <td className="py-3 px-3"><div className="flex justify-center">{renderPermissionControl(row.volunteer ?? false, row.name, 'Voluntario')}</div></td>
+                            <td className="py-3 px-3"><div className="flex justify-center">{renderPermissionControl(row.volunteer, row.name, 'Voluntario')}</div></td>
                           </tr>
                         ))}
                       </tbody>
@@ -1364,7 +1394,7 @@ export default function SettingsPage() {
           </div>
 
           {/* 4. Requerimientos por Turno (Role-based) */}
-          {currentRole === 'Admin' && (
+          {canManageCommittees && (
             <div id="settings-requirements" className="w-full scroll-mt-44 transition-all">
               <button
                 type="button"
@@ -1413,7 +1443,7 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Multi-select Committee Chips Bar (Max 2 Rows) */}
-                  {currentRole === 'Admin' && activeCommittees.length > 0 ? (
+                  {canManageCommittees && activeCommittees.length > 0 ? (
                     <div className="space-y-2 pt-1">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider">
@@ -1466,7 +1496,7 @@ export default function SettingsPage() {
                   )}
 
                   {/* Warning banner when no committee is selected */}
-                  {selectedConfigCommittees.length === 0 && currentRole === 'Admin' && (
+                  {selectedConfigCommittees.length === 0 && canManageCommittees && (
                     <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-500 dark:text-amber-400 font-bold flex items-center gap-2">
                       <span className="material-symbols-outlined text-[15px]">info</span>
                       Selecciona al menos un comité arriba para ver y modificar sus requerimientos por turno.
@@ -1579,7 +1609,7 @@ export default function SettingsPage() {
           )}
 
           {/* 6. Gestión de Comités (Admin Only) */}
-          {currentRole === 'Admin' && (
+          {canManageCommittees && (
             <div id="settings-committeeMgmt" className="w-full scroll-mt-44 transition-all">
               <button
                 type="button"

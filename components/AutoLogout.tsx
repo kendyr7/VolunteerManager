@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { logout } from '@/app/actions/auth';
 import { preserveBrowserPushOnLogout } from '@/lib/push/browser';
+import { clearPreparedDashboardSession } from '@/lib/dashboard-session-cache';
 
 const IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const WARNING_DURATION_MS = 5 * 60 * 1000;
@@ -71,6 +72,7 @@ export function AutoLogout() {
     localStorage.removeItem('mock_role');
     localStorage.removeItem('mock_committee');
     localStorage.removeItem('authorization_snapshot');
+    clearPreparedDashboardSession();
     const { pushRevoked } = await logout();
     await preserveBrowserPushOnLogout(pushRevoked);
 

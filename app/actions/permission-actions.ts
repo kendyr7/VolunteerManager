@@ -8,6 +8,7 @@ import {
   CONFIGURABLE_PERMISSION_DEFAULTS,
   CONFIGURABLE_PERMISSION_KEYS,
   ConfigurablePermissionKey,
+  ROLE_PERMISSION_KEYS,
   configurablePermissionRoleLabel,
   roleDisplayName,
 } from '@/lib/role-permissions';
@@ -32,6 +33,34 @@ export async function updateRolePermissionAction(
     }
 
     const supabase = await getAdminSupabase();
+    const permissionManagerKeys: ConfigurablePermissionKey[] = [
+      ROLE_PERMISSION_KEYS.admin.manage_permissions,
+      ROLE_PERMISSION_KEYS.technology.manage_permissions,
+      ROLE_PERMISSION_KEYS.committee.manage_permissions,
+    ];
+
+    if (!enabled && permissionManagerKeys.includes(key)) {
+      const { data: managerRows, error: managerRowsError } = await supabase
+        .from('system_settings')
+        .select('key, value')
+        .in('key', permissionManagerKeys);
+      if (managerRowsError) {
+        return { success: false as const, error: managerRowsError.message };
+      }
+
+      const savedManagers = new Map((managerRows || []).map(row => [row.key, row.value === 'true']));
+      const anotherRoleCanManage = permissionManagerKeys.some(managerKey => {
+        if (managerKey === key) return false;
+        return savedManagers.get(managerKey) ?? CONFIGURABLE_PERMISSION_DEFAULTS[managerKey];
+      });
+      if (!anotherRoleCanManage) {
+        return {
+          success: false as const,
+          error: 'Primero habilita “Gestionar permisos por rol” para otro rol. El sistema no puede quedar sin un responsable de permisos.',
+        };
+      }
+    }
+
     const { data: previous } = await supabase
       .from('system_settings')
       .select('value')

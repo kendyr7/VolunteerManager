@@ -27,6 +27,14 @@ import {
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { DashboardDistributionChart, type DistributionItem } from "@/components/DashboardDistributionChart";
+import { DashboardInsightPanel } from "@/components/DashboardInsightPanel";
+import type { DashboardInsight } from "@/lib/dashboard-insight-types";
+import {
+  DASHBOARD_SIMULATION_STORAGE_KEY,
+  preparedDashboardMatches,
+  readPreparedDashboardSession,
+  writePreparedDashboardSession,
+} from "@/lib/dashboard-session-cache";
 
 type DashboardGreeting = {
   timeOfDay: string;
@@ -57,8 +65,6 @@ const itemVariants = {
     }
   }
 };
-
-const DASHBOARD_SIMULATION_STORAGE_KEY = 'volunteer-manager.dashboard.include-simulation';
 
 function readStoredSimulationPreference() {
   if (typeof window === 'undefined') return false;
@@ -114,11 +120,15 @@ export default function CoordinatorDashboard() {
   const [rotateProgress, setRotateProgress] = useState<number>(0);
   const [activeKpiInfo, setActiveKpiInfo] = useState<{ title: string; explanation: string; formula: string } | null>(null);
   const [greeting, setGreeting] = useState<DashboardGreeting | null>(null);
+  const [dashboardInsight, setDashboardInsight] = useState<DashboardInsight | null>(null);
+  const [isInsightLoading, setIsInsightLoading] = useState(true);
   const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [userCommittee, setUserCommittee] = useState<string>('');
   const [permTick, setPermTick] = useState(0);
   const [operationalData, setOperationalData] = useState<DashboardOperationalData | null>(null);
+  const lastInsightScopeRef = useRef<string | null>(null);
+  const preparedSessionCheckedRef = useRef(false);
 
   const supabase = createClient();
 
@@ -398,20 +408,71 @@ export default function CoordinatorDashboard() {
     };
   }, []);
 
-  const loadOperationalData = useCallback(async (targetCommittee?: string) => {
+  const loadOperationalData = useCallback(async (targetCommittee?: string, forceInsight = false) => {
+    const effectiveTargetCommittee = targetCommittee || selectedHeatmapCommittee;
+    const insightScopeKey = `${permTick}:${effectiveTargetCommittee}:${includeSimulation}`;
+    const shouldGenerateInsight = forceInsight || lastInsightScopeRef.current !== insightScopeKey;
+
+    if (shouldGenerateInsight) {
+      lastInsightScopeRef.current = insightScopeKey;
+      setIsInsightLoading(true);
+    }
+
     try {
-      const res = await getDashboardOperationalDataAction(targetCommittee || selectedHeatmapCommittee);
+      const res = await getDashboardOperationalDataAction(
+        effectiveTargetCommittee,
+        includeSimulation,
+        shouldGenerateInsight,
+        forceInsight ? 'ai' : 'instant'
+      );
       if (res?.data) {
         setOperationalData(res.data);
       }
+      if (shouldGenerateInsight) {
+        setDashboardInsight(res?.insight || null);
+        if (res?.data) {
+          writePreparedDashboardSession({
+            includeSimulation,
+            data: res.data,
+            insight: res.insight || null,
+          });
+        }
+      }
     } catch (err) {
       console.error("Error loading dashboard operational data:", err);
+      if (shouldGenerateInsight) setDashboardInsight(null);
+    } finally {
+      if (shouldGenerateInsight) setIsInsightLoading(false);
     }
-  }, [selectedHeatmapCommittee]);
+  }, [includeSimulation, permTick, selectedHeatmapCommittee]);
 
   useEffect(() => {
+    if (dashboardAccess !== 'allowed') return;
+
+    if (!preparedSessionCheckedRef.current) {
+      preparedSessionCheckedRef.current = true;
+      const prepared = readPreparedDashboardSession();
+      if (
+        prepared
+        && preparedDashboardMatches(prepared, selectedHeatmapCommittee, includeSimulation)
+      ) {
+        const insightScopeKey = `${permTick}:${selectedHeatmapCommittee}:${includeSimulation}`;
+        lastInsightScopeRef.current = insightScopeKey;
+        window.queueMicrotask(() => {
+          setOperationalData(prepared.data);
+          setDashboardInsight(prepared.insight);
+          setIsInsightLoading(false);
+        });
+        return;
+      }
+    }
+
     void loadOperationalData(selectedHeatmapCommittee);
-  }, [selectedHeatmapCommittee, permTick, rawVolunteers.length, globalShifts, dbCheckedInMap, loadOperationalData]);
+  }, [dashboardAccess, selectedHeatmapCommittee, includeSimulation, permTick, rawVolunteers.length, globalShifts, dbCheckedInMap, loadOperationalData]);
+
+  const regenerateDashboardInsight = useCallback(() => {
+    void loadOperationalData(selectedHeatmapCommittee, true);
+  }, [loadOperationalData, selectedHeatmapCommittee]);
 
   useEffect(() => {
     const handlePermissionsChange = () => {
@@ -992,72 +1053,63 @@ export default function CoordinatorDashboard() {
 
   return (
     <>
-      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 pointer-events-auto shrink-0 border-b border-white/5">
-        <div className="w-full flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2 relative z-10 text-text">
-            {greeting ? (
-              <motion.div
-                key={`${greeting.timeOfDay}-${greeting.userName}`}
-                className="flex flex-col gap-1"
-                aria-live="polite"
-                initial={shouldReduceMotion ? false : { opacity: 0.45, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={shouldReduceMotion
-                  ? { duration: 0 }
-                  : { duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <h1 className="text-[32px] sm:text-4xl font-black text-text tracking-tight flex items-center gap-3">
-                  {greeting.timeOfDay}, {greeting.userName} {greeting.emoji}
-                </h1>
-                <motion.p
-                  className="text-sm md:text-base text-text-dim font-inter font-bold"
-                  initial={shouldReduceMotion ? false : { opacity: 0.35, y: 3 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={shouldReduceMotion
-                    ? { duration: 0 }
-                    : { duration: 0.18, delay: 0.06, ease: [0.22, 1, 0.36, 1] }}
-                >
-                  {greeting.message}
-                </motion.p>
-              </motion.div>
-            ) : (
-              <div className="flex flex-col gap-2" aria-hidden="true">
-                <div className="h-8 w-64 max-w-[70vw] rounded-md bg-dark3 animate-pulse motion-reduce:animate-none" />
-                <div className="h-4 w-48 max-w-[55vw] rounded bg-dark3/70 animate-pulse motion-reduce:animate-none" />
-              </div>
-            )}
-          </div>
+      <div className="sticky top-0 z-40 flex shrink-0 flex-col gap-3 border-b border-white/5 bg-dark/70 px-4 py-3 backdrop-blur-xl pointer-events-auto dark:bg-dark/70 sm:px-6 sm:py-4 lg:px-8">
+        <div className="grid w-full min-w-0 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          {greeting ? (
+            <motion.h1
+              key={`${greeting.timeOfDay}-${greeting.userName}`}
+              className="flex min-w-0 flex-wrap items-center gap-3 text-[32px] font-black tracking-tight !text-text sm:text-4xl lg:min-h-10"
+              aria-live="polite"
+              initial={shouldReduceMotion ? false : { opacity: 0.45, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={shouldReduceMotion
+                ? { duration: 0 }
+                : { duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {greeting.timeOfDay}, {greeting.userName} {greeting.emoji}
+            </motion.h1>
+          ) : (
+            <div className="h-8 w-64 max-w-[70vw] animate-pulse rounded-md bg-dark3 motion-reduce:animate-none" aria-hidden="true" />
+          )}
 
-          <div className="flex flex-row items-center gap-2 sm:gap-4 shrink-0 relative z-10 w-full lg:w-auto">
+          <div className="relative z-10 flex w-full items-center justify-start gap-2 overflow-x-auto pb-0.5 lg:w-auto lg:justify-end lg:overflow-visible lg:pb-0">
             <button
               type="button"
               aria-pressed={includeSimulation}
               onClick={toggleSimulation}
-              className={`h-9 rounded-full border px-3 text-[11px] font-bold transition-all active:scale-[0.97] ${
+              className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition-all active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:min-h-10 ${
                 includeSimulation
                   ? 'border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-300'
                   : 'border-white/10 bg-dark2 text-text-dim hover:bg-dark3 hover:text-text'
               }`}
-              title="El panel oficial excluye el 5 de septiembre por defecto"
+              title={includeSimulation ? 'La simulación del 5 de septiembre está incluida' : 'Incluir la simulación del 5 de septiembre'}
             >
-              {includeSimulation ? 'Simulación incluida' : 'Incluir simulación'}
+              <span className="material-symbols-outlined text-[17px]" aria-hidden="true">science</span>
+              Simulación
             </button>
-            <Link href="/settings" className="flex-none">
-              <Button variant="outline" className="w-auto bg-dark2 hover:bg-dark3 text-text border-white/10 rounded-full shadow-lg h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5 justify-center">
-                <span className="material-symbols-outlined text-[16px]">settings</span>
-                <span className="sm:hidden">Ajustes</span>
-                <span className="hidden sm:inline">Ajustes Globales</span>
+            <Link href="/settings" className="shrink-0">
+              <Button variant="outline" className="flex min-h-11 w-auto items-center justify-center gap-1.5 rounded-full border-white/10 bg-dark2 px-4 text-xs font-bold text-text shadow-lg transition-all hover:bg-dark3 active:scale-[0.97] sm:min-h-10">
+                <span className="material-symbols-outlined text-[17px]" aria-hidden="true">settings</span>
+                Ajustes
               </Button>
             </Link>
-            <Link href="/shifts" className="flex-none">
-              <Button className="w-auto bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold transition-all active:scale-[0.97] flex items-center gap-1.5 justify-center group">
-                <span className="material-symbols-outlined text-[16px]">calendar_month</span>
-                <span className="sm:hidden">Turnos</span>
-                <span className="hidden sm:inline">Gestionar Turnos</span>
+            <Link href="/shifts" className="shrink-0">
+              <Button className="group flex min-h-11 w-auto items-center justify-center gap-1.5 rounded-full bg-[#4d7cfe] px-4 text-xs font-bold text-white shadow-lg shadow-blue-500/10 transition-all hover:bg-[#3b66e0] active:scale-[0.97] sm:min-h-10">
+                <span className="material-symbols-outlined text-[17px]" aria-hidden="true">calendar_month</span>
+                Turnos
               </Button>
             </Link>
           </div>
         </div>
+
+        {greeting && (
+          <DashboardInsightPanel
+            insight={dashboardInsight}
+            isLoading={isInsightLoading}
+            fallbackMessage={greeting.message}
+            onRegenerate={regenerateDashboardInsight}
+          />
+        )}
       </div>
 
       <motion.div

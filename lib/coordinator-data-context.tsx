@@ -70,7 +70,7 @@ function getAuthScope() {
   if (!snapshot.authenticated) {
     return { authenticated: false, canViewAll: false, committeeId: null as string | null, cacheKey: 'unauth' };
   }
-  const canViewAll = snapshot.role === 'Admin' || hasCapability(snapshot, 'view_all_volunteers');
+  const canViewAll = hasCapability(snapshot, 'view_all_volunteers');
   const committeeId = snapshot.committeeId;
   const cacheKey = `${snapshot.role}:${snapshot.coordinatorType || ''}:${snapshot.committeeId || ''}:${canViewAll}:${snapshot.authenticated}`;
   return { authenticated: true, canViewAll, committeeId, cacheKey };

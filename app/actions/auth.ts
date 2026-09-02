@@ -33,6 +33,9 @@ export type AuthState = {
   }>;
 }
 
+const PIN_FAILED_ATTEMPT_LIMIT = 4;
+const IP_LOGIN_ATTEMPT_LIMIT = 40;
+
 type LoginCandidate = {
   id: string;
   userType: 'profile' | 'volunteer';
@@ -87,14 +90,21 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
       const [phoneLimit, ipLimit] = await timing.measure('rateLimit', async () => {
         const clientIp = await getServerActionClientIp();
         return Promise.all([
-          consumeAuthRateLimit({ scope: 'login-phone', identifier: phoneRateLimitKey, limit: 5, windowSeconds: 900, signal }),
-          consumeAuthRateLimit({ scope: 'login-ip', identifier: clientIp, limit: 20, windowSeconds: 900, signal }),
+          consumeAuthRateLimit({ scope: 'login-phone', identifier: phoneRateLimitKey, limit: PIN_FAILED_ATTEMPT_LIMIT, windowSeconds: 900, signal }),
+          consumeAuthRateLimit({ scope: 'login-ip', identifier: clientIp, limit: IP_LOGIN_ATTEMPT_LIMIT, windowSeconds: 900, signal }),
         ]);
       });
-      const blocked = !phoneLimit.allowed ? phoneLimit : !ipLimit.allowed ? ipLimit : null;
-      if (blocked) {
+      if (!phoneLimit.allowed) {
         outcome = 'rate_limited';
-        return { error: `Demasiados intentos de acceso. Inténtalo de nuevo en ${rateLimitMinutes(blocked.retryAfterSeconds)} minutos.` };
+        return {
+          error: `Ya utilizaste ${PIN_FAILED_ATTEMPT_LIMIT} intentos de PIN. Inténtalo de nuevo en ${rateLimitMinutes(phoneLimit.retryAfterSeconds)} minutos.`,
+        };
+      }
+      if (!ipLimit.allowed) {
+        outcome = 'rate_limited';
+        return {
+          error: `Se alcanzó temporalmente el límite de accesos desde esta conexión. Inténtalo de nuevo en ${rateLimitMinutes(ipLimit.retryAfterSeconds)} minutos.`,
+        };
       }
     } catch {
       outcome = 'security_unavailable';

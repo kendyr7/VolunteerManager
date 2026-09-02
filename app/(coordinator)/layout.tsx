@@ -16,6 +16,7 @@ import { useThemePreference } from "@/lib/use-theme-preference";
 import { useMobileNavigationMode } from "@/lib/use-mobile-navigation-mode";
 import { PushNotificationInvite } from '@/components/PushNotificationSettings';
 import { preserveBrowserPushOnLogout } from '@/lib/push/browser';
+import { clearPreparedDashboardSession } from '@/lib/dashboard-session-cache';
 import { NotificationCenter, NotificationCenterTrigger } from '@/components/NotificationCenter';
 import { NAVIGATION_ICONS } from '@/lib/navigation-icons';
 import {
@@ -191,6 +192,7 @@ function CoordinatorLayoutInner({
   const handleLogout = async () => {
     localStorage.removeItem('mock_role');
     localStorage.removeItem('mock_committee');
+    clearPreparedDashboardSession();
     const { pushRevoked } = await logout();
     await preserveBrowserPushOnLogout(pushRevoked);
     window.location.href = '/login';
@@ -205,7 +207,7 @@ function CoordinatorLayoutInner({
     { name: "Solicitudes", href: "/replacements", icon: NAVIGATION_ICONS.requests, roles: ['Admin', 'Editor'] },
     { name: "Avisos", href: "/reminders", icon: "campaign", roles: ['Admin', 'Editor'] },
     { name: "Reportes", href: "/reports", icon: "analytics", roles: ['Admin', 'Editor'] },
-    { name: "Usuarios", href: "/users", icon: "shield_person", roles: ['Admin'] },
+    { name: "Usuarios", href: "/users", icon: "shield_person", roles: ['Admin', 'Editor'] },
     { name: "Importación", href: "/import", icon: "cloud_upload", roles: ['Admin', 'Editor'] },
   ];
 
@@ -218,21 +220,22 @@ function CoordinatorLayoutInner({
     if (!item.roles.includes(currentRole)) return false;
     if (item.href === '/dashboard' && !canViewDashboard()) return false;
     if (item.href === '/users' && !canManageUsers()) return false;
-    if (currentRole === 'Editor') {
-      if (item.href === '/volunteers' && !canViewVolunteers()) return false;
-      if (item.href === '/areas' && !canManageOwnAreaCoverage()) return false;
-      if (item.href === '/check-in' && !canQrCheckin()) return false;
-      if (item.href === '/reminders' && !canSendWhatsappMessages()) return false;
-      if (item.href === '/replacements' && !canViewRequests()) return false;
-      if (item.href === '/reports' && !canViewReports()) return false;
-      if (item.href === '/import' && !canImportData()) return false;
-    }
+    if (item.href === '/volunteers' && !canViewVolunteers()) return false;
+    if (item.href === '/areas' && !canManageOwnAreaCoverage()) return false;
+    if (item.href === '/check-in' && !canQrCheckin()) return false;
+    if (item.href === '/reminders' && !canSendWhatsappMessages()) return false;
+    if (item.href === '/replacements' && !canViewRequests()) return false;
+    if (item.href === '/reports' && !canViewReports()) return false;
+    if (item.href === '/import' && !canImportData()) return false;
     if (currentRole === 'Lector') {
       if (item.href === '/volunteers' && !canViewVolunteers()) return false;
     }
     return true;
   });
-  const visibleBottomItems = BOTTOM_ITEMS.filter(item => !mounted ? item.roles.includes('Admin') : item.roles.includes(currentRole));
+  const visibleBottomItems = BOTTOM_ITEMS.filter(item => {
+    if (!mounted) return item.roles.includes('Admin');
+    return item.roles.includes(currentRole) && canViewSettings();
+  });
   const quickWheelActions: Record<(typeof QUICK_WHEEL_ROUTES)[number], MobileQuickWheelAction[]> = {
     '/dashboard': [
       { name: 'Mapa de calor', href: '/dashboard?view=heatmap-fullscreen', icon: 'grid_view' },
