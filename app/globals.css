@@ -35,6 +35,9 @@
   --color-accent-faint: var(--accent-faint);
   --color-red: var(--red);
   --color-red-faint: var(--red-faint);
+  --color-full-bg: var(--full-bg);
+  --color-full-border: var(--full-border);
+  --color-full-text: var(--full-text);
 
   /* Existing Shadcn Variables */
   --color-sidebar-ring: var(--sidebar-ring);
@@ -97,6 +100,9 @@
   --accent-faint: rgba(109, 210, 48, 0.15); /* Success 15% */
   --red: #fe4d97;          /* Danger Pink */
   --red-faint: rgba(254, 77, 151, 0.15);    /* Danger 15% */
+  --full-bg: #fff1f2;      /* Full shift surface */
+  --full-border: #e11d48;
+  --full-text: #9f1239;
 
   /* Shadows */
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.02);
@@ -142,6 +148,9 @@
   --accent-faint: rgba(109, 210, 48, 0.25); 
   --red: #fe4d97;          /* Danger Pink */
   --red-faint: rgba(254, 77, 151, 0.25);    
+  --full-bg: #2a1118;      /* Full shift surface */
+  --full-border: #be123c;
+  --full-text: #fda4af;
 
   /* Shadcn Overrides */
   --sidebar: #0a0a0a;

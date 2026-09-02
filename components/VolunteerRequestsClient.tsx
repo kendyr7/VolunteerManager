@@ -581,6 +581,7 @@ export function VolunteerRequestsClient({
                             const capInfo = getVolunteerShiftCapacity(rescheduleCtx, targetDayKey, t);
                             const isFull = capInfo.isFull;
                             const availabilityUnavailable = !rescheduleCtx?.success;
+                            const showFull = isFull && !isRescheduleContextRefreshing && !availabilityUnavailable;
                             const isBtnDisabled = isSameShift || tCompleted || tAssigned || isFull || isRescheduleContextRefreshing || availabilityUnavailable;
                             return (
                               <button
@@ -589,10 +590,10 @@ export function VolunteerRequestsClient({
                                 disabled={isBtnDisabled}
                                 onClick={() => setTargetShiftKey(t)}
                                 className={`py-2 rounded-xl border text-xs font-bold transition-all relative ${
-                                  isBtnDisabled
+                                  showFull
+                                    ? 'bg-full-bg border-full-border text-full-text cursor-not-allowed opacity-100'
+                                  : isBtnDisabled
                                     ? 'bg-dark2 border-border text-text-dim/40 cursor-not-allowed opacity-40'
-                                    : isFull
-                                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25 cursor-pointer'
                                     : isSelected
                                     ? 'bg-emerald-600 border-emerald-600 text-white shadow-md cursor-pointer'
                                     : 'bg-dark3 border-border text-text hover:bg-dark3/80 cursor-pointer'
@@ -609,8 +610,8 @@ export function VolunteerRequestsClient({
                                   <span className="block text-[8px] text-text-dim/70 font-normal leading-none">Actualizando…</span>
                                 ) : availabilityUnavailable ? (
                                   <span className="block text-[8px] text-rose-400 font-bold leading-none">No disponible</span>
-                                ) : isFull ? (
-                                  <span className="block text-[8px] text-amber-400 font-bold leading-none">Lleno ({capInfo.count}/{capInfo.maxReq})</span>
+                                ) : showFull ? (
+                                  <span className="block text-[8px] text-full-text font-bold leading-none">Lleno ({capInfo.count}/{capInfo.maxReq})</span>
                                 ) : (
                                   <span className="block text-[8px] text-text-dim/70 font-normal leading-none">
                                     {capInfo.available !== null ? `${capInfo.count} ocupados · ${capInfo.available} libres` : `${capInfo.count} asignados`}

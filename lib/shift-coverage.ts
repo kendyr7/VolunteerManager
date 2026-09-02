@@ -85,8 +85,9 @@ export async function getCommitteeCoverageSnapshot(
       .eq('committee_id', committeeId),
     supabase
       .from('shifts')
-      .select('volunteer_id, day_key, shift_key, checked_out, checked_out_at, volunteers!inner(committee_id)')
+      .select('volunteer_id, day_key, shift_key, checked_out, checked_out_at, volunteers!inner(committee_id, status)')
       .eq('volunteers.committee_id', committeeId)
+      .or('status.is.null,status.neq.archived', { referencedTable: 'volunteers' })
       .in('day_key', dayKeys),
   ]);
 
