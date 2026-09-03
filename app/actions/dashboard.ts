@@ -1,7 +1,6 @@
 'use server'
 
 import { getAdminClient } from "@/lib/supabase/server";
-import { fetchAllRows } from "@/lib/supabase-helpers";
 import { requireCapability } from "@/lib/authorization";
 import { hasCapability } from "@/lib/role-permissions";
 import {
@@ -95,6 +94,27 @@ interface DashboardAreaRequirementRow {
   required_count: number;
 }
 
+interface DashboardRequirementRow {
+  committee_id: string;
+  shift_key: string;
+  required: number;
+}
+
+interface DashboardVolunteerRow {
+  id: string;
+  committee_id: string;
+  status?: string | null;
+}
+
+interface DashboardSessionRow {
+  id: string;
+  volunteer_id: string;
+  day_key: string;
+  started_at: string;
+  ended_at?: string | null;
+  status?: string | null;
+}
+
 interface DashboardShiftRow {
   id: string;
   volunteer_id: string;
@@ -102,6 +122,34 @@ interface DashboardShiftRow {
   shift_key: string;
   checked_in?: boolean;
   area_id?: string | null;
+}
+
+interface DashboardOperationalSnapshot {
+  committees: CommitteeRow[];
+  requirements: DashboardRequirementRow[];
+  volunteers: DashboardVolunteerRow[];
+  shifts: DashboardShiftRow[];
+  sessions: DashboardSessionRow[];
+  areas: DashboardAreaRow[];
+  area_requirements: DashboardAreaRequirementRow[];
+}
+
+function parseDashboardOperationalSnapshot(value: unknown): DashboardOperationalSnapshot | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const snapshot = value as Record<string, unknown>;
+  const requiredArrays = [
+    'committees',
+    'requirements',
+    'volunteers',
+    'shifts',
+    'sessions',
+    'areas',
+    'area_requirements',
+  ];
+
+  if (!requiredArrays.every(key => Array.isArray(snapshot[key]))) return null;
+  return snapshot as unknown as DashboardOperationalSnapshot;
 }
 
 export async function getDashboardOperationalDataAction(
@@ -173,96 +221,38 @@ export async function getDashboardOperationalDataAction(
     ]));
     const queriedEventDayKeys = new Set(queriedEventDayKeyList);
 
-    // Fetch every independent dataset in one network round. Previously the
-    // committees request delayed all six operational queries.
+    // Return all operational source rows in one PostgREST response. The RPC is
+    // service-role-only and removes the serial 1,000-row pagination requests
+    // that previously dominated dashboard latency.
     const queryStartedAt = performance.now();
-    const [committeesResult, reqsData, volsData, shiftsData, sessionsData, areasData, areaRequirementsData] = await Promise.all([
-      supabase
-        .from('committees')
-        .select('id, name, status')
-        .or('status.is.null,status.neq.archived'),
-      fetchAllRows<{ committee_id: string; shift_key: string; required: number }>(
-        supabase,
-        'committee_shift_requirements',
-        'committee_id, shift_key, required',
-        (query) => !canSeeGlobal && userCommitteeId
-          ? query.eq('committee_id', userCommitteeId)
-          : query
-      ),
-      fetchAllRows<{ id: string; committee_id: string; status: string }>(
-        supabase,
-        'volunteers',
-        'id, committee_id, status',
-        (query) => {
-          let scopedQuery = query.or('status.is.null,status.neq.archived');
-          if (!canSeeGlobal && userCommitteeId) scopedQuery = scopedQuery.eq('committee_id', userCommitteeId);
-          return scopedQuery;
-        }
-      ),
-      fetchAllRows<DashboardShiftRow>(
-        supabase,
-        'shifts',
-        canSeeGlobal
-          ? 'id, volunteer_id, day_key, shift_key, checked_in, area_id'
-          : 'id, volunteer_id, day_key, shift_key, checked_in, area_id, volunteers!inner(committee_id)',
-        (query) => {
-          let scopedQuery = query.in('day_key', queriedEventDayKeyList);
-          if (!canSeeGlobal && userCommitteeId) {
-            scopedQuery = scopedQuery.eq('volunteers.committee_id', userCommitteeId);
-          }
-          return scopedQuery;
-        }
-      ),
-      fetchAllRows<{ id: string; volunteer_id: string; day_key: string; started_at: string; ended_at?: string | null; status?: string }>(
-        supabase,
-        'attendance_sessions',
-        canSeeGlobal
-          ? 'id, volunteer_id, day_key, started_at, ended_at, status'
-          : 'id, volunteer_id, day_key, started_at, ended_at, status, volunteers!inner(committee_id)',
-        (query) => {
-          let scopedQuery = query.in('day_key', queriedEventDayKeyList);
-          if (!canSeeGlobal && userCommitteeId) {
-            scopedQuery = scopedQuery.eq('volunteers.committee_id', userCommitteeId);
-          }
-          return scopedQuery;
-        }
-      ),
-      shouldIncludeInsight
-        ? fetchAllRows<DashboardAreaRow>(
-            supabase,
-            'committee_areas',
-            'id, committee_id, name, status',
-            (query) => {
-              let scopedQuery = query.or('status.is.null,status.neq.archived');
-              if (!canSeeGlobal && userCommitteeId) scopedQuery = scopedQuery.eq('committee_id', userCommitteeId);
-              return scopedQuery;
-            }
-          )
-        : Promise.resolve([]),
-      shouldIncludeInsight
-        ? fetchAllRows<DashboardAreaRequirementRow>(
-            supabase,
-            'area_shift_requirements',
-            canSeeGlobal
-              ? 'area_id, day_key, shift_key, required_count'
-              : 'area_id, day_key, shift_key, required_count, committee_areas!inner(committee_id)',
-            (query) => {
-              let scopedQuery = query.in('day_key', queriedEventDayKeyList);
-              if (!canSeeGlobal && userCommitteeId) {
-                scopedQuery = scopedQuery.eq('committee_areas.committee_id', userCommitteeId);
-              }
-              return scopedQuery;
-            }
-          )
-        : Promise.resolve([]),
-    ]);
+    const { data: snapshotValue, error: snapshotError } = await supabase.rpc(
+      'get_dashboard_operational_snapshot',
+      {
+        p_day_keys: queriedEventDayKeyList,
+        p_committee_id: canSeeGlobal ? null : userCommitteeId,
+        p_include_insight: shouldIncludeInsight,
+      }
+    );
     queryDurationMs = performance.now() - queryStartedAt;
 
-    if (committeesResult.error) {
-      return { error: `Error loading committees: ${committeesResult.error.message}` };
+    if (snapshotError) {
+      return { error: `Error loading dashboard data: ${snapshotError.message}` };
     }
 
-    const activeCommittees = ((committeesResult.data || []) as CommitteeRow[]).filter(
+    const snapshot = parseDashboardOperationalSnapshot(snapshotValue);
+    if (!snapshot) return { error: 'Supabase devolvió un resumen operativo inválido' };
+
+    const {
+      committees,
+      requirements: reqsData,
+      volunteers: volsData,
+      shifts: shiftsData,
+      sessions: sessionsData,
+      areas: areasData,
+      area_requirements: areaRequirementsData,
+    } = snapshot;
+
+    const activeCommittees = committees.filter(
       (committee) => (committee.status || '').toLowerCase() !== 'archived'
     );
     const committeeNameById = new Map<string, string>();
