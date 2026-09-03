@@ -274,14 +274,14 @@ export async function openAttendanceSessionAction(
       }),
       target_id: volunteerId
     });
-  } catch (e) {}
+  } catch {}
 
   try {
     revalidatePath('/shifts');
     revalidatePath('/volunteers');
     revalidatePath('/check-in');
     revalidatePath('/dashboard');
-  } catch (e) {}
+  } catch {}
 
   return {
     success: true,
@@ -628,8 +628,6 @@ export async function createAttendanceSessionAdminAction(input: {
     record: saved,
   });
 
-  const { getCurrentUserSession } = await import('@/lib/auth-helpers');
-  const currentActor = await getCurrentUserSession();
   const adminName = authorizedActor.name;
   const adminId = authorizedActor.userId || 'admin-server-session';
 
@@ -654,7 +652,7 @@ export async function createAttendanceSessionAdminAction(input: {
       }),
       target_id: volunteerId
     });
-  } catch (e) {}
+  } catch {}
 
   return { success: true, session: saved };
 }
@@ -714,7 +712,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         revalidatePath('/volunteers');
         revalidatePath('/check-in');
         revalidatePath('/dashboard');
-      } catch (rErr) {}
+      } catch {}
 
       return {
         success: true,

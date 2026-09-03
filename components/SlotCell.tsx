@@ -12,8 +12,6 @@ interface SlotCellProps {
 }
 
 export function SlotCell({ 
-  date, 
-  shiftId, 
   initialCapacity, 
   initialRegistered, 
   initialIsEnrolled 

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Toast } from "@/components/ui/toast";
 
 import { Badge } from "@/components/ui/badge";
-import { SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
+import { getOfficialShiftTime } from "@/lib/dates";
 import type { VolunteerScheduleShift } from "@/lib/types/volunteer-schedule";
 
 interface VolunteerProfileClientProps {
@@ -68,7 +68,7 @@ export function VolunteerProfileClient({
       } else {
         throw new Error("No se pudo verificar la huella");
       }
-    } catch (err: any) {
+    } catch {
       showToast("Registro cancelado o dispositivo no compatible.", "error");
     } finally {
       setIsRegistering(false);
@@ -90,7 +90,7 @@ export function VolunteerProfileClient({
       } else {
         throw new Error("Error al eliminar la huella.");
       }
-    } catch (err: any) {
+    } catch {
       showToast("No se pudo eliminar la huella.", "error");
     } finally {
       setIsRegistering(false);

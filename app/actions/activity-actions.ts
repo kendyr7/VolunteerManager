@@ -170,7 +170,7 @@ export async function syncPastRequestsToActivityLogs() {
     if (newLogsToInsert.length > 0) {
       await supabase.from('activity_logs').insert(newLogsToInsert);
     }
-  } catch (err) {
+  } catch {
     // Ignore error if table activity_logs does not exist yet
   }
 }

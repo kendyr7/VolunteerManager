@@ -14,6 +14,7 @@ export function getUnifiedShiftTimes(
   dbShiftRecords: any[] = [],
   auditLogs: any[] = []
 ): ShiftTimeResult {
+  void dbShiftRecords;
   const official = getOfficialShiftTime(dayKey, shiftKey);
   let startTime = official.startTime;
   let endTime = official.endTime;
@@ -47,7 +48,7 @@ export function getUnifiedShiftTimes(
         minute: '2-digit',
         hour12: true,
       });
-    } catch (e) {}
+    } catch {}
   }
 
   for (const log of relevantLogs) {
@@ -97,7 +98,7 @@ export function getUnifiedShiftWorkedMinutes(
     if (diff > 0 && diff <= maxMins) {
       return diff;
     }
-  } catch (e) {}
+  } catch {}
 
   return 30;
 }

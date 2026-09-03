@@ -35,7 +35,7 @@ export function broadcastShiftSync(payload: ShiftSyncBroadcastPayload): void {
       await new Promise<void>((resolve) => {
         const timeout = setTimeout(() => {
           console.warn('[SHIFT ACTION] broadcast timeout reached');
-          try { channel.unsubscribe(); } catch (_) {}
+          try { channel.unsubscribe(); } catch {}
           resolve();
         }, 800);
 
@@ -52,7 +52,7 @@ export function broadcastShiftSync(payload: ShiftSyncBroadcastPayload): void {
             } catch (e) {
               console.error('[SHIFT ACTION] broadcast error sending message:', e);
             } finally {
-              try { await channel.unsubscribe(); } catch (_) {}
+              try { await channel.unsubscribe(); } catch {}
               resolve();
             }
           }
@@ -95,7 +95,7 @@ export function broadcastSessionSync(payload: SessionSyncBroadcastPayload): void
       await new Promise<void>((resolve) => {
         const timeout = setTimeout(() => {
           console.warn('[SESSION ACTION] broadcast timeout reached');
-          try { channel.unsubscribe(); } catch (_) {}
+          try { channel.unsubscribe(); } catch {}
           resolve();
         }, 800);
 
@@ -112,7 +112,7 @@ export function broadcastSessionSync(payload: SessionSyncBroadcastPayload): void
             } catch (e) {
               console.error('[SESSION ACTION] broadcast error sending message:', e);
             } finally {
-              try { await channel.unsubscribe(); } catch (_) {}
+              try { await channel.unsubscribe(); } catch {}
               resolve();
             }
           }

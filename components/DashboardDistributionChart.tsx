@@ -84,8 +84,6 @@ function describeDonutSlice(
 }
 
 export function DashboardDistributionChart({
-  title,
-  subtitle,
   items,
   totalLabel = 'Total',
   unitLabel = 'voluntarios',
@@ -166,7 +164,6 @@ export function DashboardDistributionChart({
     );
   }
 
-  const activeHoveredSlice = hoveredIndex !== null ? slices.find(s => s.originalIndex === hoveredIndex) : null;
   const hoveredItem = hoveredIndex !== null ? activeItems[hoveredIndex] : null;
 
   return (
