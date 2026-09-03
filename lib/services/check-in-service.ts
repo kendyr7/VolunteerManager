@@ -36,6 +36,9 @@ export class CheckInService {
     }
 
     const nowIso = new Date().toISOString();
+    const volunteerName = volunteer.name
+      || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim()
+      || 'el voluntario';
 
     try {
       // 1. Transactional Update: Registrar entrada en PostgreSQL
@@ -69,19 +72,19 @@ export class CheckInService {
         ...volunteer,
         status: 'active',
         updated_at: nowIso,
-      } as any);
+      });
 
       return {
         success: true,
-        message: `¡Entrada registrada para ${volunteer.name}!`,
-        volunteerName: volunteer.name,
+        message: `¡Entrada registrada para ${volunteerName}!`,
+        volunteerName,
         timestamp: nowIso,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       return {
         success: false,
         message: 'Error inesperado durante el check-in',
-        error: err?.message || 'UNKNOWN_ERROR',
+        error: err instanceof Error ? err.message : 'UNKNOWN_ERROR',
       };
     }
   }
@@ -103,6 +106,9 @@ export class CheckInService {
     }
 
     const nowIso = new Date().toISOString();
+    const volunteerName = volunteer.name
+      || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim()
+      || 'el voluntario';
 
     try {
       const { error: updateErr } = await supabase
@@ -130,15 +136,15 @@ export class CheckInService {
 
       return {
         success: true,
-        message: `¡Salida registrada para ${volunteer.name}!`,
-        volunteerName: volunteer.name,
+        message: `¡Salida registrada para ${volunteerName}!`,
+        volunteerName,
         timestamp: nowIso,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       return {
         success: false,
         message: 'Error inesperado durante el check-out',
-        error: err?.message || 'UNKNOWN_ERROR',
+        error: err instanceof Error ? err.message : 'UNKNOWN_ERROR',
       };
     }
   }

@@ -14,19 +14,21 @@ export const NULLABLE_FIELDS = new Set([
  * Single Unified Realtime Merge Utility for all stores and event queues.
  * Prevents partial updates or nulls from overwriting valid domain state flags.
  */
-export function mergeRealtimeRecord<T extends Record<string, any>>(
+export function mergeRealtimeRecord<T extends object>(
   existing: T | undefined | null,
   incoming: Partial<T> | undefined | null
 ): T {
   if (!incoming) return (existing || {}) as T;
   if (!existing) return { ...incoming } as T;
 
-  const merged = { ...existing } as Record<string, any>;
+  const existingRecord = existing as Record<string, unknown>;
+  const incomingRecord = incoming as Record<string, unknown>;
+  const merged = { ...existingRecord };
 
-  Object.keys(incoming).forEach(key => {
-    const val = incoming[key];
+  Object.keys(incomingRecord).forEach(key => {
+    const val = incomingRecord[key];
     if (val !== undefined) {
-      if (val === null && existing[key] !== undefined && existing[key] !== null) {
+      if (val === null && existingRecord[key] !== undefined && existingRecord[key] !== null) {
         if (NULLABLE_FIELDS.has(key)) {
           merged[key] = null;
         }

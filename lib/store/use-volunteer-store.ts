@@ -1,35 +1,76 @@
 import { create } from 'zustand';
-import type { VolunteerType } from '@/components/VolunteerTableRow';
 import { useRealtimeStore } from '@/lib/store/use-realtime-store';
 import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
-import { assertShiftConsistency } from '@/lib/utils/shift-invariants';
+import { assertShiftConsistency, type ShiftDomainState } from '@/lib/utils/shift-invariants';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
+
+export interface VolunteerStoreRecord {
+  id: string;
+  name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  stake?: string | null;
+  ward?: string | null;
+  neighborhood?: string | null;
+  barrio?: string | null;
+  committee?: string | null;
+  committeeName?: string | null;
+  committee_id?: string | null;
+  committees?: { name?: string | null } | null;
+  volunteerName?: string | null;
+  shifts?: number;
+  reliability?: number | string | null;
+  reliability_score?: number | null;
+  computedReliability?: number | string;
+  status?: string | null;
+  age?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  normalizedSearchText?: string;
+}
+
+export interface ShiftStoreRecord extends ShiftDomainState {
+  id?: string;
+  volunteer_id?: string;
+  volunteerId?: string;
+  volunteer?: { id?: string } | null;
+  dayKey?: string;
+  shiftKey?: string;
+  area_id?: string | null;
+  area_name?: string | null;
+  area_description?: string | null;
+  committee_areas?: unknown;
+  updated_at?: string | null;
+  updatedAt?: string | null;
+  created_at?: string | null;
+}
 
 interface VolunteerStoreState {
   // Single Source of Truth for Volunteers and Shifts
-  volunteersMap: Map<string, VolunteerType>;
-  shiftsMap: Map<string, any>;
-  shiftsByVolunteerMap: Map<string, any[]>;
+  volunteersMap: Map<string, VolunteerStoreRecord>;
+  shiftsMap: Map<string, ShiftStoreRecord>;
+  shiftsByVolunteerMap: Map<string, ShiftStoreRecord[]>;
 
   // Volunteers Actions
-  setInitialVolunteers: (volunteers: VolunteerType[]) => void;
-  upsertVolunteer: (volunteer: VolunteerType, traceId?: string) => boolean;
+  setInitialVolunteers: (volunteers: VolunteerStoreRecord[]) => void;
+  upsertVolunteer: (volunteer: VolunteerStoreRecord, traceId?: string) => boolean;
   deleteVolunteer: (id: string, traceId?: string) => boolean;
 
   // Shifts Actions
-  setInitialShifts: (shifts: any[]) => void;
-  upsertShift: (shift: any, traceId?: string) => boolean;
+  setInitialShifts: (shifts: ShiftStoreRecord[]) => void;
+  upsertShift: (shift: ShiftStoreRecord, traceId?: string) => boolean;
   deleteShift: (id: string, traceId?: string) => boolean;
   
   // Selectors
-  getVolunteersList: () => VolunteerType[];
-  getVolunteerById: (id: string) => VolunteerType | undefined;
-  getShiftsList: () => any[];
-  getShiftsByVolunteerId: (volunteerId: string) => any[];
+  getVolunteersList: () => VolunteerStoreRecord[];
+  getVolunteerById: (id: string) => VolunteerStoreRecord | undefined;
+  getShiftsList: () => ShiftStoreRecord[];
+  getShiftsByVolunteerId: (volunteerId: string) => ShiftStoreRecord[];
 }
 
-function rebuildShiftsByVolunteerMap(shiftsMap: Map<string, any>): Map<string, any[]> {
-  const index = new Map<string, any[]>();
+function rebuildShiftsByVolunteerMap(shiftsMap: Map<string, ShiftStoreRecord>): Map<string, ShiftStoreRecord[]> {
+  const index = new Map<string, ShiftStoreRecord[]>();
   shiftsMap.forEach(shift => {
     const volId = shift.volunteer_id || shift.volunteerId || shift.volunteer?.id;
     if (volId) {
@@ -41,15 +82,15 @@ function rebuildShiftsByVolunteerMap(shiftsMap: Map<string, any>): Map<string, a
   return index;
 }
 
-const EMPTY_SHIFTS_ARRAY: any[] = [];
+const EMPTY_SHIFTS_ARRAY: ShiftStoreRecord[] = [];
 
 export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
-  volunteersMap: new Map<string, VolunteerType>(),
-  shiftsMap: new Map<string, any>(),
-  shiftsByVolunteerMap: new Map<string, any[]>(),
+  volunteersMap: new Map<string, VolunteerStoreRecord>(),
+  shiftsMap: new Map<string, ShiftStoreRecord>(),
+  shiftsByVolunteerMap: new Map<string, ShiftStoreRecord[]>(),
 
-  setInitialVolunteers: (volunteers: VolunteerType[]) => {
-    const map = new Map<string, VolunteerType>();
+  setInitialVolunteers: (volunteers: VolunteerStoreRecord[]) => {
+    const map = new Map<string, VolunteerStoreRecord>();
     volunteers.forEach(v => {
       if (v.id) map.set(v.id, v);
     });
@@ -57,16 +98,16 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     useRealtimeStore.getState().setInitialSyncCompleted(true);
   },
 
-  upsertVolunteer: (incoming: VolunteerType, traceId?: string) => {
+  upsertVolunteer: (incoming: VolunteerStoreRecord, traceId?: string) => {
     if (!incoming.id) return false;
     const currentMap = get().volunteersMap;
     const existing = currentMap.get(incoming.id);
 
-    const existingTsVal = (existing as any)?.updated_at || (existing as any)?.created_at;
-    const incomingTsVal = (incoming as any)?.updated_at || (incoming as any)?.created_at;
+    const existingTsVal = existing?.updated_at || existing?.created_at;
+    const incomingTsVal = incoming.updated_at || incoming.created_at;
 
-    const existingNeigh = (existing as any)?.neighborhood || (existing as any)?.ward;
-    const incomingNeigh = (incoming as any)?.neighborhood || (incoming as any)?.ward;
+    const existingNeigh = existing?.neighborhood || existing?.ward;
+    const incomingNeigh = incoming.neighborhood || incoming.ward;
 
     let decision = 'APPLY_NEW';
     if (existingTsVal && incomingTsVal) {
@@ -94,21 +135,21 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
       recordId: incoming.id,
       previousUpdatedAt: existingTsVal,
       newUpdatedAt: incomingTsVal,
-      previousNeighborhood: (existing as any)?.neighborhood || (existing as any)?.ward,
-      newNeighborhood: (merged as any).neighborhood || (merged as any).ward,
-      previousStake: (existing as any)?.stake,
-      newStake: (merged as any).stake,
+      previousNeighborhood: existing?.neighborhood || existing?.ward,
+      newNeighborhood: merged.neighborhood || merged.ward,
+      previousStake: existing?.stake,
+      newStake: merged.stake,
       timestamp: new Date().toISOString()
     });
 
-    const volName = `${(merged as any).first_name || ''} ${(merged as any).last_name || ''}`.trim() || merged.name;
+    const volName = `${merged.first_name || ''} ${merged.last_name || ''}`.trim() || merged.name || 'Voluntario';
     realtimeDebugLogger.addLog({
       stage: 'ZUSTAND_UPDATE',
       table: 'volunteers',
       eventType: 'UPDATE',
       volunteerId: merged.id,
       volunteerName: volName,
-      details: `Zustand store updated volunteer: ${volName} (ward/neighborhood: ${(merged as any).neighborhood || (merged as any).ward || ''})`,
+      details: `Zustand store updated volunteer: ${volName} (ward/neighborhood: ${merged.neighborhood || merged.ward || ''})`,
       payload: merged,
     });
     realtimeDebugLogger.triggerHighlight(merged.id, 'volunteers');
@@ -136,11 +177,11 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     return true;
   },
 
-  setInitialShifts: (shifts: any[]) => {
-    const map = new Map<string, any>();
+  setInitialShifts: (shifts: ShiftStoreRecord[]) => {
+    const map = new Map<string, ShiftStoreRecord>();
     shifts.forEach(s => {
       if (s.id) {
-        map.set(s.id, assertShiftConsistency(s));
+        map.set(s.id, assertShiftConsistency(s) as ShiftStoreRecord);
       }
     });
     const byVolMap = rebuildShiftsByVolunteerMap(map);
@@ -148,7 +189,7 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     useRealtimeStore.getState().setInitialSyncCompleted(true);
   },
 
-  upsertShift: (incoming: any, traceId?: string) => {
+  upsertShift: (incoming: ShiftStoreRecord, traceId?: string) => {
     if (!incoming.id) return false;
     const currentMap = get().shiftsMap;
     const existing = currentMap.get(incoming.id);
@@ -163,13 +204,13 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     }
 
     const merged = mergeRealtimeRecord(existing, incoming);
-    const sanitized = assertShiftConsistency(merged);
+    const sanitized = assertShiftConsistency(merged) as ShiftStoreRecord;
 
     const newMap = new Map(currentMap);
     newMap.set(incoming.id, sanitized);
 
     const byVolMap = rebuildShiftsByVolunteerMap(newMap);
-    const volId = (sanitized as any).volunteer_id || (sanitized as any).volunteerId;
+    const volId = sanitized.volunteer_id || sanitized.volunteerId;
     const prevShifts = volId ? (get().shiftsByVolunteerMap.get(volId) || []) : [];
 
     set({ shiftsMap: newMap, shiftsByVolunteerMap: byVolMap });
@@ -180,10 +221,10 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
       traceId: traceId || 'RT-UNKNOWN',
       recordId: incoming.id,
       volunteer_id: volId,
-      day_key: (sanitized as any).day_key,
-      shift_key: (sanitized as any).shift_key,
+      day_key: sanitized.day_key,
+      shift_key: sanitized.shift_key,
       previousCount: prevShifts.length,
-      newCount: byVolMap.get(volId)?.length || 0,
+      newCount: volId ? (byVolMap.get(volId)?.length || 0) : 0,
       timestamp: new Date().toISOString()
     });
 
@@ -192,7 +233,7 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
       table: 'shifts',
       eventType: 'INSERT',
       volunteerId: volId,
-      details: `Zustand store inserted/updated shift: ${(sanitized as any).day_key} / ${(sanitized as any).shift_key}`,
+      details: `Zustand store inserted/updated shift: ${sanitized.day_key} / ${sanitized.shift_key}`,
       payload: sanitized,
     });
     if (volId) realtimeDebugLogger.triggerHighlight(volId, 'shifts');
@@ -207,7 +248,7 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     let targetVolId: string | null = null;
     if (currentMap.has(id)) {
       const targetShift = currentMap.get(id);
-      targetVolId = (targetShift as any)?.volunteer_id || (targetShift as any)?.volunteerId || null;
+      targetVolId = targetShift?.volunteer_id || targetShift?.volunteerId || null;
     }
 
     const prevShifts = targetVolId ? (currentByVolMap.get(targetVolId) || []) : [];
