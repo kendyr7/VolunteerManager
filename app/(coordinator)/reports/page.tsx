@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect, useTransition, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { getReportsData, ReportItem, ReportsData, AttendanceSummary } from "@/app/actions/reports";
+import { getReportsData, ReportsData } from "@/app/actions/reports";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { 
   Select, 
   SelectTrigger, 
@@ -14,7 +13,6 @@ import {
   SelectItem 
 } from "@/components/ui/select";
 import { motion, AnimatePresence } from "framer-motion";
-import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn } from "@/lib/utils";
 import { getActiveEventDays, formatDateShort } from "@/lib/dates";
@@ -30,14 +28,6 @@ import { HighlightText } from "@/components/HighlightText";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 
-// Day names for week headers
-const DAY_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-
-// Maps ISO date string to short label shown under the day number
-const DAY_SHORT: Record<string, string> = {
-  "1": "Lun", "2": "Mar", "3": "Mié",
-  "4": "Jue", "5": "Vie", "6": "Sáb", "0": "Dom"
-};
 // Utilidad para formatear minutos
 function getCommitteeColor(committee: string) {
   if (!committee) return 'bg-white/5 text-text-dim border-white/10';
@@ -259,7 +249,7 @@ export default function ReportsPage() {
     setIsProfileDrawerOpen(true);
   };
 
-  const [permTick, setPermTick] = useState(0);
+  const [, setPermTick] = useState(0);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -287,7 +277,6 @@ export default function ReportsPage() {
     setCurrentPage(1);
   }, [activeTab, selectedCommittees, selectedNeighborhoods, selectedStakes, selectedStatuses, selectedDates, appliedSearch]);
 
-  const [isPending, startTransition] = useTransition();
   const hasLoadedReportsRef = useRef(false);
 
   const loadData = async (includeSimulationData = includeSimulation) => {
@@ -426,11 +415,7 @@ export default function ReportsPage() {
     };
   }, [filteredItems]);
 
-  const { totalShifts, confirmedShifts, absentShifts, pendingShifts, totalMinutes, attendanceRate } = kpiStats;
-
-  const summary = data?.attendanceSummary;
-  const globalAttendanceRate = summary?.attendanceRate ?? attendanceRate;
-  const globalCoverageRate = summary?.coverageRate ?? 0;
+  const { confirmedShifts, absentShifts, pendingShifts, totalMinutes, attendanceRate } = kpiStats;
 
   // Memoized volunteer summary ranking calculation
   const volunteerRanking = useMemo(() => {

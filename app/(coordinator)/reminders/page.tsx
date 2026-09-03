@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from "react";
+import { useState, useMemo, useEffect, useCallback, Fragment } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlphabetScrubber } from "@/components/AlphabetScrubber";
 import { format } from "date-fns";
@@ -22,18 +22,14 @@ import {
 } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn, normalizeSearch } from "@/lib/utils";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { DataTableFilter } from "@/components/DataTableFilter";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { USER_TABLE_STYLES } from "@/app/(coordinator)/users/page";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
-import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { canEditShifts, canSendWhatsappMessages } from "@/lib/permissions";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";

@@ -5,16 +5,9 @@ import { Html5Qrcode } from "html5-qrcode";
 import { checkInVolunteer, getHistoricalAttendanceLogs, checkOutVolunteer, reassignVolunteerShift, closeAttendanceSessionAction } from "@/app/actions/attendance";
 import { canQrCheckin } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn, normalizeSearch } from "@/lib/utils";
 import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, getOfficialShiftTime } from "@/lib/dates";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { createClient } from "@/lib/supabase/client";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
@@ -24,8 +17,6 @@ import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
-
-import { AdminSessionCorrectionModal } from "@/components/AdminSessionCorrectionModal";
 
 interface CheckInScannerProps {
   coordinatorId: string;
@@ -85,13 +76,6 @@ function orderCameras(cameras: ScannerCamera[], preferredCameraId: string | null
 }
 
 
-
-function getInitials(name: string): string {
-  if (!name || name === '—') return '?';
-  const parts = name.trim().split(' ').filter(Boolean);
-  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
-}
 
 function formatDateLabel(date: Date): string {
   if (!date || isNaN(date.getTime())) return '';
@@ -211,7 +195,7 @@ export function CheckInScanner({
   const [dbHistory, setDbHistory] = useState<ScanEntry[]>([]);
   const [loadingDbHistory, setLoadingDbHistory] = useState(false);
   const { inputValue: searchInput, setInputValue: setSearchInput, appliedSearch: searchQuery, applySearch } = useDebouncedSearch();
-  const [selectedDayFilter, setSelectedDayFilter] = useState("all");
+  const [selectedDayFilter] = useState("all");
 
   const fetchDbHistory = useCallback(async () => {
     setLoadingDbHistory(true);
@@ -318,17 +302,6 @@ export function CheckInScanner({
       return true;
     });
   }, [activeRawList, searchQuery, selectedDayFilter, checkedOutMap, dbHistory]);
-
-  const uniqueDays = useMemo(() => {
-    const daysSet = new Set<string>();
-    activeRawList.forEach(item => {
-      if (item.shiftDetail) {
-        const dayPart = item.shiftDetail.split(' - ')[0].trim();
-        if (dayPart) daysSet.add(dayPart);
-      }
-    });
-    return Array.from(daysSet);
-  }, [activeRawList]);
 
   const [expandedHistoryDays, setExpandedHistoryDays] = useState<Record<string, boolean>>({});
   const [mobileDrawerDayGroup, setMobileDrawerDayGroup] = useState<{
@@ -979,7 +952,7 @@ export function CheckInScanner({
     startScanning();
   };
 
-  const [permTick, setPermTick] = useState(0);
+  const [, setPermTick] = useState(0);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -1003,19 +976,6 @@ export function CheckInScanner({
   }, []);
 
   const isActive = state === 'scanning';
-
-  // Status pill config
-  const statusConfig = {
-    idle:              { dot: 'bg-black/20 dark:bg-white/25',   label: 'En espera' },
-    scanning:          { dot: 'bg-emerald-400 animate-pulse',   label: 'Escaneando' },
-    loading:           { dot: 'bg-[#4d7cfe] animate-pulse',     label: 'Procesando' },
-    success:           { dot: 'bg-emerald-400',                  label: 'Registrado ✓' },
-    already_checked_in:{ dot: 'bg-amber-400',                   label: 'Ya marcado' },
-    manual_selection:  { dot: 'bg-[#4d7cfe]',                   label: 'Selección manual' },
-    error:             { dot: 'bg-red-400',                     label: 'Error' },
-  } as const;
-
-  const { dot, label } = statusConfig[state];
 
   if (mounted && !canQrCheckin()) {
     return (

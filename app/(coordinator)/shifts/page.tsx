@@ -2,17 +2,11 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { Input } from "@/components/ui/input";
 import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, getOfficialShiftTime, isSimulationEventDay } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { DataTableFilter } from "@/components/DataTableFilter";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
@@ -21,8 +15,6 @@ import { undoVolunteerCheckInAction } from "@/app/actions/audit-actions";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn, normalizeSearch } from "@/lib/utils";
-import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
-import { canEditShifts } from "@/lib/permissions";
 import { ShiftSectionTabs } from "@/components/ShiftSectionTabs";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";

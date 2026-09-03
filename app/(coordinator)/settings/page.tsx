@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +8,6 @@ import { Toast } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { DataTableFilter } from "@/components/DataTableFilter";
 import { startRegistration } from "@simplewebauthn/browser";
 import Fuse from "fuse.js";
 
@@ -127,7 +125,6 @@ export default function SettingsPage() {
   const [committees, setCommittees] = useState<{ id: string, name: string, status?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRegisteringPasskey, setIsRegisteringPasskey] = useState(false);
-  const [hasPasskey, setHasPasskey] = useState(false);
   const [permissionSortDirection, setPermissionSortDirection] = useState<TableSortDirection>('asc');
 
   // Committee Management States (Admin Only)
@@ -657,21 +654,20 @@ export default function SettingsPage() {
       }
 
       // Check and load passkeys list
-      await loadPasskeys(user.id, supabase);
+      await loadPasskeys();
     }
     setLoading(false);
   };
 
   // Load passkeys for the current user via the API
-  const loadPasskeys = async (userId?: string, supabaseClient?: any) => {
+  const loadPasskeys = async () => {
     try {
       const resp = await fetch('/api/webauthn/list');
       if (!resp.ok) return;
       const data = await resp.json();
       const list = data.passkeys || [];
       setPasskeys(list);
-      setHasPasskey(list.length > 0);
-    } catch (e) {
+    } catch {
       // silently fail — not critical
     }
   };
@@ -868,19 +864,6 @@ export default function SettingsPage() {
     }
     setIsChangingPin(false);
   };
-
-  // Permissions Data
-  const ALL_PERMISSIONS = ['Ver voluntarios', 'Reagendar turnos', 'Gestionar asistencia', 'Ver reportes', 'Importar datos', 'Configurar ajustes'];
-  const ROLE_PERMISSIONS: Record<string, string[]> = useMemo(() => {
-    const isTechnology = userProfile?.coordinator_type === 'technology';
-    return {
-      'Admin': ALL_PERMISSIONS,
-      'Editor': isTechnology
-        ? ['Ver voluntarios', 'Reagendar turnos', 'Escanear QR', 'Crear e importar voluntarios', 'Ver reportes globales']
-        : ['Ver voluntarios de su comité', 'Reagendar su comité', 'Ver avisos y solicitudes', 'Ver reportes de su comité'],
-      'Lector': ['Ver su propio perfil y turnos']
-    };
-  }, [userProfile]);
 
   if (loading) return null;
 

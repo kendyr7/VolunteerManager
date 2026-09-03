@@ -1,25 +1,15 @@
 'use client'
 
 import { AddVolunteerForm } from "@/components/AddVolunteerForm";
-import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from "react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { List } from 'react-window';
-import { CSSProperties } from 'react';
+import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 // ...
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MessageCircle, Phone, MoreHorizontal, UserPlus, Mail, Briefcase, MapPin, GraduationCap, Heart, Calendar } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { getOperationalEventDays, formatDateShort, isShiftAvailableForDay } from "@/lib/dates";
-import { DataTableFilter } from "@/components/DataTableFilter";
-import { createClient } from "@/lib/supabase/client";
 import { cn, normalizeSearch } from "@/lib/utils";
-import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import {
   canArchiveVolunteer,
   canCreateVolunteer,
@@ -32,15 +22,14 @@ import {
 import { hasCapability } from '@/lib/role-permissions';
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
-import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { USER_TABLE_STYLES } from "../users/page";
-import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
+import { AlphabetScrubber } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
-import { formatE164, validatePhone8Digits, getLocal8Digits } from "@/lib/whatsapp";
+import { validatePhone8Digits } from "@/lib/whatsapp";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { sendVolunteerCredentialsAction } from "@/app/actions/whatsapp";
-import { VolunteerProfileView } from "@/components/VolunteerProfileView";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 import { VolunteerTableRow } from "@/components/VolunteerTableRow";
 import { BulkSendCredentialsModal } from "@/components/BulkSendCredentialsModal";
@@ -51,7 +40,6 @@ import { RealtimeDebugOverlay } from "@/components/RealtimeDebugOverlay";
 import { useVolunteerStore } from "@/lib/store/use-volunteer-store";
 import { saveShiftsAction, updateVolunteerAction } from "@/app/actions/volunteer-actions";
 import { SmartSearchBar } from "@/components/SmartSearchBar";
-import { HighlightText } from "@/components/HighlightText";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 
@@ -139,22 +127,19 @@ export default function VolunteersPage() {
     : null;
   const requestedCommittee = searchParams.get('committee')?.trim() || null;
   const hasDashboardScheduleFilter = Boolean(requestedShiftDay);
-  const supabase = createClient();
   const {
     rawVolunteers,
     committeesList,
     globalShifts,
-    checkedInMap,
-    checkedOutMap,
     shiftCounts,
     reliabilityMap,
     loading,
     refresh,
   } = useCoordinatorData();
   const { inputValue, setInputValue, appliedSearch, applySearch } = useDebouncedSearch();
-  const [selectedCommittees, setSelectedCommittees] = useState<string[]>([]);
-  const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
-  const [selectedWards, setSelectedWards] = useState<string[]>([]);
+  const [selectedCommittees] = useState<string[]>([]);
+  const [selectedStakes] = useState<string[]>([]);
+  const [selectedWards] = useState<string[]>([]);
 
   // Table Column Sort State
   const [sortField, setSortField] = useState<SortField>('name');
@@ -309,8 +294,7 @@ export default function VolunteersPage() {
     isEditingPhone: false,
   });
   const [isEditingShifts, setIsEditingShifts] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [showLegend, setShowLegend] = useState(false);
+  const [, setSaved] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   // Edit Volunteer Profile states
@@ -322,9 +306,9 @@ export default function VolunteersPage() {
   const [editWard, setEditWard] = useState('');
   const [editAge, setEditAge] = useState('');
   const [editCommitteeId, setEditCommitteeId] = useState('');
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [, setIsSavingProfile] = useState(false);
 
-  const [permTick, setPermTick] = useState(0);
+  const [, setPermTick] = useState(0);
 
   useEffect(() => {
     const handlePermissionsChange = () => setPermTick(v => v + 1);

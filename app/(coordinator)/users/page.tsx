@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { validatePhone8Digits } from "@/lib/whatsapp";
@@ -22,12 +21,10 @@ import {
   updateUserProfileAction,
 } from "@/app/actions/user-actions";
 import { CoordinatorType } from "@/lib/role-permissions";
-import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
-import { DataTableFilter } from "@/components/DataTableFilter";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { AlphabetScrubber, ALPHABET } from "@/components/AlphabetScrubber";
+import { AlphabetScrubber } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
-import { MeshGradientBackground } from "@/components/ui/mesh-gradient";
 import { SortableTableHead, TableSortDirection } from "@/components/SortableTableHead";
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { HighlightText } from "@/components/HighlightText";
@@ -89,8 +86,7 @@ const getCommitteeColor = (committee: string) => {
 };
 
 // ─── helper: highlight search term ─────────────────────────────────────────
-const ROLES = ['Admin', 'Editor', 'Lector'] as const;
-type Role = typeof ROLES[number];
+type Role = 'Admin' | 'Editor' | 'Lector';
 type PlatformRoleSelection = 'admin' | 'technology' | 'committee' | 'volunteer';
 
 const PLATFORM_ROLE_OPTIONS: Array<{
@@ -343,12 +339,6 @@ export default function UsersPage() {
   useEffect(() => {
     loadData();
   }, []);
-
-  const { activeCount, archivedCount } = useMemo(() => {
-    const active = users.filter(u => !u.isArchived).length;
-    const archived = users.filter(u => u.isArchived).length;
-    return { activeCount: active, archivedCount: archived };
-  }, [users]);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -645,7 +635,7 @@ export default function UsersPage() {
   }, [filteredUsers]);
   const sortedLetters = Object.keys(groupedUsers).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
 
-  const [permTick, setPermTick] = useState(0);
+  const [, setPermTick] = useState(0);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

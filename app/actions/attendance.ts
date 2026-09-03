@@ -1,13 +1,11 @@
 'use server'
 
 import { createActivityLog } from "./activity-actions";
-import { createClient, getAdminClient } from "@/lib/supabase/server";
+import { getAdminClient } from "@/lib/supabase/server";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { revalidatePath } from "next/cache";
 import { broadcastShiftSync, broadcastSessionSync } from "@/lib/services/shift-broadcast.service";
-import { cookies } from "next/headers";
-import { verifySessionToken } from "@/lib/auth";
 import { requireCapability, requireVolunteerCapability, requireVolunteerSelfOrCapability } from "@/lib/authorization";
 import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
 import { getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay } from "@/lib/dates";
@@ -137,27 +135,6 @@ function parseShiftDateTime(dayKey: string, shiftKey: string): Date {
   // Guatemala is six hours behind the zero-offset reference used by Date.UTC.
   const utcMillis = Date.UTC(2026, 8, dayNum, Math.floor(endHour) + 6, Math.round((endHour % 1) * 60), 0);
   return new Date(utcMillis);
-}
-
-// Check if current time is within a shift window (with 45 min buffer before/after) in Guatemala.
-function isCurrentTimeInShiftWindow(dayKey: string, shiftKey: string): boolean {
-  const guatemalaString = new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" });
-  const guatemalaNow = new Date(guatemalaString);
-  
-  // Format current date to day_key: e.g. "mié 16"
-  const currentDayKey = format(guatemalaNow, "EEE d", { locale: es }).toLowerCase();
-  if (dayKey.toLowerCase() !== currentDayKey) {
-    return false;
-  }
-
-  const currentHour = guatemalaNow.getHours() + guatemalaNow.getMinutes() / 60;
-
-  const official = getOfficialShiftTime(dayKey, shiftKey);
-  // Window definitions (StartHour - 45 min buffer to EndHour + 45 min buffer)
-  const startWindow = official.startHour - 0.75; // e.g. T1 starts at 7:00 AM (6:15 AM buffer)
-  const endWindow = official.endHour + 0.75;     // e.g. T1 ends at 12:00 PM (12:45 PM buffer)
-
-  return currentHour >= startWindow && currentHour <= endWindow;
 }
 
 // 1. Generate the volunteer's permanent pass token

@@ -1,6 +1,5 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { useCallback, useEffect, useState, useMemo, useRef } from "react";
@@ -14,7 +13,7 @@ import {
   getDashboardOperationalDataAction,
   type DashboardOperationalData,
 } from "@/app/actions/dashboard";
-import { getActiveEventDays, getAvailableShiftKeys, formatDateShort, SHIFT_TIMES, getOfficialShiftTime } from "@/lib/dates";
+import { getActiveEventDays, getAvailableShiftKeys, formatDateShort, getOfficialShiftTime } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { 
@@ -100,9 +99,6 @@ export default function CoordinatorDashboard() {
       dateNum: formatDateShort(date).split(' ')[1],
     })), [includeSimulation]);
 
-  const buildEmptyShifts = () =>
-    Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
-
   const committeeRequirements = useMemo(() => {
     return requirementsByCommittee || {};
   }, [requirementsByCommittee]);
@@ -122,8 +118,8 @@ export default function CoordinatorDashboard() {
   const [greeting, setGreeting] = useState<DashboardGreeting | null>(null);
   const [dashboardInsight, setDashboardInsight] = useState<DashboardInsight | null>(null);
   const [isInsightLoading, setIsInsightLoading] = useState(true);
-  const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
-  const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
+  const [, setConfirmedReminders] = useState<Record<string, boolean>>({});
+  const [, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [userCommittee, setUserCommittee] = useState<string>('');
   const [permTick, setPermTick] = useState(0);
   const [operationalData, setOperationalData] = useState<DashboardOperationalData | null>(null);
@@ -230,8 +226,6 @@ export default function CoordinatorDashboard() {
 
   const touchStartXRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
-  const heatmapDeepLinkHandledRef = useRef(false);
-
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0].clientX;
     touchStartYRef.current = e.touches[0].clientY;
@@ -597,10 +591,6 @@ export default function CoordinatorDashboard() {
     return volunteers.filter(v => (v.status || '').toLowerCase() !== 'archived');
   }, [volunteers]);
 
-  const activeVolunteerIds = useMemo(() => {
-    return new Set(activeVolunteers.map(v => v.id));
-  }, [activeVolunteers]);
-
   const activeAssignmentCounts = useMemo(() => {
     const counts = new Map<string, number>();
     activeVolunteers.forEach(volunteer => {
@@ -845,7 +835,6 @@ export default function CoordinatorDashboard() {
     && operationalData.effectiveCommitteeScope === (selectedHeatmapCommittee || 'todos');
   const globalStats = isOperationalSynced ? operationalData.globalStats : clientGlobalStats;
   const committeeStatus = isOperationalSynced ? operationalData.committeeStatus : clientCommitteeStatus;
-  const criticalShifts = isOperationalSynced ? operationalData.criticalShifts : clientCriticalShifts;
   const heatmapMatrix = isOperationalSynced ? operationalData.heatmapMatrix : clientHeatmapMatrix;
   const volsPerDay = isOperationalSynced ? operationalData.volsPerDay : clientVolsPerDay;
   const shiftsPerDay = isOperationalSynced ? operationalData.shiftsPerDay : clientShiftsPerDay;
