@@ -709,6 +709,26 @@ export class VolunteerMutationService {
           volunteerId,
           details: `DATABASE UPDATE FAILED: ${updateError.message}`,
         });
+
+        if (updateError.code === '23505') {
+          const concurrentConflicts = await this.findActivePhoneConflicts(supabase, payload.phone, volunteerId);
+          if (concurrentConflicts.length > 0) {
+            return {
+              success: false,
+              reason: 'phone_conflict',
+              error: 'Este número de teléfono ya está compartido por otros voluntarios activos.',
+              conflictingVolunteers: concurrentConflicts.map(conflict => ({
+                id: conflict.id,
+                name: `${conflict.first_name || ''} ${conflict.last_name || ''}`.trim(),
+              })),
+            };
+          }
+          return {
+            success: false,
+            error: 'No se pudo guardar el teléfono por una coincidencia interna. Actualiza la página e intenta nuevamente.',
+          };
+        }
+
         return { success: false, error: updateError.message };
       }
 
@@ -1326,6 +1346,26 @@ export class VolunteerMutationService {
         .select('id, first_name, last_name, phone')
         .single();
       if (insertError || !inserted) {
+        if (insertError?.code === '23505') {
+          const conflicts = await this.findActivePhoneConflicts(supabase, phoneToCreate);
+          if (conflicts.length > 0) {
+            const names = conflicts
+              .map(conflict => `${conflict.first_name || ''} ${conflict.last_name || ''}`.trim())
+              .filter(Boolean)
+              .join(', ');
+            return {
+              success: false,
+              reason: 'phone_conflict',
+              error: names
+                ? `El teléfono ya pertenece a ${names}. Selecciona la opción de número compartido.`
+                : 'El teléfono ya pertenece a otro voluntario activo. Selecciona la opción de número compartido.',
+            };
+          }
+          return {
+            success: false,
+            error: 'No se pudo aprobar el registro por una coincidencia interna. Actualiza la página e intenta nuevamente.',
+          };
+        }
         return { success: false, error: insertError?.message || 'No se pudo crear el voluntario.' };
       }
 

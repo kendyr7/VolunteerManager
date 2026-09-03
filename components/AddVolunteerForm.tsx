@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -26,6 +26,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
   const [sendWelcomeMessage, setSendWelcomeMessage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [phoneConflicts, setPhoneConflicts] = useState<string[]>([]);
+  const submittingRef = useRef(false);
 
   const resetForm = () => {
     setNewFirstName('');
@@ -46,6 +47,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
   };
 
   const submitVolunteer = async (allowSharedPhone = false) => {
+    if (submittingRef.current) return;
 
     const identity = normalizeVolunteerIdentity({
       firstName: newFirstName, lastName: newLastName, stake: newStake, neighborhood: newWard,
@@ -73,6 +75,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
     }
 
     const sanitizedPhone = phoneValidation.formatted;
+    submittingRef.current = true;
     setIsSubmitting(true);
 
     try {
@@ -115,6 +118,7 @@ export function AddVolunteerForm({ committeesList = [], onSuccess, onClose, show
       console.error("Error al añadir voluntario:", error);
       showToast("Error al añadir voluntario", "error");
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
