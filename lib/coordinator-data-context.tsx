@@ -39,7 +39,7 @@ const STALE_TIME_MS = 60_000;
 const SAFE_VOLUNTEER_FIELDS = 'id, first_name, last_name, phone, stake, neighborhood, committee_id, age, status, created_at, committees(name)';
 const OPERATIONAL_EVENT_DAY_KEYS = buildEventDayKeys();
 
-interface CoordinatorCommitteeData {
+export interface CoordinatorCommitteeData {
   id: string;
   name: string;
   status?: string | null;
@@ -56,7 +56,7 @@ function withoutSensitiveVolunteerFields(record: unknown): CoordinatorVolunteerD
 
 interface CoordinatorDataContextValue {
   rawVolunteers: CoordinatorVolunteerData[];
-  committeesList: { id: string; name: string }[];
+  committeesList: CoordinatorCommitteeData[];
   shiftsData: CoordinatorShiftData[];
   sessionsData: CoordinatorSessionData[];
   requirementsByCommittee: Record<string, Record<string, number>>;
@@ -96,9 +96,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
 
   const [rawVolunteers, setRawVolunteers] = useState<CoordinatorVolunteerData[]>([]);
-  const [committeesList, setCommitteesList] = useState<
-    { id: string; name: string }[]
-  >([]);
+  const [committeesList, setCommitteesList] = useState<CoordinatorCommitteeData[]>([]);
   const [shiftsData, setShiftsData] = useState<CoordinatorShiftData[]>([]);
   const [sessionsData, setSessionsData] = useState<CoordinatorSessionData[]>([]);
   const [requirementsByCommittee, setRequirementsByCommittee] = useState<
