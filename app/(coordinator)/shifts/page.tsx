@@ -742,7 +742,7 @@ export default function ShiftsPage() {
       volunteer: VolunteerType;
       dayKey: string;
       shiftKey: string;
-      checkedInAt?: string;
+      checkedInAt?: string | null;
       checkedOut?: boolean;
     }[] = [];
 
@@ -906,7 +906,7 @@ export default function ShiftsPage() {
     return dbCount + localCount;
   }, [rawShiftsData, completedShiftsMap, volunteerMap]);
 
-  const formatGuatemalaTime = (isoString?: string) => {
+  const formatGuatemalaTime = (isoString?: string | null) => {
     if (!isoString) return undefined;
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return undefined;
@@ -918,7 +918,7 @@ export default function ShiftsPage() {
     });
   };
 
-  const getElapsedInfoBetween = (startIso?: string, endIso?: string) => {
+  const getElapsedInfoBetween = (startIso?: string | null, endIso?: string | null) => {
     if (!startIso || !endIso) return null;
     const start = new Date(startIso);
     const end = new Date(endIso);

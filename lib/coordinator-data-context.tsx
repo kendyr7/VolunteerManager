@@ -17,6 +17,9 @@ import {
   parseRequirementsData,
   processShiftsData,
   computeReliabilityMap,
+  type CoordinatorSessionData,
+  type CoordinatorShiftData,
+  type CoordinatorVolunteerData,
 } from '@/lib/coordinator-data';
 import { getAuthorizationSnapshotCache } from '@/lib/permissions';
 import { hasCapability } from '@/lib/role-permissions';
@@ -41,16 +44,16 @@ function withoutSensitiveVolunteerFields(record: any) {
 }
 
 interface CoordinatorDataContextValue {
-  rawVolunteers: any[];
+  rawVolunteers: CoordinatorVolunteerData[];
   committeesList: { id: string; name: string }[];
-  shiftsData: any[];
-  sessionsData: any[];
+  shiftsData: CoordinatorShiftData[];
+  sessionsData: CoordinatorSessionData[];
   requirementsByCommittee: Record<string, Record<string, number>>;
   globalShifts: Record<string, Record<string, string[]>>;
   indexedAssignments: Record<string, Record<string, Record<string, string[]>>>;
   checkedInMap: Record<string, boolean>;
   checkedOutMap: Record<string, boolean>;
-  activeSessionsByVolunteer: Record<string, any>;
+  activeSessionsByVolunteer: Record<string, CoordinatorSessionData>;
   sessionOpenShiftKeys: Record<string, boolean>;
   sessionCompletedShiftKeys: Record<string, boolean>;
   shiftCounts: Record<string, number>;
@@ -81,33 +84,17 @@ function getAuthScope() {
 export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
 
-  const [rawVolunteers, setRawVolunteers] = useState<any[]>([]);
+  const [rawVolunteers, setRawVolunteers] = useState<CoordinatorVolunteerData[]>([]);
   const [committeesList, setCommitteesList] = useState<
     { id: string; name: string }[]
   >([]);
-  const [shiftsData, setShiftsData] = useState<any[]>([]);
-  const [sessionsData, setSessionsData] = useState<any[]>([]);
-  const [confirmedReminders, setConfirmedReminders] = useState<Record<string, boolean>>({});
+  const [shiftsData, setShiftsData] = useState<CoordinatorShiftData[]>([]);
+  const [sessionsData, setSessionsData] = useState<CoordinatorSessionData[]>([]);
   const [requirementsByCommittee, setRequirementsByCommittee] = useState<
     Record<string, Record<string, number>>
   >({});
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Load confirmed reminders from localStorage
-  useEffect(() => {
-    const loadConfirmations = () => {
-      const stored = localStorage.getItem("confirmed_reminders");
-      if (stored) {
-        try {
-          setConfirmedReminders(JSON.parse(stored));
-        } catch (e) {
-          console.error("Error loading confirmations", e);
-        }
-      }
-    };
-    loadConfirmations();
-  }, []);
 
   const lastFetchedAtRef = useRef(0);
   const lastCacheKeyRef = useRef('');
@@ -172,8 +159,8 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   );
   
   const reliabilityMap = useMemo(
-    () => computeReliabilityMap(rawVolunteers, derived.globalShifts, confirmedReminders),
-    [rawVolunteers, derived.globalShifts, confirmedReminders]
+    () => computeReliabilityMap(rawVolunteers),
+    [rawVolunteers]
   );
 
   const fetchData = useCallback(

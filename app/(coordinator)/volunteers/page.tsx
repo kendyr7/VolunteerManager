@@ -73,6 +73,8 @@ const itemVariants = {
 type VolunteerType = {
   id: string; // UUID de Supabase
   name: string;
+  first_name?: string;
+  last_name?: string;
   stake: string;
   ward: string;
   phone: string;
@@ -83,6 +85,7 @@ type VolunteerType = {
   committee_id?: string;
   status?: string;
   age?: number;
+  normalizedSearchText?: string;
 };
 
 const getCommitteeColor = (committee: string) => {
@@ -256,8 +259,8 @@ export default function VolunteersPage() {
   const [selectedVolunteerId, setSelectedVolunteerId] = useState<string | null>(null);
   const selectedVolunteer = useMemo(() => {
     if (!selectedVolunteerId) return null;
-    return rawVolunteers.find((v: any) => v.id === selectedVolunteerId) ?? null;
-  }, [selectedVolunteerId, rawVolunteers]);
+    return volunteers.find((volunteer) => volunteer.id === selectedVolunteerId) ?? null;
+  }, [selectedVolunteerId, volunteers]);
 
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
@@ -600,7 +603,7 @@ export default function VolunteersPage() {
         phone: sanitizedPhone,
         stake: trimmedStake,
         ward: trimmedWard,
-        committee: commName,
+        committee: commName || 'Sin comité',
         age: ageNum ?? undefined,
       };
 

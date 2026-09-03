@@ -275,7 +275,9 @@ export function GlobalCommandPalette({
       .filter(volunteer => volunteer.status !== 'archived' && canViewVolunteerProfile(volunteer.committee_id))
       .map(volunteer => {
         const name = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim();
-        const committee = committeeNames.get(volunteer.committee_id)
+        const committee = (volunteer.committee_id
+          ? committeeNames.get(volunteer.committee_id)
+          : undefined)
           || volunteer.committees?.name
           || volunteer.committee
           || 'Sin subcomité';

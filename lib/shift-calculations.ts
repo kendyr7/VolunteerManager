@@ -5,14 +5,20 @@ export interface ShiftTimeResult {
   endTime: string;
 }
 
+interface ShiftAuditLog {
+  description?: string | null;
+  details?: string | null;
+  created_at?: string | null;
+}
+
 /**
  * Single Unified Source of Truth for Shift Start & End Times
  */
 export function getUnifiedShiftTimes(
   dayKey: string,
   shiftKey: string,
-  dbShiftRecords: any[] = [],
-  auditLogs: any[] = []
+  dbShiftRecords: unknown[] = [],
+  auditLogs: ShiftAuditLog[] = []
 ): ShiftTimeResult {
   void dbShiftRecords;
   const official = getOfficialShiftTime(dayKey, shiftKey);
@@ -28,14 +34,14 @@ export function getUnifiedShiftTimes(
   }
 
   // 2. Check audit logs for explicit time range text e.g. "de 12:08 p. m. a 11:00 p. m."
-  const relevantLogs = (auditLogs || []).filter((l: any) => {
+  const relevantLogs = (auditLogs || []).filter((l) => {
     const desc = (l.description || '').toLowerCase();
     const det = (l.details || '').toLowerCase();
     return (desc.includes(dayKey.toLowerCase()) || det.includes(dayKey.toLowerCase())) &&
            (desc.includes(shiftKey.toLowerCase()) || det.includes(shiftKey.toLowerCase()));
   });
 
-  const checkInLog = relevantLogs.find((l: any) => {
+  const checkInLog = relevantLogs.find((l) => {
     const desc = (l.description || '').toLowerCase();
     return desc.includes('check-in') || desc.includes('escaneó') || desc.includes('registró asistencia');
   });
@@ -69,8 +75,8 @@ export function getUnifiedShiftTimes(
 export function getUnifiedShiftWorkedMinutes(
   dayKey: string,
   shiftKey: string,
-  dbShiftRecords: any[] = [],
-  auditLogs: any[] = []
+  dbShiftRecords: unknown[] = [],
+  auditLogs: ShiftAuditLog[] = []
 ): number {
   // Override for known test shifts to guarantee exact 34m and 23m
   if (dayKey.includes('11') && shiftKey === 'T4') return 34;
