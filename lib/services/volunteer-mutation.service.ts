@@ -189,6 +189,22 @@ export interface ResolvePendingImportExceptionResult extends MutationResult {
   };
 }
 
+function postgresErrorText(error: unknown): string {
+  if (!error || typeof error !== 'object') return '';
+  const candidate = error as { message?: unknown; details?: unknown; hint?: unknown };
+  return [candidate.message, candidate.details, candidate.hint]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ')
+    .toLowerCase();
+}
+
+function isPinUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown };
+  return candidate.code === '23505'
+    && /(?:^|[^a-z0-9])pin(?:_hash)?(?:[^a-z0-9]|$)/.test(postgresErrorText(error));
+}
+
 export class VolunteerMutationService {
   /** Applies a name boundary explicitly approved in the local review report.
    * Maintenance-only and not exposed through a Server Action.
@@ -384,29 +400,46 @@ export class VolunteerMutationService {
     const local8 = getLocal8Digits(phoneInput);
     if (!local8 || local8.length !== 8) return [];
 
+    const normalizedPhone = normalizePhoneE164(phoneInput);
     const targetVariants = Array.from(new Set([
       phoneInput.trim(),
-      `+505${local8}`,
+      normalizedPhone,
       `505${local8}`,
       local8
     ])).filter(Boolean);
 
-    let query = supabase
+    const fields = 'id, first_name, last_name, phone, phone_normalized, stake, neighborhood, committee_id, is_shared_phone, shared_phone_owner_id';
+    let phoneQuery = supabase
       .from('volunteers')
-      .select('id, first_name, last_name, phone, stake, neighborhood, committee_id, is_shared_phone, shared_phone_owner_id')
+      .select(fields)
       .in('phone', targetVariants)
-      .neq('status', 'archived');
+      .eq('status', 'active');
+
+    let normalizedQuery = supabase
+      .from('volunteers')
+      .select(fields)
+      .eq('phone_normalized', normalizedPhone)
+      .eq('status', 'active');
 
     if (excludeVolunteerId) {
-      query = query.neq('id', excludeVolunteerId);
+      phoneQuery = phoneQuery.neq('id', excludeVolunteerId);
+      normalizedQuery = normalizedQuery.neq('id', excludeVolunteerId);
     }
 
-    const { data: matches } = await query;
-    if (!matches || matches.length === 0) return [];
+    const [phoneResult, normalizedResult] = await Promise.all([phoneQuery, normalizedQuery]);
+    const queryError = phoneResult.error || normalizedResult.error;
+    if (queryError) {
+      throw new Error(`No se pudo comprobar si el teléfono ya está registrado: ${queryError.message}`);
+    }
 
-    return matches.filter(v => {
+    const uniqueMatches = new Map<string, (typeof phoneResult.data)[number]>();
+    for (const match of [...(phoneResult.data || []), ...(normalizedResult.data || [])]) {
+      uniqueMatches.set(match.id, match);
+    }
+
+    return Array.from(uniqueMatches.values()).filter(v => {
       if (excludeVolunteerId && v.id === excludeVolunteerId) return false;
-      return getLocal8Digits(v.phone) === local8;
+      return getLocal8Digits(v.phone_normalized || v.phone) === local8;
     });
   }
 
@@ -480,31 +513,41 @@ export class VolunteerMutationService {
     payload: CreateVolunteerPayload,
     sharedPhone?: { ownerId: string; reason: string; authorizedBy: string }
   ): Promise<{ data: any | null; error: any | null }> {
-    const pin = generateTemporaryPin();
     const phoneNormalized = normalizePhoneE164(payload.phone);
-    const { data, error } = await supabase
-      .from('volunteers')
-      .insert({
-        first_name:   payload.firstName,
-        last_name:    payload.lastName,
-        phone:        phoneNormalized || payload.phone,
-        phone_normalized: phoneNormalized,
-        stake:        payload.stake ?? null,
-        neighborhood: payload.neighborhood ?? null,
-        committee_id: payload.committeeId ?? null,
-        age:          payload.age ?? null,
-        pin,
-        status:       'active',
-        is_shared_phone: Boolean(sharedPhone),
-        shared_phone_owner_id: sharedPhone?.ownerId ?? null,
-        shared_phone_reason: sharedPhone?.reason ?? null,
-        shared_phone_authorized_by: sharedPhone?.authorizedBy ?? null,
-        shared_phone_authorized_at: sharedPhone ? new Date().toISOString() : null,
-      })
-      .select()
-      .single();
+    let lastResult: { data: any | null; error: any | null } = { data: null, error: null };
 
-    return { data, error };
+    // Some deployed schemas still enforce uniqueness on temporary PINs. A
+    // random PIN collision must not surface to the coordinator as a misleading
+    // duplicate-phone error, so generate a fresh PIN and retry it briefly.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const pin = generateTemporaryPin();
+      const { data, error } = await supabase
+        .from('volunteers')
+        .insert({
+          first_name:   payload.firstName,
+          last_name:    payload.lastName,
+          phone:        phoneNormalized || payload.phone,
+          phone_normalized: phoneNormalized,
+          stake:        payload.stake ?? null,
+          neighborhood: payload.neighborhood ?? null,
+          committee_id: payload.committeeId ?? null,
+          age:          payload.age ?? null,
+          pin,
+          status:       'active',
+          is_shared_phone: Boolean(sharedPhone),
+          shared_phone_owner_id: sharedPhone?.ownerId ?? null,
+          shared_phone_reason: sharedPhone?.reason ?? null,
+          shared_phone_authorized_by: sharedPhone?.authorizedBy ?? null,
+          shared_phone_authorized_at: sharedPhone ? new Date().toISOString() : null,
+        })
+        .select()
+        .single();
+
+      lastResult = { data, error };
+      if (!isPinUniqueViolation(error)) return lastResult;
+    }
+
+    return lastResult;
   }
 
   // ---------------------------------------------------------------------------
@@ -786,6 +829,30 @@ export class VolunteerMutationService {
 
       if (insertError || !inserted) {
         console.error('[VolunteerMutationService.createVolunteer] DB insert failed:', insertError);
+
+        // Close the race between the pre-insert conflict check and INSERT.
+        // This also prevents PostgreSQL's raw duplicate-key text from leaking
+        // into the toast when another request registered the phone first.
+        if (insertError?.code === '23505') {
+          const concurrentConflicts = await this.findActivePhoneConflicts(supabase, payload.phone);
+          if (concurrentConflicts.length > 0) {
+            return {
+              success: false,
+              reason: 'phone_conflict',
+              error: 'Este número de teléfono ya está compartido por otros voluntarios activos.',
+              conflictingVolunteers: concurrentConflicts.map(conflict => ({
+                id: conflict.id,
+                name: `${conflict.first_name || ''} ${conflict.last_name || ''}`.trim(),
+              })),
+            };
+          }
+
+          return {
+            success: false,
+            error: 'No se pudo completar el registro por una coincidencia interna. Intenta añadirlo nuevamente.',
+          };
+        }
+
         return { success: false, error: insertError?.message || 'Error al crear voluntario.' };
       }
 
