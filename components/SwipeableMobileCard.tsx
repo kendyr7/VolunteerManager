@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, useMotionValue, useTransform } from 'framer-motion';
+import { motion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { USER_TABLE_STYLES } from '@/app/(coordinator)/users/page';
 import { HighlightText } from '@/components/HighlightText';
@@ -66,7 +66,7 @@ export const SwipeableMobileCard: React.FC<SwipeableMobileCardProps> = React.mem
   const scaleLeft = useTransform(x, [-100, -20], [1, 0.8]);
   const scaleRight = useTransform(x, [20, 100], [0.8, 1]);
 
-  const handleDragEnd = (event: any, info: any) => {
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     // If we are in selection mode, disable swipes
     if (selectionModeActive) return;
 
@@ -78,7 +78,7 @@ export const SwipeableMobileCard: React.FC<SwipeableMobileCardProps> = React.mem
     }
   };
 
-  const handleCardClick = (e: React.MouseEvent) => {
+  const handleCardClick = () => {
     // If we just finished a long press and enter selection mode, this click might trigger.
     // However, the long-press already activated it. We should just toggle normally if we are in selection mode.
     if (selectionModeActive && onToggleSelect) {
@@ -190,3 +190,5 @@ export const SwipeableMobileCard: React.FC<SwipeableMobileCardProps> = React.mem
     prevProps.swipeLeftText === nextProps.swipeLeftText
   );
 });
+
+SwipeableMobileCard.displayName = 'SwipeableMobileCard';
