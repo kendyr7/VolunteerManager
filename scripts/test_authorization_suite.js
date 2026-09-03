@@ -328,7 +328,10 @@ async function runAuthorizationSuite() {
     committeeId: 'committee-a',
     permissions: {
       ...techSnapshot.permissions,
-      'role.technology.manage_area_coverage': true,
+      'role.technology.view_area_coverage': true,
+      'role.technology.manage_committee_areas': true,
+      'role.technology.assign_volunteer_areas': true,
+      'role.technology.manage_area_requirements': true,
     },
   };
   assert(

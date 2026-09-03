@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { loginWithPin } from "@/app/actions/auth";
+import { loginWithPin, type AuthState } from "@/app/actions/auth";
 import { getDashboardOperationalDataAction } from "@/app/actions/dashboard";
 import { getLoginProfiles } from "@/app/actions/login-profiles";
 import { updateInitialPin } from "@/app/actions/update-pin";
@@ -11,7 +10,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { createPortal } from "react-dom";
 import { startAuthentication } from "@simplewebauthn/browser";
-import Image from "next/image";
 import { MobilePinLogin } from "./MobilePinLogin";
 import mobileStyles from "./mobile-login.module.css";
 import { loginDisplayName, normalizeLoginPhone, rememberLoginPhone } from "@/lib/login-experience";
@@ -21,16 +19,13 @@ import {
   writePreparedDashboardSession,
 } from "@/lib/dashboard-session-cache";
 
-const isMobileDevice = () => {
-  if (typeof window === 'undefined') return false;
-  const ua = navigator.userAgent || '';
-  const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-  return isMobileUA || (isTouch && window.innerWidth < 1024);
-};
+type LoginCompletionResult = AuthState & { phone?: string };
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 export function LoginForm({ mobile = false }: { mobile?: boolean }) {
-  const router = useRouter();
   const authAttemptRef = useRef(false);
   const activeRef = useRef(true);
   const cancelPinSuccessRef = useRef<(() => void) | null>(null);
@@ -101,7 +96,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
   const [isMounted, setIsMounted] = useState(false);
   const [authMode, setAuthMode] = useState<'biometrics' | 'pin'>('pin');
   const [hasPasskey, setHasPasskey] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = mobile;
 
   // Auto-dismiss error banner after 4 seconds
   useEffect(() => {
@@ -113,10 +108,8 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
     }
   }, [error, mobile]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- Browser-only saved login data must hydrate after SSR. */
   useEffect(() => {
-    const mobileCheck = isMobileDevice();
-    setIsMobile(mobileCheck);
-
     try {
       const isRemembered = localStorage.getItem("remember_me") === "true";
       setRememberMe(isRemembered);
@@ -152,12 +145,12 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
 
     setIsMounted(true);
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Check if current phone has registered passkeys (huella/Face ID)
   useEffect(() => {
     if (mobile) return;
     if (!phone || phone.length < 8) {
-      setHasPasskey(false);
       return;
     }
 
@@ -225,12 +218,12 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
       } else {
         setError('La huella no pudo ser verificada.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsBiometricLoading(false);
-      if (err.name === 'NotAllowedError') {
+      if (err instanceof Error && err.name === 'NotAllowedError') {
         setError(null);
       } else {
-        setError(err.message || "Huella o Passkey no reconocida. Inténtelo con su PIN.");
+        setError(getErrorMessage(err, "Huella o Passkey no reconocida. Inténtelo con su PIN."));
       }
     } finally {
       authAttemptRef.current = false;
@@ -290,7 +283,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
       } else {
         setIsSubmittingPin(false);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Login error:", err);
       setError("Error de conexión con el servidor. Inténtalo de nuevo.");
       if (mobile) setPin("");
@@ -363,17 +356,17 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
       } else {
         setIsSubmittingPin(false);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("PIN update error:", err);
       setError("Error de conexión con el servidor. Inténtalo de nuevo.");
       setIsSubmittingPin(false);
     }
   };
 
-  const finishLogin = async (result: any) => {
+  const finishLogin = async (result: LoginCompletionResult) => {
     setIsRedirecting(true);
 
-    rememberLoginPhone(phone || result.phone, rememberMe, result.name);
+    rememberLoginPhone(phone || result.phone || '', rememberMe, result.name);
     try {
       if (!localStorage.getItem("preferred_auth_method")) {
         localStorage.setItem("preferred_auth_method", "pin");
@@ -405,6 +398,9 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
       }
     }
     
+    // A full navigation resets client providers and consumes the dashboard data
+    // prepared immediately above before the destination starts rendering.
+    // eslint-disable-next-line react-hooks/immutability
     window.location.href = result.redirectTo || "/calendar";
   };
 
@@ -538,7 +534,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
                                 } else {
                                   setIsSubmittingPin(false);
                                 }
-                              } catch (err) {
+                              } catch {
                                 setError("Error de conexión con el servidor.");
                                 setIsSubmittingPin(false);
                               }
