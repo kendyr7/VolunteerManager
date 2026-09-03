@@ -682,6 +682,7 @@ export class VolunteerMutationService {
           first_name:   payload.firstName,
           last_name:    payload.lastName,
           phone:        normPhone,
+          phone_normalized: normPhone,
           stake:        payload.stake ?? null,
           neighborhood: payload.neighborhood ?? null,
           committee_id: payload.committeeId ?? null,
