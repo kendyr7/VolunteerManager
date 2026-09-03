@@ -13,6 +13,7 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { fetchAllRows } from '@/lib/supabase-helpers';
 import {
+  buildEventDayKeys,
   parseRequirementsData,
   processShiftsData,
   computeReliabilityMap,
@@ -29,6 +30,7 @@ import { withShiftAreaDetails } from '@/lib/shift-area';
 
 const STALE_TIME_MS = 60_000;
 const SAFE_VOLUNTEER_FIELDS = 'id, first_name, last_name, phone, stake, neighborhood, committee_id, age, status, created_at, committees(name)';
+const OPERATIONAL_EVENT_DAY_KEYS = buildEventDayKeys();
 
 function withoutSensitiveVolunteerFields(record: any) {
   if (!record || typeof record !== 'object') return record;
@@ -243,15 +245,31 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
               volsQuery,
               supabase
                 .from('committees')
-                .select('*')
+                .select('id, name, status')
                 .or('status.is.null,status.neq.archived'),
-              fetchAllRows(supabase, 'shifts', '*, committee_areas(name, description)'),
+              fetchAllRows(
+                supabase,
+                'shifts',
+                canViewAll
+                  ? '*, committee_areas(name, description)'
+                  : '*, committee_areas(name, description), volunteers!inner(committee_id)',
+                query => {
+                  let scopedQuery = query.in('day_key', OPERATIONAL_EVENT_DAY_KEYS);
+                  if (!canViewAll && committeeId) {
+                    scopedQuery = scopedQuery.eq('volunteers.committee_id', committeeId);
+                  }
+                  return scopedQuery;
+                }
+              ),
               fetchAllRows(
                 supabase,
                 'committee_shift_requirements',
-                '*, committees(name)'
+                'committee_id, shift_key, required, committees(name)',
+                (query) => !canViewAll && committeeId
+                  ? query.eq('committee_id', committeeId)
+                  : query
               ),
-              getAttendanceSessionsAction()
+              getAttendanceSessionsAction(OPERATIONAL_EVENT_DAY_KEYS)
             ]);
 
           const commsData = commsRes.data ?? [];

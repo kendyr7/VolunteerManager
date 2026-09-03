@@ -1,4 +1,5 @@
 import { getOperationalEventDays, formatDateShort, isSimulationEventDay } from "@/lib/dates";
+import { inferShiftsForSession } from '@/lib/session-utils';
 
 export function buildEventDayKeys(): string[] {
   return getOperationalEventDays().map((date) => formatDateShort(date));
@@ -44,6 +45,18 @@ export function processShiftsData(shiftsData: any[], volunteers: any[] = [], ses
   const sessionOpenShiftKeys: Record<string, boolean> = {};
   const sessionCompletedShiftKeys: Record<string, boolean> = {};
 
+  const assignedShiftKeysByVolunteerDay = new Map<string, string[]>();
+  for (const shift of shiftsData) {
+    const volunteerId = shift.volunteer_id || shift.volunteerId;
+    const dayKey = shift.day_key || shift.dayKey;
+    const shiftKey = shift.shift_key || shift.shiftKey;
+    if (!volunteerId || !dayKey || !shiftKey) continue;
+    const key = `${volunteerId}|${dayKey}`;
+    const assigned = assignedShiftKeysByVolunteerDay.get(key) || [];
+    if (!assigned.includes(shiftKey)) assigned.push(shiftKey);
+    assignedShiftKeysByVolunteerDay.set(key, assigned);
+  }
+
   // 1. Process attendance_sessions (Primary Source of Truth)
   (sessionsData || []).forEach((sess: any) => {
     const vId = sess.volunteer_id || sess.volunteerId;
@@ -55,12 +68,9 @@ export function processShiftsData(shiftsData: any[], volunteers: any[] = [], ses
     const status = sess.status || (endedAt ? 'completed' : 'open');
 
     // Infer related shifts via temporal intersection
-    const assignedForVolAndDay = shiftsData
-      .filter((s: any) => (s.volunteer_id || s.volunteerId) === vId && (s.day_key || s.dayKey) === dayKey)
-      .map((s: any) => s.shift_key || s.shiftKey);
+    const assignedForVolAndDay = assignedShiftKeysByVolunteerDay.get(`${vId}|${dayKey}`) || [];
 
     const targetShiftKeys = assignedForVolAndDay.length > 0 ? assignedForVolAndDay : ['T1', 'T2', 'T3', 'T4'];
-    const { inferShiftsForSession } = require('@/lib/session-utils');
     const relatedShifts = inferShiftsForSession(dayKey, startedAt, endedAt, targetShiftKeys);
 
     if (status === 'open') {

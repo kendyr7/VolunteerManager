@@ -11,6 +11,7 @@ import { verifySessionToken } from "@/lib/auth";
 import { requireCapability, requireVolunteerCapability, requireVolunteerSelfOrCapability } from "@/lib/authorization";
 import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
 import { getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay } from "@/lib/dates";
+import { buildEventDayKeys } from '@/lib/coordinator-data';
 import { AttendanceSession, validateSessionConstraints } from "@/lib/session-utils";
 import {
   saveAttendanceSession,
@@ -20,20 +21,21 @@ import {
 } from "@/lib/services/session-store";
 import { createEntryPassPayload, validateEntryPassQrValue } from "@/lib/entry-pass";
 
-export async function getAttendanceSessionsAction(): Promise<AttendanceSession[]> {
+export async function getAttendanceSessionsAction(requestedDayKeys?: string[]): Promise<AttendanceSession[]> {
   const authorization = await requireCapability('view_volunteers');
-  const sessions = await fetchAllAttendanceSessionsFromDb();
-  if (hasCapability(authorization, 'view_all_volunteers')) return sessions;
+  const allowedDayKeys = new Set(buildEventDayKeys());
+  const dayKeys = Array.isArray(requestedDayKeys)
+    ? [...new Set(requestedDayKeys.filter(key => typeof key === 'string' && allowedDayKeys.has(key)))]
+    : undefined;
+  if (Array.isArray(requestedDayKeys) && dayKeys?.length === 0) return [];
+  const canViewAllVolunteers = hasCapability(authorization, 'view_all_volunteers');
+  const sessions = await fetchAllAttendanceSessionsFromDb(
+    dayKeys,
+    canViewAllVolunteers ? undefined : authorization.committeeId
+  );
+  if (canViewAllVolunteers) return sessions;
   if (!authorization.committeeId) return [];
-
-  const supabase = getAdminClient();
-  const { data: volunteers } = await supabase
-    .from('volunteers')
-    .select('id')
-    .eq('committee_id', authorization.committeeId)
-    .neq('status', 'archived');
-  const allowedIds = new Set((volunteers || []).map((volunteer: { id: string }) => volunteer.id));
-  return sessions.filter(session => allowedIds.has(session.volunteer_id));
+  return sessions;
 }
 
 // Safely update checked_in status on shifts table, protecting against FK constraint errors on checked_in_by

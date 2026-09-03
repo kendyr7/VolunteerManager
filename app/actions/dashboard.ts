@@ -110,6 +110,9 @@ export async function getDashboardOperationalDataAction(
   includeInsight = false,
   insightMode: 'instant' | 'ai' = 'ai'
 ): Promise<{ data?: DashboardOperationalData; insight?: DashboardInsight | null; error?: string }> {
+  const actionStartedAt = performance.now();
+  let queryDurationMs = 0;
+  let insightDurationMs = 0;
   try {
     const safeRequestedCommittee = typeof requestedCommittee === 'string'
       ? requestedCommittee.trim().slice(0, 120) || 'todos'
@@ -172,6 +175,7 @@ export async function getDashboardOperationalDataAction(
 
     // Fetch every independent dataset in one network round. Previously the
     // committees request delayed all six operational queries.
+    const queryStartedAt = performance.now();
     const [committeesResult, reqsData, volsData, shiftsData, sessionsData, areasData, areaRequirementsData] = await Promise.all([
       supabase
         .from('committees')
@@ -180,43 +184,79 @@ export async function getDashboardOperationalDataAction(
       fetchAllRows<{ committee_id: string; shift_key: string; required: number }>(
         supabase,
         'committee_shift_requirements',
-        'committee_id, shift_key, required'
+        'committee_id, shift_key, required',
+        (query) => !canSeeGlobal && userCommitteeId
+          ? query.eq('committee_id', userCommitteeId)
+          : query
       ),
       fetchAllRows<{ id: string; committee_id: string; status: string }>(
         supabase,
         'volunteers',
         'id, committee_id, status',
-        (q) => q.or('status.is.null,status.neq.archived')
+        (query) => {
+          let scopedQuery = query.or('status.is.null,status.neq.archived');
+          if (!canSeeGlobal && userCommitteeId) scopedQuery = scopedQuery.eq('committee_id', userCommitteeId);
+          return scopedQuery;
+        }
       ),
       fetchAllRows<DashboardShiftRow>(
         supabase,
         'shifts',
-        'id, volunteer_id, day_key, shift_key, checked_in, area_id',
-        (query) => query.in('day_key', queriedEventDayKeyList)
+        canSeeGlobal
+          ? 'id, volunteer_id, day_key, shift_key, checked_in, area_id'
+          : 'id, volunteer_id, day_key, shift_key, checked_in, area_id, volunteers!inner(committee_id)',
+        (query) => {
+          let scopedQuery = query.in('day_key', queriedEventDayKeyList);
+          if (!canSeeGlobal && userCommitteeId) {
+            scopedQuery = scopedQuery.eq('volunteers.committee_id', userCommitteeId);
+          }
+          return scopedQuery;
+        }
       ),
       fetchAllRows<{ id: string; volunteer_id: string; day_key: string; started_at: string; ended_at?: string | null; status?: string }>(
         supabase,
         'attendance_sessions',
-        'id, volunteer_id, day_key, started_at, ended_at, status',
-        (query) => query.in('day_key', queriedEventDayKeyList)
+        canSeeGlobal
+          ? 'id, volunteer_id, day_key, started_at, ended_at, status'
+          : 'id, volunteer_id, day_key, started_at, ended_at, status, volunteers!inner(committee_id)',
+        (query) => {
+          let scopedQuery = query.in('day_key', queriedEventDayKeyList);
+          if (!canSeeGlobal && userCommitteeId) {
+            scopedQuery = scopedQuery.eq('volunteers.committee_id', userCommitteeId);
+          }
+          return scopedQuery;
+        }
       ),
       shouldIncludeInsight
         ? fetchAllRows<DashboardAreaRow>(
             supabase,
             'committee_areas',
             'id, committee_id, name, status',
-            (query) => query.or('status.is.null,status.neq.archived')
+            (query) => {
+              let scopedQuery = query.or('status.is.null,status.neq.archived');
+              if (!canSeeGlobal && userCommitteeId) scopedQuery = scopedQuery.eq('committee_id', userCommitteeId);
+              return scopedQuery;
+            }
           )
         : Promise.resolve([]),
       shouldIncludeInsight
         ? fetchAllRows<DashboardAreaRequirementRow>(
             supabase,
             'area_shift_requirements',
-            'area_id, day_key, shift_key, required_count',
-            (query) => query.in('day_key', queriedEventDayKeyList)
+            canSeeGlobal
+              ? 'area_id, day_key, shift_key, required_count'
+              : 'area_id, day_key, shift_key, required_count, committee_areas!inner(committee_id)',
+            (query) => {
+              let scopedQuery = query.in('day_key', queriedEventDayKeyList);
+              if (!canSeeGlobal && userCommitteeId) {
+                scopedQuery = scopedQuery.eq('committee_areas.committee_id', userCommitteeId);
+              }
+              return scopedQuery;
+            }
           )
         : Promise.resolve([]),
     ]);
+    queryDurationMs = performance.now() - queryStartedAt;
 
     if (committeesResult.error) {
       return { error: `Error loading committees: ${committeesResult.error.message}` };
@@ -322,6 +362,24 @@ export async function getDashboardOperationalDataAction(
       }
     });
 
+    const assignmentCountByCommitteeSlot = new Map<string, number>();
+    volunteerCommitteeMap.forEach((committee, volunteerId) => {
+      const days = globalShifts[volunteerId];
+      if (!days) return;
+      Object.entries(days).forEach(([dayKey, shiftKeys]) => {
+        shiftKeys.forEach(shiftKey => {
+          const key = `${committee}|${dayKey}|${shiftKey}`;
+          assignmentCountByCommitteeSlot.set(
+            key,
+            (assignmentCountByCommitteeSlot.get(key) || 0) + 1
+          );
+        });
+      });
+    });
+
+    const assignedCount = (committee: string, dayKey: string, shiftKey: string) =>
+      assignmentCountByCommitteeSlot.get(`${committee}|${dayKey}|${shiftKey}`) || 0;
+
     // Calculate Heatmap Matrix
     const heatmapMatrix: HeatmapDayData[] = EVENT_DAYS.map(day => {
       const availableShiftKeys = new Set(getAvailableShiftKeys(day.key));
@@ -335,16 +393,7 @@ export async function getDashboardOperationalDataAction(
 
         targetCommittees.forEach(commName => {
           totalReq += committeeRequirements[commName]?.[shiftId] ?? 0;
-
-          // Count volunteers belonging to this committee with this shift
-          volunteerCommitteeMap.forEach((cName, volId) => {
-            if (cName === commName) {
-              const vShifts = globalShifts[volId];
-              if (vShifts && vShifts[day.key] && vShifts[day.key].includes(shiftId)) {
-                totalAssignedShift++;
-              }
-            }
-          });
+          totalAssignedShift += assignedCount(commName, day.key, shiftId);
         });
 
         const coverage = totalReq === 0 ? 1 : totalAssignedShift / totalReq;
@@ -393,15 +442,7 @@ export async function getDashboardOperationalDataAction(
           const req = committeeRequirements[committee.name]?.[shiftId] ?? 0;
           totalReq += req;
 
-          let count = 0;
-          volunteerCommitteeMap.forEach((cName, volId) => {
-            if (cName === committee.name) {
-              const shifts = globalShifts[volId];
-              if (shifts && shifts[day.key] && shifts[day.key].includes(shiftId)) {
-                count++;
-              }
-            }
-          });
+          const count = assignedCount(committee.name, day.key, shiftId);
 
           totalAssignedComm += Math.min(count, req);
           if (count < req) {
@@ -436,15 +477,7 @@ export async function getDashboardOperationalDataAction(
             const req = committeeRequirements[comm]?.[shiftId] ?? 0;
             if (req === 0) return;
 
-            let count = 0;
-            volunteerCommitteeMap.forEach((cName, volId) => {
-              if (cName === comm) {
-                const shifts = globalShifts[volId];
-                if (shifts && shifts[day.key] && shifts[day.key].includes(shiftId)) {
-                  count++;
-                }
-              }
-            });
+            const count = assignedCount(comm, day.key, shiftId);
 
             if (count < req) {
               const shiftInfo = getOfficialShiftTime(formatDateShort(day.date), shiftId);
@@ -587,15 +620,7 @@ export async function getDashboardOperationalDataAction(
           const req = committeeRequirements[comm]?.[shiftId] ?? 0;
           totalRequired += req;
 
-          let count = 0;
-          volunteerCommitteeMap.forEach((cName, volId) => {
-            if (cName === comm) {
-              const shifts = globalShifts[volId];
-              if (shifts && shifts[day.key] && shifts[day.key].includes(shiftId)) {
-                count++;
-              }
-            }
-          });
+          const count = assignedCount(comm, day.key, shiftId);
 
           totalAssignedInRequired += Math.min(count, req);
           if (count < req) {
@@ -699,11 +724,23 @@ export async function getDashboardOperationalDataAction(
         openAttendanceSessions: openSessions.length,
         staleOpenAttendanceSessions,
       };
+      const insightStartedAt = performance.now();
       insight = insightMode === 'instant'
         ? buildInstantDashboardInsight(authorization, insightContext)
         : await generateDashboardInsight(authorization, insightContext);
+      insightDurationMs = performance.now() - insightStartedAt;
     }
 
+    const totalDurationMs = performance.now() - actionStartedAt;
+    if (totalDurationMs >= 1_000) {
+      console.info('[DASHBOARD_TIMING]', JSON.stringify({
+        scope: canSeeGlobal ? 'global' : 'committee',
+        mode: shouldIncludeInsight ? insightMode : 'data_only',
+        totalMs: Math.round(totalDurationMs),
+        queryMs: Math.round(queryDurationMs),
+        insightMs: Math.round(insightDurationMs),
+      }));
+    }
     return { data, insight };
   } catch (err: unknown) {
     console.error('Error calculating dashboard operational data:', err);

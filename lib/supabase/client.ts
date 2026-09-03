@@ -19,6 +19,11 @@ export function setGlobalToken(token: string | null) {
 }
 
 export function createClient() {
+  // Client Components can call this helper during every render. Reuse one
+  // browser client so effects keep stable dependencies and Realtime does not
+  // create duplicate WebSocket/channel infrastructure.
+  if (typeof window !== 'undefined' && browserClient) return browserClient;
+
   const client = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

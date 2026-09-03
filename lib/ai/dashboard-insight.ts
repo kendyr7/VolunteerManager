@@ -19,7 +19,11 @@ interface GeminiGenerateContentResponse {
   }>;
 }
 
-const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+// A dashboard sentence benefits more from predictable latency than from the
+// heaviest reasoning model. This stable Flash-Lite model was measurably faster
+// for the same structured request; deployments can still override it without
+// changing the model used by other Gemini features.
+const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
 const PLACEHOLDER_PATTERN = /\{\{([a-z0-9_]+)\}\}/g;
 
 function pluralize(value: number, singular: string, plural: string) {
@@ -313,13 +317,13 @@ export async function generateDashboardInsight(
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) return null;
 
-  const configuredModel = process.env.GEMINI_MODEL?.trim();
+  const configuredModel = process.env.GEMINI_DASHBOARD_MODEL?.trim();
   const model = configuredModel && /^[a-z0-9._-]+$/i.test(configuredModel)
     ? configuredModel
     : DEFAULT_GEMINI_MODEL;
   const blueprint = buildDashboardInsightBlueprint(authorization, context);
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 2_500);
+  const timeoutId = setTimeout(() => controller.abort(), 4_000);
 
   try {
     const response = await fetch(

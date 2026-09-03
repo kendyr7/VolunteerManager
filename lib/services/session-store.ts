@@ -4,6 +4,16 @@ import { AttendanceSession } from "@/lib/session-utils";
 // In-memory session store used ONLY when explicitly running tests
 const memorySessionStore = new Map<string, AttendanceSession>();
 
+function getSafeCachedSessions(dayKeys?: string[], committeeId?: string | null): AttendanceSession[] {
+  // AttendanceSession does not carry committee_id, so a committee-scoped DB
+  // failure must fail closed instead of returning another committee's cache.
+  if (committeeId) return [];
+  const sessions = Array.from(memorySessionStore.values());
+  if (!dayKeys?.length) return sessions;
+  const allowedDays = new Set(dayKeys);
+  return sessions.filter((session) => allowedDays.has(session.day_key));
+}
+
 export function isTestMode(): boolean {
   return (
     process.env.USE_TEST_SESSION_STORE === 'true' ||
@@ -11,32 +21,42 @@ export function isTestMode(): boolean {
   );
 }
 
-export async function fetchAllAttendanceSessionsFromDb(): Promise<AttendanceSession[]> {
+export async function fetchAllAttendanceSessionsFromDb(
+  dayKeys?: string[],
+  committeeId?: string | null
+): Promise<AttendanceSession[]> {
   if (isTestMode()) {
     return Array.from(memorySessionStore.values());
   }
 
   try {
     const supabase = await getAdminSupabase();
-    const { data, error } = await supabase
+    let query = supabase
       .from('attendance_sessions')
-      .select('*')
+      .select(committeeId ? '*, volunteers!inner(committee_id)' : '*')
       .order('started_at', { ascending: false });
+    if (dayKeys?.length) query = query.in('day_key', dayKeys);
+    if (committeeId) query = query.eq('volunteers.committee_id', committeeId);
+    const { data, error } = await query;
 
     if (error) {
       console.error("[SESSION STORE] Error fetching attendance sessions from DB:", error.message);
-      return Array.from(memorySessionStore.values());
+      return getSafeCachedSessions(dayKeys, committeeId);
     }
 
     if (data) {
-      data.forEach((s: AttendanceSession) => memorySessionStore.set(s.id, s));
-      return data;
+      // The selected relation is only used for server-side filtering. Supabase's
+      // type parser cannot infer a conditional select string, while the returned
+      // session columns keep the same AttendanceSession shape at runtime.
+      const sessions = data as unknown as AttendanceSession[];
+      sessions.forEach((session) => memorySessionStore.set(session.id, session));
+      return sessions;
     }
   } catch (e: any) {
     console.error("[SESSION STORE] Exception fetching attendance sessions:", e?.message);
   }
 
-  return Array.from(memorySessionStore.values());
+  return getSafeCachedSessions(dayKeys, committeeId);
 }
 
 export async function getOpenSessionForVolunteer(volunteerId: string): Promise<AttendanceSession | null> {

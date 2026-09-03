@@ -130,7 +130,7 @@ export default function CoordinatorDashboard() {
   const lastInsightScopeRef = useRef<string | null>(null);
   const preparedSessionCheckedRef = useRef(false);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     let isMounted = true;
@@ -468,7 +468,7 @@ export default function CoordinatorDashboard() {
     }
 
     void loadOperationalData(selectedHeatmapCommittee);
-  }, [dashboardAccess, selectedHeatmapCommittee, includeSimulation, permTick, rawVolunteers.length, globalShifts, dbCheckedInMap, loadOperationalData]);
+  }, [dashboardAccess, selectedHeatmapCommittee, includeSimulation, permTick, loadOperationalData]);
 
   const regenerateDashboardInsight = useCallback(() => {
     void loadOperationalData(selectedHeatmapCommittee, true);
@@ -601,6 +601,21 @@ export default function CoordinatorDashboard() {
     return new Set(activeVolunteers.map(v => v.id));
   }, [activeVolunteers]);
 
+  const activeAssignmentCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    activeVolunteers.forEach(volunteer => {
+      const days = globalShifts[volunteer.id];
+      if (!days) return;
+      Object.entries(days).forEach(([dayKey, shiftKeys]) => {
+        shiftKeys.forEach(shiftKey => {
+          const key = `${volunteer.committee}|${dayKey}|${shiftKey}`;
+          counts.set(key, (counts.get(key) || 0) + 1);
+        });
+      });
+    });
+    return counts;
+  }, [activeVolunteers, globalShifts]);
+
   const clientGlobalStats = useMemo(() => {
     let totalRequired = 0;
     let totalAssignedInRequired = 0;
@@ -617,11 +632,7 @@ export default function CoordinatorDashboard() {
           const req = committeeRequirements[comm]?.[shiftId] ?? 0;
           totalRequired += req;
 
-          const count = activeVolunteers.filter(vol => {
-            if (vol.committee !== comm) return false;
-            const shifts = globalShifts[vol.id];
-            return shifts && shifts[day.key] && shifts[day.key].includes(shiftId);
-          }).length;
+          const count = activeAssignmentCounts.get(`${comm}|${day.key}|${shiftId}`) || 0;
 
           totalAssignedInRequired += Math.min(count, req);
 
@@ -672,7 +683,7 @@ export default function CoordinatorDashboard() {
       checkedInCount: totalGlobalCheckedIn,
       totalAssigned: totalGlobalAssigned,
     };
-  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, dbCheckedInMap, selectedHeatmapCommittee, EVENT_DAYS]);
+  }, [activeVolunteers, activeAssignmentCounts, committeesList, globalShifts, committeeRequirements, dbCheckedInMap, selectedHeatmapCommittee, EVENT_DAYS]);
 
   const clientCommitteeStatus = useMemo(() => {
     const isFiltered = selectedHeatmapCommittee && selectedHeatmapCommittee !== 'todos' && selectedHeatmapCommittee !== 'all';
@@ -690,11 +701,7 @@ export default function CoordinatorDashboard() {
           const req = committeeRequirements[c.name]?.[shiftId] ?? 0;
           totalReq += req;
 
-          const count = activeVolunteers.filter(vol => {
-            if (vol.committee !== c.name) return false;
-            const shifts = globalShifts[vol.id];
-            return shifts && shifts[day.key] && shifts[day.key].includes(shiftId);
-          }).length;
+          const count = activeAssignmentCounts.get(`${c.name}|${day.key}|${shiftId}`) || 0;
 
           totalAssigned += Math.min(count, req);
           if (count < req) {
@@ -716,7 +723,7 @@ export default function CoordinatorDashboard() {
         status
       };
     }).sort((a, b) => a.coverage - b.coverage);
-  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, selectedHeatmapCommittee, EVENT_DAYS]);
+  }, [activeAssignmentCounts, committeesList, committeeRequirements, selectedHeatmapCommittee, EVENT_DAYS]);
 
   const clientCriticalShifts = useMemo(() => {
     const list: any[] = [];
@@ -731,11 +738,7 @@ export default function CoordinatorDashboard() {
           const req = committeeRequirements[comm]?.[shiftId] ?? 0;
           if (req === 0) return;
 
-          const count = activeVolunteers.filter(vol => {
-            if (vol.committee !== comm) return false;
-            const shifts = globalShifts[vol.id];
-            return shifts && shifts[day.key] && shifts[day.key].includes(shiftId);
-          }).length;
+          const count = activeAssignmentCounts.get(`${comm}|${day.key}|${shiftId}`) || 0;
 
           if (count < req) {
             const shiftInfo = getOfficialShiftTime(formatDateShort(day.date), shiftId);
@@ -757,7 +760,7 @@ export default function CoordinatorDashboard() {
       .sort((a, b) => b.missing - a.missing)
       .slice(0, 5)
       .map((item, index) => ({ id: index + 1, ...item }));
-  }, [activeVolunteers, committeesList, globalShifts, committeeRequirements, selectedHeatmapCommittee, EVENT_DAYS]);
+  }, [activeAssignmentCounts, committeesList, committeeRequirements, selectedHeatmapCommittee, EVENT_DAYS]);
 
   const clientHeatmapMatrix = useMemo(() => {
     return EVENT_DAYS.map(day => {
@@ -780,18 +783,14 @@ export default function CoordinatorDashboard() {
         targetCommittees.forEach(commName => {
           totalReq += committeeRequirements[commName]?.[shiftId] ?? 0;
 
-          const assigned = activeVolunteers.filter(v => {
-            if (v.committee !== commName) return false;
-            const vShifts = globalShifts[v.id];
-            return vShifts && vShifts[day.key] && vShifts[day.key].includes(shiftId);
-          }).length;
+          const assigned = activeAssignmentCounts.get(`${commName}|${day.key}|${shiftId}`) || 0;
           totalAssigned += assigned;
         });
         return { shift: shiftId, required: totalReq, assigned: totalAssigned, coverage: totalReq === 0 ? 1 : totalAssigned / totalReq };
       });
       return { day: day.key, shortLabel: day.label, dayLabel: day.dateNum, shifts: shiftsData };
     });
-  }, [committeeRequirements, committeesList, activeVolunteers, globalShifts, selectedHeatmapCommittee, EVENT_DAYS]);
+  }, [committeeRequirements, committeesList, activeVolunteers, activeAssignmentCounts, selectedHeatmapCommittee, EVENT_DAYS]);
 
   // Volunteers per event day (unique volunteers with ≥1 shift that day)
   const clientVolsPerDay = useMemo(() => {
@@ -837,7 +836,13 @@ export default function CoordinatorDashboard() {
     return unique.size;
   }, [activeVolunteers, globalShifts, EVENT_DAYS]);
 
-  const isOperationalSynced = !includeSimulation && operationalData && operationalData.effectiveCommitteeScope === (selectedHeatmapCommittee || 'todos');
+  // The prepared server snapshot makes the first paint immediate. Once the
+  // shared realtime dataset is ready, prefer its client-derived values so
+  // changes stay live without downloading the same dashboard datasets again.
+  const isOperationalSynced = loading
+    && !includeSimulation
+    && operationalData
+    && operationalData.effectiveCommitteeScope === (selectedHeatmapCommittee || 'todos');
   const globalStats = isOperationalSynced ? operationalData.globalStats : clientGlobalStats;
   const committeeStatus = isOperationalSynced ? operationalData.committeeStatus : clientCommitteeStatus;
   const criticalShifts = isOperationalSynced ? operationalData.criticalShifts : clientCriticalShifts;
