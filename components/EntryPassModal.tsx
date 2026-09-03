@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { getOfficialShiftTime } from "@/lib/dates";
 import type { VolunteerScheduleShift } from "@/lib/types/volunteer-schedule";
+import { useHydrated } from "@/lib/use-hydrated";
 
 interface EntryPassModalProps {
   isOpen: boolean;
@@ -45,9 +46,7 @@ export function EntryPassModal({
   const [tokenData, setTokenData] = useState<{ v: 1; id: string; sig: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [todayShifts, setTodayShifts] = useState<VolunteerScheduleShift[]>([]);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => { setMounted(true); }, []);
+  const mounted = useHydrated();
 
   const loadTokenAndShifts = async () => {
     setLoading(true);

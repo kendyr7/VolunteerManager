@@ -23,6 +23,7 @@ import {
   findPotentialVolunteerNameMatches,
   VolunteerNameCandidate,
 } from "@/lib/volunteer-name-matching";
+import { useHydrated } from "@/lib/use-hydrated";
 
 interface ParsedVolunteer {
   id?: string;
@@ -558,11 +559,10 @@ export default function ImportPage() {
   const totalValids = parsedData.filter(v => !v.error && !v.isDuplicate).length;
   const totalProcessable = parsedData.filter(v => !v.error).length;
 
-  const [permTick, setPermTick] = useState(0);
-  const [mounted, setMounted] = useState(false);
+  const [, setPermTick] = useState(0);
+  const mounted = useHydrated();
 
   useEffect(() => {
-    setMounted(true);
     const handlePermissionsChange = () => setPermTick(v => v + 1);
     window.addEventListener("storage", handlePermissionsChange);
     window.addEventListener("permissions-changed", handlePermissionsChange);

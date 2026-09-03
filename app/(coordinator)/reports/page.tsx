@@ -27,6 +27,7 @@ import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
+import { useHydrated } from "@/lib/use-hydrated";
 
 // Utilidad para formatear minutos
 function getCommitteeColor(committee: string) {
@@ -250,10 +251,9 @@ export default function ReportsPage() {
   };
 
   const [, setPermTick] = useState(0);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
 
   useEffect(() => {
-    setMounted(true);
     const handlePermissionsChange = () => setPermTick(v => v + 1);
     window.addEventListener("storage", handlePermissionsChange);
     window.addEventListener("permissions-changed", handlePermissionsChange);

@@ -31,6 +31,7 @@ import { HighlightText } from "@/components/HighlightText";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
+import { useHydrated } from "@/lib/use-hydrated";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -636,10 +637,9 @@ export default function UsersPage() {
   const sortedLetters = Object.keys(groupedUsers).sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b));
 
   const [, setPermTick] = useState(0);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
 
   useEffect(() => {
-    setMounted(true);
     const handlePermissionsChange = () => setPermTick(v => v + 1);
     window.addEventListener("storage", handlePermissionsChange);
     window.addEventListener("permissions-changed", handlePermissionsChange);

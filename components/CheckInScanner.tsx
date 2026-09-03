@@ -17,6 +17,7 @@ import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
+import { useHydrated } from "@/lib/use-hydrated";
 
 interface CheckInScannerProps {
   coordinatorId: string;
@@ -953,10 +954,9 @@ export function CheckInScanner({
   };
 
   const [, setPermTick] = useState(0);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
 
   useEffect(() => {
-    setMounted(true);
     const handlePermissionsChange = () => setPermTick(v => v + 1);
     window.addEventListener("storage", handlePermissionsChange);
     window.addEventListener("permissions-changed", handlePermissionsChange);

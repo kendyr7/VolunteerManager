@@ -11,6 +11,7 @@ import { clearPreparedDashboardSession } from '@/lib/dashboard-session-cache';
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MobileThemeMenu } from "@/components/mobile-theme-menu";
 import { useThemePreference } from "@/lib/use-theme-preference";
+import { useHydrated } from "@/lib/use-hydrated";
 
 // Helper component for Material Symbols
 function Icon({ name, size = 20, className = "" }: { name: string, size?: number, className?: string }) {
@@ -32,12 +33,8 @@ export default function VolunteerLayout({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobileThemeOpen, setIsMobileThemeOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
   const { preference, resolvedTheme, setPreference, toggleTheme } = useThemePreference();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     setIsMobileThemeOpen(false);
