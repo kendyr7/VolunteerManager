@@ -17,6 +17,7 @@ import {
   parseRequirementsData,
   processShiftsData,
   computeReliabilityMap,
+  type CoordinatorRequirementData,
   type CoordinatorSessionData,
   type CoordinatorShiftData,
   type CoordinatorVolunteerData,
@@ -25,7 +26,10 @@ import { getAuthorizationSnapshotCache } from '@/lib/permissions';
 import { hasCapability } from '@/lib/role-permissions';
 import { useVolunteerStore } from '@/lib/store/use-volunteer-store';
 import { useRealtimeStore } from '@/lib/store/use-realtime-store';
-import { RealtimeEventQueue } from '@/lib/services/realtime-event-queue';
+import {
+  RealtimeEventQueue,
+  type RealtimeEventType,
+} from '@/lib/services/realtime-event-queue';
 import { SupabaseReconnectManager } from '@/lib/services/supabase-reconnect-manager';
 import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
@@ -35,12 +39,19 @@ const STALE_TIME_MS = 60_000;
 const SAFE_VOLUNTEER_FIELDS = 'id, first_name, last_name, phone, stake, neighborhood, committee_id, age, status, created_at, committees(name)';
 const OPERATIONAL_EVENT_DAY_KEYS = buildEventDayKeys();
 
-function withoutSensitiveVolunteerFields(record: any) {
-  if (!record || typeof record !== 'object') return record;
-  const safeRecord = { ...record };
+interface CoordinatorCommitteeData {
+  id: string;
+  name: string;
+  status?: string | null;
+}
+
+function withoutSensitiveVolunteerFields(record: unknown): CoordinatorVolunteerData | null {
+  if (!record || typeof record !== 'object') return null;
+  const safeRecord: Record<string, unknown> = { ...record };
   delete safeRecord.pin;
   delete safeRecord.pin_hash;
-  return safeRecord;
+  if (typeof safeRecord.id !== 'string') return null;
+  return { ...safeRecord, id: safeRecord.id } as CoordinatorVolunteerData;
 }
 
 interface CoordinatorDataContextValue {
@@ -99,35 +110,21 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   const lastFetchedAtRef = useRef(0);
   const lastCacheKeyRef = useRef('');
   const fetchPromiseRef = useRef<Promise<void> | null>(null);
-  const eventQueueRef = useRef<RealtimeEventQueue | null>(null);
-
-  const clientIdRef = useRef<string>('');
-  if (!clientIdRef.current && typeof window !== 'undefined') {
-    let existing = sessionStorage.getItem('realtime_client_id');
-    if (!existing) {
-      existing = `CLIENT_${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-      sessionStorage.setItem('realtime_client_id', existing);
-    }
-    clientIdRef.current = existing;
-  }
-  const clientId = clientIdRef.current || 'CLIENT_UNKNOWN';
-
-  if (!eventQueueRef.current) {
-    eventQueueRef.current = new RealtimeEventQueue((processed) => {
+  const [eventQueue] = useState(() => new RealtimeEventQueue((processed) => {
       processed.forEach((evt) => {
         if (evt.table === 'shifts') {
           setShiftsData((prev) => {
-            let nextShifts: any[];
+            let nextShifts: CoordinatorShiftData[];
             if (evt.eventType === 'DELETE') {
               nextShifts = prev.filter((s) => s.id !== evt.payload.id);
             } else {
               const idx = prev.findIndex((s) => s.id === evt.payload.id);
               if (idx !== -1) {
                 const copy = [...prev];
-                copy[idx] = mergeRealtimeRecord(copy[idx], evt.payload);
+                copy[idx] = mergeRealtimeRecord(copy[idx], evt.payload as Partial<CoordinatorShiftData>);
                 nextShifts = copy;
               } else {
-                nextShifts = [evt.payload, ...prev];
+                nextShifts = [evt.payload as CoordinatorShiftData, ...prev];
               }
             }
             return nextShifts;
@@ -138,20 +135,19 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
               return prev.filter((v) => v.id !== evt.payload.id);
             }
             const idx = prev.findIndex((v) => v.id === evt.payload.id);
-            let nextState: any[];
+            let nextState: CoordinatorVolunteerData[];
             if (idx !== -1) {
               const copy = [...prev];
-              copy[idx] = mergeRealtimeRecord(copy[idx], evt.payload);
+              copy[idx] = mergeRealtimeRecord(copy[idx], evt.payload as Partial<CoordinatorVolunteerData>);
               nextState = copy;
             } else {
-              nextState = [evt.payload, ...prev];
+              nextState = [evt.payload as CoordinatorVolunteerData, ...prev];
             }
             return nextState;
           });
         }
       });
-    });
-  }
+    }));
 
   const derived = useMemo(
     () => processShiftsData(shiftsData, rawVolunteers, sessionsData),
@@ -170,7 +166,6 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         !force &&
         lastCacheKeyRef.current === cacheKey &&
         Date.now() - lastFetchedAtRef.current < STALE_TIME_MS &&
-        rawVolunteers.length >= 0 &&
         lastFetchedAtRef.current > 0;
 
       if (isFresh) return;
@@ -202,7 +197,8 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
               .from('committees')
               .select('*')
               .or('status.is.null,status.neq.archived');
-            const activeComms = (commsResData ?? []).filter((c: any) => c.status !== 'archived');
+            const activeComms = (commsResData ?? [])
+              .filter((committee) => committee.status !== 'archived') as CoordinatorCommitteeData[];
             setRawVolunteers([]);
             setCommitteesList(activeComms);
             setShiftsData([]);
@@ -229,12 +225,12 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
           const [volsData, commsRes, shiftsResult, reqsData, loadedSessions] =
             await Promise.all([
-              volsQuery,
+              volsQuery as Promise<CoordinatorVolunteerData[]>,
               supabase
                 .from('committees')
                 .select('id, name, status')
                 .or('status.is.null,status.neq.archived'),
-              fetchAllRows(
+              fetchAllRows<CoordinatorShiftData>(
                 supabase,
                 'shifts',
                 canViewAll
@@ -248,7 +244,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
                   return scopedQuery;
                 }
               ),
-              fetchAllRows(
+              fetchAllRows<CoordinatorRequirementData>(
                 supabase,
                 'committee_shift_requirements',
                 'committee_id, shift_key, required, committees(name)',
@@ -260,12 +256,12 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             ]);
 
           const commsData = commsRes.data ?? [];
-          const activeComms = commsData.filter((c: any) => c.status !== 'archived');
+          const activeComms = commsData.filter((committee) => committee.status !== 'archived') as CoordinatorCommitteeData[];
           const cleanVols = volsData ?? [];
-          const allowedVolunteerIds = new Set(cleanVols.map((v: any) => v.id));
+          const allowedVolunteerIds = new Set(cleanVols.map((volunteer) => volunteer.id));
           const scopedShifts = canViewAll
             ? (shiftsResult ?? [])
-            : (shiftsResult ?? []).filter((s: any) => allowedVolunteerIds.has(s.volunteer_id));
+            : (shiftsResult ?? []).filter((shift) => allowedVolunteerIds.has(shift.volunteer_id));
           const cleanShifts = scopedShifts.map(withShiftAreaDetails);
 
           setRawVolunteers(cleanVols);
@@ -280,7 +276,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           const storedReqs: Record<string, Record<string, number>> = stored
             ? JSON.parse(stored)
             : {};
-          const activeNames = new Set(activeComms.map((c: any) => c.name));
+          const activeNames = new Set(activeComms.map((committee) => committee.name));
           const activeStoredReqs = Object.fromEntries(
             Object.entries(storedReqs).filter(([committeeName]) => activeNames.has(committeeName))
           );
@@ -314,6 +310,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
   // Set up Supabase Realtime for instant synchronization across all active coordinators
   useEffect(() => {
+    const clientId = realtimeDebugLogger.getClientSessionId();
     realtimeDebugLogger.debug('[REALTIME CHANNEL DIAGNOSTIC]', {
       channelName: 'global_coordinator_realtime',
       clientId,
@@ -327,7 +324,9 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         { event: '*', schema: 'public', table: 'shifts' },
         (payload) => {
           const traceId = realtimeDebugLogger.generateTraceId();
-          const recordId = (payload.new as any)?.id || (payload.old as any)?.id;
+          const newRec = payload.new as CoordinatorShiftData | null;
+          const oldRec = payload.old as Partial<CoordinatorShiftData> | null;
+          const recordId = newRec?.id || oldRec?.id;
 
           realtimeDebugLogger.debug('[RT-TRACE][CALLBACK]', {
             clientId,
@@ -337,9 +336,6 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             recordId,
             timestamp: new Date().toISOString()
           });
-
-          const newRec = payload.new as any;
-          const oldRec = payload.old as any;
 
           const storedShift = newRec?.id
             ? useVolunteerStore.getState().shiftsMap.get(newRec.id)
@@ -352,16 +348,16 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             traceId,
             stage: 'REALTIME_RECEIVED',
             table: 'shifts',
-            eventType: payload.eventType as any,
+            eventType: payload.eventType as RealtimeEventType,
             volunteerId: newRec?.volunteer_id,
             details: `Shift event ${payload.eventType} for shift ${newRec?.day_key || ''} ${newRec?.shift_key || ''}`,
             payload: payload.eventType === 'DELETE' ? payload.old : payload.new,
           });
 
           if (payload.eventType === 'DELETE' && payload.old) {
-            eventQueueRef.current?.enqueue('DELETE', payload.old, 'shifts', traceId);
+            eventQueue.enqueue('DELETE', payload.old, 'shifts', traceId);
           } else if (payload.eventType && payload.new) {
-            eventQueueRef.current?.enqueue(payload.eventType as any, payload.new, 'shifts', traceId);
+            eventQueue.enqueue(payload.eventType as RealtimeEventType, payload.new, 'shifts', traceId);
           }
           if (areaChanged) void fetchData(true);
         }
@@ -374,8 +370,8 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           if (!payload || payload.table !== 'shifts' || !payload.record) return;
 
           const traceId = realtimeDebugLogger.generateTraceId();
-          const eventType = payload.eventType;
-          const record = payload.record;
+          const eventType = payload.eventType as RealtimeEventType;
+          const record = payload.record as CoordinatorShiftData;
 
           realtimeDebugLogger.debug('[RT-TRACE][BROADCAST_CALLBACK]', {
             clientId,
@@ -393,16 +389,16 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             traceId,
             stage: 'REALTIME_RECEIVED',
             table: 'shifts',
-            eventType: eventType as any,
+            eventType,
             volunteerId: record.volunteer_id,
             details: `Broadcast shift ${eventType}: ${record.day_key || ''} / ${record.shift_key || ''}`,
             payload: record,
           });
 
           if (eventType === 'DELETE') {
-            eventQueueRef.current?.enqueue('DELETE', record, 'shifts', traceId);
+            eventQueue.enqueue('DELETE', record, 'shifts', traceId);
           } else if (eventType) {
-            eventQueueRef.current?.enqueue(eventType as any, record, 'shifts', traceId);
+            eventQueue.enqueue(eventType, record, 'shifts', traceId);
           }
         }
       )
@@ -411,7 +407,9 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         { event: '*', schema: 'public', table: 'volunteers' },
         (payload) => {
           const traceId = realtimeDebugLogger.generateTraceId();
-          const recordId = (payload.new as any)?.id || (payload.old as any)?.id;
+          const incomingRecord = payload.new as Partial<CoordinatorVolunteerData> | null;
+          const previousRecord = payload.old as Partial<CoordinatorVolunteerData> | null;
+          const recordId = incomingRecord?.id || previousRecord?.id;
 
           realtimeDebugLogger.debug('[RT-TRACE][CALLBACK]', {
             clientId,
@@ -430,7 +428,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             traceId,
             stage: 'REALTIME_RECEIVED',
             table: 'volunteers',
-            eventType: payload.eventType as any,
+            eventType: payload.eventType as RealtimeEventType,
             volunteerId: newRec?.id || oldRec?.id,
             volunteerName: volName,
             details: `Volunteer ${payload.eventType}: ${volName || ''} (${newRec?.neighborhood || ''})`,
@@ -438,9 +436,9 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           });
 
           if (payload.eventType === 'DELETE' && oldRec) {
-            eventQueueRef.current?.enqueue('DELETE', oldRec, 'volunteers', traceId);
+            eventQueue.enqueue('DELETE', oldRec, 'volunteers', traceId);
           } else if (payload.eventType && newRec) {
-            eventQueueRef.current?.enqueue(payload.eventType as any, newRec, 'volunteers', traceId);
+            eventQueue.enqueue(payload.eventType as RealtimeEventType, newRec, 'volunteers', traceId);
           }
         }
       )
@@ -482,14 +480,7 @@ shifts: DELETE
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, fetchData, clientId]);
-
-  const refresh = useCallback(
-    async (force = true) => {
-      await fetchData(force);
-    },
-    [fetchData]
-  );
+  }, [supabase, fetchData, eventQueue]);
 
   const value = useMemo<CoordinatorDataContextValue>(
     () => ({

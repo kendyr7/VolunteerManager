@@ -32,6 +32,7 @@ export interface CoordinatorShiftData {
   checked_in_at?: string | null;
   checked_out?: boolean;
   checked_out_at?: string | null;
+  area_id?: string | null;
   area_name?: string | null;
   area_description?: string | null;
   committee_areas?: unknown;
