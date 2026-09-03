@@ -198,11 +198,6 @@ export default function VolunteersPage() {
     [rawVolunteers, shiftCounts, committeesMap]
   );
 
-  useEffect(() => {
-    if (volunteers && volunteers.length > 0) {
-      console.log(`[VOLUNTEERS PAGE MAP] total=${volunteers.length}, sampleId=${volunteers[0]?.id}, name=${volunteers[0]?.name}, ward=${volunteers[0]?.ward}`);
-    }
-  }, [volunteers]);
   const [showArchived, setShowArchived] = useState(false);
 
   // Toast State

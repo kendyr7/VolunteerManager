@@ -41,6 +41,7 @@ import {
   formatUnifiedDuration
 } from "@/lib/shift-calculations";
 import { getVolunteerProfileMetrics } from "@/lib/services/volunteer-profile.service";
+import { realtimeDebugLogger } from "@/lib/services/realtime-debug-logger";
 import { AdminSessionCorrectionModal } from "./AdminSessionCorrectionModal";
 import { AdminCreateSessionModal } from "./AdminCreateSessionModal";
 import type { ShiftAreaDetails } from "@/lib/shift-area";
@@ -240,7 +241,7 @@ export function VolunteerProfileView({
   const hasStoreEntry = useVolunteerStore((s) => s.shiftsByVolunteerMap.has(volunteer.id));
 
   const dbShiftRecords = useMemo(() => {
-    console.log('[RT-TRACE][VIEW_SHIFTS_MEMO]', {
+    realtimeDebugLogger.debug('[RT-TRACE][VIEW_SHIFTS_MEMO]', {
       volunteerId: volunteer.id,
       hasStoreEntry,
       storeShiftsCount: storeShifts?.length ?? 0,
@@ -1156,7 +1157,6 @@ export function VolunteerProfileView({
                   <Button
                     size="sm"
                     onClick={() => {
-                      console.log('[SHIFT SAVE] Guardar button clicked in VolunteerProfileView');
                       if (onSaveShifts) onSaveShifts();
                       setLocalEditingShifts(false);
                     }}

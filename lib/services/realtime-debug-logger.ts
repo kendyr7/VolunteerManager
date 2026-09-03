@@ -26,6 +26,10 @@ export interface DebugLogItem {
   newValue?: any;
 }
 
+export const REALTIME_DEBUG_ENABLED =
+  process.env.NODE_ENV === 'development' ||
+  process.env.NEXT_PUBLIC_REALTIME_DEBUG === 'true';
+
 type LogListener = (logs: DebugLogItem[]) => void;
 type HighlightListener = (entityId: string, table: 'volunteers' | 'shifts') => void;
 type ConnectionStatusListener = (status: string) => void;
@@ -39,6 +43,11 @@ class RealtimeDebugLogger {
   private currentConnectionStatus: string = 'CONNECTING';
 
   constructor() {
+    if (!REALTIME_DEBUG_ENABLED) {
+      this.clientSessionId = 'DISABLED';
+      return;
+    }
+
     // Generate unique 4-character hex client ID per browser session tab
     if (typeof window !== 'undefined' && window.sessionStorage) {
       let storedId = window.sessionStorage.getItem('rt_debug_client_id');
@@ -60,12 +69,18 @@ class RealtimeDebugLogger {
     return this.currentConnectionStatus;
   }
 
+  public debug(...values: unknown[]) {
+    if (REALTIME_DEBUG_ENABLED) console.log(...values);
+  }
+
   public setConnectionStatus(status: string) {
+    if (!REALTIME_DEBUG_ENABLED) return;
     this.currentConnectionStatus = status;
     this.connectionStatusListeners.forEach(fn => fn(status));
   }
 
   public subscribeConnectionStatus(fn: ConnectionStatusListener): () => void {
+    if (!REALTIME_DEBUG_ENABLED) return () => undefined;
     this.connectionStatusListeners.add(fn);
     fn(this.currentConnectionStatus);
     return () => this.connectionStatusListeners.delete(fn);
@@ -76,6 +91,7 @@ class RealtimeDebugLogger {
   }
 
   public subscribeLogs(fn: LogListener): () => void {
+    if (!REALTIME_DEBUG_ENABLED) return () => undefined;
     this.logListeners.add(fn);
     fn(this.logs);
     return () => this.logListeners.delete(fn);
@@ -96,6 +112,7 @@ class RealtimeDebugLogger {
   }
 
   public addLog(item: Omit<DebugLogItem, 'id' | 'clientSessionId' | 'timestamp'>) {
+    if (!REALTIME_DEBUG_ENABLED) return;
     const fullItem: DebugLogItem = {
       ...item,
       id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -113,6 +130,7 @@ class RealtimeDebugLogger {
 
   // --- Helper Generators ---
   public generateTraceId(): string {
+    if (!REALTIME_DEBUG_ENABLED) return 'RT-DISABLED';
     return `RT-${Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase().padStart(6, '0')}`;
   }
 }

@@ -74,13 +74,13 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
       const incomingTs = new Date(incomingTsVal).getTime();
       if (incomingTs < existingTs) {
         decision = 'REJECT_STALE';
-        console.log(`[ZUSTAND REALTIME] id=${incoming.id}, existingNeigh=${existingNeigh}, incomingNeigh=${incomingNeigh}, existingTs=${existingTsVal}, incomingTs=${incomingTsVal}, decision=${decision}`);
+        realtimeDebugLogger.debug(`[ZUSTAND REALTIME] id=${incoming.id}, existingNeigh=${existingNeigh}, incomingNeigh=${incomingNeigh}, existingTs=${existingTsVal}, incomingTs=${incomingTsVal}, decision=${decision}`);
         return false;
       }
       decision = incomingTs > existingTs ? 'APPLY_NEWER' : 'APPLY_EQUAL';
     }
 
-    console.log(`[ZUSTAND REALTIME] id=${incoming.id}, existingNeigh=${existingNeigh}, incomingNeigh=${incomingNeigh}, existingTs=${existingTsVal}, incomingTs=${incomingTsVal}, decision=${decision}`);
+    realtimeDebugLogger.debug(`[ZUSTAND REALTIME] id=${incoming.id}, existingNeigh=${existingNeigh}, incomingNeigh=${incomingNeigh}, existingTs=${existingTsVal}, incomingTs=${incomingTsVal}, decision=${decision}`);
 
     const merged = mergeRealtimeRecord(existing, incoming);
     const newMap = new Map(currentMap);
@@ -88,7 +88,7 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     set({ volunteersMap: newMap });
     useRealtimeStore.getState().recordSync();
 
-    console.log('[RT-TRACE][ZUSTAND_STATE_CHANGE]', {
+    realtimeDebugLogger.debug('[RT-TRACE][ZUSTAND_STATE_CHANGE]', {
       clientId: realtimeDebugLogger.getClientSessionId(),
       traceId: traceId || 'RT-UNKNOWN',
       recordId: incoming.id,
@@ -175,7 +175,7 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     set({ shiftsMap: newMap, shiftsByVolunteerMap: byVolMap });
     useRealtimeStore.getState().recordSync();
 
-    console.log('[RT-TRACE][ZUSTAND_STATE_CHANGE]', {
+    realtimeDebugLogger.debug('[RT-TRACE][ZUSTAND_STATE_CHANGE]', {
       clientId: realtimeDebugLogger.getClientSessionId(),
       traceId: traceId || 'RT-UNKNOWN',
       recordId: incoming.id,
@@ -226,7 +226,7 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
     set({ shiftsMap: newMap, shiftsByVolunteerMap: byVolMap });
     useRealtimeStore.getState().recordSync();
 
-    console.log('[RT-TRACE][ZUSTAND_STATE_CHANGE]', {
+    realtimeDebugLogger.debug('[RT-TRACE][ZUSTAND_STATE_CHANGE]', {
       clientId: realtimeDebugLogger.getClientSessionId(),
       traceId: traceId || 'RT-UNKNOWN',
       recordId: id,

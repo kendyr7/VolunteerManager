@@ -95,7 +95,6 @@ export function VolunteerProfileDrawer({
     if (isOpen) {
       const volId = propVolunteerId || propVolunteer?.id || 'unknown';
       performance.mark(`profile-open-${volId}`);
-      console.log(`[Profile Drawer Telemetry] Open mark recorded for ${volId}`);
       return () => {
         try {
           performance.mark(`profile-close-${volId}`);
@@ -131,7 +130,7 @@ export function VolunteerProfileDrawer({
     // Canonical precedence: Prefer Database field 'neighborhood' over pre-mapped string 'ward'
     const resolvedWard = target.neighborhood ?? target.ward ?? target.barrio ?? '';
 
-    console.log('[RT-TRACE][REACT_SOURCE_STATE]', {
+    realtimeDebugLogger.debug('[RT-TRACE][REACT_SOURCE_STATE]', {
       clientId: realtimeDebugLogger.getClientSessionId(),
       recordId: target.id || targetId,
       source,
@@ -166,7 +165,7 @@ export function VolunteerProfileDrawer({
     if (!activeVolunteer) return {};
     const result: Record<string, string[]> = {};
 
-    console.log('[RT-TRACE][DRAWER_SHIFTS_MEMO]', {
+    realtimeDebugLogger.debug('[RT-TRACE][DRAWER_SHIFTS_MEMO]', {
       volunteerId: activeVolunteer.id,
       hasStoreEntry,
       storeShiftsCount: storeShifts?.length ?? 'undefined',
@@ -457,7 +456,6 @@ export function VolunteerProfileDrawer({
                     canEditShifts={canEditShifts()}
                     onStartEditShifts={() => setIsEditingShifts(prev => !prev)}
                     onSaveShifts={() => {
-                      console.log('[SHIFT SAVE] clicked / onSaveShifts triggered in Drawer');
                       setIsEditingShifts(false);
                       showToast('Turnos actualizados correctamente');
                     }}

@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { realtimeDebugLogger, DebugLogItem } from '@/lib/services/realtime-debug-logger';
+import {
+  REALTIME_DEBUG_ENABLED,
+  realtimeDebugLogger,
+  type DebugLogItem,
+} from '@/lib/services/realtime-debug-logger';
 
 export function RealtimeDebugOverlay() {
   const [isOpen, setIsOpen] = useState(false);
@@ -11,11 +15,10 @@ export function RealtimeDebugOverlay() {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   // Enabled in dev mode or via NEXT_PUBLIC_REALTIME_DEBUG=true
-  const isDebugEnabled =
-    process.env.NODE_ENV === 'development' ||
-    process.env.NEXT_PUBLIC_REALTIME_DEBUG === 'true';
+  const isDebugEnabled = REALTIME_DEBUG_ENABLED;
 
   useEffect(() => {
+    if (!isDebugEnabled) return;
     setClientId(realtimeDebugLogger.getClientSessionId());
     const unsubLogs = realtimeDebugLogger.subscribeLogs(setLogs);
     const unsubStatus = realtimeDebugLogger.subscribeConnectionStatus(setStatus);
@@ -24,7 +27,7 @@ export function RealtimeDebugOverlay() {
       unsubLogs();
       unsubStatus();
     };
-  }, []);
+  }, [isDebugEnabled]);
 
   if (!isDebugEnabled) return null;
 

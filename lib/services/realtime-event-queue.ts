@@ -45,7 +45,7 @@ export class RealtimeEventQueue {
       mergedData = mergeRealtimeRecord(existing.payload, data);
     }
 
-    console.log('[RT-TRACE][QUEUE_ENQUEUE]', {
+    realtimeDebugLogger.debug('[RT-TRACE][QUEUE_ENQUEUE]', {
       clientId: realtimeDebugLogger.getClientSessionId(),
       traceId: traceId || 'RT-UNKNOWN',
       queueSize: this.queue.size + 1,
@@ -83,7 +83,7 @@ export class RealtimeEventQueue {
     const eventsToProcess = Array.from(this.queue.values());
     const traceIds = eventsToProcess.map(e => e.traceId).filter(Boolean);
 
-    console.log('[RT-TRACE][QUEUE_FLUSH_START]', {
+    realtimeDebugLogger.debug('[RT-TRACE][QUEUE_FLUSH_START]', {
       clientId: realtimeDebugLogger.getClientSessionId(),
       batchSize: eventsToProcess.length,
       traceIds,
@@ -99,7 +99,7 @@ export class RealtimeEventQueue {
     const processed: PendingRealtimeEvent[] = [];
 
     eventsToProcess.forEach(evt => {
-      console.log('[RT-TRACE][QUEUE_PROCESS]', {
+      realtimeDebugLogger.debug('[RT-TRACE][QUEUE_PROCESS]', {
         clientId: realtimeDebugLogger.getClientSessionId(),
         traceId: evt.traceId || 'RT-UNKNOWN',
         table: evt.table,
@@ -108,7 +108,7 @@ export class RealtimeEventQueue {
         timestamp: new Date().toISOString()
       });
 
-      console.log('[RT-TRACE][ZUSTAND_BEFORE]', {
+      realtimeDebugLogger.debug('[RT-TRACE][ZUSTAND_BEFORE]', {
         clientId: realtimeDebugLogger.getClientSessionId(),
         traceId: evt.traceId || 'RT-UNKNOWN',
         table: evt.table,
@@ -135,7 +135,7 @@ export class RealtimeEventQueue {
       const volFound = evt.table === 'volunteers' ? !!useVolunteerStore.getState().volunteersMap.get(evt.payload?.id) : undefined;
       const shiftFound = evt.table === 'shifts' ? !!useVolunteerStore.getState().shiftsMap.get(evt.payload?.id) : undefined;
 
-      console.log('[RT-TRACE][ZUSTAND_AFTER]', {
+      realtimeDebugLogger.debug('[RT-TRACE][ZUSTAND_AFTER]', {
         clientId: realtimeDebugLogger.getClientSessionId(),
         traceId: evt.traceId || 'RT-UNKNOWN',
         table: evt.table,

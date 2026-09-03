@@ -314,7 +314,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
   // Set up Supabase Realtime for instant synchronization across all active coordinators
   useEffect(() => {
-    console.log('[REALTIME CHANNEL DIAGNOSTIC]', {
+    realtimeDebugLogger.debug('[REALTIME CHANNEL DIAGNOSTIC]', {
       channelName: 'global_coordinator_realtime',
       clientId,
       timestamp: new Date().toISOString()
@@ -329,7 +329,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           const traceId = realtimeDebugLogger.generateTraceId();
           const recordId = (payload.new as any)?.id || (payload.old as any)?.id;
 
-          console.log('[RT-TRACE][CALLBACK]', {
+          realtimeDebugLogger.debug('[RT-TRACE][CALLBACK]', {
             clientId,
             traceId,
             table: 'shifts',
@@ -377,7 +377,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           const eventType = payload.eventType;
           const record = payload.record;
 
-          console.log('[RT-TRACE][BROADCAST_CALLBACK]', {
+          realtimeDebugLogger.debug('[RT-TRACE][BROADCAST_CALLBACK]', {
             clientId,
             traceId,
             table: 'shifts',
@@ -413,7 +413,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           const traceId = realtimeDebugLogger.generateTraceId();
           const recordId = (payload.new as any)?.id || (payload.old as any)?.id;
 
-          console.log('[RT-TRACE][CALLBACK]', {
+          realtimeDebugLogger.debug('[RT-TRACE][CALLBACK]', {
             clientId,
             traceId,
             table: 'volunteers',
@@ -445,7 +445,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         }
       )
       .subscribe((status) => {
-        console.log('[REALTIME CHANNEL STATUS]', {
+        realtimeDebugLogger.debug('[REALTIME CHANNEL STATUS]', {
           channel: 'global_coordinator_realtime',
           status,
           clientId,
@@ -454,7 +454,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
 
         realtimeDebugLogger.setConnectionStatus(status);
         if (status === 'SUBSCRIBED') {
-          console.log(`
+          realtimeDebugLogger.debug(`
 ================================================
 REALTIME SUBSCRIPTION ACTIVE
 ================================================
