@@ -33,6 +33,12 @@ export function setAuthorizationSnapshot(snapshot: AuthorizationSnapshot) {
     localStorage.setItem('mock_role', snapshot.role);
     if (snapshot.committeeName) localStorage.setItem('mock_committee', snapshot.committeeName);
     else localStorage.removeItem('mock_committee');
+    // Keep the legacy display cache aligned with the authenticated profile.
+    // It must never survive a user switch (otherwise the next coordinator can
+    // briefly inherit the previous user's name in client-only UI).
+    const authenticatedName = snapshot.name?.trim();
+    if (authenticatedName) localStorage.setItem('volunteer_name', authenticatedName);
+    else localStorage.removeItem('volunteer_name');
     localStorage.setItem('authorization_snapshot', JSON.stringify(snapshot));
   }
   dispatchPermissionChange();

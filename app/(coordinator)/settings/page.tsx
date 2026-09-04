@@ -642,6 +642,8 @@ export default function SettingsPage() {
       setEditName(fullName || 'Coordinador');
       setEditPhone(user.phone || '');
       setEditRole(role);
+      if (fullName) localStorage.setItem('volunteer_name', fullName);
+      else localStorage.removeItem('volunteer_name');
       const userComm = user.committees?.name || '';
       setEditCommittee(userComm);
       if (user.phone) localStorage.setItem('volunteer_phone', normalizeLoginPhone(user.phone));

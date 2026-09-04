@@ -6,7 +6,6 @@ import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { formatE164 } from "@/lib/whatsapp";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { canViewGlobalReports, getAuthorizationSnapshotCache, syncAllPermissionsFromDatabase } from "@/lib/permissions";
 import {
@@ -123,7 +122,6 @@ export default function CoordinatorDashboard() {
   const [operationalData, setOperationalData] = useState<DashboardOperationalData | null>(null);
   const lastInsightScopeRef = useRef<string | null>(null);
   const preparedSessionCheckedRef = useRef(false);
-
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
@@ -474,50 +472,14 @@ export default function CoordinatorDashboard() {
     let active = true;
 
     const fetchUserNameAndSetGreeting = async (snapshot: AuthorizationSnapshot) => {
-      const phone = localStorage.getItem('volunteer_phone');
-      const authenticatedProfileName = snapshot.name;
-      let userName = snapshot.role === 'Lector' ? 'Voluntario' : 'Coordinador';
-      const savedName = localStorage.getItem('volunteer_name');
-      if (authenticatedProfileName?.trim()) {
-        userName = authenticatedProfileName.trim().split(/\s+/)[0];
-        localStorage.setItem('volunteer_name', authenticatedProfileName.trim());
-      } else if (savedName) {
-        userName = savedName.split(' ')[0];
-      }
-
-      if (!authenticatedProfileName?.trim() && phone) {
-        const formatted = formatE164(phone);
-        const rawDigits = phone.replace(/\D/g, '');
-        const targetPhones = Array.from(new Set([
-          formatted,
-          phone.replace(/\s+/g, ''),
-          formatted.replace('+', ''),
-          rawDigits,
-          rawDigits.length === 8 ? `505${rawDigits}` : rawDigits
-        ])).filter(Boolean);
-
-        const { data: user } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .in('phone', targetPhones)
-          .maybeSingle();
-
-        if (user && user.full_name) {
-          userName = user.full_name.split(' ')[0];
-          localStorage.setItem('volunteer_name', user.full_name);
-        } else {
-          const { data: vol } = await supabase
-            .from('volunteers')
-            .select('first_name, last_name')
-            .in('phone', targetPhones)
-            .maybeSingle();
-
-          if (vol && vol.first_name) {
-            userName = vol.first_name;
-            localStorage.setItem('volunteer_name', `${vol.first_name} ${vol.last_name || ''}`.trim());
-          }
-        }
-      }
+      // The authorization snapshot is resolved server-side from the signed
+      // session (user id + user type). Do not infer identity from phone or
+      // localStorage: those values can belong to a previous account on the
+      // same device and may show another coordinator's name.
+      const authenticatedProfileName = snapshot.name?.trim() || '';
+      const userName = authenticatedProfileName
+        ? authenticatedProfileName.split(/\s+/)[0]
+        : snapshot.role === 'Lector' ? 'Voluntario' : 'Coordinador';
 
       const hour = new Date().getHours();
       let timeOfDay = 'Buenas noches';
@@ -561,13 +523,16 @@ export default function CoordinatorDashboard() {
     };
 
     window.addEventListener('permissions-changed', handleProfileChange);
-    void syncAllPermissionsFromDatabase();
+    // Resolve the initial snapshot explicitly. Relying only on the event can
+    // race with the layout's first permission sync and leave the greeting with
+    // a stale compatibility name.
+    void syncAllPermissionsFromDatabase().then(applyAuthorizationSnapshot);
 
     return () => {
       active = false;
       window.removeEventListener('permissions-changed', handleProfileChange);
     };
-  }, [supabase]);
+  }, []);
 
   const activeVolunteers = useMemo(() => {
     return volunteers.filter(v => (v.status || '').toLowerCase() !== 'archived');
