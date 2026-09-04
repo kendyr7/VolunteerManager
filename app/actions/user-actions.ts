@@ -10,13 +10,9 @@ import { formatE164, getLocal8Digits } from '@/lib/whatsapp';
 import { generateTemporaryPin } from '@/lib/pin-security';
 import { clearAuthRateLimit } from '@/lib/auth-rate-limit';
 import { after } from 'next/server';
+import { getRelationName } from '@/lib/supabase-relation';
 
 type PlatformRole = 'Admin' | 'Editor' | 'Lector';
-
-function relationName(relation: { name?: string | null } | Array<{ name?: string | null }> | null): string | undefined {
-  const row = Array.isArray(relation) ? relation[0] : relation;
-  return row?.name || undefined;
-}
 
 export async function getCurrentSettingsProfileAction() {
   try {
@@ -59,7 +55,10 @@ export async function listUserProfilesAction() {
     if (error) return { success: false as const, error: error.message };
     return {
       success: true as const,
-      profiles: profilesResult.data || [],
+      profiles: (profilesResult.data || []).map(profile => ({
+        ...profile,
+        committee: getRelationName(profile.committees),
+      })),
       committees: committeesResult.data || [],
     };
   } catch (error) {
@@ -143,7 +142,7 @@ export async function createUserProfileAction({
         phone: inserted.phone,
         role: inserted.role,
         coordinatorType: inserted.coordinator_type,
-        committee: relationName(inserted.committees),
+        committee: getRelationName(inserted.committees),
       },
       waSuccess,
       waError,
@@ -216,7 +215,7 @@ export async function updateUserProfileAction({
         phone: updated.phone,
         role: updated.role,
         coordinatorType: updated.coordinator_type,
-        committee: relationName(updated.committees),
+        committee: getRelationName(updated.committees),
       },
     };
   } catch (error) {

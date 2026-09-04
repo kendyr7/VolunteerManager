@@ -58,8 +58,6 @@ const itemVariants = {
 
 
 
-const COMMITTEES = ['Historia', 'Seguridad', 'Guía', 'Traducción', 'Transporte', 'Primeros Auxilios'];
-
 const getCommitteeColor = (committee: string) => {
   if (!committee) return 'bg-dark3 text-text-dim border-border';
   const comm = committee.toLowerCase();
@@ -280,7 +278,7 @@ export default function UsersPage() {
   const [newPhone, setNewPhone] = useState('');
   const [newRole, setNewRole] = useState<Role>('Editor');
   const [newCoordinatorType, setNewCoordinatorType] = useState<CoordinatorType>('committee');
-  const [newCommittee, setNewCommittee] = useState<string>(COMMITTEES[0]);
+  const [newCommittee, setNewCommittee] = useState<string>('');
   const [sendWelcomeWhatsApp, setSendWelcomeWhatsApp] = useState(true);
   const [generatedInvite, setGeneratedInvite] = useState<PlatformUser | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -321,7 +319,7 @@ export default function UsersPage() {
           phone: p.phone || '',
           role: p.role as Role,
           coordinatorType: p.coordinator_type as CoordinatorType | null,
-          committee: p.committees?.[0]?.name,
+          committee: p.committee,
           status: 'active',
           isArchived: p.status === 'archived',
         }))
@@ -407,7 +405,7 @@ export default function UsersPage() {
     setNewPhone(user.phone);
     setNewRole(user.role);
     setNewCoordinatorType(user.coordinatorType || 'committee');
-    setNewCommittee(user.committee || COMMITTEES[0]);
+    setNewCommittee(user.committee || '');
     setIsEditSheetOpen(true);
   };
 
@@ -555,7 +553,7 @@ export default function UsersPage() {
     setNewPhone('');
     setNewRole('Editor');
     setNewCoordinatorType('committee');
-    setNewCommittee(COMMITTEES[0]);
+    setNewCommittee(committeesList[0]?.name || '');
     setGeneratedInvite(null);
     setIsInviteOpen(false);
     setErrorMsg(null);
