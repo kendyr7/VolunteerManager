@@ -416,6 +416,30 @@ export async function sendShiftReminderAction({
     }
     const areaName = getShiftAreaName(assignedShift);
 
+    // A confirmed volunteer no longer needs an outbound reminder. Keep this
+    // check on the server as the final guard against unnecessary Meta usage,
+    // even if an old browser still shows an enabled action.
+    const { data: confirmedReminder, error: confirmedReminderError } = await supabase
+      .from('reminder_logs')
+      .select('id')
+      .eq('volunteer_id', volunteerId)
+      .eq('day_key', dayKey)
+      .eq('shift_key', shiftKey)
+      .eq('status', 'confirmado')
+      .limit(1)
+      .maybeSingle();
+    if (confirmedReminderError) {
+      console.error('[WHATSAPP] Error checking confirmed reminder status:', confirmedReminderError.message);
+      return { success: false, error: 'No se pudo comprobar si el voluntario ya confirmó el turno.' };
+    }
+    if (confirmedReminder) {
+      return {
+        success: false,
+        alreadyConfirmed: true as const,
+        error: 'Este voluntario ya confirmó este turno. No es necesario enviar otro recordatorio.',
+      };
+    }
+
     let attemptNumber = 1;
     if (mode === 'retry') {
       let retryQuery = supabase

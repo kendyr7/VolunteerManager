@@ -12,11 +12,13 @@ import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { checkOutVolunteer, adjustCheckoutTimeAction } from "@/app/actions/attendance";
 import { undoVolunteerCheckInAction } from "@/app/actions/audit-actions";
+import { getReminderDeliveryLogsAction } from "@/app/actions/whatsapp";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn, normalizeSearch } from "@/lib/utils";
 import { ShiftSectionTabs } from "@/components/ShiftSectionTabs";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
+import { canSendWhatsappMessages } from "@/lib/permissions";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 import { updateVolunteerAction, saveShiftsAction } from "@/app/actions/volunteer-actions";
@@ -62,6 +64,23 @@ type VolunteerType = {
   committee_id?: string;
   status?: string;
   age?: number;
+};
+
+type ReminderStatus = 'pendiente' | 'contactado' | 'confirmado';
+
+const REMINDER_STATUS_DOT: Record<ReminderStatus, { className: string; label: string }> = {
+  pendiente: {
+    className: 'bg-amber-400 motion-safe:animate-pulse',
+    label: 'Aviso pendiente',
+  },
+  contactado: {
+    className: 'bg-sky-400',
+    label: 'Aviso contactado',
+  },
+  confirmado: {
+    className: 'bg-emerald-400',
+    label: 'Aviso confirmado',
+  },
 };
 
 const getShiftColor = (shiftId: string, count: number, minRequired: number, showColors: boolean = true) => {
@@ -331,6 +350,86 @@ export default function ShiftsPage() {
   const [saved, setSaved] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const [showCapacityColors, setShowCapacityColors] = useState<boolean>(true);
+  const [reminderStatusMap, setReminderStatusMap] = useState<Record<string, ReminderStatus>>({});
+
+  // Avisos are maintained by the reminders view and by WhatsApp webhooks.
+  // Mirror both sources here so the volunteer dot reflects the latest
+  // operational status without changing shift or attendance data.
+  useEffect(() => {
+    let disposed = false;
+    let syncing = false;
+
+    const readLocalReminderStatuses = (): Record<string, ReminderStatus> => {
+      const statuses: Record<string, ReminderStatus> = {};
+      if (typeof window === 'undefined') return statuses;
+
+      const readBooleanRecord = (storageKey: string) => {
+        try {
+          const stored = window.localStorage.getItem(storageKey);
+          return stored ? JSON.parse(stored) as Record<string, boolean> : {};
+        } catch {
+          return {};
+        }
+      };
+
+      Object.entries(readBooleanRecord('contacted_reminders')).forEach(([key, isContacted]) => {
+        if (isContacted) statuses[key] = 'contactado';
+      });
+      Object.entries(readBooleanRecord('confirmed_reminders')).forEach(([key, isConfirmed]) => {
+        if (isConfirmed) statuses[key] = 'confirmado';
+      });
+
+      return statuses;
+    };
+
+    const syncReminderStatuses = async () => {
+      if (syncing) return;
+      syncing = true;
+      const statuses = readLocalReminderStatuses();
+
+      try {
+        // Readers without the Avisos permission still get local statuses, but
+        // should not make an unauthorized server request on every refresh.
+        if (canSendWhatsappMessages()) {
+          const result = await getReminderDeliveryLogsAction();
+          if (result.success) {
+            result.logs.forEach((log) => {
+              const key = `${log.volunteer_id}-${log.day_key}-${log.shift_key}`;
+              if (log.status === 'confirmado') {
+                statuses[key] = 'confirmado';
+              } else if (log.status === 'contactado' && statuses[key] !== 'confirmado') {
+                statuses[key] = 'contactado';
+              }
+            });
+          }
+        }
+      } catch {
+        // Local statuses remain available when the delivery log is offline.
+      } finally {
+        syncing = false;
+      }
+
+      if (!disposed) {
+        setReminderStatusMap(previous => {
+          const previousKeys = Object.keys(previous);
+          const nextKeys = Object.keys(statuses);
+          const unchanged = previousKeys.length === nextKeys.length
+            && nextKeys.every(key => previous[key] === statuses[key]);
+          return unchanged ? previous : statuses;
+        });
+      }
+    };
+
+    void syncReminderStatuses();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void syncReminderStatuses();
+    }, 10000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   // Edit Volunteer Profile states
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit_profile'>('view');
@@ -1306,6 +1405,8 @@ export default function ShiftsPage() {
                                 const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
                                 const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
                                 const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
+                                const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
+                                const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                 const checkInTimeStr = formatGuatemalaTime(shiftRecord?.checked_in_at);
                                 const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
                                 const elapsed = getElapsedInfoBetween(shiftRecord?.checked_in_at, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
@@ -1323,7 +1424,12 @@ export default function ShiftsPage() {
                                     onClick={(e) => { e.stopPropagation(); handleEditClick(vol); }}
                                   >
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      <div className={`w-2 h-2 rounded-full shrink-0 ${isCheckedOut ? 'bg-gray-400 dark:bg-gray-600' : isCheckedIn ? 'bg-emerald-400 animate-pulse' : c.dot}`} />
+                                      <div
+                                        className={cn('w-2 h-2 rounded-full shrink-0', reminderDot.className)}
+                                        role="img"
+                                        title={reminderDot.label}
+                                        aria-label={reminderDot.label}
+                                      />
                                       <div className="flex flex-col min-w-0">
                                         <span className={`font-inter font-bold text-[12px] truncate group-hover:text-[#4d7cfe] transition-colors ${
                                           isCheckedOut ? 'text-gray-400 dark:text-gray-400 font-bold' : isCheckedIn ? 'text-emerald-400 font-extrabold' : 'text-text'
@@ -1583,6 +1689,8 @@ export default function ShiftsPage() {
                                   const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
                                   const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
                                   const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
+                                  const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
+                                  const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                   const checkInTimeStr = formatGuatemalaTime(shiftRecord?.checked_in_at);
                                   const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
                                   const elapsed = getElapsedInfoBetween(shiftRecord?.checked_in_at, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
@@ -1602,9 +1710,12 @@ export default function ShiftsPage() {
                                       onClick={(e) => { e.stopPropagation(); toggleDay(key); handleEditClick(vol); }}
                                     >
                                       <div className="flex items-center gap-2 min-w-0 flex-1">
-                                        <div className={`w-2 h-2 rounded-full shrink-0 ${
-                                          isCheckedOut ? 'bg-gray-400 dark:bg-gray-600' : isCheckedIn ? 'bg-emerald-400 animate-pulse' : isMatch ? 'bg-yellow-300' : 'bg-white/60'
-                                        }`} />
+                                        <div
+                                          className={cn('w-2 h-2 rounded-full shrink-0', reminderDot.className)}
+                                          role="img"
+                                          title={reminderDot.label}
+                                          aria-label={reminderDot.label}
+                                        />
                                         <div className="flex flex-col min-w-0">
                                           <span className={`font-inter font-bold text-[12px] truncate ${
                                             isCheckedOut ? 'text-gray-400 font-bold' : isCheckedIn ? 'text-emerald-300 font-extrabold' : 'text-white'

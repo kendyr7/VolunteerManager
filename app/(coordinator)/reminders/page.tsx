@@ -783,6 +783,11 @@ export default function RemindersPage() {
   }, []);
 
   const handleSingleSendWhatsApp = async (vol: VolunteerType, mode: 'send' | 'retry' = 'send') => {
+    const reminderKey = `${vol.id}-${selectedDayKey}-${selectedShiftId}`;
+    if (confirmedReminders[reminderKey]) {
+      showToast('Este voluntario ya confirmó este turno. No es necesario enviar otro recordatorio.', 'info');
+      return;
+    }
     if (!canSendWhatsappMessages()) {
       showToast("El Administrador ha deshabilitado el envío de WhatsApp para Coordinadores", "error");
       return;
@@ -843,7 +848,16 @@ export default function RemindersPage() {
 
     const selectedVols = Array.from(selectedVolunteers)
       .map(id => volunteers.find(v => v.id === id))
-      .filter((v): v is VolunteerType => !!v);
+      .filter((v): v is VolunteerType => !!v)
+      .filter(vol => !confirmedReminders[`${vol.id}-${selectedDayKey}-${selectedShiftId}`]);
+    const confirmedCount = selectedVolunteers.size - selectedVols.length;
+
+    if (selectedVols.length === 0) {
+      setIsSendingBulkWA(false);
+      setSelectedVolunteers(new Set());
+      showToast('Todos los voluntarios seleccionados ya confirmaron sus turnos.', 'info');
+      return;
+    }
 
     let successCount = 0;
     let failCount = 0;
@@ -887,7 +901,8 @@ export default function RemindersPage() {
         'error'
       );
     } else if (failCount === 0) {
-      showToast(`✅ ¡Recordatorios enviados exitosamente a ${successCount} voluntarios!`);
+      const skippedText = confirmedCount > 0 ? ` · ${confirmedCount} ya confirmado${confirmedCount === 1 ? '' : 's'}` : '';
+      showToast(`✅ ¡Recordatorios enviados exitosamente a ${successCount} voluntarios!${skippedText}`);
     } else {
       showToast(`Enviados: ${successCount} | Fallidos: ${failCount}`, failCount > 0 ? 'error' : 'success');
     }
@@ -1497,16 +1512,20 @@ export default function RemindersPage() {
                                     selectionModeActive={selectedVolunteers.size > 0}
 
                                     onSwipeRight={() => {
+                                      if (isConfirmed) {
+                                        showToast("Este voluntario ya confirmó este turno. No es necesario enviar otro recordatorio.", "info");
+                                        return;
+                                      }
                                       if (!canSendWhatsappMessages()) {
                                         showToast("El Administrador ha deshabilitado el envío de WhatsApp para Coordinadores", "error");
                                         return;
                                       }
                                       void handleSingleSendWhatsApp(vol, deliveryInfo?.status === 'failed' ? 'retry' : 'send');
                                     }}
-                                    swipeRightIcon={sendingVolunteerIds.has(vol.id) ? "hourglass_top" : deliveryInfo?.status === 'failed' ? "refresh" : "send"}
-                                    swipeRightText={deliveryInfo?.status === 'failed' ? "Reintentar" : "WhatsApp"}
-                                    swipeRightColorClass="text-[#25D366]"
-                                    swipeRightBgColor="rgba(37, 211, 102, 0.2)"
+                                    swipeRightIcon={isConfirmed ? "check_circle" : sendingVolunteerIds.has(vol.id) ? "hourglass_top" : deliveryInfo?.status === 'failed' ? "refresh" : "send"}
+                                    swipeRightText={isConfirmed ? "Confirmado" : deliveryInfo?.status === 'failed' ? "Reintentar" : "WhatsApp"}
+                                    swipeRightColorClass={isConfirmed ? "text-emerald-400" : "text-[#25D366]"}
+                                    swipeRightBgColor={isConfirmed ? "rgba(16, 185, 129, 0.2)" : "rgba(37, 211, 102, 0.2)"}
 
                                     onSwipeLeft={() => toggleConfirmed(vol.id)}
                                     swipeLeftIcon={isConfirmed ? "close" : "check"}
@@ -1679,16 +1698,18 @@ export default function RemindersPage() {
                                             <Button
                                               variant="ghost"
                                               size="icon"
-                                              disabled={!canSendWhatsappMessages() || sendingVolunteerIds.has(vol.id) || isSendingBulkWA}
+                                              disabled={isConfirmed || !canSendWhatsappMessages() || sendingVolunteerIds.has(vol.id) || isSendingBulkWA}
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 void handleSingleSendWhatsApp(vol, deliveryInfo?.status === 'failed' ? 'retry' : 'send');
                                               }}
                                               className={cn(
                                                 "h-8 w-8 transition-all rounded-full border border-[#25D366]/20 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 active:scale-95",
-                                                (!canSendWhatsappMessages() || sendingVolunteerIds.has(vol.id) || isSendingBulkWA) && "text-text-dim/30 border-transparent bg-transparent cursor-not-allowed"
+                                                (isConfirmed || !canSendWhatsappMessages() || sendingVolunteerIds.has(vol.id) || isSendingBulkWA) && "text-text-dim/30 border-transparent bg-transparent cursor-not-allowed"
                                               )}
-                                              title={!canSendWhatsappMessages()
+                                              title={isConfirmed
+                                                ? "Este turno ya está confirmado; no se enviará otro recordatorio"
+                                                : !canSendWhatsappMessages()
                                                 ? "Permiso deshabilitado por el administrador"
                                                 : deliveryInfo?.status === 'failed'
                                                   ? "Reintentar envío fallido"
