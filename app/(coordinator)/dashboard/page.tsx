@@ -95,13 +95,6 @@ export default function CoordinatorDashboard() {
   const [dashboardAccess, setDashboardAccess] = useState<'checking' | 'allowed' | 'denied'>('checking');
   const [includeSimulation, setIncludeSimulation] = useState(readStoredSimulationPreference);
 
-  const EVENT_DAYS = useMemo(() => getActiveEventDays({ includeSimulation }).map(date => ({
-      date,
-      key: formatDateShort(date),
-      label: formatDateShort(date).split(' ')[0],
-      dateNum: formatDateShort(date).split(' ')[1],
-    })), [includeSimulation]);
-
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
   const [selectedChartDay, setSelectedChartDay] = useState<string | null>(null);
   const [chartAnimationKey, setChartAnimationKey] = useState(0);
@@ -124,12 +117,30 @@ export default function CoordinatorDashboard() {
   const [authorizationKey, setAuthorizationKey] = useState('');
   const [operationalData, setOperationalData] = useState<DashboardOperationalData | null>(null);
   const [operationalScopeKey, setOperationalScopeKey] = useState('');
+  const [operationalSelection, setOperationalSelection] = useState<{
+    committee: string; includeSimulation: boolean; permissionTick: number;
+  } | null>(null);
   const [operationalError, setOperationalError] = useState<string | null>(null);
   const operationalRequestRef = useRef(0);
+  const pendingOperationalRef = useRef<{ scope: string; id: number } | null>(null);
   const insightRequestRef = useRef(0);
   const lastInsightScopeRef = useRef<string | null>(null);
   const preparedSessionCheckedRef = useRef(false);
   const supabase = useMemo(() => createClient(), []);
+
+  // Keep the complete visible snapshot during filter changes, never across
+  // identity/permission changes. Labels and navigation follow the visible data.
+  const canDisplayOperationalData = operationalData !== null
+    && operationalData.authorizationKey === authorizationKey
+    && operationalSelection?.permissionTick === permTick;
+  const displayedCommittee = canDisplayOperationalData ? operationalSelection.committee : selectedHeatmapCommittee;
+  const displayedSimulation = canDisplayOperationalData ? operationalSelection.includeSimulation : includeSimulation;
+  const EVENT_DAYS = useMemo(() => getActiveEventDays({ includeSimulation: displayedSimulation }).map(date => ({
+    date,
+    key: formatDateShort(date),
+    label: formatDateShort(date).split(' ')[0],
+    dateNum: formatDateShort(date).split(' ')[1],
+  })), [displayedSimulation]);
 
   useEffect(() => {
     let isMounted = true;
@@ -261,11 +272,11 @@ export default function CoordinatorDashboard() {
   const openVolunteersForHeatmapSlot = useCallback((dayKey: string, shiftKey: string) => {
     const params = new URLSearchParams({ day: dayKey, shift: shiftKey });
     if (
-      selectedHeatmapCommittee
-      && selectedHeatmapCommittee !== 'todos'
-      && selectedHeatmapCommittee !== 'all'
+      displayedCommittee
+      && displayedCommittee !== 'todos'
+      && displayedCommittee !== 'all'
     ) {
-      params.set('committee', selectedHeatmapCommittee);
+      params.set('committee', displayedCommittee);
     }
 
     setIsHeatmapFullscreen(false);
@@ -273,20 +284,20 @@ export default function CoordinatorDashboard() {
       void document.exitFullscreen().catch(() => {});
     }
     router.push(`/volunteers?${params.toString()}`);
-  }, [router, selectedHeatmapCommittee]);
+  }, [router, displayedCommittee]);
 
   const openVolunteersForChartDay = useCallback((dayKey: string) => {
     const params = new URLSearchParams({ day: dayKey });
     if (
-      selectedHeatmapCommittee
-      && selectedHeatmapCommittee !== 'todos'
-      && selectedHeatmapCommittee !== 'all'
+      displayedCommittee
+      && displayedCommittee !== 'todos'
+      && displayedCommittee !== 'all'
     ) {
-      params.set('committee', selectedHeatmapCommittee);
+      params.set('committee', displayedCommittee);
     }
 
     router.push(`/volunteers?${params.toString()}`);
-  }, [router, selectedHeatmapCommittee]);
+  }, [router, displayedCommittee]);
 
   const toggleSimulation = useCallback(() => {
     setIncludeSimulation(currentValue => {
@@ -412,12 +423,15 @@ export default function CoordinatorDashboard() {
   const loadOperationalData = useCallback(async (targetCommittee?: string, forceInsight = false) => {
     const effectiveTargetCommittee = targetCommittee ?? selectedHeatmapCommittee;
     const insightScopeKey = `${authorizationKey}:${permTick}:${effectiveTargetCommittee}:${includeSimulation}`;
+    if (!forceInsight && pendingOperationalRef.current?.scope === insightScopeKey
+      && pendingOperationalRef.current.id === operationalRequestRef.current) return;
     const requestId = ++operationalRequestRef.current;
+    pendingOperationalRef.current = { scope: insightScopeKey, id: requestId };
+    setOperationalError(null);
     const shouldGenerateInsight = forceInsight || lastInsightScopeRef.current !== insightScopeKey;
     const insightRequestId = shouldGenerateInsight ? ++insightRequestRef.current : insightRequestRef.current;
 
     if (shouldGenerateInsight) {
-      lastInsightScopeRef.current = insightScopeKey;
       setIsInsightLoading(true);
     }
 
@@ -428,9 +442,13 @@ export default function CoordinatorDashboard() {
         shouldGenerateInsight,
         forceInsight ? 'ai' : 'instant'
       );
+      if (requestId !== operationalRequestRef.current) return;
       if (res?.data && (res.data.authorizationKey !== authorizationKey
         || !dashboardScopeMatches(res.data.effectiveCommitteeScope, effectiveTargetCommittee))) {
         if (requestId === operationalRequestRef.current) {
+          setOperationalData(null);
+          setDashboardInsight(null);
+          lastInsightScopeRef.current = null;
           setOperationalError('Los permisos cambiaron. Recarga la página para actualizar los indicadores.');
         }
         return;
@@ -438,11 +456,13 @@ export default function CoordinatorDashboard() {
       if (requestId === operationalRequestRef.current && res?.data) {
         setOperationalData(res.data);
         setOperationalScopeKey(insightScopeKey);
+        setOperationalSelection({ committee: effectiveTargetCommittee, includeSimulation, permissionTick: permTick });
         setOperationalError(null);
-      } else if (requestId === operationalRequestRef.current && res?.error) {
+      } else if (requestId === operationalRequestRef.current) {
         setOperationalError('No se pudieron actualizar los indicadores. Intenta de nuevo.');
       }
-      if (shouldGenerateInsight && insightRequestId === insightRequestRef.current) {
+      if (res?.data && shouldGenerateInsight && insightRequestId === insightRequestRef.current) {
+        lastInsightScopeRef.current = insightScopeKey;
         setDashboardInsight(res?.insight || null);
         if (res?.data) {
           writePreparedDashboardSession({
@@ -457,9 +477,11 @@ export default function CoordinatorDashboard() {
       if (requestId === operationalRequestRef.current) {
         setOperationalError('No se pudieron actualizar los indicadores. Intenta de nuevo.');
       }
-      if (shouldGenerateInsight && insightRequestId === insightRequestRef.current) setDashboardInsight(null);
     } finally {
-      if (shouldGenerateInsight && insightRequestId === insightRequestRef.current) setIsInsightLoading(false);
+      if (requestId === operationalRequestRef.current) {
+        pendingOperationalRef.current = null;
+        setIsInsightLoading(false);
+      }
     }
   }, [authorizationKey, includeSimulation, permTick, selectedHeatmapCommittee]);
 
@@ -485,6 +507,7 @@ export default function CoordinatorDashboard() {
           if (!active) return;
           setOperationalData(prepared.data);
           setOperationalScopeKey(insightScopeKey);
+          setOperationalSelection({ committee: selectedHeatmapCommittee, includeSimulation, permissionTick: permTick });
           setDashboardInsight(prepared.insight);
           setIsInsightLoading(false);
         });
@@ -599,16 +622,21 @@ export default function CoordinatorDashboard() {
     && operationalData.authorizationKey === authorizationKey
     && operationalScopeKey === currentOperationalScopeKey
     && dashboardScopeMatches(operationalData.effectiveCommitteeScope, selectedHeatmapCommittee);
-  const globalStats = isOperationalSynced ? operationalData.globalStats : {
+  const isFilterUpdating = canDisplayOperationalData && !isOperationalSynced;
+  const displayedScopeLabel = dashboardScopeMatches(displayedCommittee, 'todos') ? 'Todos los comités' : displayedCommittee;
+  const filterStatus = isFilterUpdating
+    ? operationalError ? 'No se pudo cambiar el filtro.' : 'Actualizando…'
+    : null;
+  const globalStats = canDisplayOperationalData ? operationalData.globalStats : {
     totalRecruited: 0, targetVolunteers: 0, recruitmentPercentage: 0,
     globalCoveragePercentage: 0, criticalAlerts: 0, attendanceRate: 0,
     checkedInCount: 0, totalAssigned: 0,
   };
-  const committeeStatus = isOperationalSynced ? operationalData.committeeStatus : [];
-  const heatmapMatrix = isOperationalSynced ? operationalData.heatmapMatrix : EMPTY_HEATMAP;
-  const volsPerDay = isOperationalSynced ? operationalData.volsPerDay : EMPTY_DAILY_COUNTS;
-  const shiftsPerDay = isOperationalSynced ? operationalData.shiftsPerDay : EMPTY_DAILY_COUNTS;
-  const totalVolsWithShifts = isOperationalSynced ? operationalData.totalVolsWithShifts : 0;
+  const committeeStatus = canDisplayOperationalData ? operationalData.committeeStatus : [];
+  const heatmapMatrix = canDisplayOperationalData ? operationalData.heatmapMatrix : EMPTY_HEATMAP;
+  const volsPerDay = canDisplayOperationalData ? operationalData.volsPerDay : EMPTY_DAILY_COUNTS;
+  const shiftsPerDay = canDisplayOperationalData ? operationalData.shiftsPerDay : EMPTY_DAILY_COUNTS;
+  const totalVolsWithShifts = canDisplayOperationalData ? operationalData.totalVolsWithShifts : 0;
   const coverageStatus = globalStats.globalCoveragePercentage >= 100
     ? { label: 'Completo', className: 'bg-accent/15 text-accent' }
     : globalStats.globalCoveragePercentage >= 70
@@ -670,21 +698,21 @@ export default function CoordinatorDashboard() {
   const isScopedToSingleCommittee = useMemo(() => {
     if (!canViewGlobalReports()) return true;
     return Boolean(
-      selectedHeatmapCommittee &&
-      selectedHeatmapCommittee !== 'todos' &&
-      selectedHeatmapCommittee !== 'all'
+      displayedCommittee &&
+      displayedCommittee !== 'todos' &&
+      displayedCommittee !== 'all'
     );
-  }, [selectedHeatmapCommittee]);
+  }, [displayedCommittee]);
 
   const targetCommitteeName = useMemo(() => {
     if (isScopedToSingleCommittee) {
-      if (selectedHeatmapCommittee && selectedHeatmapCommittee !== 'todos' && selectedHeatmapCommittee !== 'all') {
-        return selectedHeatmapCommittee;
+      if (displayedCommittee && displayedCommittee !== 'todos' && displayedCommittee !== 'all') {
+        return displayedCommittee;
       }
       return userCommittee || committeesList[0]?.name || '';
     }
     return null;
-  }, [isScopedToSingleCommittee, selectedHeatmapCommittee, userCommittee, committeesList]);
+  }, [isScopedToSingleCommittee, displayedCommittee, userCommittee, committeesList]);
 
   const targetCommitteeObj = useMemo(() => {
     if (!targetCommitteeName) return null;
@@ -807,7 +835,7 @@ export default function CoordinatorDashboard() {
     );
   }
 
-  if (!isOperationalSynced && operationalError) {
+  if (!canDisplayOperationalData && operationalError) {
     return (
       <div role="alert" className="flex min-h-[65vh] flex-col items-center justify-center gap-4 p-8 text-center">
         <p className="text-sm text-text-dim">{operationalError}</p>
@@ -816,7 +844,7 @@ export default function CoordinatorDashboard() {
     );
   }
 
-  if (!isOperationalSynced) {
+  if (!canDisplayOperationalData) {
     return (
       <div className="absolute inset-0 flex items-center justify-center z-50">
         <AnimatedLogo isLooping className="w-16 h-16 md:w-20 md:h-20 text-text" />
@@ -880,7 +908,11 @@ export default function CoordinatorDashboard() {
             </Link>
           </div>
         </div>
-
+        {filterStatus && (
+          <p role="status" aria-live="polite" className="mt-2 text-xs font-medium text-text-dim">
+            {filterStatus}
+          </p>
+        )}
       </div>
 
       {greeting && (
@@ -898,6 +930,7 @@ export default function CoordinatorDashboard() {
         variants={containerVariants}
         initial="hidden"
         animate="visible"
+        aria-busy={isFilterUpdating && !operationalError}
         className="w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6 md:space-y-12 pb-20 pt-4"
       >
 
@@ -933,7 +966,8 @@ export default function CoordinatorDashboard() {
               <motion.p
                 initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.92, y: 8 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: shouldReduceMotion ? 0 : 0.35, delay: shouldReduceMotion ? 0 : 0.12, ease: [0.22, 1, 0.36, 1] }}
+                key={`${operationalScopeKey}-recruited`}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
                 className="text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]"
               >
                 {globalStats.totalRecruited}
@@ -974,7 +1008,8 @@ export default function CoordinatorDashboard() {
               <motion.p
                 initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.92, y: 8 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: shouldReduceMotion ? 0 : 0.35, delay: shouldReduceMotion ? 0 : 0.17, ease: [0.22, 1, 0.36, 1] }}
+                key={`${operationalScopeKey}-coverage`}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
                 className="flex items-start text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]"
               >
                 {globalStats.globalCoveragePercentage}
@@ -1018,7 +1053,8 @@ export default function CoordinatorDashboard() {
               <motion.p
                 initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.92, y: 8 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: shouldReduceMotion ? 0 : 0.35, delay: shouldReduceMotion ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
+                key={`${operationalScopeKey}-alerts`}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
                 className={`text-[44px] font-black leading-none tracking-[-0.045em] tabular-nums sm:text-[60px] xl:text-[68px] ${globalStats.criticalAlerts > 0 ? 'text-red' : 'text-text'}`}
               >
                 {globalStats.criticalAlerts}
@@ -1063,7 +1099,8 @@ export default function CoordinatorDashboard() {
               <motion.p
                 initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.92, y: 8 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: shouldReduceMotion ? 0 : 0.35, delay: shouldReduceMotion ? 0 : 0.27, ease: [0.22, 1, 0.36, 1] }}
+                key={`${operationalScopeKey}-attendance`}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
                 className="flex items-start text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]"
               >
                 {globalStats.attendanceRate}
@@ -1131,7 +1168,7 @@ export default function CoordinatorDashboard() {
             </div>
 
             <div className="hidden items-center rounded-md border border-border bg-dark3 px-2.5 py-1.5 text-[10px] font-bold text-text-dim md:flex">
-              {includeSimulation ? '5 – 26 Sep' : '10 – 26 Sep'}
+              {displayedSimulation ? '5 – 26 Sep' : '10 – 26 Sep'}
             </div>
           </div>
         </div>
@@ -1160,7 +1197,7 @@ export default function CoordinatorDashboard() {
                 <div className="absolute inset-x-0 bottom-0 border-t border-border" />
                 <svg className={`absolute inset-0 z-10 size-full overflow-visible ${chartModel.hasShiftRequirements ? 'text-amber-500' : 'text-text-dim'}`} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
                   <motion.g
-                    key={`${chartMetric}-${chartAnimationKey}`}
+                    key={`${operationalScopeKey}-${chartMetric}-${chartAnimationKey}`}
                     initial={shouldReduceMotion ? false : { opacity: 0.35 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
@@ -1208,7 +1245,7 @@ export default function CoordinatorDashboard() {
                       }}
                     >
                       <motion.span
-                        key={`${day.key}-${chartMetric}-${chartAnimationKey}`}
+                        key={`${operationalScopeKey}-${day.key}-${chartMetric}-${chartAnimationKey}`}
                         initial={shouldReduceMotion ? false : { height: '0%', opacity: 0 }}
                         animate={{ height: `${heightPct}%`, opacity: 1 }}
                         transition={{ duration: shouldReduceMotion ? 0 : 0.42, delay: shouldReduceMotion ? 0 : idx * 0.035, ease: [0.22, 1, 0.36, 1] }}
@@ -1365,6 +1402,7 @@ export default function CoordinatorDashboard() {
               transition={{ duration: 0.2 }}
             >
               <DashboardDistributionChart
+                key={operationalScopeKey}
                 title={isScopedToSingleCommittee ? `Distribución por Áreas` : 'Distribución por Comités'}
                 subtitle={isScopedToSingleCommittee ? `Comité: ${targetCommitteeName}` : 'Todos los Comités'}
                 items={distributionItems}
@@ -1439,6 +1477,14 @@ export default function CoordinatorDashboard() {
         </div>
 
         {/* Grid */}
+        {filterStatus && (
+          <p role="status" aria-live="polite" className="px-5 py-2 text-xs font-medium text-text-dim sm:px-8">
+            {filterStatus}
+            {operationalError && (
+              <button type="button" className="ml-2 font-bold underline" onClick={() => void loadOperationalData()}>Reintentar</button>
+            )}
+          </p>
+        )}
         <div className="overflow-x-auto w-full">
           <div className="min-w-full flex">
             <div className="w-16 sm:w-20 shrink-0 bg-dark3 border-r border-border flex flex-col pt-8">
@@ -1477,7 +1523,7 @@ export default function CoordinatorDashboard() {
                         onClick={() => openVolunteersForHeatmapSlot(dayData.day, shiftId)}
                         onMouseEnter={() => setHoveredHeatmapDay(dayData.day)}
                         onMouseLeave={() => setHoveredHeatmapDay(null)}
-                        className={`flex-1 min-h-[60px] flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-1 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4d7cfe] ${
+                        className={`flex-1 min-h-[60px] flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-1 transition-colors duration-150 motion-reduce:transition-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4d7cfe] ${
                           isHovered ? 'brightness-125 saturate-125' : ''
                         }`}
                         aria-label={`Ver voluntarios de ${shiftId} el ${dayData.day}`}
@@ -1560,9 +1606,13 @@ export default function CoordinatorDashboard() {
 
                 <div className="px-3 sm:px-6 py-1 sm:py-2 rounded-xl bg-dark2 border border-border shadow-sm flex flex-col items-center justify-center flex-1 max-w-[380px] sm:max-w-[440px] min-w-0">
                   <span className="text-xs sm:text-base md:text-xl font-black text-text tracking-tight text-center truncate w-full">
-                    {selectedHeatmapCommittee === 'todos' || selectedHeatmapCommittee === 'all'
-                      ? 'Todos los comités'
-                      : selectedHeatmapCommittee}
+                    {displayedScopeLabel}
+                  </span>
+                  <span role="status" className="min-h-4 text-center text-xs text-text-dim">
+                    {isFilterUpdating ? operationalError ? 'No se pudo actualizar' : 'Actualizando…' : ''}
+                    {isFilterUpdating && operationalError && (
+                      <button type="button" className="ml-2 font-bold underline" onClick={() => void loadOperationalData()}>Reintentar</button>
+                    )}
                   </span>
                   <div className="flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px] md:text-xs font-bold text-[#4d7cfe] tracking-wider uppercase mt-0.5">
                     {canViewGlobalReports() ? (
@@ -1681,7 +1731,7 @@ export default function CoordinatorDashboard() {
                           onClick={() => openVolunteersForHeatmapSlot(dayData.day, shiftId)}
                           onMouseEnter={() => setHoveredHeatmapDay(dayData.day)}
                           onMouseLeave={() => setHoveredHeatmapDay(null)}
-                          className={`flex-1 min-h-0 flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-0.5 sm:p-1 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4d7cfe] ${
+                          className={`flex-1 min-h-0 flex flex-col items-center justify-center border-b border-dark2 last:border-b-0 p-0.5 sm:p-1 transition-colors duration-150 motion-reduce:transition-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4d7cfe] ${
                             isHovered ? 'brightness-125 saturate-125' : ''
                           }`}
                           aria-label={`Ver voluntarios de ${shiftId} el ${dayData.day}`}

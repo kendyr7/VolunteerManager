@@ -142,18 +142,6 @@ export function DashboardInsightPanel({
   const [isExpanded, setIsExpanded] = useState(true);
   const template = insight?.template || fallbackMessage;
   const highlights = insight?.highlights || EMPTY_HIGHLIGHTS;
-  const generatedAt = insight?.generatedAt;
-  const updatedLabel = useMemo(() => {
-    if (!generatedAt) return null;
-    const generatedDate = new Date(generatedAt);
-    if (Number.isNaN(generatedDate.getTime())) return null;
-    return new Intl.DateTimeFormat('es-GT', {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(generatedDate);
-  }, [generatedAt]);
 
   return (
     <section
@@ -184,19 +172,6 @@ export function DashboardInsightPanel({
             </span>
           </button>
 
-          {updatedLabel && (
-            <time
-              dateTime={generatedAt}
-              title={updatedLabel ? `Actualizado ${updatedLabel}` : undefined}
-              className="inline-flex min-w-0 shrink items-center gap-1 overflow-hidden whitespace-nowrap text-[10px] font-medium text-text-dim sm:text-[11px]"
-            >
-              <span className="material-symbols-outlined text-[14px]" aria-hidden="true">
-                schedule
-              </span>
-              <span>Actualizado</span>
-              <span className="hidden truncate sm:inline">{updatedLabel}</span>
-            </time>
-          )}
         </div>
 
         <button
