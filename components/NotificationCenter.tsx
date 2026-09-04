@@ -9,6 +9,7 @@ import { type NotificationItem, type NotificationPage, safeNotificationLink } fr
 import styles from './NotificationCenter.module.css';
 import { NAVIGATION_ICONS } from '@/lib/navigation-icons';
 import { groupNotifications, notificationTimeLabel, notificationTodaySummary } from '@/lib/notifications/presentation';
+import { announceNotificationRead, watchNotificationChanges } from '@/lib/notifications/browser-sync';
 
 const focus = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] focus-visible:ring-offset-2 focus-visible:ring-offset-dark2';
 const secondary = 'text-[#586383] dark:text-slate-300';
@@ -144,13 +145,13 @@ export function NotificationCenter({ children }: { children?: ReactNode }) {
   const filterRef = useRef(true);
   const invalidateLoad = useCallback(() => { generation.current++; loadingRef.current = false; }, []);
 
-  const load = useCallback(async (filter: boolean, cursor: string | null = null, sync = false) => {
+  const load = useCallback(async (filter: boolean, cursor: string | null = null, sync = false, quiet = false) => {
     if (busyRef.current) return;
     const version = ++generation.current;
     loadingRef.current = true;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     try {
-      if (sync && Date.now() - lastSync.current > 15000) {
+      if (sync && Date.now() - lastSync.current > 60000) {
         lastSync.current = Date.now();
         // A busy/temporarily unavailable worker must not hide previously saved items.
         await requestInbox('/sync', 'POST').catch(() => undefined);
@@ -169,21 +170,14 @@ export function NotificationCenter({ children }: { children?: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const refresh = () => { if (document.visibilityState === 'visible' && !loadingRef.current && !busyRef.current) void load(filterRef.current, null, true); };
-    const timer = setTimeout(refresh, 0);
-    const interval = setInterval(refresh, 60000);
-    const onMessage = (event: MessageEvent) => { if (event.data?.type === 'notifications-updated') refresh(); };
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', refresh);
-    navigator.serviceWorker?.addEventListener('message', onMessage);
+    const stop = watchNotificationChanges(() => {
+      if (!loadingRef.current && !busyRef.current) void load(filterRef.current, null, true, true);
+    }, open);
     return () => {
       invalidateLoad();
-      clearTimeout(timer); clearInterval(interval);
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', refresh);
-      navigator.serviceWorker?.removeEventListener('message', onMessage);
+      stop();
     };
-  }, [load, invalidateLoad]);
+  }, [load, invalidateLoad, open]);
 
   const markRead = async (item?: NotificationItem) => {
     if (!page || busyRef.current) return false;
@@ -192,6 +186,7 @@ export function NotificationCenter({ children }: { children?: ReactNode }) {
     generation.current++; loadingRef.current = false; setLoading(false);
     try {
       await requestInbox('', 'PATCH', item ? { ids: [item.id] } : { all: true, before: page.asOf });
+      announceNotificationRead();
       setPage(previous => {
         if (!previous) return previous;
         const updated = previous.items.map(row => !item || row.id === item.id ? { ...row, read_at: row.read_at || new Date().toISOString() } : row);

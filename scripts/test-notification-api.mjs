@@ -75,6 +75,16 @@ result = await exports.PATCH(request('PATCH', { ids: [items[0].id], profileId: o
 ok(result.status === 200 && queries[0].some(op => op[0] === 'eq' && op[1] === 'profile_id' && op[2] === owner), 'Mutation ignores supplied profile ID');
 ok(queries[0].some(op => op[0] === 'is' && op[1] === 'read_at' && op[2] === null), 'Reading is idempotent');
 queries = [];
+const pushTag = `request:${randomUUID()}`;
+result = await exports.PATCH(request('PATCH', { tag: pushTag, recipientId: owner }));
+ok(result.status === 200 && queries[0].some(op => op[0] === 'eq' && op[1] === 'dedupe_key' && op[2] === pushTag), 'Native click marks the item by its push tag');
+ok(queries[0].some(op => op[0] === 'eq' && op[1] === 'profile_id' && op[2] === owner) && queries[0].some(op => op[0] === 'or'), 'Native read keeps account and permission restrictions');
+for (const invalid of [{ tag: pushTag, recipientId: other }, { tag: pushTag }, { tag: 'test', recipientId: owner },
+  { tag: pushTag, recipientId: owner, all: true }, { tag: pushTag, recipientId: owner, ids: [items[0].id] }]) {
+  queries = []; result = await exports.PATCH(request('PATCH', invalid));
+  ok(result.status === 400 && !queries.length, 'Native read rejects wrong account, invalid tag and ambiguous targets');
+}
+queries = [];
 const before = new Date(Date.now() - 5000).toISOString();
 result = await exports.PATCH(request('PATCH', { all: true, before }));
 ok(result.status === 200 && queries[0].some(op => op[0] === 'lte' && op[1] === 'inserted_at' && op[2] === before), 'Mark-all excludes late-arriving unseen events too');
@@ -103,4 +113,48 @@ ok(presentation.notificationTimeLabel('2027-01-01T05:59:00Z', '2027-01-01T06:10:
 ok(presentation.notificationTodaySummary(0) === 'Tienes 0 notificaciones hoy'
   && presentation.notificationTodaySummary(1) === 'Tienes 1 notificación hoy'
   && presentation.notificationTodaySummary(7) === 'Tienes 7 notificaciones hoy', 'Daily summary handles zero, singular and plural');
-console.log(`Notification API: ${checks} checks passed (ownership, permissions, pagination, validation, CSRF).`);
+// Two independent clients read the same durable account state through the real
+// route, rather than relying on either client's optimistic UI.
+let activeProfile = owner;
+const sharedRows = [owner, other].map(profile_id => ({ ...items[0], id: randomUUID(), profile_id,
+  dedupe_key: pushTag, inserted_at: new Date(Date.now() - 1000).toISOString(),
+  created_at: new Date(Date.now() - 2000).toISOString(), read_at: null }));
+modules['@/lib/notifications/access'].notificationAccess = async () => ({ profileId: activeProfile, scopes: ['kind.eq.request'], db: {
+  from() {
+    const filters = []; let update; let head = false; let limit = Infinity;
+    const query = {
+      select(_columns, options) { head = Boolean(options?.head); return query; },
+      eq(key, value) { filters.push(row => row[key] === value); return query; },
+      gte(key, value) { filters.push(row => row[key] >= value); return query; },
+      lte(key, value) { filters.push(row => row[key] <= value); return query; },
+      is(key, value) { filters.push(row => row[key] === value); return query; },
+      not(key, _operator, value) { filters.push(row => row[key] !== value); return query; },
+      in(key, values) { filters.push(row => values.includes(row[key])); return query; },
+      or() { filters.push(row => row.kind === 'request'); return query; },
+      order() { return query; },
+      limit(value) { limit = value; return query; },
+      update(value) { update = value; return query; },
+      then(resolve, reject) {
+        const rows = sharedRows.filter(row => filters.every(filter => filter(row)));
+        if (update) rows.forEach(row => Object.assign(row, update));
+        return Promise.resolve({ data: head ? null : structuredClone(rows.slice(0, limit)), count: rows.length, error: null }).then(resolve, reject);
+      },
+    };
+    return query;
+  },
+} });
+const unreadRequest = () => new Request('https://app.test/api/notifications?filter=unread');
+const deviceA = await (await exports.GET(unreadRequest())).json();
+const deviceB = await (await exports.GET(unreadRequest())).json();
+ok(deviceA.unreadCount === 1 && deviceB.items[0].id === deviceA.items[0].id, 'Same-account devices share one notification, not per-device copies');
+await exports.PATCH(request('PATCH', { ids: [deviceA.items[0].id] }));
+const refreshedB = await (await exports.GET(unreadRequest())).json();
+const readB = await (await exports.GET(new Request('https://app.test/api/notifications?filter=read'))).json();
+ok(refreshedB.unreadCount === 0 && !refreshedB.items.length && Boolean(readB.items[0].read_at), 'Reading on device A updates unread and read lists on device B');
+activeProfile = other;
+ok((await (await exports.GET(unreadRequest())).json()).unreadCount === 1, 'Other accounts keep independent read state');
+await exports.PATCH(request('PATCH', { tag: pushTag, recipientId: owner }));
+ok(sharedRows[1].read_at === null, 'Push from a previous login cannot mark the new account read');
+await exports.PATCH(request('PATCH', { tag: pushTag, recipientId: other }));
+ok((await (await exports.GET(unreadRequest())).json()).unreadCount === 0, 'Native push reading is also visible to another same-account device');
+console.log(`Notification API: ${checks} checks passed (ownership, permissions, pagination, validation, CSRF, shared read state).`);

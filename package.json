@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:push": "node scripts/test-web-push.mjs && node scripts/test-web-push-worker.mjs && node scripts/test-notification-api.mjs",
+    "test:push": "node scripts/test-web-push.mjs && node scripts/test-web-push-worker.mjs && node scripts/test-notification-api.mjs && node scripts/test-notification-browser.mjs",
     "check:whatsapp": "node scripts/check-whatsapp-config.mjs",
     "subscribe:whatsapp": "node scripts/check-whatsapp-config.mjs --subscribe",
     "check:whatsapp-inbox": "node scripts/check-whatsapp-inbox.mjs",

@@ -111,8 +111,14 @@ try {
 } finally { await db.close(); }
 
 // Service-worker tests exercise notification rendering and safe navigation without browser permission.
-const handlers = new Map(); const shown = []; const opened = [];
-const context = vm.createContext({ URL, self: {
+const handlers = new Map(); const shown = []; const opened = []; const reads = [];
+let readFails = false;
+const context = vm.createContext({ URL, AbortController, setTimeout, clearTimeout,
+  fetch: async (url, options) => {
+    reads.push({ url, options });
+    if (readFails) throw new Error('offline');
+    return { ok: true };
+  }, self: {
   location: { origin: 'https://example.test' },
   addEventListener: (type, handler) => handlers.set(type, handler),
   registration: { showNotification: async (title, options) => shown.push({ title, options }) },
@@ -150,4 +156,15 @@ ok(shown[1].title === 'Volunteer Manager', 'Malformed payload remains user-visib
 handlers.get('notificationclick')({ notification: { close() {}, data: { url: '/replacements?tab=pending' } }, waitUntil: task => { pending = task; } });
 await pending;
 ok(opened[0] === 'https://example.test/replacements?tab=pending', 'Click opens intended authenticated route');
+ok(reads.length === 0, 'Legacy push without recipient identity cannot mark another login read');
+handlers.get('push')({ data: { json: () => ({ title: 'Solicitud', tag: 'request:test', recipientId: 'account-a', url: '/replacements' }) }, waitUntil: task => { pending = task; } });
+await pending;
+handlers.get('notificationclick')({ notification: { close() {}, data: shown.at(-1).options.data }, waitUntil: task => { pending = task; } });
+await pending;
+ok(reads.length === 1 && reads[0].url === '/api/notifications' && reads[0].options.method === 'PATCH', 'Native push click saves a read receipt');
+ok(JSON.parse(reads[0].options.body).recipientId === 'account-a' && JSON.parse(reads[0].options.body).tag === 'request:test', 'Read receipt carries original recipient and notification tag');
+readFails = true;
+handlers.get('notificationclick')({ notification: { close() {}, data: shown.at(-1).options.data }, waitUntil: task => { pending = task; } });
+await pending;
+ok(opened.at(-1) === 'https://example.test/replacements', 'Read failure never blocks navigation');
 console.log(`Web Push: ${checks} checks passed (policies, SSRF, PostgreSQL outbox, lease, deduplication, service worker).`);

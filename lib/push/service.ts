@@ -24,6 +24,22 @@ function check(error: { message: string } | null) {
   if (error) throw new Error(error.message);
 }
 
+// Keep operational context readable within the push notification's size limits.
+// Phone numbers and personal reasons must never be selected for these messages.
+function notificationLabel(value: string | null | undefined, fallback: string, limit = 70) {
+  const text = value?.replace(/\s+/g, ' ').trim() || fallback;
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+}
+
+function notificationSlot(dayKey: string | null | undefined, shiftKey: string | null | undefined) {
+  const day = dayKey && getOperationalEventDays().find(date => parseDayKeyToDateStr(date) === parseDayKeyToDateStr(dayKey));
+  const dateLabel = day
+    ? new Intl.DateTimeFormat('es-NI', { timeZone: 'America/Guatemala', weekday: 'short', day: 'numeric', month: 'short' })
+      .format(new Date(`${parseDayKeyToDateStr(day)}T12:00:00-06:00`))
+    : notificationLabel(dayKey, 'Fecha por confirmar', 30);
+  return `${dateLabel} · ${notificationLabel(shiftKey, 'Turno por confirmar', 20)}`;
+}
+
 export function schedulePushDispatch() {
   after(async () => {
     try {
@@ -39,7 +55,7 @@ export async function sendWebPush(subscription: Subscription, payload: PushPaylo
   const config = getPushConfig();
   if (!config) throw new Error('Las notificaciones todavía no están configuradas.');
   const target = parsePushSubscription({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } });
-  await webpush.sendNotification(target, JSON.stringify(payload), {
+  await webpush.sendNotification(target, JSON.stringify({ ...payload, recipientId: subscription.profile_id }), {
     vapidDetails: config, timeout: 4000, TTL: Math.max(0, Math.min(3600, Math.floor(ttl))),
     urgency: kind === 'coverage' ? 'high' : 'normal',
     topic: createHash('sha256').update(payload.tag).digest('base64url').slice(0, 32),
@@ -50,18 +66,25 @@ export async function resolveEvent(db: SupabaseClient, event: EventRow, now: Dat
   if (now.getTime() - Date.parse(event.created_at) > MAX_EVENT_AGE) return null;
   if (event.kind === 'request') {
     const { data: request, error } = await db.from('shift_change_requests')
-      .select('status, volunteer_id').eq('id', event.request_id).maybeSingle();
+      .select('status, volunteer_id, current_day_key, current_shift_key, requested_day_key, requested_shift_key').eq('id', event.request_id).maybeSingle();
     check(error);
     if (!request || request.status !== 'pending') return null;
     const { data: volunteer, error: volunteerError } = await db.from('volunteers')
-      .select('committee_id, status').eq('id', request.volunteer_id).maybeSingle();
+      .select('committee_id, status, first_name, last_name').eq('id', request.volunteer_id).maybeSingle();
     check(volunteerError);
     if (!volunteer || volunteer.status === 'archived') return null;
+    const { data: committee, error: committeeError } = volunteer.committee_id
+      ? await db.from('committees').select('name').eq('id', volunteer.committee_id).maybeSingle()
+      : { data: null, error: null };
+    check(committeeError);
+    const name = notificationLabel([volunteer.first_name, volunteer.last_name].filter(Boolean).join(' '), 'Voluntario sin nombre');
+    const committeeName = notificationLabel(committee?.name, 'Sin subcomité asignado');
     return {
       committeeId: volunteer.committee_id, dedupeKey: `request:${event.request_id}`,
       expiresAt: new Date(Date.parse(event.created_at) + MAX_EVENT_AGE).toISOString(),
-      payload: { title: 'Nueva solicitud de cambio', body: 'Hay una solicitud pendiente de revisión. Abre la app para consultar los detalles.',
-        url: '/replacements?tab=pending', tag: `request:${event.request_id}` },
+      payload: { title: `Solicitud de cambio · ${name}`,
+        body: `${committeeName}. Actual: ${notificationSlot(request.current_day_key, request.current_shift_key)}. Solicitado: ${notificationSlot(request.requested_day_key, request.requested_shift_key)}.`,
+        url: `/replacements?requestId=${event.request_id}`, tag: `request:${event.request_id}` },
     };
   }
   if (!event.committee_id || !event.day_key || !event.shift_key) return null;
@@ -76,7 +99,7 @@ export async function resolveEvent(db: SupabaseClient, event: EventRow, now: Dat
     db.from('shifts').select('id, volunteers!inner(committee_id,status)', { count: 'exact', head: true })
       .eq('volunteers.committee_id', event.committee_id).neq('volunteers.status', 'archived')
       .eq('day_key', event.day_key).eq('shift_key', event.shift_key),
-    db.from('committees').select('status').eq('id', event.committee_id).maybeSingle(),
+    db.from('committees').select('status,name').eq('id', event.committee_id).maybeSingle(),
   ]);
   check(reqError); check(countError); check(committeeError);
   if (!committee || committee.status === 'archived' || !requirement?.required || (count ?? 0) >= requirement.required) return null;
@@ -85,8 +108,8 @@ export async function resolveEvent(db: SupabaseClient, event: EventRow, now: Dat
   return {
     committeeId: event.committee_id, dedupeKey: key,
     expiresAt: new Date(Math.min(startsAt.getTime(), Date.parse(`${dateKey}T00:00:00-06:00`) + MAX_EVENT_AGE)).toISOString(),
-    payload: { title: 'Cobertura crítica de un turno',
-      body: `${event.day_key} · ${event.shift_key}: ${count ?? 0} de ${requirement.required} puestos cubiertos. Revisa el dashboard.`,
+    payload: { title: `Cobertura crítica · ${notificationLabel(committee.name, 'Subcomité sin nombre')}`,
+      body: `${notificationSlot(event.day_key, event.shift_key)}: ${count ?? 0} de ${requirement.required} puestos cubiertos. ${requirement.required - (count ?? 0) === 1 ? 'Falta 1 persona' : `Faltan ${requirement.required - (count ?? 0)} personas`}.`,
       url: '/dashboard', tag: key },
   };
 }

@@ -45,7 +45,7 @@ export async function dispatchNotificationInbox(scanCoverage = false) {
           const rows = recipients.slice(offset, offset + 200).map(profile => ({
             profile_id: profile.id, kind: event.kind, committee_id: resolved.committeeId,
             dedupe_key: resolved.dedupeKey, title: resolved.payload.title,
-            body: event.kind === 'request' ? 'Se recibió una solicitud de cambio de turno. Consulta su estado y los detalles.' : resolved.payload.body,
+            body: resolved.payload.body,
             url: event.kind === 'request' ? `/replacements?requestId=${event.request_id}` : resolved.payload.url,
             created_at: event.created_at,
           }));

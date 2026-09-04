@@ -25,7 +25,9 @@ self.addEventListener('push', (event) => {
   const body = typeof payload.body === 'string' ? payload.body.slice(0, 300) : 'Tienes un aviso pendiente. Abre la app para revisarlo.';
   event.waitUntil(Promise.all([self.registration.showNotification(title, { body, icon: '/app-icon-192.png', badge: '/notification-badge-96.png',
     tag: typeof payload.tag === 'string' ? payload.tag.slice(0, 200) : 'volunteer-manager',
-    data: { url: safeNotificationUrl(payload.url) },
+    data: { url: safeNotificationUrl(payload.url),
+      tag: typeof payload.tag === 'string' ? payload.tag.slice(0, 200) : null,
+      recipientId: typeof payload.recipientId === 'string' ? payload.recipientId : null },
   }), self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windows => {
     windows.forEach(client => client.postMessage({ type: 'notifications-updated' }));
   })]));
@@ -34,7 +36,26 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = safeNotificationUrl(event.notification.data?.url);
-  event.waitUntil((async () => {
+  // Save the reading without delaying opening the app (required on mobile).
+  const saveRead = async () => {
+    const { tag, recipientId } = event.notification.data || {};
+    if (!tag || !recipientId) return; // Older pushes have no account binding.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch('/api/notifications', {
+        method: 'PATCH', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag, recipientId }), signal: controller.signal,
+      });
+      if (response.ok) {
+        const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        windows.forEach(client => client.postMessage({ type: 'notifications-updated' }));
+      }
+    } catch { /* Offline or signed out: opening the app must still work. */ }
+    finally { clearTimeout(timeout); }
+  };
+  event.waitUntil(Promise.all([saveRead(), (async () => {
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const exact = windows.find(client => client.url === url);
     if (exact) return exact.focus();
@@ -44,5 +65,5 @@ self.addEventListener('notificationclick', (event) => {
       if (navigated) return navigated.focus();
     }
     return self.clients.openWindow(url);
-  })());
+  })()]));
 });

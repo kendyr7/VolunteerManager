@@ -7,6 +7,9 @@ import {
   getBrowserPushSubscription,
   restoreBrowserPushSubscription,
   setBrowserPushPreference,
+  dismissPushInvite,
+  isPushInviteDismissed,
+  waitForPushRestore,
 } from '@/lib/push/browser';
 
 type PushState = { configured: boolean; active: boolean; serverActive?: boolean; publicKey?: string; requests?: boolean; coverage?: boolean };
@@ -60,7 +63,7 @@ export function PushNotificationSettings() {
     try {
       // Request immediately in the click handler (required by iOS).
       const permission = await Notification.requestPermission();
-      if (permission !== 'granted') { setSupport(browserSupport()); setNotice('No se activaron las notificaciones. Puedes hacerlo cuando quieras.'); return; }
+      if (permission !== 'granted') { dismissPushInvite(); setSupport(browserSupport()); setNotice('No se activaron las notificaciones. Puedes hacerlo cuando quieras.'); return; }
       const ensured = await ensureBrowserPushSubscription(state.publicKey);
       const subscription = ensured.subscription;
       if (ensured.created) created = subscription;
@@ -77,6 +80,8 @@ export function PushNotificationSettings() {
   const disable = async () => {
     setBusy(true); setError(''); setNotice('');
     try {
+      setBrowserPushPreference(false);
+      await waitForPushRestore();
       await api('subscription', 'DELETE');
       setState(previous => previous ? { ...previous, active: false, serverActive: false } : previous);
       // Server revocation is authoritative even if the browser has lost permission/support.
@@ -87,7 +92,10 @@ export function PushNotificationSettings() {
       setBrowserPushPreference(false);
       setNotice('Ya no se enviarán notificaciones a este dispositivo.');
       window.dispatchEvent(new Event('push-settings-changed'));
-    } catch (error) { setError(error instanceof Error ? error.message : 'No se pudieron desactivar.'); }
+    } catch (error) {
+      if (state?.serverActive) setBrowserPushPreference(true);
+      setError(error instanceof Error ? error.message : 'No se pudieron desactivar.');
+    }
     finally { setBusy(false); }
   };
   const preferences = async (key: 'requests' | 'coverage', value: boolean) => {
@@ -130,11 +138,13 @@ export function PushNotificationSettings() {
 export function PushNotificationInvite() {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
+    let cancelled = false;
     const refresh = async () => {
       try {
         let state = await api('subscription') as PushState;
         if (await restoreBrowserPushSubscription(state)) state = await api('subscription') as PushState;
-        if (sessionStorage.getItem('push-invite-dismissed') === '1') {
+        if (cancelled) return;
+        if (isPushInviteDismissed() || ('Notification' in window && Notification.permission === 'denied')) {
           setVisible(false);
           return;
         }
@@ -143,12 +153,16 @@ export function PushNotificationInvite() {
     };
     void refresh();
     window.addEventListener('push-settings-changed', refresh);
-    return () => window.removeEventListener('push-settings-changed', refresh);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'vm_push_enabled' || event.key === 'vm_push_invite_dismissed_v1') void refresh();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => { cancelled = true; window.removeEventListener('push-settings-changed', refresh); window.removeEventListener('storage', onStorage); };
   }, []);
   if (!visible) return null;
   return <aside aria-label="Activar notificaciones" className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-border bg-dark2 p-3 sm:mx-6">
     <span aria-hidden="true" className="material-symbols-outlined text-[#4d7cfe]">notifications</span>
     <div className="min-w-0 flex-1"><p className="text-sm font-bold text-text">Entérate cuando una solicitud necesite atención</p><Link href="/settings?section=notifications" className={`inline-flex min-h-9 items-center rounded text-sm font-bold text-blue-700 dark:text-blue-300 hover:underline ${focusStyle}`}>Configurar notificaciones</Link></div>
-    <button type="button" aria-label="Ocultar sugerencia por esta sesión" onClick={() => { sessionStorage.setItem('push-invite-dismissed', '1'); setVisible(false); }} className={`flex size-10 shrink-0 items-center justify-center rounded hover:bg-dark3 ${focusStyle}`}><span aria-hidden="true" className="material-symbols-outlined">close</span></button>
+    <button type="button" aria-label="No volver a mostrar esta sugerencia en este dispositivo" onClick={() => { dismissPushInvite(); setVisible(false); }} className={`flex size-10 shrink-0 items-center justify-center rounded hover:bg-dark3 ${focusStyle}`}><span aria-hidden="true" className="material-symbols-outlined">close</span></button>
   </aside>;
 }

@@ -50,14 +50,23 @@ export async function PATCH(request: Request) {
       body = JSON.parse(raw);
     } catch { return Response.json({ error: 'Solicitud inválida.' }, { status: 400 }); }
     const all = body?.all === true;
+    // Native push clicks identify the same durable account item by its tag.
+    // A push for an earlier login must never mark another account's item read.
+    const hasTag = body?.tag !== undefined;
+    const validTag = typeof body?.tag === 'string' && body.tag.length <= 200 &&
+      /^(request|coverage):[^\r\n]+$/.test(body.tag) && body.recipientId === profileId;
     const validBefore = typeof body?.before === 'string' && Number.isFinite(Date.parse(body.before)) && Date.parse(body.before) <= Date.now();
     const validIds = Array.isArray(body?.ids) && body.ids.length > 0 && body.ids.length <= NOTIFICATION_PAGE_SIZE && body.ids.every((id: unknown) => typeof id === 'string' && UUID_PATTERN.test(id));
-    if ((all && !validBefore) || (!all && !validIds)) return Response.json({ error: 'Selecciona notificaciones válidas.' }, { status: 400 });
+    if ((hasTag && (!validTag || all || body.ids !== undefined)) ||
+      (!hasTag && ((all && !validBefore) || (!all && !validIds)))) {
+      return Response.json({ error: 'Selecciona notificaciones válidas.' }, { status: 400 });
+    }
     if (scopes.length) {
       let query = db.from('notification_inbox').update({ read_at: new Date().toISOString() })
         .eq('profile_id', profileId).or(notificationFilter(scopes)).is('read_at', null)
         .gte('created_at', new Date(Date.now() - NOTIFICATION_RETENTION_DAYS * 86400000).toISOString());
-      query = all ? query.lte('inserted_at', new Date(body.before).toISOString()) : query.in('id', body.ids);
+      query = hasTag ? query.eq('dedupe_key', body.tag)
+        : all ? query.lte('inserted_at', new Date(body.before).toISOString()) : query.in('id', body.ids);
       const { error } = await query;
       if (error) throw error;
     }

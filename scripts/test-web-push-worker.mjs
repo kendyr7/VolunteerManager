@@ -31,9 +31,10 @@ function fixture(options = {}) {
   } : Date;
   const tables = {
     profiles: [{ id: 'coordinator', role: 'Editor', coordinator_type: 'committee', committee_id: 'A', status: 'active' }],
-    volunteers: [{ id: 'volunteer', committee_id: 'A', status: 'active' }],
-    shift_change_requests: [{ id: 'request', volunteer_id: 'volunteer', status: 'pending' }],
-    system_settings: [], committees: [{ id: 'A', status: 'active' }],
+    volunteers: [{ id: 'volunteer', committee_id: 'A', status: 'active', first_name: 'Ana', last_name: 'Pérez', phone: 'PRIVATE_PHONE' }],
+    shift_change_requests: [{ id: 'request', volunteer_id: 'volunteer', status: 'pending',
+      current_day_key: 'jue 10', current_shift_key: 'T1', requested_day_key: 'vie 11', requested_shift_key: 'T2', reason: 'PRIVATE_REASON' }],
+    system_settings: [], committees: [{ id: 'A', name: 'Hospitalidad', status: 'active' }],
     committee_shift_requirements: [{ committee_id: 'A', shift_key: 'T1', required: 3 }], shifts: [],
     push_events: [{ id: 'event', kind: 'request', request_id: 'request', event_key: 'request:request', created_at: new Date(now - 1000).toISOString(), processed_at: null, inbox_processed_at: null }],
     push_subscriptions: [{ id: 'sub', profile_id: 'coordinator', endpoint: 'https://fcm.googleapis.com/fcm/send/test',
@@ -115,8 +116,24 @@ await f.run();
 ok(f.sends.length === 1 && f.tables.push_deliveries[0].status === 'sent', 'Pending request delivered');
 ok(f.sends[0].settings.TTL <= 3600 && f.sends[0].settings.topic.length === 32, 'Transport TTL and stable topic');
 ok(!f.sends[0].body.body.includes('volunteer'), 'No volunteer identifiers in visible text');
+ok(f.sends[0].body.title === 'Solicitud de cambio · Ana Pérez', 'Request identifies the volunteer');
+ok(f.sends[0].body.body.includes('Hospitalidad') && f.sends[0].body.body.includes('Actual:') && f.sends[0].body.body.includes('T1') && f.sends[0].body.body.includes('Solicitado:') && f.sends[0].body.body.includes('T2'), 'Request includes committee and both slots');
+ok(f.sends[0].body.body.includes('10') && f.sends[0].body.body.includes('11') && f.sends[0].body.body.includes('sep'), 'Request dates include the month');
+ok(f.sends[0].body.url === '/replacements?requestId=request', 'Push opens the specific request');
+ok(!JSON.stringify(f.sends[0].body).includes('PRIVATE_'), 'Phones and personal reasons are excluded');
 await f.run();
 ok(f.sends.length === 1, 'Repeating dispatch does not resend completed delivery');
+
+f = fixture();
+Object.assign(f.tables.volunteers[0], { first_name: null, last_name: null, committee_id: null });
+f.tables.profiles[0].role = 'Admin';
+await f.run();
+ok(f.sends[0].body.title.includes('Voluntario sin nombre') && f.sends[0].body.body.includes('Sin subcomité asignado'), 'Missing names and committee use honest fallback labels');
+f = fixture();
+f.tables.volunteers[0].first_name = 'Nombre '.repeat(100);
+f.tables.committees[0].name = 'Subcomité '.repeat(100);
+await f.run();
+ok(f.sends[0].body.title.length <= 100 && f.sends[0].body.body.length <= 300 && f.sends[0].body.body.includes('Solicitado:'), 'Long names stay within push limits without losing requested slot');
 
 for (const code of [429, 500]) {
   f = fixture({ sendStatus: code }); await f.run();
@@ -168,6 +185,8 @@ function coverageFixture(beforeMs) {
 f = coverageFixture(30 * 60000); await f.run();
 ok(f.sends.length === 1 && f.sends[0].body.url === '/dashboard', 'Imminent understaffed shift sends coverage alert');
 ok(f.sends[0].settings.TTL === 1800 && f.sends[0].settings.urgency === 'high', 'Coverage TTL ends at shift start');
+ok(f.sends[0].body.title === 'Cobertura crítica · Hospitalidad', 'Coverage identifies the affected committee');
+ok(f.sends[0].body.body.includes('0 de 3 puestos cubiertos') && f.sends[0].body.body.includes('Faltan 3 personas'), 'Coverage includes headcount and missing people');
 f.tables.push_events.push({ ...f.tables.push_events[0], id: 'second-coverage', event_key: 'second-coverage', processed_at: null });
 await f.run(); ok(f.sends.length === 1, 'Separate coverage events share daily deduplication');
 f = coverageFixture(49 * 3600000); await f.run(); ok(!f.sends.length, 'No coverage alert outside 48-hour window');
@@ -175,6 +194,10 @@ f = coverageFixture(-60000); await f.run(); ok(!f.sends.length, 'No stale covera
 f = coverageFixture(3600000);
 f.tables.shifts = Array.from({ length: 3 }, (_, index) => ({ id: index, day_key: dayKey, shift_key: shiftKey, volunteers: { committee_id: 'A', status: 'active' } }));
 await f.run(); ok(!f.sends.length, 'Recovered coverage suppresses pending alert');
+f = coverageFixture(3600000);
+f.tables.committee_shift_requirements[0].required = 1;
+await f.inbox();
+ok(f.tables.notification_inbox[0].title.includes('Hospitalidad') && f.tables.notification_inbox[0].body.includes('Falta 1 persona.'), 'Inbox coverage preserves committee and singular missing-person count');
 
 const configExports = {};
 const testEnvironment = { PUSH_ENABLED: 'true', VAPID_PUBLIC_KEY: config.publicKey, VAPID_PRIVATE_KEY: config.privateKey, VAPID_SUBJECT: config.subject };
@@ -188,6 +211,7 @@ ok(configExports.getPushConfig() === null, 'Mismatched VAPID pair rejected befor
 f = fixture({ disabled: true }); f.tables.push_subscriptions = [];
 await f.inbox();
 ok(f.tables.notification_inbox.length === 1 && !f.sends.length, 'Internal inbox works without VAPID configuration or subscriptions');
+ok(f.tables.notification_inbox[0].title.includes('Ana Pérez') && f.tables.notification_inbox[0].body.includes('Hospitalidad') && f.tables.notification_inbox[0].body.includes('Solicitado:'), 'Inbox preserves request context instead of replacing it with generic text');
 ok(f.tables.push_events[0].processed_at === null && Boolean(f.tables.push_events[0].inbox_processed_at), 'Internal processing leaves external push cursor untouched');
 f.tables.notification_inbox[0].read_at = new Date().toISOString();
 f.tables.push_events[0].inbox_processed_at = null;
