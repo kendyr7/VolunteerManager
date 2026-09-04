@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { fetchAllRows } from '@/lib/supabase-helpers';
+import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
 import {
   buildEventDayKeys,
   parseRequirementsData,
@@ -184,6 +184,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             setCommitteesList([]);
             setShiftsData([]);
             setSessionsData([]);
+            setRequirementsByCommittee({});
             useVolunteerStore.getState().setInitialVolunteers([]);
             useVolunteerStore.getState().setInitialShifts([]);
             return;
@@ -201,6 +202,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             setCommitteesList(activeComms);
             setShiftsData([]);
             setSessionsData([]);
+            setRequirementsByCommittee({});
             useVolunteerStore.getState().setInitialVolunteers([]);
             useVolunteerStore.getState().setInitialShifts([]);
             return;
@@ -209,16 +211,17 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           const { getAttendanceSessionsAction } = await import('@/app/actions/attendance');
 
           const volsQuery = canViewAll
-            ? fetchAllRows(
-                supabase,
-                'volunteers',
-                SAFE_VOLUNTEER_FIELDS
-              )
-            : fetchAllRows(
+            ? fetchAllRowsStrict(
                 supabase,
                 'volunteers',
                 SAFE_VOLUNTEER_FIELDS,
-                (q) => q.eq('committee_id', committeeId!)
+                query => query.order('id')
+              )
+            : fetchAllRowsStrict(
+                supabase,
+                'volunteers',
+                SAFE_VOLUNTEER_FIELDS,
+                (q) => q.eq('committee_id', committeeId!).order('id')
               );
 
           const [volsData, commsRes, shiftsResult, reqsData, loadedSessions] =
@@ -228,31 +231,32 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
                 .from('committees')
                 .select('id, name, status')
                 .or('status.is.null,status.neq.archived'),
-              fetchAllRows<CoordinatorShiftData>(
+              fetchAllRowsStrict<CoordinatorShiftData>(
                 supabase,
                 'shifts',
                 canViewAll
                   ? '*, committee_areas(name, description)'
                   : '*, committee_areas(name, description), volunteers!inner(committee_id)',
                 query => {
-                  let scopedQuery = query.in('day_key', OPERATIONAL_EVENT_DAY_KEYS);
+                  let scopedQuery = query.in('day_key', OPERATIONAL_EVENT_DAY_KEYS).order('id');
                   if (!canViewAll && committeeId) {
                     scopedQuery = scopedQuery.eq('volunteers.committee_id', committeeId);
                   }
                   return scopedQuery;
                 }
               ),
-              fetchAllRows<CoordinatorRequirementData>(
+              fetchAllRowsStrict<CoordinatorRequirementData>(
                 supabase,
                 'committee_shift_requirements',
                 'committee_id, shift_key, required, committees(name)',
                 (query) => !canViewAll && committeeId
-                  ? query.eq('committee_id', committeeId)
-                  : query
+                  ? query.eq('committee_id', committeeId).order('committee_id').order('shift_key')
+                  : query.order('committee_id').order('shift_key')
               ),
               getAttendanceSessionsAction(OPERATIONAL_EVENT_DAY_KEYS)
             ]);
 
+          if (commsRes.error) throw commsRes.error;
           const commsData = commsRes.data ?? [];
           const activeComms = commsData.filter((committee) => committee.status !== 'archived') as CoordinatorCommitteeData[];
           const cleanVols = volsData ?? [];
@@ -270,17 +274,8 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           useVolunteerStore.getState().setInitialShifts(cleanShifts);
 
           const parsedReqs = parseRequirementsData(reqsData ?? [], activeComms);
-          const stored = localStorage.getItem('committee_requirements');
-          const storedReqs: Record<string, Record<string, number>> = stored
-            ? JSON.parse(stored)
-            : {};
-          const activeNames = new Set(activeComms.map((committee) => committee.name));
-          const activeStoredReqs = Object.fromEntries(
-            Object.entries(storedReqs).filter(([committeeName]) => activeNames.has(committeeName))
-          );
-          const allReqs = { ...activeStoredReqs, ...parsedReqs };
-          localStorage.setItem('committee_requirements', JSON.stringify(allReqs));
-          setRequirementsByCommittee(allReqs);
+          setRequirementsByCommittee(parsedReqs);
+          localStorage.setItem('committee_requirements', JSON.stringify(parsedReqs));
 
           lastFetchedAtRef.current = Date.now();
           lastCacheKeyRef.current = cacheKey;
@@ -302,8 +297,17 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetchData();
     const handleAuthorizationChange = () => void fetchData(true);
+    const refreshVisibleData = () => {
+      if (document.visibilityState === 'visible') void fetchData(true);
+    };
+    const timer = window.setInterval(refreshVisibleData, STALE_TIME_MS);
     window.addEventListener('permissions-changed', handleAuthorizationChange);
-    return () => window.removeEventListener('permissions-changed', handleAuthorizationChange);
+    window.addEventListener('focus', refreshVisibleData);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('permissions-changed', handleAuthorizationChange);
+      window.removeEventListener('focus', refreshVisibleData);
+    };
   }, [fetchData]);
 
   // Set up Supabase Realtime for instant synchronization across all active coordinators
@@ -439,6 +443,16 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             eventQueue.enqueue(payload.eventType as RealtimeEventType, newRec, 'volunteers', traceId);
           }
         }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'committee_shift_requirements' },
+        () => void fetchData(true)
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'committees' },
+        () => void fetchData(true)
       )
       .subscribe((status) => {
         realtimeDebugLogger.debug('[REALTIME CHANNEL STATUS]', {

@@ -727,25 +727,19 @@ export default function SettingsPage() {
     }
     setIsSavingConfig(true);
 
-    // 1. Persist to localStorage (client-side fallback)
-    const stored = localStorage.getItem("committee_requirements");
-    let allReqs: any = {};
-    if (stored) {
-      try { allReqs = JSON.parse(stored); } catch (e) { }
+    try {
+      const res = await updateCommitteeRequirementsAction(selectedConfigCommittees, capacities);
+      if (!res.success) {
+        showToast(res.error || 'No se pudieron guardar los requerimientos.', 'error');
+        return;
+      }
+      await refresh(true);
+      showToast("Requerimientos guardados correctamente");
+    } catch {
+      showToast('No se pudieron guardar los requerimientos. Inténtalo nuevamente.', 'error');
+    } finally {
+      setIsSavingConfig(false);
     }
-    selectedConfigCommittees.forEach(comm => {
-      allReqs[comm] = capacities;
-    });
-    localStorage.setItem("committee_requirements", JSON.stringify(allReqs));
-
-    // 2. Persist to Supabase via Server Action and CommitteeMutationService
-    const res = await updateCommitteeRequirementsAction(selectedConfigCommittees, capacities);
-    if (!res.success) {
-      console.warn('updateCommitteeRequirementsAction warning:', res.error);
-    }
-
-    setIsSavingConfig(false);
-    showToast("Requerimientos guardados correctamente");
   };
 
   const updateCapacity = (id: 'T1' | 'T2' | 'T3' | 'T4', delta: number) => {

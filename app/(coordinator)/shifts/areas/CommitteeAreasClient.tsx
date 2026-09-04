@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -32,6 +32,7 @@ type RequirementMap = Record<string, number>;
 export type AreaView = 'areas' | 'assignments' | 'coverage';
 const ALL_SHIFTS: ShiftKey[] = ['T1', 'T2', 'T3', 'T4'];
 const MAX_SHIFT_AREA_ASSIGNMENTS = 250;
+const EMPTY_AREA_OVERRIDES = new Map<string, string | null>();
 type ToastState = {
   visible: boolean;
   message: string;
@@ -1339,7 +1340,19 @@ export function CommitteeAreasClient({
   const [savedRequirements, setSavedRequirements] = useState<RequirementMap>(initialRequirements);
   const [toast, setToast] = useState<ToastState>({ visible: false, message: '', type: 'success' });
 
-  const [areaOverrides, setAreaOverrides] = useState<Map<string, string | null>>(new Map());
+  const [optimisticAreas, setOptimisticAreas] = useState({
+    source: data.assignments,
+    overrides: EMPTY_AREA_OVERRIDES,
+  });
+  // A refreshed server snapshot supersedes the optimistic values from its predecessor.
+  const areaOverrides = optimisticAreas.source === data.assignments
+    ? optimisticAreas.overrides : EMPTY_AREA_OVERRIDES;
+  function setAreaOverrides(update: (current: Map<string, string | null>) => Map<string, string | null>) {
+    setOptimisticAreas(current => ({
+      source: data.assignments,
+      overrides: update(current.source === data.assignments ? current.overrides : EMPTY_AREA_OVERRIDES),
+    }));
+  }
 
   const effectiveAssignments = useMemo(
     () => data.assignments.map((assignment) => (
@@ -1351,10 +1364,17 @@ export function CommitteeAreasClient({
   );
 
   const effectiveData = useMemo<AreaManagementData>(
-    () => ({
-      ...data,
-      assignments: effectiveAssignments,
-    }),
+    () => {
+      const assignedByArea = new Map<string, number>();
+      effectiveAssignments.forEach(assignment => {
+        if (assignment.areaId) assignedByArea.set(assignment.areaId, (assignedByArea.get(assignment.areaId) || 0) + 1);
+      });
+      return {
+        ...data,
+        areas: data.areas.map(area => ({ ...area, assignedCount: assignedByArea.get(area.id) || 0 })),
+        assignments: effectiveAssignments,
+      };
+    },
     [data, effectiveAssignments]
   );
 
@@ -1372,6 +1392,26 @@ export function CommitteeAreasClient({
   const activeCount = effectiveData.areas.filter((area) => area.status === 'active').length;
   const archivedCount = effectiveData.areas.length - activeCount;
   const busy = isPending || mutationPending;
+
+  const [requirementsSource, setRequirementsSource] = useState(data.requirements);
+  if (requirementsSource !== data.requirements) {
+    setRequirementsSource(data.requirements);
+    const nextRequirements = buildRequirementMap(data, selectedArea?.id || null);
+    if (!isDirty) setRequirements(nextRequirements);
+    setSavedRequirements(nextRequirements);
+  }
+
+  useEffect(() => {
+    const refreshVisibleData = () => {
+      if (!busy && !isDirty && document.visibilityState === 'visible') router.refresh();
+    };
+    const timer = window.setInterval(refreshVisibleData, 60_000);
+    window.addEventListener('focus', refreshVisibleData);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshVisibleData);
+    };
+  }, [busy, isDirty, router]);
 
   function showToast(message: string, type: ToastState['type'] = 'success', options?: Pick<ToastState, 'actionLabel' | 'onAction'>) {
     setToast({ visible: true, message, type, ...options });

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { getShiftCapacityStatus } from "@/lib/shift-capacity";
 import { DashboardDistributionChart, type DistributionItem } from "@/components/DashboardDistributionChart";
 import { DashboardInsightPanel } from "@/components/DashboardInsightPanel";
 import type { DashboardInsight } from "@/lib/dashboard-insight-types";
@@ -1467,6 +1468,7 @@ export default function CoordinatorDashboard() {
                   </div>
                   {heatmapMatrix.map((dayData) => {
                     const shift = dayData.shifts[shiftIdx];
+                    const capacityStatus = getShiftCapacityStatus(shift.assigned, shift.required);
                     const isHovered = hoveredHeatmapDay === dayData.day;
                     return (
                       <button
@@ -1482,8 +1484,8 @@ export default function CoordinatorDashboard() {
                         title={`Ver ${shift.assigned} voluntario${shift.assigned === 1 ? '' : 's'} de ${shiftId} el ${dayData.day}`}
                         style={{
                           backgroundColor: shift.required === 0 ? (isHovered ? 'var(--dark2)' : 'var(--dark3)') :
-                            shift.coverage >= 1 ? (isHovered ? 'rgba(20, 184, 166, 0.28)' : 'rgba(20, 184, 166, 0.15)') :
-                              shift.coverage >= 0.7 ? (isHovered ? 'rgba(251, 191, 36, 0.28)' : 'rgba(251, 191, 36, 0.15)') :
+                            capacityStatus === 'covered' ? (isHovered ? 'rgba(20, 184, 166, 0.28)' : 'rgba(20, 184, 166, 0.15)') :
+                              capacityStatus === 'risk' ? (isHovered ? 'rgba(251, 191, 36, 0.28)' : 'rgba(251, 191, 36, 0.15)') :
                                 (isHovered ? 'rgba(248, 113, 113, 0.28)' : 'rgba(248, 113, 113, 0.15)')
                         }}
                       >
@@ -1670,6 +1672,7 @@ export default function CoordinatorDashboard() {
                     </div>
                     {heatmapMatrix.map((dayData) => {
                       const shift = dayData.shifts[shiftIdx];
+                      const capacityStatus = getShiftCapacityStatus(shift.assigned, shift.required);
                       const isHovered = hoveredHeatmapDay === dayData.day;
                       return (
                         <button
@@ -1685,8 +1688,8 @@ export default function CoordinatorDashboard() {
                           title={`Ver ${shift.assigned} voluntario${shift.assigned === 1 ? '' : 's'} de ${shiftId} el ${dayData.day}`}
                           style={{
                             backgroundColor: shift.required === 0 ? (isHovered ? 'var(--dark2)' : 'var(--dark3)') :
-                              shift.coverage >= 1 ? (isHovered ? 'rgba(20, 184, 166, 0.28)' : 'rgba(20, 184, 166, 0.15)') :
-                                shift.coverage >= 0.7 ? (isHovered ? 'rgba(251, 191, 36, 0.28)' : 'rgba(251, 191, 36, 0.15)') :
+                              capacityStatus === 'covered' ? (isHovered ? 'rgba(20, 184, 166, 0.28)' : 'rgba(20, 184, 166, 0.15)') :
+                                capacityStatus === 'risk' ? (isHovered ? 'rgba(251, 191, 36, 0.28)' : 'rgba(251, 191, 36, 0.15)') :
                                   (isHovered ? 'rgba(248, 113, 113, 0.28)' : 'rgba(248, 113, 113, 0.15)')
                           }}
                         >

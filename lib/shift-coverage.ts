@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAvailableShiftKeys } from '@/lib/dates';
+import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
 
 export type CoverageLevel = 'unconfigured' | 'deficit' | 'at_requirement' | 'covered';
 
@@ -78,24 +79,25 @@ export async function getCommitteeCoverageSnapshot(
   const dayKeys = [...new Set(requestedDayKeys.filter(Boolean))];
   if (dayKeys.length === 0) return { assignments: [], slots: [] };
 
-  const [requirementsResult, assignmentsResult] = await Promise.all([
+  const [requirementsResult, assignmentRows] = await Promise.all([
     supabase
       .from('committee_shift_requirements')
       .select('shift_key, required')
       .eq('committee_id', committeeId),
-    supabase
-      .from('shifts')
-      .select('volunteer_id, day_key, shift_key, checked_out, checked_out_at, volunteers!inner(committee_id, status)')
-      .eq('volunteers.committee_id', committeeId)
-      .or('status.is.null,status.neq.archived', { referencedTable: 'volunteers' })
-      .in('day_key', dayKeys),
+    fetchAllRowsStrict<AssignmentRow>(
+      supabase,
+      'shifts',
+      'volunteer_id, day_key, shift_key, checked_out, checked_out_at, volunteers!inner(committee_id, status)',
+      query => query
+        .eq('volunteers.committee_id', committeeId)
+        .or('status.is.null,status.neq.archived', { referencedTable: 'volunteers' })
+        .in('day_key', dayKeys)
+        .order('id'),
+    ),
   ]);
 
   if (requirementsResult.error) {
     throw new Error(`No se pudo consultar la cobertura requerida: ${requirementsResult.error.message}`);
-  }
-  if (assignmentsResult.error) {
-    throw new Error(`No se pudieron consultar las asignaciones actuales: ${assignmentsResult.error.message}`);
   }
 
   const requirements = new Map<string, number>();
@@ -103,7 +105,7 @@ export async function getCommitteeCoverageSnapshot(
     requirements.set(row.shift_key, Number(row.required) || 0);
   });
 
-  const assignments = ((assignmentsResult.data || []) as AssignmentRow[]).map(row => ({
+  const assignments = assignmentRows.map(row => ({
     volunteerId: row.volunteer_id,
     dayKey: row.day_key,
     shiftKey: row.shift_key,

@@ -112,7 +112,7 @@ function TypedSummary({
             <span
               key={`highlight-${unit.value.id}`}
               className={cn(
-                'mx-0.5 my-0.5 inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 align-baseline whitespace-nowrap text-[13px] font-extrabold leading-6 sm:text-sm',
+                'mx-0.5 my-0.5 inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 align-middle whitespace-nowrap text-[13px] font-extrabold leading-6 sm:text-sm',
                 toneClasses[unit.value.tone]
               )}
             >

@@ -99,6 +99,7 @@ const moduleMocks = {
   '@/lib/dashboard-session-cache': { ...cache, readPreparedDashboardSession: () => prepared, writePreparedDashboardSession() {} },
   '@/app/actions/dashboard': { getDashboardOperationalDataAction: action },
   '@/lib/dates': jiti('./lib/dates'),
+  '@/lib/shift-capacity': jiti('./lib/shift-capacity'),
   '@/lib/utils': { cn: (...args) => args.filter(Boolean).join(' ') },
 };
 const source = fs.readFileSync('app/(coordinator)/dashboard/page.tsx', 'utf8');

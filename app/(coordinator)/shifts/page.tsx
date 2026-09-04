@@ -27,6 +27,7 @@ import { HighlightText } from "@/components/HighlightText";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
+import { getShiftCapacityStatus, getShiftCommitteeScope } from "@/lib/shift-capacity";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -95,10 +96,9 @@ const getShiftColor = (shiftId: string, count: number, minRequired: number, show
     };
   }
 
-  const isUnderstaffed = count < minRequired;
-  const isCritical = count <= Math.floor(minRequired / 2);
+  const status = getShiftCapacityStatus(count, minRequired);
 
-  if (isCritical) {
+  if (status === 'critical') {
     // Rojo suave para alertas críticas
     return {
       card: 'bg-rose-500/10 dark:bg-rose-500/15 border-rose-500/30',
@@ -107,7 +107,7 @@ const getShiftColor = (shiftId: string, count: number, minRequired: number, show
       badge: 'bg-rose-500/20 text-rose-500 border border-rose-500/30',
       dot: 'bg-rose-500'
     };
-  } else if (isUnderstaffed) {
+  } else if (status === 'risk') {
     // Naranja suave para déficit / casi lleno
     return {
       card: 'bg-amber-500/10 dark:bg-amber-500/15 border-amber-500/30',
@@ -204,6 +204,7 @@ export default function ShiftsPage() {
   const {
     rawVolunteers,
     committeesList,
+    requirementsByCommittee: committeeRequirements,
     shiftsData: contextShiftsData,
     globalShifts: contextGlobalShifts,
     indexedAssignments: contextIndexedAssignments,
@@ -328,8 +329,10 @@ export default function ShiftsPage() {
     if (role) setCurrentRole(role);
     if (committee && role !== 'Admin') {
       setSelectedCommittees([committee]);
+    } else {
+      setSelectedCommittees(requestedCommittee ? [requestedCommittee] : []);
     }
-  }, []);
+  }, [requestedCommittee]);
 
 
   const [isMobile, setIsMobile] = useState(false);
@@ -486,52 +489,15 @@ export default function ShiftsPage() {
     });
   }, []);
 
-  // Requerimientos por comité cargados de localStorage o por defecto
-  const [committeeRequirements, setCommitteeRequirements] = useState<Record<string, Record<string, number>>>(() => {
-    const defaults = {
-      'Historia': { T1: 3, T2: 2, T3: 3, T4: 2 },
-      'Seguridad': { T1: 4, T2: 4, T3: 4, T4: 4 },
-      'Guía': { T1: 5, T2: 5, T3: 5, T4: 5 },
-      'Traducción': { T1: 2, T2: 1, T3: 2, T4: 1 },
-      'Transporte': { T1: 3, T2: 2, T3: 3, T4: 2 },
-      'Primeros Auxilios': { T1: 2, T2: 2, T3: 2, T4: 2 }
-    };
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("committee_requirements");
-      if (stored) {
-        try {
-          return { ...defaults, ...JSON.parse(stored) };
-        } catch (e) {
-          console.error("Error loading committee requirements in init", e);
-        }
-      }
-    }
-    return defaults;
-  });
-
-  useEffect(() => {
-    const handleUpdate = () => {
-      if (typeof window !== "undefined") {
-        const stored = localStorage.getItem("committee_requirements");
-        if (stored) {
-          try {
-            setCommitteeRequirements(prev => ({ ...prev, ...JSON.parse(stored) }));
-          } catch (e) {
-            console.error("Error updating committee requirements", e);
-          }
-        }
-      }
-    };
-
-    // Escuchar el evento storage por si se cambia en otra pestaña, y ejecutar al montar
-    handleUpdate();
-    window.addEventListener("storage", handleUpdate);
-    window.addEventListener("focus", handleUpdate); // Cargar al regresar al tab
-    return () => {
-      window.removeEventListener("storage", handleUpdate);
-      window.removeEventListener("focus", handleUpdate);
-    };
-  }, []);
+  const scopedCommittees = useMemo(() => getShiftCommitteeScope(
+    committeesList.map(committee => committee.name), selectedCommittees, appliedSearch,
+  ), [committeesList, selectedCommittees, appliedSearch]);
+  const scopedCommitteeSet = useMemo(() => new Set(scopedCommittees), [scopedCommittees]);
+  const requiredByShift = useMemo(() => Object.fromEntries(
+    ['T1', 'T2', 'T3', 'T4'].map(shiftKey => [shiftKey, scopedCommittees.reduce(
+      (total, committee) => total + (committeeRequirements[committee]?.[shiftKey] ?? 0), 0,
+    )]),
+  ), [committeeRequirements, scopedCommittees]);
 
   // Determinar si hay un único comité seleccionado
   const isSingleCommittee = selectedCommittees.length === 1;
@@ -644,7 +610,7 @@ export default function ShiftsPage() {
 
     for (const id of allCandidateIds) {
       const vol = volunteerMap.get(id);
-      if (!vol) continue;
+      if (!vol || !scopedCommitteeSet.has(vol.committee)) continue;
 
       if (matchesFilters(vol, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole)) {
         const s = getShiftRecord(vol.id, dateKey, shiftId);
@@ -665,7 +631,7 @@ export default function ShiftsPage() {
     }
 
     return result.sort((a, b) => a.committee.localeCompare(b.committee));
-  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, completedShiftsMap, contextCheckedInMap, getShiftRecord]);
+  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, completedShiftsMap, contextCheckedInMap, getShiftRecord, scopedCommitteeSet]);
 
   const handleStartEditProfile = (vol: VolunteerType) => {
     const fn = (vol as any).first_name ?? vol.name ?? '';
@@ -794,15 +760,23 @@ export default function ShiftsPage() {
 
   // qué días están expandidos (todos colapsados al inicio)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [searchExpansion, setSearchExpansion] = useState<{
+    query: string;
+    days: Record<string, boolean>;
+  }>({ query: '', days: {} });
   const [mobileDrawerKey, setMobileDrawerKey] = useState<string | null>(null);
+  const expansionQuery = appliedSearch.trim();
 
   const toggleDay = useCallback((key: string) => {
     if (window.matchMedia('(max-width: 767px)').matches) {
       setMobileDrawerKey(currentKey => currentKey === key ? null : key);
-      setExpanded(prev => {
-        const willOpen = !prev[key];
-        const next = Object.fromEntries(Object.keys(prev).map(dayKey => [dayKey, false]));
-        return { ...next, [key]: willOpen };
+      return;
+    }
+
+    if (expansionQuery) {
+      setSearchExpansion(prev => {
+        const days = prev.query === expansionQuery ? prev.days : {};
+        return { query: expansionQuery, days: { ...days, [key]: !(days[key] ?? true) } };
       });
       return;
     }
@@ -811,13 +785,11 @@ export default function ShiftsPage() {
       const willOpen = !prev[key];
       return { ...prev, [key]: willOpen };
     });
-  }, []);
+  }, [expansionQuery]);
 
   const closeMobileDayDrawer = useCallback(() => {
-    if (!mobileDrawerKey) return;
-    setExpanded(prev => ({ ...prev, [mobileDrawerKey]: false }));
     setMobileDrawerKey(null);
-  }, [mobileDrawerKey]);
+  }, []);
 
   const { drawerRef: dayDrawerRef, scrollAreaRef: dayDrawerScrollRef } = useMobileDrawerNavigation({
     isOpen: Boolean(mobileDrawerKey),
@@ -1229,14 +1201,19 @@ export default function ShiftsPage() {
     const availableShiftKeys = getAvailableShiftKeys(key) as Array<keyof typeof shiftData>;
     const totalVolsOnDay = availableShiftKeys.reduce((acc, t) => acc + shiftData[t].length, 0);
 
-    const isFiltering = appliedSearch.trim() !== '' || selectedCommittees.length > 0 || selectedStakes.length > 0 || selectedWards.length > 0;
+    const hasVolunteerFilters = selectedStakes.length > 0 || selectedWards.length > 0
+      || appliedSearch.split(',').map(term => normalizeSearch(term.trim())).filter(Boolean)
+        .some(term => !scopedCommittees.some(committee => normalizeSearch(committee).includes(term)));
+    const hasRequiredCapacity = availableShiftKeys.some(shiftKey => (requiredByShift[shiftKey] ?? 0) > 0);
 
-    if (totalVolsOnDay === 0) {
+    if (totalVolsOnDay === 0 && (viewMode !== 'turnos' || hasVolunteerFilters || !hasRequiredCapacity)) {
       return null;
     }
 
-    const isSearchActive = appliedSearch.trim() !== '';
-    const isOpen = !!expanded[key] || isSearchActive;
+    // Open search results by default while respecting manual toggles for this query.
+    const isOpen = expansionQuery
+      ? (searchExpansion.query === expansionQuery ? searchExpansion.days[key] ?? true : true)
+      : !!expanded[key];
 
     const dayIndex = EVENT_DAYS.findIndex(d => d.key === key);
     const bgColors = [
@@ -1272,7 +1249,11 @@ export default function ShiftsPage() {
                   Simulación · 9 AM–2 PM
                 </span>
               )}
-              <span className={cn("material-symbols-outlined text-[20px] text-text-dim transition-transform duration-300", isOpen && "rotate-180 text-primary")}>
+              <span className={cn(
+                "material-symbols-outlined text-[20px] text-text-dim transition-transform duration-300",
+                isOpen && "md:rotate-180 md:text-primary",
+                mobileDrawerKey === key && "max-md:rotate-180 max-md:text-primary",
+              )}>
                 expand_more
               </span>
             </div>
@@ -1280,36 +1261,20 @@ export default function ShiftsPage() {
             {/* Right: 4 Columns */}
             <div className="flex items-center shrink-0 ml-auto">
               {availableShiftKeys.map((t, i) => {
-                let count = shiftData[t].length;
-                if (viewMode === 'active') {
-                  count = shiftData[t].filter(vol => {
-                    const s = getShiftRecord(vol.id, key, t);
-                    const isCompletedLocal = !!completedShiftsMap[`${vol.id}-${key}-${t}`];
-                    const isCheckedOut = s?.checked_out || isCompletedLocal;
-                    return !!(s && s.checked_in && !isCheckedOut);
-                  }).length;
-                }
+                const count = shiftData[t].length;
 
-                let minRequired = 0;
-                if (activeCommittee) {
-                  minRequired = committeeRequirements[activeCommittee]?.[t] ?? 0;
-                } else {
-                  committees.forEach(c => {
-                    minRequired += (committeeRequirements[c]?.[t] ?? 0);
-                  });
-                }
+                const minRequired = requiredByShift[t] ?? 0;
 
                 let numColorClass = "text-text font-semibold";
                 let labelColorClass = "text-text-dim font-bold";
 
                 if (showCapacityColors && minRequired > 0) {
-                  const isUnderstaffed = count < minRequired;
-                  const isCritical = count <= Math.floor(minRequired / 2);
+                  const capacityStatus = getShiftCapacityStatus(count, minRequired);
 
-                  if (isCritical) {
+                  if (capacityStatus === 'critical') {
                     numColorClass = "text-rose-500 font-extrabold";
                     labelColorClass = "text-rose-500/80 font-bold";
-                  } else if (isUnderstaffed) {
+                  } else if (capacityStatus === 'risk') {
                     numColorClass = "text-amber-500 font-extrabold";
                     labelColorClass = "text-amber-500/80 font-bold";
                   } else {
@@ -1345,14 +1310,7 @@ export default function ShiftsPage() {
                   const vols = shiftData[t];
                   const count = vols.length;
 
-                  let minRequired = 0;
-                  if (activeCommittee) {
-                    minRequired = committeeRequirements[activeCommittee]?.[t] ?? 0;
-                  } else {
-                    committees.forEach(c => {
-                      minRequired += (committeeRequirements[c]?.[t] ?? 0);
-                    });
-                  }
+                  const minRequired = requiredByShift[t] ?? 0;
 
                   const c = getShiftColor(t, count, minRequired, showCapacityColors);
                   const combinedKey = `${key}-${t}`;
@@ -1552,7 +1510,7 @@ export default function ShiftsPage() {
           )}
         </AnimatePresence>
 
-        {isOpen && (
+        {mobileDrawerKey === key && (
           <>
             {/* Mobile Bottom Drawer */}
             <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end pointer-events-none">
@@ -1590,12 +1548,7 @@ export default function ShiftsPage() {
                     <div className="text-xl font-black text-white/40 mb-4 px-2">-</div>
                     <div className="flex flex-col items-center flex-1">
                       <span className="text-drawer-kpi-value text-white drop-shadow-md">
-                        {availableShiftKeys.reduce((acc, t) => {
-                          let minReq = 0;
-                          if (activeCommittee) minReq = committeeRequirements[activeCommittee]?.[t] ?? 0;
-                          else committees.forEach(c => minReq += (committeeRequirements[c]?.[t] ?? 0));
-                          return acc + minReq;
-                        }, 0)}
+                        {availableShiftKeys.reduce((acc, t) => acc + (requiredByShift[t] ?? 0), 0)}
                       </span>
                       <span className="text-drawer-kpi-label text-white/70 mt-2">Requeridos</span>
                     </div>
@@ -1603,12 +1556,7 @@ export default function ShiftsPage() {
 
                   <div className="text-center mb-8 px-4 border-t border-white/20 pt-6 mt-2">
                     <p className="font-inter text-sm font-medium text-white/90 leading-snug">
-                      Estado actual de reclutamiento para el día. {totalVolsOnDay >= availableShiftKeys.reduce((acc, t) => {
-                        let minReq = 0;
-                        if (activeCommittee) minReq = committeeRequirements[activeCommittee]?.[t] ?? 0;
-                        else committees.forEach(c => minReq += (committeeRequirements[c]?.[t] ?? 0));
-                        return acc + minReq;
-                      }, 0) ? "La meta diaria ha sido alcanzada." : "Aún se necesitan voluntarios."}
+                      Estado actual de reclutamiento para el día. {totalVolsOnDay >= availableShiftKeys.reduce((acc, t) => acc + (requiredByShift[t] ?? 0), 0) ? "La meta diaria ha sido alcanzada." : "Aún se necesitan voluntarios."}
                     </p>
                   </div>
 
@@ -1619,14 +1567,7 @@ export default function ShiftsPage() {
                         const info = getOfficialShiftTime(key, t);
                         const vols = shiftData[t];
                         const count = vols.length;
-                        let minRequired = 0;
-                        if (activeCommittee) {
-                          minRequired = committeeRequirements[activeCommittee]?.[t] ?? 0;
-                        } else {
-                          committees.forEach(c => {
-                            minRequired += (committeeRequirements[c]?.[t] ?? 0);
-                          });
-                        }
+                        const minRequired = requiredByShift[t] ?? 0;
 
                         const combinedKey = `${key}-${t}`;
                         const isShiftExpanded = !!expandedShifts[combinedKey];
@@ -1640,14 +1581,13 @@ export default function ShiftsPage() {
                         let drawerIconColor = "text-white/80";
 
                         if (showCapacityColors && minRequired > 0) {
-                          const isUnderstaffed = count < minRequired;
-                          const isCritical = minRequired > 0 && count <= Math.floor(minRequired / 2);
+                          const capacityStatus = getShiftCapacityStatus(count, minRequired);
 
-                          if (isCritical) {
+                          if (capacityStatus === 'critical') {
                             drawerCardBg = "bg-rose-500/20 border-rose-500/40";
                             drawerBadgeBg = "bg-rose-500/30 text-rose-200 border-rose-500/50 font-bold";
                             drawerIconColor = "text-rose-400";
-                          } else if (isUnderstaffed) {
+                          } else if (capacityStatus === 'risk') {
                             drawerCardBg = "bg-amber-500/20 border-amber-500/40";
                             drawerBadgeBg = "bg-amber-500/30 text-amber-200 border-amber-500/50 font-bold";
                             drawerIconColor = "text-amber-400";
@@ -1886,7 +1826,9 @@ export default function ShiftsPage() {
             onSelect={(section) => {
               const nextMode = section === 'active' ? 'active' : 'turnos';
               setViewMode(nextMode);
-              const newUrl = nextMode === 'active' ? '/shifts?view=active' : '/shifts';
+              const params = new URLSearchParams(window.location.search);
+              params.set('view', nextMode);
+              const newUrl = `/shifts?${params.toString()}`;
               window.history.replaceState(null, '', newUrl);
             }}
           />

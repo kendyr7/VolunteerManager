@@ -143,7 +143,8 @@ export class CommitteeAreaQueryService {
     if (committees.length === 0) return null;
 
     const selectedCommittee = isAdmin
-      ? committees.find((committee) => committee.id === requestedCommitteeId || committee.slug === requestedCommitteeId) || committees[0]
+      ? committees.find((committee) => committee.id === requestedCommitteeId || committee.slug === requestedCommitteeId
+        || (requestedCommitteeId && committee.name.localeCompare(requestedCommitteeId, 'es', { sensitivity: 'base' }) === 0)) || committees[0]
       : committees[0];
     if (!hasCapability(authorization, 'view_area_coverage', selectedCommittee.id)) return null;
 
@@ -151,7 +152,7 @@ export class CommitteeAreaQueryService {
       supabase,
       'committee_areas',
       'id, committee_id, name, description, status, sort_order',
-      (query) => query.eq('committee_id', selectedCommittee.id).order('sort_order').order('name')
+      (query) => query.eq('committee_id', selectedCommittee.id).order('sort_order').order('name').order('id')
     );
     const areaIds = areaRows.map((area) => area.id);
     const validAreaIds = new Set(areaIds);
@@ -160,7 +161,7 @@ export class CommitteeAreaQueryService {
       supabase,
       'volunteers',
       'id, first_name, last_name, age, neighborhood, stake, phone',
-      (query) => query.eq('committee_id', selectedCommittee.id).or('status.is.null,status.neq.archived').order('first_name').order('last_name')
+      (query) => query.eq('committee_id', selectedCommittee.id).or('status.is.null,status.neq.archived').order('first_name').order('last_name').order('id')
     );
     const volunteerIds = volunteerRows.map((volunteer) => volunteer.id);
     const operationalEventDates = getOperationalEventDays();
@@ -172,14 +173,14 @@ export class CommitteeAreaQueryService {
             supabase,
             'area_shift_requirements',
             'area_id, day_key, shift_key, required_count',
-            (query) => query.in('area_id', areaIds)
+            (query) => query.in('area_id', areaIds).in('day_key', eventDayKeys).order('id')
           ),
           volunteerIds.length > 0
             ? fetchAllRowsStrict<ShiftAreaRow>(
                 supabase,
                 'shifts',
                 'id, volunteer_id, day_key, shift_key, area_id',
-                (query) => query.in('volunteer_id', volunteerIds).in('day_key', eventDayKeys)
+                (query) => query.in('volunteer_id', volunteerIds).in('day_key', eventDayKeys).order('id')
               )
             : Promise.resolve([]),
         ])
@@ -190,7 +191,7 @@ export class CommitteeAreaQueryService {
                 supabase,
                 'shifts',
                 'id, volunteer_id, day_key, shift_key, area_id',
-                (query) => query.in('volunteer_id', volunteerIds).in('day_key', eventDayKeys)
+                (query) => query.in('volunteer_id', volunteerIds).in('day_key', eventDayKeys).order('id')
               )
             : [],
         ];
