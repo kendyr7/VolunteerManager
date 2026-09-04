@@ -1,5 +1,6 @@
 import type { DashboardOperationalData } from '@/app/actions/dashboard';
 import type { DashboardInsight } from '@/lib/dashboard-insight-types';
+import { dashboardScopeMatches } from '@/lib/dashboard-scope';
 
 export const DASHBOARD_SIMULATION_STORAGE_KEY = 'volunteer-manager.dashboard.include-simulation';
 const DASHBOARD_SESSION_CACHE_KEY = 'volunteer-manager.dashboard.prepared-v1';
@@ -66,14 +67,10 @@ export function clearPreparedDashboardSession() {
 export function preparedDashboardMatches(
   prepared: PreparedDashboardSession,
   targetCommittee: string,
-  includeSimulation: boolean
+  includeSimulation: boolean,
+  authorizationKey: string
 ) {
   if (prepared.includeSimulation !== includeSimulation) return false;
-
-  const target = targetCommittee.trim().toLowerCase();
-  const effectiveScope = prepared.data.effectiveCommitteeScope.trim().toLowerCase();
-  if (target === 'todos' || target === 'all') {
-    return !prepared.data.canSeeGlobal || effectiveScope === 'todos' || effectiveScope === 'all';
-  }
-  return target === effectiveScope;
+  if (prepared.data.authorizationKey !== authorizationKey) return false;
+  return dashboardScopeMatches(prepared.data.effectiveCommitteeScope, targetCommittee);
 }

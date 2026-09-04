@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -96,6 +96,8 @@ export function DashboardDistributionChart({
   showMetricToggle = true,
 }: DashboardDistributionChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [animationReplay, setAnimationReplay] = useState(0);
+  const shouldReduceMotion = useReducedMotion();
 
   // Filter out items with 0 count for the chart slices, but keep list of all items
   const activeItems = useMemo(() => {
@@ -227,21 +229,27 @@ export function DashboardDistributionChart({
               )}
 
               {/* Slices */}
-              {slices.map((slice) => {
+              {slices.map((slice, index) => {
                 const isHovered = hoveredIndex === slice.originalIndex;
                 const isOtherHovered = hoveredIndex !== null && !isHovered;
 
                 return (
-                  <path
-                    key={slice.id}
+                  <motion.path
+                    key={`${slice.id}-${metric}-${animationReplay}`}
                     d={slice.pathData}
                     fill={slice.color}
                     onMouseEnter={() => setHoveredIndex(slice.originalIndex)}
                     onMouseLeave={() => setHoveredIndex(null)}
+                    onClick={() => setAnimationReplay(value => value + 1)}
+                    initial={shouldReduceMotion ? false : { pathLength: 0, opacity: 0 }}
+                    animate={{
+                      pathLength: 1,
+                      opacity: isOtherHovered ? 0.35 : 1,
+                      scale: isHovered ? 1.03 : 1,
+                    }}
+                    transition={{ duration: shouldReduceMotion ? 0 : 0.42, delay: shouldReduceMotion ? 0 : index * 0.045, ease: [0.22, 1, 0.36, 1] }}
                     className="transition-all duration-200 cursor-pointer focus:outline-none"
                     style={{
-                      opacity: isOtherHovered ? 0.35 : 1,
-                      transform: isHovered ? 'scale(1.03)' : 'scale(1)',
                       transformOrigin: '140px 140px',
                       filter: isHovered ? `drop-shadow(0 0 8px ${slice.color}80)` : 'none',
                     }}
@@ -310,10 +318,14 @@ export function DashboardDistributionChart({
               const isOtherHovered = hoveredIndex !== null && !isHovered;
 
               return (
-                <div
-                  key={item.id}
+                <motion.div
+                  key={`${item.id}-${metric}-${animationReplay}`}
                   onMouseEnter={() => setHoveredIndex(idx)}
                   onMouseLeave={() => setHoveredIndex(null)}
+                  onClick={() => setAnimationReplay(value => value + 1)}
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: isOtherHovered ? 0.5 : 1, y: 0 }}
+                  transition={{ duration: shouldReduceMotion ? 0 : 0.24, delay: shouldReduceMotion ? 0 : idx * 0.035, ease: [0.22, 1, 0.36, 1] }}
                   className={cn(
                     "p-3 rounded-xl border transition-all duration-200 flex items-center justify-between gap-3 cursor-pointer select-none",
                     isHovered
@@ -350,7 +362,7 @@ export function DashboardDistributionChart({
                       </p>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>

@@ -101,7 +101,10 @@ function TypedSummary({
 
   return (
     <>
-      <p aria-hidden="true" className="text-[15px] font-semibold leading-7 text-text sm:text-base">
+      <p
+        aria-hidden="true"
+        className="max-w-[72ch] text-pretty text-[15px] font-semibold leading-7 text-text [overflow-wrap:anywhere] sm:text-base"
+      >
         {revealUnits.slice(0, visibleUnits).map((unit, index) => {
           if (unit.kind === 'text') return <span key={`text-${index}`}>{unit.value}</span>;
 
@@ -109,7 +112,7 @@ function TypedSummary({
             <span
               key={`highlight-${unit.value.id}`}
               className={cn(
-                'relative top-px mx-0.5 inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 align-middle text-[13px] font-extrabold leading-6 sm:text-sm',
+                'mx-0.5 my-0.5 inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 align-baseline whitespace-nowrap text-[13px] font-extrabold leading-6 sm:text-sm',
                 toneClasses[unit.value.tone]
               )}
             >
@@ -139,31 +142,62 @@ export function DashboardInsightPanel({
   const [isExpanded, setIsExpanded] = useState(true);
   const template = insight?.template || fallbackMessage;
   const highlights = insight?.highlights || EMPTY_HIGHLIGHTS;
+  const generatedAt = insight?.generatedAt;
+  const updatedLabel = useMemo(() => {
+    if (!generatedAt) return null;
+    const generatedDate = new Date(generatedAt);
+    if (Number.isNaN(generatedDate.getTime())) return null;
+    return new Intl.DateTimeFormat('es-GT', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(generatedDate);
+  }, [generatedAt]);
 
   return (
-    <section className="mt-2 w-full">
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => setIsExpanded(current => !current)}
-          aria-expanded={isExpanded}
-          aria-controls="dashboard-intelligent-analysis"
-          className="inline-flex min-h-9 items-center gap-2 rounded-full bg-dark3 px-3 text-xs font-bold text-text transition-colors duration-200 hover:bg-gold-faint hover:text-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
-        >
-          <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
-            auto_awesome
-          </span>
-          Análisis inteligente
-          <span
-            className={cn(
-              'material-symbols-outlined text-[16px] transition-transform duration-200 motion-reduce:transition-none',
-              isExpanded ? 'rotate-180' : 'rotate-0'
-            )}
-            aria-hidden="true"
+    <section
+      className="mt-3 w-full border-t border-border/70 pt-3"
+      aria-busy={isLoading}
+    >
+      <div className="flex w-full flex-nowrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsExpanded(current => !current)}
+            aria-expanded={isExpanded}
+            aria-controls="dashboard-intelligent-analysis"
+            className="inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-dark3 px-2.5 text-[11px] font-bold text-text transition-colors duration-200 hover:bg-gold-faint hover:text-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold sm:gap-2 sm:px-3 sm:text-xs"
           >
-            expand_more
-          </span>
-        </button>
+            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+              auto_awesome
+            </span>
+            Análisis inteligente
+            <span
+              className={cn(
+                'material-symbols-outlined text-[16px] transition-transform duration-200 motion-reduce:transition-none',
+                isExpanded ? 'rotate-180' : 'rotate-0'
+              )}
+              aria-hidden="true"
+            >
+              expand_more
+            </span>
+          </button>
+
+          {updatedLabel && (
+            <time
+              dateTime={generatedAt}
+              title={updatedLabel ? `Actualizado ${updatedLabel}` : undefined}
+              className="inline-flex min-w-0 shrink items-center gap-1 overflow-hidden whitespace-nowrap text-[10px] font-medium text-text-dim sm:text-[11px]"
+            >
+              <span className="material-symbols-outlined text-[14px]" aria-hidden="true">
+                schedule
+              </span>
+              <span>Actualizado</span>
+              <span className="hidden truncate sm:inline">{updatedLabel}</span>
+            </time>
+          )}
+        </div>
 
         <button
           type="button"
@@ -196,7 +230,7 @@ export function DashboardInsightPanel({
             transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <div className="min-h-[4.75rem] pt-3">
+            <div className="min-h-[4.75rem] max-w-[72ch] pt-3">
               {isLoading && !insight ? (
                 <div
                   className="flex items-center gap-2 text-sm font-semibold text-text-dim"

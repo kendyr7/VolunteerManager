@@ -3,6 +3,7 @@
 import { getAdminClient } from "@/lib/supabase/server";
 import { requireCapability } from "@/lib/authorization";
 import { hasCapability } from "@/lib/role-permissions";
+import { getDashboardAuthorizationKey } from "@/lib/dashboard-scope";
 import {
   getActiveEventDays,
   getAvailableShiftKeys,
@@ -63,6 +64,7 @@ export interface DashboardGlobalStats {
 }
 
 export interface DashboardOperationalData {
+  authorizationKey: string;
   canSeeGlobal: boolean;
   effectiveCommitteeScope: string;
   heatmapMatrix: HeatmapDayData[];
@@ -176,6 +178,7 @@ export async function getDashboardOperationalDataAction(
     if (!canSeeGlobal && !userCommitteeId) {
       return {
         data: {
+          authorizationKey: getDashboardAuthorizationKey(authorization),
           canSeeGlobal: false,
           effectiveCommitteeScope: '',
           heatmapMatrix: [],
@@ -669,6 +672,7 @@ export async function getDashboardOperationalDataAction(
     };
 
     const data: DashboardOperationalData = {
+      authorizationKey: getDashboardAuthorizationKey(authorization),
       canSeeGlobal,
       effectiveCommitteeScope: effectiveCommittee,
       heatmapMatrix,

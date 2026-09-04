@@ -15,6 +15,7 @@
     "check:whatsapp-retry": "node --no-warnings --experimental-strip-types scripts/check-whatsapp-retry-policy.mts",
     "preview:whatsapp-reminders": "node --no-warnings --experimental-strip-types scripts/preview-automatic-reminders.mts",
     "test:authorization": "node scripts/test_authorization_suite.js",
+    "test:dashboard": "node scripts/test-dashboard-kpis.js",
     "test:settings-authorization": "node scripts/test_settings_authorization.js"
   },
   "dependencies": {

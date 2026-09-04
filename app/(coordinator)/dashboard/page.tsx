@@ -12,7 +12,7 @@ import {
   getDashboardOperationalDataAction,
   type DashboardOperationalData,
 } from "@/app/actions/dashboard";
-import { getActiveEventDays, getAvailableShiftKeys, formatDateShort } from "@/lib/dates";
+import { getActiveEventDays, formatDateShort } from "@/lib/dates";
 import { 
   Select, 
   SelectTrigger, 
@@ -26,6 +26,7 @@ import { DashboardDistributionChart, type DistributionItem } from "@/components/
 import { DashboardInsightPanel } from "@/components/DashboardInsightPanel";
 import type { DashboardInsight } from "@/lib/dashboard-insight-types";
 import { hasCapability, type AuthorizationSnapshot } from "@/lib/role-permissions";
+import { dashboardScopeMatches, getDashboardAuthorizationKey } from "@/lib/dashboard-scope";
 import {
   DASHBOARD_SIMULATION_STORAGE_KEY,
   preparedDashboardMatches,
@@ -39,6 +40,9 @@ type DashboardGreeting = {
   emoji: string;
   message: string;
 };
+
+const EMPTY_HEATMAP: DashboardOperationalData['heatmapMatrix'] = [];
+const EMPTY_DAILY_COUNTS: Record<string, number> = {};
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -83,7 +87,7 @@ export default function CoordinatorDashboard() {
     committeesList,
     shiftsData,
     globalShifts,
-    checkedInMap: dbCheckedInMap,
+    sessionsData,
     requirementsByCommittee,
     loading,
   } = useCoordinatorData();
@@ -97,12 +101,9 @@ export default function CoordinatorDashboard() {
       dateNum: formatDateShort(date).split(' ')[1],
     })), [includeSimulation]);
 
-  const committeeRequirements = useMemo(() => {
-    return requirementsByCommittee || {};
-  }, [requirementsByCommittee]);
-
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
   const [selectedChartDay, setSelectedChartDay] = useState<string | null>(null);
+  const [chartAnimationKey, setChartAnimationKey] = useState(0);
   const [hoveredHeatmapDay, setHoveredHeatmapDay] = useState<string | null>(null);
   const [chartMetric, setChartMetric] = useState<'volunteers' | 'shifts'>('volunteers');
   const [selectedHeatmapCommittee, setSelectedHeatmapCommittee] = useState<string>('todos');
@@ -119,7 +120,12 @@ export default function CoordinatorDashboard() {
   const [, setConfirmedReminders] = useState<Record<string, boolean>>({});
   const [userCommittee, setUserCommittee] = useState<string>('');
   const [permTick, setPermTick] = useState(0);
+  const [authorizationKey, setAuthorizationKey] = useState('');
   const [operationalData, setOperationalData] = useState<DashboardOperationalData | null>(null);
+  const [operationalScopeKey, setOperationalScopeKey] = useState('');
+  const [operationalError, setOperationalError] = useState<string | null>(null);
+  const operationalRequestRef = useRef(0);
+  const insightRequestRef = useRef(0);
   const lastInsightScopeRef = useRef<string | null>(null);
   const preparedSessionCheckedRef = useRef(false);
   const supabase = useMemo(() => createClient(), []);
@@ -403,9 +409,11 @@ export default function CoordinatorDashboard() {
   }, []);
 
   const loadOperationalData = useCallback(async (targetCommittee?: string, forceInsight = false) => {
-    const effectiveTargetCommittee = targetCommittee || selectedHeatmapCommittee;
-    const insightScopeKey = `${permTick}:${effectiveTargetCommittee}:${includeSimulation}`;
+    const effectiveTargetCommittee = targetCommittee ?? selectedHeatmapCommittee;
+    const insightScopeKey = `${authorizationKey}:${permTick}:${effectiveTargetCommittee}:${includeSimulation}`;
+    const requestId = ++operationalRequestRef.current;
     const shouldGenerateInsight = forceInsight || lastInsightScopeRef.current !== insightScopeKey;
+    const insightRequestId = shouldGenerateInsight ? ++insightRequestRef.current : insightRequestRef.current;
 
     if (shouldGenerateInsight) {
       lastInsightScopeRef.current = insightScopeKey;
@@ -419,10 +427,21 @@ export default function CoordinatorDashboard() {
         shouldGenerateInsight,
         forceInsight ? 'ai' : 'instant'
       );
-      if (res?.data) {
-        setOperationalData(res.data);
+      if (res?.data && (res.data.authorizationKey !== authorizationKey
+        || !dashboardScopeMatches(res.data.effectiveCommitteeScope, effectiveTargetCommittee))) {
+        if (requestId === operationalRequestRef.current) {
+          setOperationalError('Los permisos cambiaron. Recarga la página para actualizar los indicadores.');
+        }
+        return;
       }
-      if (shouldGenerateInsight) {
+      if (requestId === operationalRequestRef.current && res?.data) {
+        setOperationalData(res.data);
+        setOperationalScopeKey(insightScopeKey);
+        setOperationalError(null);
+      } else if (requestId === operationalRequestRef.current && res?.error) {
+        setOperationalError('No se pudieron actualizar los indicadores. Intenta de nuevo.');
+      }
+      if (shouldGenerateInsight && insightRequestId === insightRequestRef.current) {
         setDashboardInsight(res?.insight || null);
         if (res?.data) {
           writePreparedDashboardSession({
@@ -434,35 +453,69 @@ export default function CoordinatorDashboard() {
       }
     } catch (err) {
       console.error("Error loading dashboard operational data:", err);
-      if (shouldGenerateInsight) setDashboardInsight(null);
+      if (requestId === operationalRequestRef.current) {
+        setOperationalError('No se pudieron actualizar los indicadores. Intenta de nuevo.');
+      }
+      if (shouldGenerateInsight && insightRequestId === insightRequestRef.current) setDashboardInsight(null);
     } finally {
-      if (shouldGenerateInsight) setIsInsightLoading(false);
+      if (shouldGenerateInsight && insightRequestId === insightRequestRef.current) setIsInsightLoading(false);
     }
-  }, [includeSimulation, permTick, selectedHeatmapCommittee]);
+  }, [authorizationKey, includeSimulation, permTick, selectedHeatmapCommittee]);
 
   useEffect(() => {
     if (dashboardAccess !== 'allowed') return;
 
+    let active = true;
+    const invalidateRequests = () => {
+      active = false;
+      operationalRequestRef.current++;
+      insightRequestRef.current++;
+    };
     if (!preparedSessionCheckedRef.current) {
       preparedSessionCheckedRef.current = true;
       const prepared = readPreparedDashboardSession();
       if (
         prepared
-        && preparedDashboardMatches(prepared, selectedHeatmapCommittee, includeSimulation)
+        && preparedDashboardMatches(prepared, selectedHeatmapCommittee, includeSimulation, authorizationKey)
       ) {
-        const insightScopeKey = `${permTick}:${selectedHeatmapCommittee}:${includeSimulation}`;
+        const insightScopeKey = `${authorizationKey}:${permTick}:${selectedHeatmapCommittee}:${includeSimulation}`;
         lastInsightScopeRef.current = insightScopeKey;
         window.queueMicrotask(() => {
+          if (!active) return;
           setOperationalData(prepared.data);
+          setOperationalScopeKey(insightScopeKey);
           setDashboardInsight(prepared.insight);
           setIsInsightLoading(false);
         });
-        return;
+        return invalidateRequests;
       }
     }
 
     void loadOperationalData(selectedHeatmapCommittee);
-  }, [dashboardAccess, selectedHeatmapCommittee, includeSimulation, permTick, loadOperationalData]);
+    return invalidateRequests;
+  }, [authorizationKey, dashboardAccess, selectedHeatmapCommittee, includeSimulation, permTick, loadOperationalData]);
+
+  // Realtime rows are invalidation signals only: their visibility can differ
+  // from report permissions and a paginated browser fetch can be incomplete.
+  useEffect(() => {
+    if (dashboardAccess !== 'allowed' || loading) return;
+    const timer = window.setTimeout(() => void loadOperationalData(), 500);
+    return () => window.clearTimeout(timer);
+  }, [dashboardAccess, loading, rawVolunteers, shiftsData, sessionsData, requirementsByCommittee, committeesList, loadOperationalData]);
+
+  useEffect(() => {
+    if (dashboardAccess !== 'allowed') return;
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void loadOperationalData();
+    };
+    // Also refresh changes outside the row visibility of this coordinator.
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [dashboardAccess, loadOperationalData]);
 
   const regenerateDashboardInsight = useCallback(() => {
     void loadOperationalData(selectedHeatmapCommittee, true);
@@ -507,8 +560,9 @@ export default function CoordinatorDashboard() {
     const applyAuthorizationSnapshot = (snapshot: AuthorizationSnapshot) => {
       if (!active) return;
       const committee = snapshot.committeeName || '';
+      setAuthorizationKey(getDashboardAuthorizationKey(snapshot));
       setUserCommittee(committee);
-      if (!hasCapability(snapshot, 'view_global_reports') && committee) {
+      if (!hasCapability(snapshot, 'view_global_reports')) {
         setSelectedHeatmapCommittee(committee);
       }
       setDashboardAccess(hasCapability(snapshot, 'view_dashboard') ? 'allowed' : 'denied');
@@ -538,217 +592,22 @@ export default function CoordinatorDashboard() {
     return volunteers.filter(v => (v.status || '').toLowerCase() !== 'archived');
   }, [volunteers]);
 
-  const activeAssignmentCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    activeVolunteers.forEach(volunteer => {
-      const days = globalShifts[volunteer.id];
-      if (!days) return;
-      Object.entries(days).forEach(([dayKey, shiftKeys]) => {
-        shiftKeys.forEach(shiftKey => {
-          const key = `${volunteer.committee}|${dayKey}|${shiftKey}`;
-          counts.set(key, (counts.get(key) || 0) + 1);
-        });
-      });
-    });
-    return counts;
-  }, [activeVolunteers, globalShifts]);
-
-  const clientGlobalStats = useMemo(() => {
-    let totalRequired = 0;
-    let totalAssignedInRequired = 0;
-    let criticalAlerts = 0;
-
-    const isFiltered = selectedHeatmapCommittee && selectedHeatmapCommittee !== 'todos' && selectedHeatmapCommittee !== 'all';
-    const committeesToInclude = isFiltered
-      ? [selectedHeatmapCommittee]
-      : committeesList.map(c => c.name);
-
-    EVENT_DAYS.forEach(day => {
-      committeesToInclude.forEach(comm => {
-        getAvailableShiftKeys(day.key).forEach(shiftId => {
-          const req = committeeRequirements[comm]?.[shiftId] ?? 0;
-          totalRequired += req;
-
-          const count = activeAssignmentCounts.get(`${comm}|${day.key}|${shiftId}`) || 0;
-
-          totalAssignedInRequired += Math.min(count, req);
-
-          if (count < req) {
-            criticalAlerts++;
-          }
-        });
-      });
-    });
-
-    const relevantVolunteers = isFiltered
-      ? activeVolunteers.filter(v => v.committee === selectedHeatmapCommittee)
-      : activeVolunteers;
-
-    const relevantVolunteerIds = new Set(relevantVolunteers.map(v => v.id));
-
-    const totalRecruited = relevantVolunteers.length;
-    const targetVolunteers = totalRequired;
-    const recruitmentPercentage = targetVolunteers > 0 ? Math.round((totalRecruited / targetVolunteers) * 100) : 0;
-    const globalCoveragePercentage = totalRequired > 0 ? Math.round((totalAssignedInRequired / totalRequired) * 100) : 100;
-    
-    let totalGlobalAssigned = 0;
-    let totalGlobalCheckedIn = 0;
-    const includedDayKeys = new Set(EVENT_DAYS.map(day => day.key));
-    Object.entries(globalShifts).forEach(([volId, days]) => {
-      if (!relevantVolunteerIds.has(volId)) return;
-      Object.entries(days).forEach(([day, shifts]) => {
-        if (!includedDayKeys.has(day)) return;
-        shifts.forEach(shift => {
-          totalGlobalAssigned++;
-          if (dbCheckedInMap[`${volId}-${day}-${shift}`]) {
-            totalGlobalCheckedIn++;
-          }
-        });
-      });
-    });
-
-    const attendanceRate = totalGlobalAssigned > 0
-      ? Math.round((totalGlobalCheckedIn / totalGlobalAssigned) * 100) : 0;
-
-    return {
-      totalRecruited,
-      targetVolunteers,
-      recruitmentPercentage,
-      globalCoveragePercentage,
-      criticalAlerts,
-      attendanceRate,
-      checkedInCount: totalGlobalCheckedIn,
-      totalAssigned: totalGlobalAssigned,
-    };
-  }, [activeVolunteers, activeAssignmentCounts, committeesList, globalShifts, committeeRequirements, dbCheckedInMap, selectedHeatmapCommittee, EVENT_DAYS]);
-
-  const clientCommitteeStatus = useMemo(() => {
-    const isFiltered = selectedHeatmapCommittee && selectedHeatmapCommittee !== 'todos' && selectedHeatmapCommittee !== 'all';
-    const listToProcess = isFiltered
-      ? committeesList.filter(c => c.name === selectedHeatmapCommittee)
-      : committeesList;
-
-    return listToProcess.map((c, index) => {
-      let totalReq = 0;
-      let totalAssigned = 0;
-      let totalMissing = 0;
-
-      EVENT_DAYS.forEach(day => {
-        getAvailableShiftKeys(day.key).forEach(shiftId => {
-          const req = committeeRequirements[c.name]?.[shiftId] ?? 0;
-          totalReq += req;
-
-          const count = activeAssignmentCounts.get(`${c.name}|${day.key}|${shiftId}`) || 0;
-
-          totalAssigned += Math.min(count, req);
-          if (count < req) {
-            totalMissing += (req - count);
-          }
-        });
-      });
-
-      const coverage = totalReq > 0 ? Math.round((totalAssigned / totalReq) * 100) : 100;
-      let status: 'success' | 'warning' | 'high_risk' = "success";
-      if (coverage < 60) status = "high_risk";
-      else if (coverage < 85) status = "warning";
-
-      return {
-        id: index + 1,
-        name: c.name,
-        coverage,
-        missing: totalMissing,
-        status
-      };
-    }).sort((a, b) => a.coverage - b.coverage);
-  }, [activeAssignmentCounts, committeesList, committeeRequirements, selectedHeatmapCommittee, EVENT_DAYS]);
-
-  const clientHeatmapMatrix = useMemo(() => {
-    return EVENT_DAYS.map(day => {
-      const availableShiftKeys = new Set(getAvailableShiftKeys(day.key));
-      const shiftsData = (['T1', 'T2', 'T3', 'T4'] as const).map(shiftId => {
-        if (!availableShiftKeys.has(shiftId)) {
-          return { id: shiftId, enrolled: 0, required: 0, coverage: 1 };
-        }
-        let totalReq = 0;
-        let totalAssigned = 0;
-
-        const activeCommitteeNames = committeesList.map(committee => committee.name);
-        const allCommKeys = activeVolunteers.some(volunteer => volunteer.committee === 'Sin comité')
-          ? [...activeCommitteeNames, 'Sin comité']
-          : activeCommitteeNames;
-        const targetCommittees = (selectedHeatmapCommittee === 'todos' || selectedHeatmapCommittee === 'all')
-          ? allCommKeys
-          : [selectedHeatmapCommittee];
-
-        targetCommittees.forEach(commName => {
-          totalReq += committeeRequirements[commName]?.[shiftId] ?? 0;
-
-          const assigned = activeAssignmentCounts.get(`${commName}|${day.key}|${shiftId}`) || 0;
-          totalAssigned += assigned;
-        });
-        return { shift: shiftId, required: totalReq, assigned: totalAssigned, coverage: totalReq === 0 ? 1 : totalAssigned / totalReq };
-      });
-      return { day: day.key, shortLabel: day.label, dayLabel: day.dateNum, shifts: shiftsData };
-    });
-  }, [committeeRequirements, committeesList, activeVolunteers, activeAssignmentCounts, selectedHeatmapCommittee, EVENT_DAYS]);
-
-  // Volunteers per event day (unique volunteers with ≥1 shift that day)
-  const clientVolsPerDay = useMemo(() => {
-    const counts: Record<string, number> = {};
-    EVENT_DAYS.forEach(day => {
-      const uniqueVols = new Set<string>();
-      activeVolunteers.forEach(vol => {
-        const shifts = globalShifts[vol.id];
-        if (shifts && shifts[day.key] && shifts[day.key].length > 0) {
-          uniqueVols.add(vol.id);
-        }
-      });
-      counts[day.key] = uniqueVols.size;
-    });
-    return counts;
-  }, [activeVolunteers, globalShifts, EVENT_DAYS]);
-
-  // Total shifts assigned per event day (sum of T1+T2+T3+T4 slots)
-  const clientShiftsPerDay = useMemo(() => {
-    const counts: Record<string, number> = {};
-    EVENT_DAYS.forEach(day => {
-      let total = 0;
-      activeVolunteers.forEach(vol => {
-        const shifts = globalShifts[vol.id];
-        if (shifts && shifts[day.key]) {
-          total += shifts[day.key].length;
-        }
-      });
-      counts[day.key] = total;
-    });
-    return counts;
-  }, [activeVolunteers, globalShifts, EVENT_DAYS]);
-
-  const clientTotalVolsWithShifts = useMemo(() => {
-    const unique = new Set<string>();
-    const includedDayKeys = new Set(EVENT_DAYS.map(day => day.key));
-    activeVolunteers.forEach(vol => {
-      const shifts = globalShifts[vol.id];
-      if (shifts && Object.entries(shifts).some(([dayKey, arr]) => includedDayKeys.has(dayKey) && arr.length > 0)) {
-        unique.add(vol.id);
-      }
-    });
-    return unique.size;
-  }, [activeVolunteers, globalShifts, EVENT_DAYS]);
-
-  // The prepared server snapshot makes the first paint immediate. Once the
-  // shared realtime dataset is ready, prefer its client-derived values so
-  // changes stay live without downloading the same dashboard datasets again.
-  const isOperationalSynced = loading
-    && !includeSimulation
-    && operationalData
-    && operationalData.effectiveCommitteeScope === (selectedHeatmapCommittee || 'todos');
-  const globalStats = isOperationalSynced ? operationalData.globalStats : clientGlobalStats;
-  const committeeStatus = isOperationalSynced ? operationalData.committeeStatus : clientCommitteeStatus;
-  const heatmapMatrix = isOperationalSynced ? operationalData.heatmapMatrix : clientHeatmapMatrix;
-  const volsPerDay = isOperationalSynced ? operationalData.volsPerDay : clientVolsPerDay;
-  const shiftsPerDay = isOperationalSynced ? operationalData.shiftsPerDay : clientShiftsPerDay;
-  const totalVolsWithShifts = isOperationalSynced ? operationalData.totalVolsWithShifts : clientTotalVolsWithShifts;
+  // All KPIs and coverage charts use the same authorized server calculation.
+  const currentOperationalScopeKey = `${authorizationKey}:${permTick}:${selectedHeatmapCommittee}:${includeSimulation}`;
+  const isOperationalSynced = operationalData !== null
+    && operationalData.authorizationKey === authorizationKey
+    && operationalScopeKey === currentOperationalScopeKey
+    && dashboardScopeMatches(operationalData.effectiveCommitteeScope, selectedHeatmapCommittee);
+  const globalStats = isOperationalSynced ? operationalData.globalStats : {
+    totalRecruited: 0, targetVolunteers: 0, recruitmentPercentage: 0,
+    globalCoveragePercentage: 0, criticalAlerts: 0, attendanceRate: 0,
+    checkedInCount: 0, totalAssigned: 0,
+  };
+  const committeeStatus = isOperationalSynced ? operationalData.committeeStatus : [];
+  const heatmapMatrix = isOperationalSynced ? operationalData.heatmapMatrix : EMPTY_HEATMAP;
+  const volsPerDay = isOperationalSynced ? operationalData.volsPerDay : EMPTY_DAILY_COUNTS;
+  const shiftsPerDay = isOperationalSynced ? operationalData.shiftsPerDay : EMPTY_DAILY_COUNTS;
+  const totalVolsWithShifts = isOperationalSynced ? operationalData.totalVolsWithShifts : 0;
   const coverageStatus = globalStats.globalCoveragePercentage >= 100
     ? { label: 'Completo', className: 'bg-accent/15 text-accent' }
     : globalStats.globalCoveragePercentage >= 70
@@ -947,7 +806,16 @@ export default function CoordinatorDashboard() {
     );
   }
 
-  if (loading) {
+  if (!isOperationalSynced && operationalError) {
+    return (
+      <div role="alert" className="flex min-h-[65vh] flex-col items-center justify-center gap-4 p-8 text-center">
+        <p className="text-sm text-text-dim">{operationalError}</p>
+        <Button onClick={() => void loadOperationalData()}>Reintentar</Button>
+      </div>
+    );
+  }
+
+  if (!isOperationalSynced) {
     return (
       <div className="absolute inset-0 flex items-center justify-center z-50">
         <AnimatedLogo isLooping className="w-16 h-16 md:w-20 md:h-20 text-text" />
@@ -957,7 +825,13 @@ export default function CoordinatorDashboard() {
 
   return (
     <>
-      <div className="sticky top-0 z-40 flex shrink-0 flex-col gap-3 border-b border-white/5 bg-dark/70 px-4 py-3 backdrop-blur-xl pointer-events-auto dark:bg-dark/70 sm:px-6 sm:py-4 lg:px-8">
+      {operationalError && (
+        <div role="status" className="flex items-center justify-center gap-3 px-4 py-2 text-xs text-text-dim">
+          <span>{operationalError} Se muestra la última actualización disponible.</span>
+          <button type="button" className="font-bold underline" onClick={() => void loadOperationalData()}>Reintentar</button>
+        </div>
+      )}
+      <div className="relative z-40 flex shrink-0 flex-col border-b border-white/5 bg-dark/70 px-4 py-3 backdrop-blur-xl pointer-events-auto dark:bg-dark/70 sm:px-6 sm:py-4 lg:sticky lg:top-0 lg:px-8">
         <div className="grid w-full min-w-0 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           {greeting ? (
             <motion.h1
@@ -1006,15 +880,18 @@ export default function CoordinatorDashboard() {
           </div>
         </div>
 
-        {greeting && (
+      </div>
+
+      {greeting && (
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <DashboardInsightPanel
             insight={dashboardInsight}
             isLoading={isInsightLoading}
             fallbackMessage={greeting.message}
             onRegenerate={regenerateDashboardInsight}
           />
-        )}
-      </div>
+        </div>
+      )}
 
       <motion.div
         variants={containerVariants}
@@ -1026,7 +903,12 @@ export default function CoordinatorDashboard() {
       {/* Primary KPIs */}
       <div className="-mx-4 mb-8 border-y border-border bg-border sm:-mx-6 lg:-mx-8">
         <div className="grid grid-cols-2 gap-px lg:grid-cols-4">
-          <section className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6">
+          <motion.section
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.24, delay: shouldReduceMotion ? 0 : 0.04, ease: [0.22, 1, 0.36, 1] }}
+            className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6"
+          >
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="material-symbols-outlined flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-[18px] text-blue-500 sm:size-9">groups</span>
@@ -1047,17 +929,27 @@ export default function CoordinatorDashboard() {
               </button>
             </div>
             <div className="flex flex-1 items-center py-4 sm:py-5">
-              <p className="text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]">
+              <motion.p
+                initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.92, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.35, delay: shouldReduceMotion ? 0 : 0.12, ease: [0.22, 1, 0.36, 1] }}
+                className="text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]"
+              >
                 {globalStats.totalRecruited}
-              </p>
+              </motion.p>
             </div>
             <div className="flex items-end justify-between gap-2 border-t border-border pt-3">
               <p className="max-w-[10rem] text-[11px] font-semibold leading-tight text-text-dim sm:text-xs">Con turnos asignados</p>
               <p className="shrink-0 text-lg font-extrabold leading-none text-blue-500 tabular-nums sm:text-xl">{totalVolsWithShifts}</p>
             </div>
-          </section>
+          </motion.section>
 
-          <section className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6">
+          <motion.section
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.24, delay: shouldReduceMotion ? 0 : 0.09, ease: [0.22, 1, 0.36, 1] }}
+            className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6"
+          >
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="material-symbols-outlined flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-[18px] text-accent sm:size-9">monitoring</span>
@@ -1078,10 +970,15 @@ export default function CoordinatorDashboard() {
               </button>
             </div>
             <div className="flex flex-1 items-center py-4 sm:py-5">
-              <p className="flex items-start text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]">
+              <motion.p
+                initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.92, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.35, delay: shouldReduceMotion ? 0 : 0.17, ease: [0.22, 1, 0.36, 1] }}
+                className="flex items-start text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]"
+              >
                 {globalStats.globalCoveragePercentage}
                 <span className="ml-1 mt-1 text-[0.42em] font-extrabold tracking-[-0.02em] text-accent sm:mt-1.5">%</span>
-              </p>
+              </motion.p>
             </div>
             <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
               <p className="text-[11px] font-semibold leading-tight text-text-dim sm:text-xs">Cobertura de cupos</p>
@@ -1089,9 +986,14 @@ export default function CoordinatorDashboard() {
                 {coverageStatus.label}
               </span>
             </div>
-          </section>
+          </motion.section>
 
-          <section className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6">
+          <motion.section
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.24, delay: shouldReduceMotion ? 0 : 0.14, ease: [0.22, 1, 0.36, 1] }}
+            className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6"
+          >
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className={`material-symbols-outlined flex size-8 shrink-0 items-center justify-center rounded-lg text-[18px] sm:size-9 ${globalStats.criticalAlerts > 0 ? 'bg-red/15 text-red' : 'bg-white/5 text-text-dim'}`}>security</span>
@@ -1112,9 +1014,14 @@ export default function CoordinatorDashboard() {
               </button>
             </div>
             <div className="flex flex-1 items-center py-4 sm:py-5">
-              <p className={`text-[44px] font-black leading-none tracking-[-0.045em] tabular-nums sm:text-[60px] xl:text-[68px] ${globalStats.criticalAlerts > 0 ? 'text-red' : 'text-text'}`}>
+              <motion.p
+                initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.92, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.35, delay: shouldReduceMotion ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className={`text-[44px] font-black leading-none tracking-[-0.045em] tabular-nums sm:text-[60px] xl:text-[68px] ${globalStats.criticalAlerts > 0 ? 'text-red' : 'text-text'}`}
+              >
                 {globalStats.criticalAlerts}
-              </p>
+              </motion.p>
             </div>
             <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
               <p className="text-[11px] font-semibold leading-tight text-text-dim sm:text-xs">
@@ -1124,9 +1031,14 @@ export default function CoordinatorDashboard() {
                 {globalStats.criticalAlerts > 0 ? 'Revisar' : 'Normal'}
               </span>
             </div>
-          </section>
+          </motion.section>
 
-          <section className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6">
+          <motion.section
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.24, delay: shouldReduceMotion ? 0 : 0.19, ease: [0.22, 1, 0.36, 1] }}
+            className="group flex min-h-[188px] flex-col bg-dark2 p-4 transition-colors duration-200 hover:bg-dark3 sm:min-h-[222px] sm:p-6"
+          >
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="material-symbols-outlined flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-[18px] text-emerald-500 sm:size-9">person_check</span>
@@ -1147,10 +1059,15 @@ export default function CoordinatorDashboard() {
               </button>
             </div>
             <div className="flex flex-1 items-center py-4 sm:py-5">
-              <p className="flex items-start text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]">
+              <motion.p
+                initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.92, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.35, delay: shouldReduceMotion ? 0 : 0.27, ease: [0.22, 1, 0.36, 1] }}
+                className="flex items-start text-[44px] font-black leading-none tracking-[-0.045em] text-text tabular-nums sm:text-[60px] xl:text-[68px]"
+              >
                 {globalStats.attendanceRate}
                 <span className="ml-1 mt-1 text-[0.42em] font-extrabold tracking-[-0.02em] text-emerald-500 sm:mt-1.5">%</span>
-              </p>
+              </motion.p>
             </div>
             <div className="flex items-end justify-between gap-2 border-t border-border pt-3">
               <p className="text-[11px] font-semibold leading-tight text-text-dim sm:text-xs">QR confirmados</p>
@@ -1159,7 +1076,7 @@ export default function CoordinatorDashboard() {
                 {globalStats.totalAssigned > 0 && <span className="text-text-dim">/{globalStats.totalAssigned}</span>}
               </p>
             </div>
-          </section>
+          </motion.section>
         </div>
       </div>
 
@@ -1182,7 +1099,10 @@ export default function CoordinatorDashboard() {
             <div className="flex items-center gap-1 rounded-lg border border-border bg-dark3 p-1" role="group" aria-label="Métrica de la gráfica">
               <button
                 type="button"
-                onClick={() => setChartMetric('volunteers')}
+                onClick={() => {
+                  setChartMetric('volunteers');
+                  setChartAnimationKey(key => key + 1);
+                }}
                 aria-pressed={chartMetric === 'volunteers'}
                 className={`min-h-8 rounded-md px-3 text-[11px] font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] ${
                   chartMetric === 'volunteers'
@@ -1194,7 +1114,10 @@ export default function CoordinatorDashboard() {
               </button>
               <button
                 type="button"
-                onClick={() => setChartMetric('shifts')}
+                onClick={() => {
+                  setChartMetric('shifts');
+                  setChartAnimationKey(key => key + 1);
+                }}
                 aria-pressed={chartMetric === 'shifts'}
                 className={`min-h-8 rounded-md px-3 text-[11px] font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe] ${
                   chartMetric === 'shifts'
@@ -1235,14 +1158,22 @@ export default function CoordinatorDashboard() {
                 <div className="absolute inset-x-0 top-1/2 border-t border-border/70" />
                 <div className="absolute inset-x-0 bottom-0 border-t border-border" />
                 <svg className={`absolute inset-0 z-10 size-full overflow-visible ${chartModel.hasShiftRequirements ? 'text-amber-500' : 'text-text-dim'}`} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline
-                    points={chartModel.referencePoints}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeDasharray="4 4"
-                    vectorEffect="non-scaling-stroke"
-                  />
+                  <motion.g
+                    key={`${chartMetric}-${chartAnimationKey}`}
+                    initial={shouldReduceMotion ? false : { opacity: 0.35 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    {/* Motion's pathLength animation overrides strokeDasharray. */}
+                    <polyline
+                      points={chartModel.referencePoints}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 4"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </motion.g>
                 </svg>
               </div>
 
@@ -1270,12 +1201,16 @@ export default function CoordinatorDashboard() {
                       onMouseLeave={() => setHoveredDay(null)}
                       onFocus={() => setHoveredDay(day.key)}
                       onBlur={() => setHoveredDay(null)}
-                      onClick={() => setSelectedChartDay(previous => previous === day.key ? null : day.key)}
+                      onClick={() => {
+                        setSelectedChartDay(previous => previous === day.key ? null : day.key);
+                        setChartAnimationKey(key => key + 1);
+                      }}
                     >
                       <motion.span
-                        initial={false}
-                        animate={{ height: `${heightPct}%` }}
-                        transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        key={`${day.key}-${chartMetric}-${chartAnimationKey}`}
+                        initial={shouldReduceMotion ? false : { height: '0%', opacity: 0 }}
+                        animate={{ height: `${heightPct}%`, opacity: 1 }}
+                        transition={{ duration: shouldReduceMotion ? 0 : 0.42, delay: shouldReduceMotion ? 0 : idx * 0.035, ease: [0.22, 1, 0.36, 1] }}
                         className={`relative block w-full rounded-t-[3px] transition-colors duration-200 ${
                           isSelected
                             ? 'bg-[#4d7cfe]'
