@@ -10,7 +10,7 @@ import { requireCapability, requireVolunteerCapability, requireVolunteerSelfOrCa
 import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
 import { getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay } from "@/lib/dates";
 import { buildEventDayKeys } from '@/lib/coordinator-data';
-import { AttendanceSession, validateSessionConstraints } from "@/lib/session-utils";
+import { AttendanceSession, getGuatemalaHourFloat, validateSessionConstraints } from "@/lib/session-utils";
 import {
   saveAttendanceSession,
   getOpenSessionForVolunteer,
@@ -242,7 +242,7 @@ export async function openAttendanceSessionAction(
   const saved = await saveAttendanceSession(sessionRecord);
 
   // Broadcast realtime event
-  broadcastSessionSync({
+  await broadcastSessionSync({
     eventType: 'INSERT',
     table: 'attendance_sessions',
     record: saved,
@@ -356,7 +356,7 @@ export async function closeAttendanceSessionAction({
   const saved = atomicRes.session!;
 
   // Broadcast realtime event
-  broadcastSessionSync({
+  await broadcastSessionSync({
     eventType: 'UPDATE',
     table: 'attendance_sessions',
     record: saved,
@@ -510,7 +510,7 @@ export async function adjustSessionTimesAdminAction({
     saved = await saveAttendanceSession(updatedRecord);
   }
 
-  broadcastSessionSync({
+  await broadcastSessionSync({
     eventType: 'UPDATE',
     table: 'attendance_sessions',
     record: saved,
@@ -622,7 +622,7 @@ export async function createAttendanceSessionAdminAction(input: {
 
   const saved = await saveAttendanceSession(newRecord);
 
-  broadcastSessionSync({
+  await broadcastSessionSync({
     eventType: 'INSERT',
     table: 'attendance_sessions',
     record: saved,
@@ -717,6 +717,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       return {
         success: true,
         message: "Asistencia registrada manualmente.",
+        volunteerId,
         volunteer: volunteerName,
         committee: vol?.committees?.name || "Sin comité",
         shiftDetail
@@ -752,23 +753,31 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
   const guatemalaString = new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" });
   const guatemalaNow = new Date(guatemalaString);
   const currentDayKey = format(guatemalaNow, "EEE d", { locale: es }).toLowerCase();
+  const operationalDayKeys = new Set(buildEventDayKeys().map(key => key.toLowerCase().trim()));
 
   const openSession = await getOpenSessionForVolunteer(volunteerId);
   if (openSession) {
     const isSameDay = (openSession.day_key || '').toLowerCase().trim() === currentDayKey;
+    const isOperationalSessionDay = operationalDayKeys.has((openSession.day_key || '').toLowerCase().trim());
 
-    if (!isSameDay) {
-      // Requirement 6: Sesión abierta de día anterior -> return action 'stale_open_session'
+    if (!isSameDay || !isOperationalSessionDay) {
+      // A previous-day or out-of-calendar session must be resolved before a new
+      // scheduled shift can start. Treating it as a normal same-day checkout
+      // creates an active session that none of the operational views can display.
       return {
         success: true,
         action: 'stale_open_session',
         isStaleOpen: true,
+        isOutsideOperationalDay: !isOperationalSessionDay,
         session: openSession,
         previousDayKey: openSession.day_key,
         startedAt: openSession.started_at,
+        volunteerId,
         volunteer: volunteerName,
         committee: volunteer.committees?.name || "Sin comité",
-        message: `El voluntario ${volunteerName} posee una sesión pendiente del día anterior (${openSession.day_key}).`
+        message: isOperationalSessionDay
+          ? `El voluntario ${volunteerName} posee una sesión pendiente del día anterior (${openSession.day_key}).`
+          : `El voluntario ${volunteerName} posee una sesión abierta fuera del cronograma operativo (${openSession.day_key}).`
       };
     }
 
@@ -778,30 +787,23 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       action: 'confirm_checkout',
       alreadyOpen: true,
       session: openSession,
+      volunteerId,
       volunteer: volunteerName,
       committee: volunteer.committees?.name || "Sin comité",
       message: `El voluntario ${volunteerName} ya posee una sesión activa iniciada a las ${new Date(openSession.started_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true })}.`
     };
   }
 
-  // 2. Open new attendance session (Caso 1-3)
-  const openRes = await openAttendanceSessionAction(volunteerId, currentDayKey, true);
-  if (openRes.success && openRes.session) {
-    return {
-      success: true,
-      action: 'opened',
-      session: openRes.session,
-      volunteer: volunteerName,
-      committee: volunteer.committees?.name || "Sin comité",
-      shiftDetail: `${openRes.session.day_key} - Sesión Continua`
-    };
-  }
-
-  // Fetch all scheduled shifts for manual selection fallback if needed
-  const { data: shifts } = await supabase
+  // Load the assignments before opening a session. This keeps the QR flow from
+  // creating invisible sessions on dates or hours that do not exist in Turnos.
+  const { data: shifts, error: shiftsError } = await supabase
     .from('shifts')
     .select('*')
     .eq('volunteer_id', volunteerId);
+
+  if (shiftsError) {
+    return { error: "No se pudieron consultar los turnos asignados del voluntario." };
+  }
 
   const formattedShifts = (shifts || []).map((s: any) => {
     const official = getOfficialShiftTime(s.day_key, s.shift_key);
@@ -812,12 +814,52 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       shiftKey: s.shift_key,
       timeLabel: official.shortTimeLabel,
       checkedIn: s.checked_in,
-      checkedInAt: s.checked_in_at
+      checkedInAt: s.checked_in_at,
+      checkedOut: s.checked_out,
+      checkedOutAt: s.checked_out_at,
     };
   });
 
+  const currentHour = getGuatemalaHourFloat(new Date());
+  const activeAssignments = (shifts || []).filter((shift: any) => {
+    if ((shift.day_key || '').toLowerCase().trim() !== currentDayKey) return false;
+    if (!isShiftAvailableForDay(shift.day_key, shift.shift_key)) return false;
+    const official = getOfficialShiftTime(shift.day_key, shift.shift_key);
+    return currentHour >= official.startHour && currentHour < official.endHour;
+  });
+
+  if (!operationalDayKeys.has(currentDayKey) || activeAssignments.length === 0) {
+    if (formattedShifts.length === 0) {
+      return { error: `${volunteerName} no tiene turnos asignados para registrar asistencia.` };
+    }
+
+    return {
+      requiresManualSelection: true,
+      outsideOperationalDay: !operationalDayKeys.has(currentDayKey),
+      volunteerId,
+      volunteer: volunteerName,
+      committee: volunteer.committees?.name || "Sin comité",
+      shifts: formattedShifts,
+    };
+  }
+
+  // 2. Open new attendance session (Caso 1-3)
+  const openRes = await openAttendanceSessionAction(volunteerId, currentDayKey, true);
+  if (openRes.success && openRes.session) {
+    return {
+      success: true,
+      action: 'opened',
+      session: openRes.session,
+      volunteerId,
+      volunteer: volunteerName,
+      committee: volunteer.committees?.name || "Sin comité",
+      shiftDetail: `${openRes.session.day_key} - Sesión Continua`
+    };
+  }
+
   return {
     requiresManualSelection: true,
+    volunteerId,
     volunteer: `${volunteer.first_name} ${volunteer.last_name}`,
     committee: volunteer.committees?.name || "Sin comité",
     shifts: formattedShifts
@@ -1042,6 +1084,7 @@ export async function getHistoricalAttendanceLogs(limit = 150) {
       .from('shifts')
       .select(`
         id,
+        volunteer_id,
         day_key,
         shift_key,
         checked_in,
@@ -1071,6 +1114,7 @@ export async function getHistoricalAttendanceLogs(limit = 150) {
 
       return {
         id: s.id,
+        volunteerId: s.volunteer_id || vol?.id,
         volunteer: volName || "Voluntario",
         committee: commName,
         shiftDetail: `${s.day_key} - ${s.shift_key}`,

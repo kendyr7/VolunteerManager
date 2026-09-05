@@ -61,7 +61,8 @@ export function inferShiftsForSession(
   dayKey: string,
   sessionStart: Date | string,
   sessionEnd?: Date | string | null,
-  assignedShifts: string[] = ['T1', 'T2', 'T3', 'T4']
+  assignedShifts: string[] = ['T1', 'T2', 'T3', 'T4'],
+  now: Date | string = new Date()
 ): OfficialShiftTime[] {
   if (!sessionStart) return [];
 
@@ -74,8 +75,12 @@ export function inferShiftsForSession(
     // For OPEN sessions: evaluate up to CURRENT Guatemala time, constrained by the continuous block
     const block = getContinuousScheduledBlockForSession(dayKey, sessionStart, assignedShifts);
     const blockEndHour = block ? getOfficialShiftTime(dayKey, block.endShiftKey).endHour : 24;
-    const currentNowHour = getGuatemalaHourFloat(new Date());
-    sessionEndHour = Math.min(currentNowHour, blockEndHour);
+    const currentNowHour = getGuatemalaHourFloat(now);
+    // A session broadcast immediately after check-in can have the same whole-second
+    // value as `now`. Give an open session a minimal interval so the shift that
+    // contains its start instant is active on the very first render.
+    const minimumOpenEndHour = sessionStartHour + (1 / 3600);
+    sessionEndHour = Math.min(Math.max(currentNowHour, minimumOpenEndHour), blockEndHour);
   }
 
   // Handle midnight wrap if session spans across 24h

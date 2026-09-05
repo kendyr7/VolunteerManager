@@ -85,41 +85,26 @@ export interface SessionSyncBroadcastPayload {
 /**
  * Publishes a Realtime Broadcast event for attendance_sessions on the 'global_coordinator_realtime' channel
  */
-export function broadcastSessionSync(payload: SessionSyncBroadcastPayload): void {
-  (async () => {
-    try {
-      console.log('[SESSION ACTION] broadcast started:', payload.eventType, payload.record?.id);
-      const adminClient = await getAdminSupabase();
-      const channel = adminClient.channel('global_coordinator_realtime');
+export async function broadcastSessionSync(payload: SessionSyncBroadcastPayload): Promise<void> {
+  let adminClient: Awaited<ReturnType<typeof getAdminSupabase>> | null = null;
+  let channel: ReturnType<Awaited<ReturnType<typeof getAdminSupabase>>['channel']> | null = null;
 
-      await new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => {
-          console.warn('[SESSION ACTION] broadcast timeout reached');
-          try { channel.unsubscribe(); } catch {}
-          resolve();
-        }, 800);
+  try {
+    console.log('[SESSION ACTION] broadcast started:', payload.eventType, payload.record?.id);
+    adminClient = await getAdminSupabase();
+    channel = adminClient.channel('global_coordinator_realtime');
 
-        channel.subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            clearTimeout(timeout);
-            try {
-              await channel.send({
-                type: 'broadcast',
-                event: 'session_sync',
-                payload,
-              });
-              console.log('[SESSION ACTION] broadcast completed successfully');
-            } catch (e) {
-              console.error('[SESSION ACTION] broadcast error sending message:', e);
-            } finally {
-              try { await channel.unsubscribe(); } catch {}
-              resolve();
-            }
-          }
-        });
-      });
-    } catch (err) {
-      console.error('[SESSION ACTION] broadcast failed to publish:', err);
+    const response = await channel.httpSend('session_sync', payload);
+    if (!response.success) {
+      console.warn('[SESSION ACTION] broadcast returned:', response);
+      return;
     }
-  })();
+    console.log('[SESSION ACTION] broadcast completed successfully');
+  } catch (err) {
+    console.error('[SESSION ACTION] broadcast failed to publish:', err);
+  } finally {
+    if (adminClient && channel) {
+      try { await adminClient.removeChannel(channel); } catch {}
+    }
+  }
 }

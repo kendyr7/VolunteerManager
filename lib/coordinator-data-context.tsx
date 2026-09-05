@@ -108,6 +108,12 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   const lastFetchedAtRef = useRef(0);
   const lastCacheKeyRef = useRef('');
   const fetchPromiseRef = useRef<Promise<void> | null>(null);
+  const visibleVolunteerIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    visibleVolunteerIdsRef.current = new Set(rawVolunteers.map((volunteer) => volunteer.id));
+  }, [rawVolunteers]);
+
   const [eventQueue] = useState(() => new RealtimeEventQueue((processed) => {
       processed.forEach((evt) => {
         if (evt.table === 'shifts') {
@@ -405,6 +411,46 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         }
       )
       .on(
+        'broadcast',
+        { event: 'session_sync' },
+        (eventPayload) => {
+          const payload = eventPayload?.payload;
+          if (!payload || payload.table !== 'attendance_sessions' || !payload.record) return;
+
+          const eventType = payload.eventType as RealtimeEventType;
+          const record = payload.record as CoordinatorSessionData;
+          if (!record.id || !eventType) return;
+          if (eventType !== 'DELETE' && !visibleVolunteerIdsRef.current.has(record.volunteer_id)) return;
+
+          realtimeDebugLogger.addLog({
+            stage: 'REALTIME_RECEIVED',
+            table: 'attendance_sessions',
+            eventType,
+            volunteerId: record.volunteer_id,
+            details: `Attendance session ${eventType}: ${record.day_key || ''}`,
+            payload: record,
+          });
+
+          setSessionsData((previous) => {
+            if (eventType === 'DELETE') {
+              return previous.filter((session) => session.id !== record.id);
+            }
+
+            const index = previous.findIndex((session) => session.id === record.id);
+            if (index === -1) return [record, ...previous];
+
+            const existing = previous[index];
+            const existingTimestamp = new Date(existing.updated_at || existing.created_at || 0).getTime();
+            const incomingTimestamp = new Date(record.updated_at || record.created_at || 0).getTime();
+            if (existingTimestamp > incomingTimestamp) return previous;
+
+            const next = [...previous];
+            next[index] = mergeRealtimeRecord(existing, record);
+            return next;
+          });
+        }
+      )
+      .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'volunteers' },
         (payload) => {
@@ -479,6 +525,7 @@ volunteers: DELETE
 shifts: UPDATE
 shifts: INSERT
 shifts: DELETE
+broadcast: session_sync
 ================================================
           `);
           useRealtimeStore.getState().recordHeartbeat();

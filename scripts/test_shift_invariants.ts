@@ -1,6 +1,8 @@
 import { validateShiftInvariants, assertShiftConsistency } from '../lib/utils/shift-invariants';
 import { mergeRealtimeRecord } from '../lib/utils/realtime-merge';
 import { getVolunteerProfileMetrics } from '../lib/services/volunteer-profile.service';
+import { getShiftAttendanceState } from '../lib/coordinator-data';
+import { inferShiftsForSession } from '../lib/session-utils';
 
 console.log('====================================================');
 console.log('   RUNNING DOMAIN INVARIANTS & SCENARIO RUNNER TEST ');
@@ -79,6 +81,57 @@ assertTest(
 assertTest(
   'Smart Merge: Partial payload retains checked_out_at timestamp',
   merged.checked_out_at === '2026-08-05T11:00:00Z'
+);
+
+const sessionDrivenAttendance = getShiftAttendanceState({
+  shift: {
+    id: 'shift-session-driven',
+    volunteer_id: 'vol-session-driven',
+    day_key: 'sáb 5',
+    shift_key: 'T1',
+    checked_in: false,
+    checked_out: false,
+  },
+  volunteerId: 'vol-session-driven',
+  dayKey: 'sáb 5',
+  shiftKey: 'T1',
+  checkedInMap: { 'vol-session-driven-sáb 5-T1': true },
+});
+assertTest(
+  'Session attendance overrides an unmarked scheduled shift',
+  sessionDrivenAttendance.isCheckedIn === true && sessionDrivenAttendance.isCheckedOut === false
+);
+
+const completedSessionAttendance = getShiftAttendanceState({
+  shift: {
+    id: 'shift-session-completed',
+    volunteer_id: 'vol-session-completed',
+    day_key: 'sáb 5',
+    shift_key: 'T1',
+    checked_in: false,
+    checked_out: false,
+  },
+  volunteerId: 'vol-session-completed',
+  dayKey: 'sáb 5',
+  shiftKey: 'T1',
+  checkedInMap: { 'vol-session-completed-sáb 5-T1': true },
+  checkedOutMap: { 'vol-session-completed-sáb 5-T1': true },
+});
+assertTest(
+  'Completed session takes precedence over active check-in styling',
+  completedSessionAttendance.isCheckedIn === false && completedSessionAttendance.isCheckedOut === true
+);
+
+const immediateOpenSessionShifts = inferShiftsForSession(
+  'sáb 5',
+  '2026-09-05T16:00:00.000Z',
+  null,
+  ['T1'],
+  '2026-09-05T16:00:00.000Z'
+);
+assertTest(
+  'A newly opened session activates its shift on the first render',
+  immediateOpenSessionShifts.some(shift => shift.shiftKey === 'T1')
 );
 
 // 3. Scenario Runner Simulation: Check-In -> Check-Out -> Reopen -> Reassign -> Check-In -> Check-Out

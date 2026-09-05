@@ -28,6 +28,7 @@ import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 import { getShiftCapacityStatus, getShiftCommitteeScope } from "@/lib/shift-capacity";
+import { getShiftAttendanceState } from "@/lib/coordinator-data";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -210,6 +211,7 @@ export default function ShiftsPage() {
     indexedAssignments: contextIndexedAssignments,
     checkedInMap: contextCheckedInMap,
     checkedOutMap: contextCheckedOutMap,
+    activeSessionsByVolunteer,
     shiftCounts: contextShiftCounts,
     loading,
     refresh,
@@ -615,8 +617,15 @@ export default function ShiftsPage() {
       if (matchesFilters(vol, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole)) {
         const s = getShiftRecord(vol.id, dateKey, shiftId);
         const completedLocal = completedShiftsMap[`${vol.id}-${dateKey}-${shiftId}`];
-        const isCheckedIn = !!(s && (s.checked_in || s.checked_in_at)) || contextCheckedInMap[`${vol.id}-${dateKey}-${shiftId}`];
-        const isCheckedOut = !!(s && (s.checked_out || s.checked_out_at)) || !!completedLocal;
+        const { isCheckedIn, isCheckedOut } = getShiftAttendanceState({
+          shift: s,
+          volunteerId: vol.id,
+          dayKey: dateKey,
+          shiftKey: shiftId,
+          checkedInMap: contextCheckedInMap,
+          checkedOutMap: contextCheckedOutMap,
+          completed: Boolean(completedLocal),
+        });
 
         if (viewMode === 'active') {
           // En Turno: Muestra solo los que hicieron check-in y AÚN NO han completado/marcado salida.
@@ -631,7 +640,7 @@ export default function ShiftsPage() {
     }
 
     return result.sort((a, b) => a.committee.localeCompare(b.committee));
-  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, completedShiftsMap, contextCheckedInMap, getShiftRecord, scopedCommitteeSet]);
+  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, completedShiftsMap, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet]);
 
   const handleStartEditProfile = (vol: VolunteerType) => {
     const fn = (vol as any).first_name ?? vol.name ?? '';
@@ -800,9 +809,19 @@ export default function ShiftsPage() {
 
   const totalActiveCount = useMemo(() => {
     return rawShiftsData.filter(
-      s => volunteerMap.has(s.volunteer_id) && s.checked_in && !s.checked_out
+      (shift) => {
+        if (!volunteerMap.has(shift.volunteer_id)) return false;
+        return getShiftAttendanceState({
+          shift,
+          volunteerId: shift.volunteer_id,
+          dayKey: shift.day_key,
+          shiftKey: shift.shift_key,
+          checkedInMap,
+          checkedOutMap,
+        }).isCheckedIn;
+      }
     ).length;
-  }, [rawShiftsData, volunteerMap]);
+  }, [rawShiftsData, volunteerMap, checkedInMap, checkedOutMap]);
 
   const activeVolunteers = useMemo(() => {
     if (!rawShiftsData || rawShiftsData.length === 0 || volunteers.length === 0) return [];
@@ -1361,13 +1380,21 @@ export default function ShiftsPage() {
                               {displayedVols.map(vol => {
                                 const shiftRecord = getShiftRecord(vol.id, key, t);
                                 const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
-                                const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
-                                const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
+                                const { isCheckedIn, isCheckedOut } = getShiftAttendanceState({
+                                  shift: shiftRecord,
+                                  volunteerId: vol.id,
+                                  dayKey: key,
+                                  shiftKey: t,
+                                  checkedInMap,
+                                  checkedOutMap,
+                                  completed: Boolean(completedLocal),
+                                });
                                 const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                 const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
-                                const checkInTimeStr = formatGuatemalaTime(shiftRecord?.checked_in_at);
+                                const attendanceStartedAt = shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
+                                const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
                                 const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
-                                const elapsed = getElapsedInfoBetween(shiftRecord?.checked_in_at, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
+                                const elapsed = getElapsedInfoBetween(attendanceStartedAt, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
 
                                 return (
                                   <div
@@ -1425,8 +1452,9 @@ export default function ShiftsPage() {
                                         ) : null}
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                                      <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
+
+                                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                                      <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] max-w-20 overflow-hidden border ${getCommitteeColor(vol.committee)}`}>
                                         <HighlightText text={vol.committee} term={appliedSearch} />
                                       </Badge>
 
@@ -1434,51 +1462,55 @@ export default function ShiftsPage() {
                                         <div className="flex items-center gap-1">
                                           {currentRole === 'Admin' && (
                                             <button
+                                              type="button"
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 handleUndoCheckInInShifts(vol, key, t);
                                               }}
-                                              className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                                              className="w-7 h-7 rounded-full bg-rose-500/20 hover:bg-rose-500/30 text-rose-500 dark:text-rose-300 border border-rose-500/40 transition-all flex items-center justify-center active:scale-95 cursor-pointer"
                                               title="Deshacer entrada accidental y regresar a pendiente"
+                                              aria-label={`Deshacer entrada de ${vol.name}`}
                                             >
-                                              <span className="material-symbols-outlined text-[12px]">undo</span>
-                                              <span>Deshacer</span>
+                                              <span className="material-symbols-outlined text-[14px]" aria-hidden="true">undo</span>
                                             </button>
                                           )}
                                           <button
+                                            type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, volunteer: vol, checkedInAt: shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
                                             }}
-                                            className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                                            className="w-7 h-7 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 transition-all flex items-center justify-center active:scale-95 cursor-pointer"
                                             title="Turno Completado"
+                                            aria-label={`Completar turno de ${vol.name}`}
                                           >
-                                            <span className="material-symbols-outlined text-[12px]">task_alt</span>
-                                            <span>Completar</span>
+                                            <span className="material-symbols-outlined text-[14px]" aria-hidden="true">task_alt</span>
                                           </button>
                                           <button
+                                            type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               handleOpenReassign(vol, key, t);
                                             }}
-                                            className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                                            className="w-7 h-7 rounded-full bg-purple-500/20 hover:bg-purple-500/30 text-purple-600 dark:text-purple-300 border border-purple-500/40 transition-all flex items-center justify-center active:scale-95 cursor-pointer"
                                             title="Reasignar Turno"
+                                            aria-label={`Reasignar turno de ${vol.name}`}
                                           >
-                                            <span className="material-symbols-outlined text-[12px]">sync_alt</span>
-                                            <span>Reasignar</span>
+                                            <span className="material-symbols-outlined text-[14px]" aria-hidden="true">sync_alt</span>
                                           </button>
                                         </div>
                                       ) : (
                                         <button
+                                          type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleOpenReassign(vol, key, t);
                                           }}
-                                          className="px-2 py-0.5 rounded-full font-inter font-bold text-[9px] bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                                          className="w-7 h-7 rounded-full bg-purple-500/20 hover:bg-purple-500/30 text-purple-600 dark:text-purple-300 border border-purple-500/40 transition-all flex items-center justify-center active:scale-95 cursor-pointer"
                                           title="Reasignar Turno"
+                                          aria-label={`Reasignar turno de ${vol.name}`}
                                         >
-                                          <span className="material-symbols-outlined text-[12px]">sync_alt</span>
-                                          <span>Reasignar</span>
+                                          <span className="material-symbols-outlined text-[14px]" aria-hidden="true">sync_alt</span>
                                         </button>
                                       )}
                                     </div>
@@ -1627,13 +1659,21 @@ export default function ShiftsPage() {
                                   const isMatch = appliedSearch.trim() !== '' && vol.name.toLowerCase().includes(appliedSearch.toLowerCase());
                                   const shiftRecord = getShiftRecord(vol.id, key, t);
                                   const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
-                                  const isCheckedOut = (shiftRecord ? (!!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : false) || !!completedLocal;
-                                  const isCheckedIn = shiftRecord ? (!!shiftRecord.checked_in || !!shiftRecord.checked_in_at || !!shiftRecord.checked_out || !!shiftRecord.checked_out_at) : (checkedInMap[`${vol.id}-${key}-${t}`] || !!completedLocal);
+                                  const { isCheckedIn, isCheckedOut } = getShiftAttendanceState({
+                                    shift: shiftRecord,
+                                    volunteerId: vol.id,
+                                    dayKey: key,
+                                    shiftKey: t,
+                                    checkedInMap,
+                                    checkedOutMap,
+                                    completed: Boolean(completedLocal),
+                                  });
                                   const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                   const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
-                                  const checkInTimeStr = formatGuatemalaTime(shiftRecord?.checked_in_at);
+                                  const attendanceStartedAt = shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
+                                  const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
                                   const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
-                                  const elapsed = getElapsedInfoBetween(shiftRecord?.checked_in_at, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
+                                  const elapsed = getElapsedInfoBetween(attendanceStartedAt, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
 
                                   return (
                                     <div
@@ -1697,53 +1737,76 @@ export default function ShiftsPage() {
                                           )}
                                         </div>
                                       </div>
+
                                       {isCheckedIn && !isCheckedOut ? (
-                                        <div className="flex items-center gap-1.5 shrink-0">
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          {currentRole === 'Admin' && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleUndoCheckInInShifts(vol, key, t);
+                                              }}
+                                              className="w-7 h-7 rounded-full bg-rose-500/25 text-rose-200 border border-rose-400/40 hover:bg-rose-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95"
+                                              title="Deshacer entrada accidental y regresar a pendiente"
+                                              aria-label={`Deshacer entrada de ${vol.name}`}
+                                            >
+                                              <span className="material-symbols-outlined text-[15px]" aria-hidden="true">undo</span>
+                                            </button>
+                                          )}
                                           <button
+                                            type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, volunteer: vol, checkedInAt: shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
                                             }}
-                                            className="w-7 h-7 rounded-full bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm"
+                                            className="w-7 h-7 rounded-full bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95"
                                             title="Turno Completado (Check-out)"
+                                            aria-label={`Completar turno de ${vol.name}`}
                                           >
-                                            <span className="material-symbols-outlined text-[15px]">task_alt</span>
+                                            <span className="material-symbols-outlined text-[15px]" aria-hidden="true">task_alt</span>
                                           </button>
                                           <button
+                                            type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               handleOpenReassign(vol, key, t);
                                             }}
-                                            className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm"
+                                            className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95"
                                             title="Reasignar Turno"
+                                            aria-label={`Reasignar turno de ${vol.name}`}
                                           >
-                                            <span className="material-symbols-outlined text-[15px]">sync_alt</span>
+                                            <span className="material-symbols-outlined text-[15px]" aria-hidden="true">sync_alt</span>
                                           </button>
                                         </div>
                                       ) : isCheckedOut ? (
                                         <button
+                                          type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleOpenReassign(vol, key, t);
                                           }}
-                                          className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm"
+                                          className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95"
                                           title="Reasignar Turno"
+                                          aria-label={`Reasignar turno de ${vol.name}`}
                                         >
-                                          <span className="material-symbols-outlined text-[15px]">sync_alt</span>
+                                          <span className="material-symbols-outlined text-[15px]" aria-hidden="true">sync_alt</span>
                                         </button>
                                       ) : (
                                         <div className="flex items-center gap-1.5 shrink-0">
                                           <button
+                                            type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               handleOpenReassign(vol, key, t);
                                             }}
-                                            className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm"
+                                            className="w-7 h-7 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 hover:bg-purple-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95"
                                             title="Reasignar Turno"
+                                            aria-label={`Reasignar turno de ${vol.name}`}
                                           >
-                                            <span className="material-symbols-outlined text-[15px]">sync_alt</span>
+                                            <span className="material-symbols-outlined text-[15px]" aria-hidden="true">sync_alt</span>
                                           </button>
-                                          <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] border ${getCommitteeColor(vol.committee)}`}>
+                                          <Badge variant="outline" className={`font-inter font-bold text-[9px] px-1.5 py-0 h-[18px] max-w-16 overflow-hidden border ${getCommitteeColor(vol.committee)}`}>
                                             <HighlightText text={vol.committee} term={appliedSearch} />
                                           </Badge>
                                         </div>

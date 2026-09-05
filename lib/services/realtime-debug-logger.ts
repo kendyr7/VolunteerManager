@@ -10,7 +10,7 @@ export interface DebugLogItem {
   clientSessionId: string;
   timestamp: number;
   stage: 'MUTATION_START' | 'DB_SUCCESS' | 'DB_ERROR' | 'REALTIME_RECEIVED' | 'QUEUE_FLUSH' | 'ZUSTAND_UPDATE' | 'UI_UPDATE';
-  table?: 'volunteers' | 'shifts';
+  table?: 'volunteers' | 'shifts' | 'attendance_sessions';
   eventType?: 'INSERT' | 'UPDATE' | 'DELETE' | 'MUTATION';
   volunteerId?: string;
   volunteerName?: string;

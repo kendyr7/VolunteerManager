@@ -61,6 +61,51 @@ export interface CoordinatorRequirementData {
   committees?: { name?: string | null } | null;
 }
 
+export function getShiftAttendanceState({
+  shift,
+  volunteerId,
+  dayKey,
+  shiftKey,
+  checkedInMap = {},
+  checkedOutMap = {},
+  completed = false,
+}: {
+  shift?: Partial<CoordinatorShiftData> | null;
+  volunteerId: string;
+  dayKey: string;
+  shiftKey: string;
+  checkedInMap?: Record<string, boolean>;
+  checkedOutMap?: Record<string, boolean>;
+  completed?: boolean;
+}) {
+  const attendanceKey = `${volunteerId}-${dayKey}-${shiftKey}`;
+  const localAttendanceKey = `${dayKey}-${shiftKey}`;
+  const shiftId = shift?.id;
+
+  const isCheckedOut = Boolean(
+    completed
+    || shift?.checked_out
+    || shift?.checked_out_at
+    || checkedOutMap[attendanceKey]
+    || checkedOutMap[localAttendanceKey]
+    || (shiftId && checkedOutMap[shiftId])
+  );
+  const hasCheckIn = Boolean(
+    shift?.checked_in
+    || shift?.checked_in_at
+    || shift?.checked_out
+    || shift?.checked_out_at
+    || checkedInMap[attendanceKey]
+    || checkedInMap[localAttendanceKey]
+    || (shiftId && checkedInMap[shiftId])
+  );
+
+  return {
+    isCheckedIn: hasCheckIn && !isCheckedOut,
+    isCheckedOut,
+  };
+}
+
 export function buildEventDayKeys(): string[] {
   return getOperationalEventDays().map((date) => formatDateShort(date));
 }

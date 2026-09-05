@@ -31,6 +31,7 @@ type ScannerState = 'idle' | 'scanning' | 'loading' | 'success' | 'already_check
 
 interface ScanEntry {
   id: string;
+  volunteerId?: string;
   volunteer: string;
   committee: string;
   shiftDetail?: string;
@@ -121,6 +122,7 @@ export function CheckInScanner({
     shifts?: any[];
     qrValue?: string;
     session?: any;
+    outsideOperationalDay?: boolean;
   } | null>(null);
   const [history, setHistory] = useState<ScanEntry[]>([]);
 
@@ -135,9 +137,23 @@ export function CheckInScanner({
 
   const handleOpenVolunteerProfile = (vol: any) => {
     if (!vol) return;
-    const volId = vol.volunteerId || vol.volunteer_id || vol.id;
-    const match = rawVolunteers.find((v: any) => v.id === volId || v.name === vol.volunteer || v.name === vol.name);
-    setDrawerVolunteer(match || vol);
+    const volunteerId = vol.volunteerId || vol.volunteer_id;
+    const requestedName = normalizeSearch(vol.volunteer || vol.name || '');
+    const match = rawVolunteers.find((candidate: any) => {
+      if (volunteerId && candidate.id === volunteerId) return true;
+      const candidateName = normalizeSearch(
+        candidate.name || `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim()
+      );
+      return !volunteerId && Boolean(requestedName) && candidateName === requestedName;
+    });
+    const resolvedVolunteer = match || (volunteerId ? {
+      ...vol,
+      id: volunteerId,
+      name: vol.volunteer || vol.name,
+    } : null);
+
+    if (!resolvedVolunteer) return;
+    setDrawerVolunteer(resolvedVolunteer);
     setIsProfileDrawerOpen(true);
   };
 
@@ -386,16 +402,6 @@ export function CheckInScanner({
     }
   }, [groupedHistoryDays]);
 
-  const groupedShifts = useMemo(() => {
-    if (!scanResult?.shifts) return {};
-    const groups: Record<string, any[]> = {};
-    scanResult.shifts.forEach((s: any) => {
-      if (!groups[s.dayKey]) groups[s.dayKey] = [];
-      groups[s.dayKey].push(s);
-    });
-    return groups;
-  }, [scanResult?.shifts]);
-
   const EVENT_DAYS_RAW = useMemo(() => getOperationalEventDays(), []);
   const EVENT_DAYS = useMemo(() => EVENT_DAYS_RAW.map(date => ({
     date,
@@ -403,6 +409,29 @@ export function CheckInScanner({
     label: formatDateShort(date).split(' ')[0],
     dateNum: formatDateShort(date).split(' ')[1],
   })), [EVENT_DAYS_RAW]);
+
+  const groupedShifts = useMemo(() => {
+    if (!scanResult?.shifts) return {};
+
+    const dayOrder = new Map(
+      EVENT_DAYS.map((day, index) => [normalizeSearch(day.key), index])
+    );
+    const groups: Record<string, any[]> = {};
+
+    [...scanResult.shifts]
+      .sort((a: any, b: any) => {
+        const dayDifference = (dayOrder.get(normalizeSearch(a.dayKey)) ?? Number.MAX_SAFE_INTEGER)
+          - (dayOrder.get(normalizeSearch(b.dayKey)) ?? Number.MAX_SAFE_INTEGER);
+        if (dayDifference !== 0) return dayDifference;
+        return String(a.shiftKey || '').localeCompare(String(b.shiftKey || ''), 'es', { numeric: true });
+      })
+      .forEach((shift: any) => {
+        if (!groups[shift.dayKey]) groups[shift.dayKey] = [];
+        groups[shift.dayKey].push(shift);
+      });
+
+    return groups;
+  }, [EVENT_DAYS, scanResult?.shifts]);
 
   const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
   const autoResetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -515,6 +544,8 @@ export function CheckInScanner({
       shiftId: string;
       volunteerName: string;
       checkedInAt?: string | Date;
+      outsideOperationalDay?: boolean;
+      dayLabel?: string;
     } | null;
   }>({
     isOpen: false,
@@ -575,6 +606,7 @@ export function CheckInScanner({
     } else {
       await checkOutVolunteer(shiftId);
     }
+    void refresh(true);
   };
 
   const handleMarkCompleted = async (shiftId: string) => {
@@ -811,6 +843,7 @@ export function CheckInScanner({
         triggerVibration(100);
         const entry: ScanEntry = {
           id: crypto.randomUUID(),
+          volunteerId: res.volunteerId || res.session?.volunteer_id,
           volunteer: res.volunteer || "Voluntario",
           committee: res.committee || "Sin comité",
           shiftDetail: res.shiftDetail,
@@ -826,6 +859,7 @@ export function CheckInScanner({
       } else if (res.action === 'stale_open_session' || res.isStaleOpen) {
         playWarningBeep();
         triggerVibration(200);
+        const isOutsideOperationalDay = Boolean(res.isOutsideOperationalDay);
         const startTimeStr = res.session?.started_at
           ? new Date(res.session.started_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true })
           : '—';
@@ -833,7 +867,9 @@ export function CheckInScanner({
         setScanResult({
           volunteer: res.volunteer || "Voluntario",
           committee: res.committee || "Sin comité",
-          shiftDetail: `⚠ Sesión pendiente de ${dayLabel} (${startTimeStr})`,
+          shiftDetail: isOutsideOperationalDay
+            ? `⚠ Sesión fuera del cronograma: ${dayLabel} (${startTimeStr})`
+            : `⚠ Sesión pendiente de ${dayLabel} (${startTimeStr})`,
           session: res.session
         });
         setCheckoutModal({
@@ -841,7 +877,9 @@ export function CheckInScanner({
           item: {
             shiftId: res.session?.id || 'stale-session',
             volunteerName: res.volunteer || "Voluntario",
-            checkedInAt: `${dayLabel} ${startTimeStr}`
+            checkedInAt: `${dayLabel} ${startTimeStr}`,
+            outsideOperationalDay: isOutsideOperationalDay,
+            dayLabel,
           }
         });
         setState('already_checked_in');
@@ -872,15 +910,18 @@ export function CheckInScanner({
           volunteer: res.volunteer || "Voluntario",
           committee: res.committee || "Sin comité",
           shifts: res.shifts || [],
-          qrValue: qrValue
+          qrValue: qrValue,
+          outsideOperationalDay: res.outsideOperationalDay,
         });
         setState('manual_selection');
       } else if (res.success) {
+        void refresh(true);
         playSuccessBeep();
         triggerVibration(150);
         setSessionCount(c => c + 1);
         const entry: ScanEntry = {
           id: crypto.randomUUID(),
+          volunteerId: res.volunteerId || res.session?.volunteer_id,
           volunteer: res.volunteer || "Voluntario",
           committee: res.committee || "Sin comité",
           shiftDetail: res.shiftDetail,
@@ -917,11 +958,13 @@ export function CheckInScanner({
         setErrorMsg(res.error);
         setState('error');
       } else if (res.success) {
+        void refresh(true);
         playSuccessBeep();
         triggerVibration(150);
         setSessionCount(c => c + 1);
         const entry: ScanEntry = {
           id: crypto.randomUUID(),
+          volunteerId: res.volunteerId || res.session?.volunteer_id,
           volunteer: res.volunteer || "Voluntario",
           committee: res.committee || "Sin comité",
           shiftDetail: res.shiftDetail,
@@ -1243,7 +1286,9 @@ export function CheckInScanner({
                   <div className="flex items-center gap-2.5 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-600 dark:text-amber-300 text-xs font-inter font-medium">
                     <span className="material-symbols-outlined text-[18px] shrink-0 text-amber-500">info</span>
                     <span>
-                      No hay un turno activo en este horario exacto. Selecciona manualmente qué turno deseas marcar para este voluntario:
+                      {scanResult.outsideOperationalDay
+                        ? 'Hoy no es una jornada operativa del cronograma. Para una prueba controlada, selecciona manualmente el turno que deseas marcar:'
+                        : 'No hay un turno activo en este horario exacto. Selecciona manualmente qué turno deseas marcar para este voluntario:'}
                     </span>
                   </div>
 
@@ -1591,14 +1636,20 @@ export function CheckInScanner({
                                                           'bg-rose-400'
                                                         }`} />
                                                         <div className="flex flex-col min-w-0">
-                                                          <span className={`font-inter font-bold text-[12px] truncate ${
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => handleOpenVolunteerProfile(entry)}
+                                                            className={`font-inter font-bold text-[12px] truncate text-left cursor-pointer hover:underline hover:text-[#4d7cfe] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe]/60 rounded-sm ${
                                                             entry.isCompleted ? 'text-gray-400 dark:text-gray-400 font-bold' :
                                                             entry.type === 'success' ? 'text-emerald-400 font-extrabold' :
                                                             entry.type === 'already_checked_in' ? 'text-amber-400 font-extrabold' :
                                                             'text-rose-400 font-extrabold'
-                                                          }`}>
+                                                          }`}
+                                                            title={`Ver perfil de ${entry.volunteer}`}
+                                                            aria-label={`Ver perfil de ${entry.volunteer}`}
+                                                          >
                                                             {entry.type === 'error' ? '—' : <HighlightText text={entry.volunteer} term={searchQuery} />}
-                                                          </span>
+                                                          </button>
                                                           <span className={`font-inter font-bold text-[9px] leading-tight truncate ${
                                                             entry.isCompleted
                                                               ? 'text-gray-400 dark:text-gray-500'
@@ -1764,15 +1815,17 @@ export function CheckInScanner({
                                   entry.isCompleted ? 'bg-gray-400 dark:bg-gray-600' : 'bg-emerald-400 animate-pulse'
                                 }`} />
                                 <div className="flex flex-col min-w-0">
-                                  <span
+                                  <button
+                                    type="button"
                                     onClick={() => handleOpenVolunteerProfile(entry)}
-                                    className={`font-inter font-bold text-[12px] truncate cursor-pointer hover:underline hover:text-[#4d7cfe] ${
+                                    className={`font-inter font-bold text-[12px] truncate text-left cursor-pointer hover:underline hover:text-[#4d7cfe] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 rounded-sm ${
                                       entry.isCompleted ? 'text-gray-400 font-bold' : 'text-emerald-300 font-extrabold'
                                     }`}
-                                    title="Ver perfil completo del voluntario"
+                                    title={`Ver perfil de ${entry.volunteer}`}
+                                    aria-label={`Ver perfil de ${entry.volunteer}`}
                                   >
                                     {entry.type === 'error' ? '—' : <HighlightText text={entry.volunteer} term={searchQuery} />}
-                                  </span>
+                                  </button>
                                   <span className={`font-inter font-bold text-[9px] leading-tight truncate ${
                                     entry.isCompleted
                                       ? 'text-gray-400 dark:text-gray-400'
@@ -1834,10 +1887,11 @@ export function CheckInScanner({
       {/* CONFIRMATION MODAL FOR CHECK-OUT (Matching /shifts page 100%) */}
       <ConfirmationModal
         isOpen={checkoutModal.isOpen}
-        title="Completar Turno"
+        title={checkoutModal.item?.outsideOperationalDay ? "Cerrar sesión fuera del cronograma" : "Completar Turno"}
         message={(() => {
           const name = checkoutModal.item?.volunteerName || 'este voluntario';
           const checkedInAt = checkoutModal.item?.checkedInAt;
+          const outsideOperationalDay = Boolean(checkoutModal.item?.outsideOperationalDay);
 
           let elapsedText = '';
           let isOver8Hours = false;
@@ -1864,7 +1918,13 @@ export function CheckInScanner({
 
           return (
             <div className="flex flex-col gap-3 text-center">
-              <span>¿Deseas marcar el turno de <strong>{name}</strong> como completado?</span>
+              <span>
+                {outsideOperationalDay ? (
+                  <>Se encontró una sesión abierta de <strong>{name}</strong> en {checkoutModal.item?.dayLabel || 'una fecha'} sin un turno correspondiente en el cronograma. ¿Deseas cerrarla para continuar?</>
+                ) : (
+                  <>¿Deseas marcar el turno de <strong>{name}</strong> como completado?</>
+                )}
+              </span>
               {elapsedText && (
                 <div className="pt-3 border-t border-black/10 dark:border-white/10 flex flex-col items-center gap-1.5">
                   <span className="text-xs font-inter font-medium text-slate-500 dark:text-text-dim">
@@ -1886,7 +1946,7 @@ export function CheckInScanner({
             </div>
           );
         })()}
-        confirmText="Turno Completado"
+        confirmText={checkoutModal.item?.outsideOperationalDay ? "Cerrar sesión pendiente" : "Turno Completado"}
         type="primary"
         onConfirm={handleConfirmCheckout}
         onCancel={() => setCheckoutModal({ isOpen: false, item: null })}

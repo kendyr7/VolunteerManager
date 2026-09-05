@@ -46,6 +46,7 @@ import { AdminSessionCorrectionModal } from "./AdminSessionCorrectionModal";
 import { AdminCreateSessionModal } from "./AdminCreateSessionModal";
 import type { ShiftAreaDetails } from "@/lib/shift-area";
 import { ShiftChangeReasonSelector } from "@/components/ShiftChangeReasonSelector";
+import { getShiftAttendanceState } from "@/lib/coordinator-data";
 
 export interface VolunteerProfileData {
   id: string;
@@ -387,13 +388,8 @@ export function VolunteerProfileView({
     if (isShiftCheckedOut(dayKey, shiftKey)) return false;
 
     const dbRec = dbShiftRecords.find(r => r.day_key === dayKey && r.shift_key === shiftKey);
-    if (dbRec) {
-      if (!dbRec.checked_in && !dbRec.checked_in_at && dbRec.status !== 'confirmed') {
-        return false;
-      }
-      if (dbRec.checked_in || dbRec.checked_in_at || dbRec.status === 'confirmed') {
-        return true;
-      }
+    if (dbRec && (dbRec.checked_in || dbRec.checked_in_at || dbRec.status === 'confirmed')) {
+      return true;
     }
 
     const relevantLogs = auditLogs.filter((l: any) => {
@@ -423,10 +419,13 @@ export function VolunteerProfileView({
     if (Array.isArray(arrayVal)) {
       return arrayVal.includes(shiftKey);
     }
-    return (
-      !!(map as Record<string, boolean>)[`${volunteer.id}-${dayKey}-${shiftKey}`] ||
-      !!(map as Record<string, boolean>)[`${dayKey}-${shiftKey}`]
-    );
+    return getShiftAttendanceState({
+      shift: dbRec,
+      volunteerId: volunteer.id,
+      dayKey,
+      shiftKey,
+      checkedInMap: map as Record<string, boolean>,
+    }).isCheckedIn;
   }, [dbShiftRecords, auditLogs, isShiftCheckedOut, externalCheckedInMap, localCheckedInMap, volunteer.id]);
 
   // Contexto de validación para reagendamiento (turnos propios + capacidad por comité)
