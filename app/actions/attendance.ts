@@ -37,94 +37,6 @@ export async function getAttendanceSessionsAction(requestedDayKeys?: string[]): 
   return sessions;
 }
 
-// Safely update checked_in status on shifts table, protecting against FK constraint errors on checked_in_by
-async function safeUpdateShiftCheckIn(
-  supabase: ReturnType<typeof getAdminClient>,
-  shiftId: string,
-  coordinatorId?: string
-) {
-  const updatePayload: Record<string, unknown> = {
-    checked_in: true,
-    checked_in_at: new Date().toISOString(),
-  };
-
-  const FALLBACK_ID = '99999999-9999-9999-9999-999999999999';
-  if (coordinatorId && coordinatorId !== FALLBACK_ID) {
-    // Check if coordinatorId exists in profiles to prevent FK violations
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', coordinatorId)
-      .maybeSingle();
-
-    if (prof) {
-      updatePayload.checked_in_by = coordinatorId;
-    }
-  }
-
-  const { data: updatedShift, error } = await supabase
-    .from('shifts')
-    .update(updatePayload)
-    .eq('id', shiftId)
-    .select('*')
-    .single();
-
-  if (!error && updatedShift) {
-    broadcastShiftSync({
-      eventType: 'UPDATE',
-      table: 'shifts',
-      record: updatedShift,
-    });
-    return null;
-  }
-
-  // Fallback: if update with checked_in_by failed due to any constraint, retry without checked_in_by
-  if (error && updatePayload.checked_in_by) {
-    console.warn("Retrying check-in update without checked_in_by:", error.message);
-    delete updatePayload.checked_in_by;
-    const { data: fallbackShift, error: fallbackErr } = await supabase
-      .from('shifts')
-      .update(updatePayload)
-      .eq('id', shiftId)
-      .select('*')
-      .single();
-
-    if (!fallbackErr && fallbackShift) {
-      broadcastShiftSync({
-        eventType: 'UPDATE',
-        table: 'shifts',
-        record: fallbackShift,
-      });
-    }
-    return fallbackErr;
-  }
-
-  return error;
-}
-
-// Helper to log check-in to activity_logs table for audit history
-async function logCheckInActivity(
-  supabase: ReturnType<typeof getAdminClient>,
-  actorName: string,
-  actorRole: string,
-  volunteerName: string,
-  shiftDetail: string,
-  shiftId: string
-) {
-  try {
-    await supabase.from('activity_logs').insert({
-      user_name: actorName,
-      user_role: actorRole,
-      action_type: 'Check-in',
-      description: `Registró asistencia de ${volunteerName}`,
-      details: `Turno: ${shiftDetail}`,
-      target_id: shiftId
-    });
-  } catch (err) {
-    console.error("Notice: Could not create activity log entry:", err);
-  }
-}
-
 // Parse day key to the instant representing the end of the shift in Guatemala.
 function parseShiftDateTime(dayKey: string, shiftKey: string): Date {
   const dayNumPart = dayKey.split(' ')[1];
@@ -702,7 +614,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
     try {
       const { data: shift, error: shiftErr } = await supabase
         .from('shifts')
-        .select('volunteer_id, day_key, shift_key')
+        .select('*')
         .eq('id', manualShiftId)
         .single();
 
@@ -710,17 +622,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         return { error: "No se encontró el turno seleccionado." };
       }
       volunteerId = shift.volunteer_id;
-
-      const updateErr = await safeUpdateShiftCheckIn(supabase, manualShiftId, coordinatorId);
-
-      if (updateErr) {
-        console.error("Error updating manual check-in:", updateErr);
-        return { error: "Error al registrar la asistencia en la base de datos." };
-      }
-
-      recalculateReliability(volunteerId).catch(err => 
-        console.error("Error en segundo plano al recalcular fiabilidad (manual):", err)
-      );
+      await requireVolunteerCapability('scan_qr_attendance', volunteerId);
 
       const { data: vol } = await supabase
         .from('volunteers')
@@ -728,17 +630,43 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         .eq('id', volunteerId)
         .single();
 
+      if (!vol || vol.status === 'archived') {
+        return { error: 'Voluntario no disponible para registrar asistencia.' };
+      }
+      const now = new Date();
+      const localNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Guatemala' }));
+      const today = format(localNow, 'EEE d', { locale: es }).toLowerCase();
+      if (shift.day_key !== today || !buildEventDayKeys().includes(today) || !isShiftAvailableForDay(shift.day_key, shift.shift_key)) {
+        return { error: 'La entrada en vivo debe corresponder a un turno de hoy. Para otra fecha utiliza una corrección de asistencia.' };
+      }
+      if (shift.checked_out || shift.checked_out_at) {
+        return { error: 'Este turno ya está completado. Utiliza Reabrir turno si la salida fue un error.' };
+      }
+      if (await getOpenSessionForVolunteer(volunteerId)) {
+        return { error: 'El voluntario ya tiene una sesión abierta. Vuelve a escanear su QR para registrar la salida o resolver la salida pendiente.' };
+      }
+      const { data: assigned, error: assignedError } = await supabase.from('shifts')
+        .select('shift_key').eq('volunteer_id', volunteerId).eq('day_key', today);
+      if (assignedError) return { error: 'No se pudieron consultar los turnos asignados.' };
+      const assignedKeys = (assigned || []).map((s: { shift_key: string }) => s.shift_key);
+      const currentHour = getGuatemalaHourFloat(now);
+      const available = assignedKeys.map((key: string) => getOfficialShiftTime(today, key))
+        .filter((s: { endHour: number }) => s.endHour > currentHour)
+        .sort((a: { startHour: number }, b: { startHour: number }) => a.startHour - b.startHour);
+      const eligible = available.filter((s: { startHour: number }) => s.startHour <= currentHour);
+      const selectable = eligible.length ? eligible : available.slice(0, 1);
+      if (!selectable.some((s: { shiftKey: string }) => s.shiftKey === shift.shift_key)) {
+        return { error: 'Selecciona el turno actual o el próximo turno asignado de hoy. Un turno pasado requiere corrección de asistencia.' };
+      }
+
+      // Use the same persistence and broadcasts as a normal QR entry. Do not
+      // write only legacy shift flags: all consumers need the actual session.
+      const opened = await openAttendanceSessionAction(volunteerId, today, true);
+      if (!opened.success || !opened.session || opened.alreadyOpen) {
+        return { error: 'No se abrió una nueva sesión. Vuelve a escanear para consultar el estado actual.' };
+      }
       const volunteerName = vol ? `${vol.first_name} ${vol.last_name}` : "Voluntario";
       const shiftDetail = `${shift.day_key} - ${shift.shift_key}`;
-
-      await logCheckInActivity(
-        supabase,
-        authorizedActor.name,
-        roleDisplayName(authorizedActor),
-        volunteerName,
-        shiftDetail,
-        manualShiftId
-      );
 
       try {
         revalidatePath('/shifts');
@@ -749,7 +677,9 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
 
       return {
         success: true,
-        message: "Asistencia registrada manualmente.",
+        action: 'opened',
+        session: opened.session,
+        message: "Sesión de asistencia abierta para el turno seleccionado.",
         shiftId: manualShiftId,
         volunteerId,
         volunteer: volunteerName,

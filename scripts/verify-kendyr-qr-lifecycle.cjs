@@ -33,6 +33,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll
   const paths = [];
   let now = at('08:00');
   let failSessionUpdate = false;
+  let failSessionInsert = false;
   let failShiftUpdate = false;
   class Clock extends Date {
     constructor(...args) { super(...(args.length ? args : [now])); }
@@ -60,6 +61,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll
         if (this.table === 'shifts' && failShiftUpdate) return { data: null, error: { message: 'Injected shift update failure' } };
         rows.forEach(row => Object.assign(row, this.payload));
       } else if (this.mode === 'insert' || this.mode === 'upsert') {
+        if (this.table === 'attendance_sessions' && failSessionInsert) return { data: null, error: { message: 'Injected session insert failure' } };
         const values = Array.isArray(this.payload) ? this.payload : [this.payload];
         rows = values.map(value => {
           const existing = this.mode === 'upsert' ? table.find(row => row.id === value.id) : null;
@@ -195,6 +197,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll
     advance: time => { now = at(time); },
     advanceTo: iso => { now = iso; },
     failClose: () => { failSessionUpdate = true; },
+    failOpen: () => { failSessionInsert = true; },
     failShiftUpdate: () => { failShiftUpdate = true; },
     shiftCheckout: () => handler('app/(coordinator)/shifts/page.tsx', 'handleConfirmCheckout', {
       ...actions, supabase: db, checkoutModal: { item: { shiftId: shiftIds[1], dayKey: 'jue 10', shiftKey: 'T2', volunteer: { ...volunteer, name: `${volunteer.first_name} ${volunteer.last_name}` } } },
@@ -559,6 +562,109 @@ async function run() {
     assert.equal(flow.tables.shifts[0].checked_in_at, at('08:00'));
     assert.equal(JSON.stringify(flow.tables.shifts[1]), other);
     assert.equal(flow.tables.attendance_sessions.length, 0);
+  });
+  await verify('QR anticipado pide seleccion; seleccion manual abre sesion y activa perfil e historial inmediatamente', async () => {
+    const flow = createHarness();
+    flow.advance('06:55');
+    const scanned = await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor');
+    assert.equal(scanned.requiresManualSelection, true);
+    assert.equal(flow.tables.attendance_sessions.length, 0);
+    const ui = flow.scanner('handleManualCheckIn');
+    await ui.runHandler(shiftIds[0]);
+    assert.equal(ui.state, 'success');
+    assert.equal(flow.tables.attendance_sessions.length, 1);
+    assert.equal(flow.tables.attendance_sessions[0].started_at, new Date(at('06:55')).toISOString());
+    assert.ok(ui.history[0].sessionId);
+    assert.deepEqual(flow.snapshot().map(s => s.isCheckedIn), [true, false]);
+    assert.equal(flow.profile().inside('jue 10', 'T1'), true);
+    assert.equal((await flow.actions.getHistoricalAttendanceLogs(150, 'jue 10')).length, 1);
+    assert.ok(flow.events.some(e => e.table === 'attendance_sessions'));
+  });
+  await verify('Entrada anticipada permite cerrar por QR el bloque continuo sin duplicar sesiones', async () => {
+    const flow = createHarness(); flow.advance('06:55');
+    await flow.actions.checkInVolunteer('', 'internal-test-actor', shiftIds[0]);
+    flow.advance('15:00');
+    const checkout = await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor');
+    assert.equal(checkout.action, 'confirm_checkout');
+    assert.equal((await flow.actions.closeAttendanceSessionAction({ sessionId: checkout.session.id })).success, true);
+    assert.deepEqual(flow.snapshot().map(s => s.isCheckedOut), [true, true]);
+    assert.equal(flow.tables.attendance_sessions.length, 1);
+  });
+  await verify('Salida antes de comenzar el horario conserva asistencia solo en el primer turno', async () => {
+    const flow = createHarness(); flow.advance('06:50');
+    const opened = await flow.actions.checkInVolunteer('', 'internal-test-actor', shiftIds[0]);
+    flow.advance('06:55');
+    await flow.actions.closeAttendanceSessionAction({ sessionId: opened.session.id });
+    assert.deepEqual(flow.snapshot().map(s => s.isCheckedOut), [true, false]);
+  });
+  await verify('Seleccion manual repetida no cambia entrada, duplica ni cierra la sesion', async () => {
+    const flow = createHarness(); flow.advance('06:55');
+    await flow.actions.checkInVolunteer('', 'internal-test-actor', shiftIds[0]);
+    const before = JSON.stringify(flow.tables);
+    flow.advance('06:56');
+    assert.ok((await flow.actions.checkInVolunteer('', 'internal-test-actor', shiftIds[0])).error);
+    assert.equal(JSON.stringify(flow.tables), before);
+  });
+  await verify('Fallo de persistencia anticipada no deja marcas ni exito falso en UI', async () => {
+    const flow = createHarness(); flow.advance('06:55'); flow.failOpen();
+    const before = JSON.stringify(flow.tables);
+    const ui = flow.scanner('handleManualCheckIn'); await ui.runHandler(shiftIds[0]);
+    assert.equal(ui.state, 'error');
+    assert.equal(JSON.stringify(flow.tables), before);
+  });
+  await verify('No hay ventana oculta de 90 minutos para entrada manual del mismo dia', async () => {
+    const flow = createHarness(); flow.advance('04:00');
+    assert.equal((await flow.actions.checkInVolunteer('', 'internal-test-actor', shiftIds[0])).success, true);
+    assert.deepEqual(flow.snapshot().map(s => s.isCheckedIn), [true, false]);
+  });
+  await verify('No abre fechas futuras, pasadas, turno terminado ni voluntario archivado', async () => {
+    for (const variant of ['future', 'past', 'ended', 'archived', 'completed']) {
+      const flow = createHarness(); flow.advance('06:55');
+      if (variant === 'future') flow.tables.shifts[0].day_key = 'vie 11';
+      if (variant === 'past') flow.tables.shifts[0].day_key = 'mié 9';
+      if (variant === 'ended') flow.advance('20:00');
+      if (variant === 'archived') flow.tables.volunteers[0].status = 'archived';
+      if (variant === 'completed') flow.tables.shifts[0].checked_out = true;
+      const before = JSON.stringify(flow.tables);
+      assert.ok((await flow.actions.checkInVolunteer('', 'internal-test-actor', shiftIds[0])).error, variant);
+      assert.equal(JSON.stringify(flow.tables), before, variant);
+    }
+  });
+  await verify('T1 y T3: entrada anticipada del segundo bloque no arrastra ni reabre el primero', async () => {
+    const flow = createHarness({ shiftKeys: ['T1', 'T3'] });
+    await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor');
+    flow.advance('12:00');
+    await flow.actions.closeAttendanceSessionAction({ sessionId: flow.tables.attendance_sessions[0].id });
+    flow.advance('13:55');
+    assert.equal((await flow.actions.checkInVolunteer('', 'internal-test-actor', shiftIds[1])).success, true);
+    assert.deepEqual(flow.snapshot().map(s => [s.isCheckedIn, s.isCheckedOut]), [[false, true], [true, false]]);
+    flow.advance('18:00');
+    assert.equal((await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor')).action, 'confirm_checkout');
+  });
+  await verify('Salida olvidada no puede saltarse mediante seleccion manual de otro bloque', async () => {
+    const flow = createHarness({ shiftKeys: ['T1', 'T3'] });
+    await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor'); flow.advance('14:00');
+    assert.ok((await flow.actions.checkInVolunteer('', 'internal-test-actor', shiftIds[1])).error);
+    assert.equal((await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor')).action, 'stale_open_session');
+    assert.equal(flow.tables.attendance_sessions.length, 1);
+  });
+  await verify('No permite seleccionar un turno posterior saltando el proximo asignado', async () => {
+    const flow = createHarness({ shiftKeys: ['T1', 'T3'] }); flow.advance('06:55');
+    assert.ok((await flow.actions.checkInVolunteer('', 'internal-test-actor', shiftIds[1])).error);
+    assert.equal(flow.tables.attendance_sessions.length, 0);
+  });
+  await verify('Caso real sab 5 a las 08:54:55: visible antes de las 9 y salida posterior por QR', async () => {
+    const flow = createHarness();
+    flow.tables.shifts = [{ ...seedShifts[0], day_key: 'sáb 5' }];
+    flow.advanceTo('2026-09-05T08:54:55.032-06:00');
+    const opened = await flow.actions.checkInVolunteer('', 'internal-test-actor', shiftIds[0]);
+    assert.equal(opened.session.started_at, '2026-09-05T14:54:55.032Z');
+    assert.equal(flow.snapshot()[0].isCheckedIn, true);
+    assert.equal((await flow.actions.getHistoricalAttendanceLogs(150, 'sáb 5')).length, 1);
+    flow.advanceTo('2026-09-05T12:00:00-06:00');
+    assert.equal((await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor')).action, 'confirm_checkout');
+    await flow.actions.checkOutVolunteer(shiftIds[0]);
+    assert.equal(flow.snapshot()[0].isCheckedOut, true);
   });
   const passes = results.filter(r => r.passed).length;
   console.log(`RESULTADO: ${passes}/${results.length} aprobadas; ${results.length - passes} fallos reproducidos. Persistencia y autenticacion simuladas; datos de produccion intactos.`);

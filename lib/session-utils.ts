@@ -102,7 +102,10 @@ export function inferShiftsForSession(
     const overlapStart = Math.max(sessionStartHour, shiftStartHour);
     const overlapEnd = Math.min(sessionEndHour, shiftEndHour);
 
-    if (overlapStart < overlapEnd) {
+    // An explicitly confirmed early arrival is already attendance in the first
+    // shift of its block, even before the scheduled start (or if it leaves early).
+    const earlyArrival = block?.startShiftKey === shiftKey && sessionStartHour < shiftStartHour;
+    if (overlapStart < overlapEnd || earlyArrival) {
       matched.push(official);
     }
   }
@@ -268,10 +271,12 @@ export function getContinuousScheduledBlockForSession(
 
   const sessionStartHour = getGuatemalaHourFloat(startedAt);
 
-  const matchedBlock = blocks.find(b =>
-    (sessionStartHour >= b.startHour - 0.75 && sessionStartHour <= b.endHour) ||
-    Math.abs(sessionStartHour - b.startHour) <= 1.5
-  );
+  // Prefer the block actually running, then the next scheduled block for an
+  // explicitly confirmed early entry. The scanner controls whether to open it;
+  // this inference must not impose a different, hidden early-arrival window.
+  const matchedBlock = blocks.find(b => sessionStartHour >= b.startHour && sessionStartHour < b.endHour)
+    || blocks.find(b => sessionStartHour < b.startHour)
+    || blocks.find(b => sessionStartHour === b.endHour);
 
   if (!matchedBlock) return null;
 
