@@ -67,13 +67,16 @@ export function inferShiftsForSession(
   if (!sessionStart) return [];
 
   const sessionStartHour = getGuatemalaHourFloat(sessionStart);
+  // A session belongs to the block where it began, even when its exit is late.
+  // Never infer attendance in a separate block from the elapsed interval alone.
+  const block = getContinuousScheduledBlockForSession(dayKey, sessionStart, assignedShifts);
+  const sessionShiftKeys = block ? block.matchedShifts.map(shift => shift.shiftKey) : assignedShifts;
 
   let sessionEndHour: number;
   if (sessionEnd) {
     sessionEndHour = getGuatemalaHourFloat(sessionEnd);
   } else {
     // For OPEN sessions: evaluate up to CURRENT Guatemala time, constrained by the continuous block
-    const block = getContinuousScheduledBlockForSession(dayKey, sessionStart, assignedShifts);
     const blockEndHour = block ? getOfficialShiftTime(dayKey, block.endShiftKey).endHour : 24;
     const currentNowHour = getGuatemalaHourFloat(now);
     // A session broadcast immediately after check-in can have the same whole-second
@@ -90,7 +93,7 @@ export function inferShiftsForSession(
 
   const matched: OfficialShiftTime[] = [];
 
-  for (const shiftKey of assignedShifts) {
+  for (const shiftKey of sessionShiftKeys) {
     const official = getOfficialShiftTime(dayKey, shiftKey);
     const shiftStartHour = official.startHour;
     const shiftEndHour = official.endHour;
@@ -288,4 +291,23 @@ export function getContinuousScheduledBlockForSession(
     blockLabel: matchedBlock.blockLabel,
     durationMinutes
   };
+}
+
+/** A later, separate block or another calendar day requires an explicit exit correction. */
+export function requiresSessionExitResolution(
+  dayKey: string,
+  startedAt: string,
+  assignedShiftKeys: string[],
+  now: Date | string = new Date(),
+): boolean {
+  const localDate = (value: Date | string) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' });
+  if (localDate(startedAt) !== localDate(now)) return true;
+  const originalBlock = getContinuousScheduledBlockForSession(dayKey, startedAt, assignedShiftKeys);
+  if (!originalBlock) return false;
+  const originalEnd = new Date(originalBlock.suggestedEndTimeIso).getTime();
+  const nowMs = new Date(now).getTime();
+  return getContinuousScheduledBlocks(dayKey, assignedShiftKeys).some(block => {
+    const start = new Date(block.startTimeIso).getTime();
+    return start > originalEnd && nowMs >= start;
+  });
 }

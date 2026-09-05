@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { AttendanceSession, getContinuousScheduledBlockForSession } from '@/lib/session-utils';
 import { formatUnifiedDuration } from '@/lib/shift-calculations';
-import { adjustSessionTimesAdminAction, closeAttendanceSessionAction } from '@/app/actions/attendance';
+import { adjustSessionTimesAdminAction } from '@/app/actions/attendance';
 import { canCorrectAttendanceTimes } from '@/lib/permissions';
 import { getOfficialShiftTime, parseDayKeyToDateStr } from '@/lib/dates';
 import { CustomTimePicker } from '@/components/CustomTimePicker';
@@ -55,9 +55,9 @@ export function AdminSessionCorrectionModal({
   // Computed custom endedAt ISO
   const customTimeIso = useMemo(() => {
     if (!session?.started_at) return null;
-    const startDateStr = session.started_at.split('T')[0];
+    const startDateStr = parseDayKeyToDateStr(session.day_key);
     return `${startDateStr}T${customTimeInput}:00-06:00`;
-  }, [session?.started_at, customTimeInput]);
+  }, [session?.started_at, session?.day_key, customTimeInput]);
 
   // Duration for custom time
   const customDurationMinutes = useMemo(() => {
@@ -77,7 +77,7 @@ export function AdminSessionCorrectionModal({
           <span className="material-symbols-outlined text-4xl text-destructive mb-2">lock</span>
           <h3 className="text-lg font-bold text-foreground">Acceso Restringido</h3>
           <p className="text-sm text-muted-foreground mt-2">
-            Solo un Administrador puede realizar correcciones manuales de asistencia.
+            Hay una salida pendiente. Solicita a un Administrador corregir su hora antes de volver a escanear para iniciar otro turno.
           </p>
           <button
             onClick={onClose}
@@ -109,9 +109,9 @@ export function AdminSessionCorrectionModal({
     }
 
     try {
-      const res = await closeAttendanceSessionAction({
+      const res = await adjustSessionTimesAdminAction({
         sessionId: session.id,
-        endedAt: block.suggestedEndTimeIso,
+        correctionType: 'official_shift_end',
       });
 
       if (res.success) {
@@ -138,7 +138,9 @@ export function AdminSessionCorrectionModal({
 
     const dateStr = parseDayKeyToDateStr(session.day_key);
     const startShiftTime = getOfficialShiftTime(session.day_key, block.startShiftKey);
-    const startedAtIso = `${dateStr}T${startShiftTime.startTime}:00-06:00`;
+    const startHour = String(Math.floor(startShiftTime.startHour)).padStart(2, '0');
+    const startMinute = String(Math.round((startShiftTime.startHour % 1) * 60)).padStart(2, '0');
+    const startedAtIso = `${dateStr}T${startHour}:${startMinute}:00-06:00`;
 
     if (isMockMode) {
       setTimeout(() => {
@@ -242,6 +244,7 @@ export function AdminSessionCorrectionModal({
         </div>
 
         <div ref={scrollAreaRef} className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4">
+          <p className="text-sm text-text-dim">Resuelve la salida pendiente de esta sesión. Esta corrección no inicia otro turno; para hacerlo, vuelve a escanear el QR después.</p>
           {errorMsg && (
             <div className="p-3.5 rounded-2xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-semibold flex items-center gap-2">
               <span className="material-symbols-outlined text-[20px] shrink-0">error</span>

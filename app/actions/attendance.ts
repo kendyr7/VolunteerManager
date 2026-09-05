@@ -10,7 +10,7 @@ import { requireCapability, requireVolunteerCapability, requireVolunteerSelfOrCa
 import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
 import { getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay } from "@/lib/dates";
 import { buildEventDayKeys } from '@/lib/coordinator-data';
-import { AttendanceSession, getGuatemalaHourFloat, validateSessionConstraints } from "@/lib/session-utils";
+import { AttendanceSession, getGuatemalaHourFloat, getContinuousScheduledBlockForSession, requiresSessionExitResolution, inferShiftsForSession, validateSessionConstraints } from "@/lib/session-utils";
 import {
   saveAttendanceSession,
   getOpenSessionForVolunteer,
@@ -290,6 +290,13 @@ export async function openAttendanceSessionAction(
   };
 }
 
+async function getSessionAssignedShiftKeys(session: AttendanceSession): Promise<string[]> {
+  const { data, error } = await getAdminClient().from('shifts').select('shift_key')
+    .eq('volunteer_id', session.volunteer_id).eq('day_key', session.day_key);
+  if (error) throw new Error('No se pudieron consultar los turnos de la sesión pendiente.');
+  return (data || []).map((shift: { shift_key: string }) => shift.shift_key);
+}
+
 // 2. Close Attendance Session Action (Server timestamp, Idempotent)
 export async function closeAttendanceSessionAction({
   sessionId,
@@ -329,6 +336,17 @@ export async function closeAttendanceSessionAction({
     };
   }
 
+  const assignedShiftKeys = await getSessionAssignedShiftKeys(sessionToClose);
+  if (requiresSessionExitResolution(sessionToClose.day_key, sessionToClose.started_at, assignedShiftKeys)) {
+    return {
+      success: false,
+      requiresResolution: true,
+      session: sessionToClose,
+      assignedShiftKeys,
+      error: 'Hay una salida olvidada de un bloque anterior. Escanea el QR y solicita a un administrador resolver la hora de salida antes de iniciar otro turno.',
+    };
+  }
+
   // Derive actor identity from server cookie session if available
   let actorName = actorNameInput || 'Coordinador';
   let actorRole = actorRoleInput || 'Coordinador';
@@ -344,7 +362,10 @@ export async function closeAttendanceSessionAction({
   const newEndedAt = new Date().toISOString();
 
   const atomicRes = await completeOpenAttendanceSessionInDb(sessionToClose.id, newEndedAt, false);
-  if (atomicRes.alreadyClosed || !atomicRes.success) {
+  if (!atomicRes.success) {
+    return { success: false, error: atomicRes.error || 'No se pudo guardar la salida. Intenta de nuevo.' };
+  }
+  if (atomicRes.alreadyClosed) {
     return {
       success: true,
       alreadyClosed: true,
@@ -465,8 +486,14 @@ export async function adjustSessionTimesAdminAction({
   const previousStartedAt = targetSession.started_at;
   const previousEndedAt = targetSession.ended_at;
 
-  const newStartedAt = startedAt || targetSession.started_at;
-  const newEndedAt = endedAt !== undefined ? endedAt : targetSession.ended_at;
+  const newStartedAt = correctionType === 'official_shift_end' ? targetSession.started_at : startedAt || targetSession.started_at;
+  let newEndedAt = endedAt !== undefined ? endedAt : targetSession.ended_at;
+  if (correctionType === 'official_shift_end') {
+    const assignedShiftKeys = await getSessionAssignedShiftKeys(targetSession);
+    const block = getContinuousScheduledBlockForSession(targetSession.day_key, targetSession.started_at, assignedShiftKeys);
+    if (!block) return { success: false, error: 'No se pudo determinar el bloque original. Registra la hora de salida con un motivo.' };
+    newEndedAt = block.suggestedEndTimeIso;
+  }
   const newStatus = newEndedAt ? 'completed' : 'open';
 
   // Chronology & constraint validation (ended_at >= started_at)
@@ -488,7 +515,8 @@ export async function adjustSessionTimesAdminAction({
 
   if (targetSession.status === 'open' && newEndedAt) {
     const atomicRes = await completeOpenAttendanceSessionInDb(sessionId, newEndedAt, false);
-    if (atomicRes.alreadyClosed || !atomicRes.success) {
+    if (!atomicRes.success) return { success: false, error: atomicRes.error || 'No se pudo guardar la corrección de salida.' };
+    if (atomicRes.alreadyClosed) {
       return {
         success: true,
         alreadyClosed: true,
@@ -497,7 +525,7 @@ export async function adjustSessionTimesAdminAction({
       };
     }
     saved = { ...atomicRes.session!, started_at: newStartedAt };
-    await saveAttendanceSession(saved);
+    if (newStartedAt !== targetSession.started_at) await saveAttendanceSession(saved);
   } else {
     const updatedRecord: AttendanceSession = {
       ...targetSession,
@@ -545,6 +573,10 @@ export async function adjustSessionTimesAdminAction({
       target_id: saved.volunteer_id
     });
   } catch (e) {}
+
+  for (const route of ['/shifts', '/volunteers', '/check-in', '/dashboard']) {
+    revalidatePath(route);
+  }
 
   return {
     success: true,
@@ -717,6 +749,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       return {
         success: true,
         message: "Asistencia registrada manualmente.",
+        shiftId: manualShiftId,
         volunteerId,
         volunteer: volunteerName,
         committee: vol?.committees?.name || "Sin comité",
@@ -757,10 +790,12 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
 
   const openSession = await getOpenSessionForVolunteer(volunteerId);
   if (openSession) {
+    const assignedShiftKeys = await getSessionAssignedShiftKeys(openSession);
+    const needsExitResolution = requiresSessionExitResolution(openSession.day_key, openSession.started_at, assignedShiftKeys);
     const isSameDay = (openSession.day_key || '').toLowerCase().trim() === currentDayKey;
     const isOperationalSessionDay = operationalDayKeys.has((openSession.day_key || '').toLowerCase().trim());
 
-    if (!isSameDay || !isOperationalSessionDay) {
+    if (!isSameDay || !isOperationalSessionDay || needsExitResolution) {
       // A previous-day or out-of-calendar session must be resolved before a new
       // scheduled shift can start. Treating it as a normal same-day checkout
       // creates an active session that none of the operational views can display.
@@ -768,6 +803,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         success: true,
         action: 'stale_open_session',
         isStaleOpen: true,
+        assignedShiftKeys,
         isOutsideOperationalDay: !isOperationalSessionDay,
         session: openSession,
         previousDayKey: openSession.day_key,
@@ -776,7 +812,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         volunteer: volunteerName,
         committee: volunteer.committees?.name || "Sin comité",
         message: isOperationalSessionDay
-          ? `El voluntario ${volunteerName} posee una sesión pendiente del día anterior (${openSession.day_key}).`
+          ? `El voluntario ${volunteerName} tiene una salida pendiente de un bloque anterior (${openSession.day_key}). Resuelve esa salida y vuelve a escanear para iniciar el siguiente turno.`
           : `El voluntario ${volunteerName} posee una sesión abierta fuera del cronograma operativo (${openSession.day_key}).`
       };
     }
@@ -872,6 +908,25 @@ export async function checkOutVolunteer(shiftId: string) {
     await requireCapability('scan_qr_attendance');
     const supabase = getAdminClient();
 
+    const { data: shift, error: lookupError } = await supabase
+      .from('shifts').select('*').eq('id', shiftId).maybeSingle();
+    if (lookupError || !shift) return { success: false, error: 'No se encontró el turno para completar.' };
+
+    const sessions = await fetchAllAttendanceSessionsFromDb([shift.day_key]);
+    const { data: assigned, error: assignmentError } = await supabase.from('shifts')
+      .select('shift_key').eq('volunteer_id', shift.volunteer_id).eq('day_key', shift.day_key);
+    if (assignmentError) return { success: false, error: 'No se pudieron consultar los turnos asociados.' };
+    const assignedKeys = (assigned || []).map((s: { shift_key: string }) => s.shift_key);
+    const related = sessions.filter(session =>
+      session.volunteer_id === shift.volunteer_id && session.day_key === shift.day_key &&
+      inferShiftsForSession(session.day_key, session.started_at, session.ended_at, assignedKeys).some(s => s.shiftKey === shift.shift_key)
+    );
+    const active = related.find(session => session.status === 'open');
+    if (active) return closeAttendanceSessionAction({ sessionId: active.id });
+    const completed = related.find(session => session.status === 'completed');
+    if (completed) return { success: true, alreadyClosed: true, session: completed };
+    if (shift.checked_out) return { success: true, alreadyClosed: true };
+
     const { data: updatedShift, error } = await supabase
       .from('shifts')
       .update({
@@ -883,9 +938,9 @@ export async function checkOutVolunteer(shiftId: string) {
       .select('*')
       .maybeSingle();
 
-    if (error) {
+    if (error || !updatedShift) {
       console.error("Error in checkOutVolunteer:", error);
-      return { error: error.message };
+      return { success: false, error: error?.message || 'No se pudo guardar la salida.' };
     }
 
     if (updatedShift) {
@@ -1078,55 +1133,76 @@ export async function reassignVolunteerShift(shiftId: string, newDayKey: string,
 // 5. Fetch Historical Attendance Logs across all days from Supabase DB
 export async function getHistoricalAttendanceLogs(limit = 150) {
   try {
+    const actor = await requireCapability('scan_qr_attendance');
     const supabase = getAdminClient();
-
-    const { data: shifts, error } = await supabase
+    const canViewAll = hasCapability(actor, 'view_all_volunteers');
+    if (!canViewAll && !actor.committeeId) return [];
+    const maxRows = Math.min(Math.max(limit, 1), 500);
+    const selection = `id, volunteer_id, day_key, shift_key, checked_in, checked_out,
+      checked_in_at, checked_out_at, volunteers!inner(id, first_name, last_name, committee_id, committees(name))`;
+    let legacyQuery = supabase
       .from('shifts')
-      .select(`
-        id,
-        volunteer_id,
-        day_key,
-        shift_key,
-        checked_in,
-        checked_out,
-        checked_in_at,
-        checked_in_by,
-        volunteers (
-          id,
-          first_name,
-          last_name,
-          committees ( name )
-        )
-      `)
+      .select(selection)
       .eq('checked_in', true)
       .order('checked_in_at', { ascending: false, nullsFirst: false })
-      .limit(limit);
-
-    if (error || !shifts) {
-      console.error("Error fetching historical attendance logs:", error);
-      return [];
+      .limit(maxRows);
+    let sessionsQuery = supabase.from('attendance_sessions')
+      .select('*, volunteers!inner(committee_id)')
+      .order('started_at', { ascending: false }).limit(maxRows);
+    if (!canViewAll) {
+      legacyQuery = legacyQuery.eq('volunteers.committee_id', actor.committeeId);
+      sessionsQuery = sessionsQuery.eq('volunteers.committee_id', actor.committeeId);
     }
-
-    return shifts.map((s: any) => {
+    const [legacyResult, sessionResult] = await Promise.all([legacyQuery, sessionsQuery]);
+    if (legacyResult.error) throw legacyResult.error;
+    if (sessionResult.error) throw sessionResult.error;
+    const sessions: AttendanceSession[] = sessionResult.data || [];
+    let assignments: any[] = [];
+    if (sessions.length) {
+      let assignmentsQuery = supabase.from('shifts').select(selection)
+        .in('volunteer_id', [...new Set(sessions.map(s => s.volunteer_id))])
+        .in('day_key', [...new Set(sessions.map(s => s.day_key))]);
+      if (!canViewAll) assignmentsQuery = assignmentsQuery.eq('volunteers.committee_id', actor.committeeId);
+      const result = await assignmentsQuery;
+      if (result.error) throw result.error;
+      assignments = result.data || [];
+    }
+    const formatEntry = (s: any, session?: AttendanceSession) => {
       const vol = s.volunteers;
       const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : "Voluntario";
       const commName = vol?.committees?.name || "Sin comité";
-
       return {
         id: s.id,
+        sessionId: session?.id,
         volunteerId: s.volunteer_id || vol?.id,
         volunteer: volName || "Voluntario",
         committee: commName,
         shiftDetail: `${s.day_key} - ${s.shift_key}`,
         dayKey: s.day_key,
         shiftKey: s.shift_key,
-        timestamp: s.checked_in_at || new Date().toISOString(),
+        timestamp: session?.started_at || s.checked_in_at || new Date().toISOString(),
         type: 'success' as const,
-        isCompleted: Boolean(s.checked_out)
+        isCompleted: session ? session.status === 'completed' : Boolean(s.checked_out || s.checked_out_at)
       };
-    });
+    };
+    const entries = new Map<string, ReturnType<typeof formatEntry>>();
+    for (const shift of legacyResult.data || []) entries.set(shift.id, formatEntry(shift));
+    // Newest session wins within each state; an open session takes precedence.
+    const sessionEntries = new Map<string, ReturnType<typeof formatEntry>>();
+    for (const session of sessions) {
+      const assigned = assignments.filter(s => s.volunteer_id === session.volunteer_id && s.day_key === session.day_key);
+      const related = new Set(inferShiftsForSession(session.day_key, session.started_at, session.ended_at, assigned.map(s => s.shift_key)).map(s => s.shiftKey));
+      for (const shift of assigned.filter(s => related.has(s.shift_key))) {
+        const previous = sessionEntries.get(shift.id);
+        if (!previous || (previous.isCompleted && session.status === 'open')) {
+          sessionEntries.set(shift.id, formatEntry(shift, session));
+        }
+      }
+    }
+    for (const [id, entry] of sessionEntries) entries.set(id, entry);
+    return [...entries.values()].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, maxRows);
   } catch (err) {
     console.error("Error in getHistoricalAttendanceLogs:", err);
-    return [];
+    throw new Error('No se pudo actualizar el historial de asistencia. Intenta de nuevo.');
   }
 }

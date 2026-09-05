@@ -9,10 +9,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn, normalizeSearch } from "@/lib/utils";
 import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, getOfficialShiftTime } from "@/lib/dates";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
-import { createClient } from "@/lib/supabase/client";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
+import { AdminSessionCorrectionModal } from "@/components/AdminSessionCorrectionModal";
+import type { AttendanceSession } from "@/lib/session-utils";
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
@@ -31,6 +32,7 @@ type ScannerState = 'idle' | 'scanning' | 'loading' | 'success' | 'already_check
 
 interface ScanEntry {
   id: string;
+  sessionId?: string;
   volunteerId?: string;
   volunteer: string;
   committee: string;
@@ -108,7 +110,7 @@ export function CheckInScanner({
   committeeName,
   initialView = 'scanner',
 }: CheckInScannerProps) {
-  const { refresh } = useCoordinatorData();
+  const { refresh, sessionsData, shiftsData, checkedOutMap, rawVolunteers } = useCoordinatorData();
   const [state, setState] = useState<ScannerState>('idle');
   const [mainView, setMainView] = useState<'scanner' | 'history'>(initialView);
   const [errorMsg, setErrorMsg] = useState("");
@@ -200,77 +202,57 @@ export function CheckInScanner({
     } catch (e) {}
   };
 
-  let checkedOutMap: Record<string, boolean> = {};
-  let rawVolunteers: any[] = [];
-  try {
-    const coordCtx = useCoordinatorData();
-    checkedOutMap = coordCtx.checkedOutMap || {};
-    rawVolunteers = coordCtx.rawVolunteers || [];
-  } catch (e) {}
-
   const [historyTab, setHistoryTab] = useState<'db' | 'session'>('db');
   const [dbHistory, setDbHistory] = useState<ScanEntry[]>([]);
   const [loadingDbHistory, setLoadingDbHistory] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [checkoutError, setCheckoutError] = useState('');
+  const [pendingExit, setPendingExit] = useState<{
+    session: AttendanceSession;
+    volunteerName: string;
+    assignedShiftKeys: string[];
+  } | null>(null);
+  const historyRequestRef = useRef(0);
   const { inputValue: searchInput, setInputValue: setSearchInput, appliedSearch: searchQuery, applySearch } = useDebouncedSearch();
   const [selectedDayFilter] = useState("all");
 
   const fetchDbHistory = useCallback(async () => {
+    const requestId = ++historyRequestRef.current;
     setLoadingDbHistory(true);
     try {
       const logs = await getHistoricalAttendanceLogs(150);
+      if (requestId !== historyRequestRef.current) return;
       const formattedLogs = logs.map((item: any) => ({
         ...item,
         timestamp: new Date(item.timestamp)
       }));
       setDbHistory(formattedLogs);
+      setHistoryError('');
 
       // Sync completed status back to local session history array
       setHistory(prev => prev.map(sessionItem => {
-        const matchingDbItem = formattedLogs.find((dbItem: any) => dbItem.id === sessionItem.id);
-        if (matchingDbItem && matchingDbItem.isCompleted) {
-          return { ...sessionItem, isCompleted: true };
+        const matchingDbItem = formattedLogs.find((dbItem: any) => sessionItem.sessionId
+          ? dbItem.sessionId === sessionItem.sessionId
+          : dbItem.id === sessionItem.id);
+        if (matchingDbItem) {
+          return { ...sessionItem, isCompleted: matchingDbItem.isCompleted };
         }
         return sessionItem;
       }));
     } catch (e) {
       console.error("Error fetching db history", e);
+      if (requestId === historyRequestRef.current) setHistoryError('No se pudo actualizar el historial. Usa Actualizar para reintentar.');
     } finally {
-      setLoadingDbHistory(false);
+      if (requestId === historyRequestRef.current) setLoadingDbHistory(false);
     }
   }, []);
 
   useEffect(() => {
     fetchDbHistory();
-  }, [fetchDbHistory]);
+  }, [fetchDbHistory, sessionsData, shiftsData]);
 
-  // Realtime subscription for Scanner history (listens to Broadcast shift_sync and postgres updates on shifts table)
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel('checkin_scanner_realtime')
-      .on(
-        'broadcast',
-        { event: 'shift_sync' },
-        (payload) => {
-          console.log('⚡ [CHECKIN SCANNER REALTIME BROADCAST RECEIVED]', payload);
-          fetchDbHistory();
-          if (refresh) refresh();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'shifts' },
-        () => {
-          fetchDbHistory();
-          if (refresh) refresh();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchDbHistory, refresh]);
+  // The shared coordinator context receives session_sync and shift_sync and
+  // refreshes visible data periodically. Its changes reload history above.
 
   const activeRawList = historyTab === 'session' ? history : dbHistory;
 
@@ -287,25 +269,22 @@ export function CheckInScanner({
       }
 
       const dbMatch = dbHistory.find(dbItem =>
+        item.sessionId ? dbItem.sessionId === item.sessionId :
         dbItem.id === item.id ||
-        (dbItem.volunteer.toLowerCase() === item.volunteer.toLowerCase() &&
+        ((item.volunteerId ? dbItem.volunteerId === item.volunteerId : dbItem.volunteer.toLowerCase() === item.volunteer.toLowerCase()) &&
          dbItem.dayKey?.toLowerCase() === itemDayKey?.toLowerCase() &&
          dbItem.shiftKey?.toLowerCase() === itemShiftKey?.toLowerCase())
       );
 
-      const volId = (item as any).volunteerId || (item as any).volunteer_id || (dbMatch as any)?.volunteer_id;
+      const volId = item.volunteerId || dbMatch?.volunteerId;
 
-      const isOutInContext = item.isCompleted || (dbMatch && dbMatch.isCompleted) || !!(checkedOutMap && (
+      const isOutInContext = dbMatch ? dbMatch.isCompleted : item.isCompleted || !!(checkedOutMap && (
         checkedOutMap[item.id] ||
-        (volId && checkedOutMap[volId]) ||
         (volId && itemDayKey && itemShiftKey && checkedOutMap[`${volId}-${itemDayKey}-${itemShiftKey}`]) ||
         (item.id && itemDayKey && itemShiftKey && checkedOutMap[`${item.id}-${itemDayKey}-${itemShiftKey}`])
       ));
 
-      if (isOutInContext) {
-        return { ...item, isCompleted: true };
-      }
-      return item;
+      return { ...item, isCompleted: Boolean(isOutInContext) };
     }).filter(item => {
       if (searchQuery.trim()) {
         const searchText = normalizeSearch(`${item.volunteer} ${item.committee} ${item.shiftDetail || ''}`);
@@ -543,6 +522,7 @@ export function CheckInScanner({
     item: {
       shiftId: string;
       volunteerName: string;
+      sessionId?: string;
       checkedInAt?: string | Date;
       outsideOperationalDay?: boolean;
       dayLabel?: string;
@@ -553,60 +533,46 @@ export function CheckInScanner({
   });
 
   const handleOpenCheckoutModal = (shiftId: string, volunteerName: string, checkedInAt?: string | Date) => {
+    setCheckoutError('');
     setCheckoutModal({
       isOpen: true,
       item: {
         shiftId,
         volunteerName,
-        checkedInAt
+        checkedInAt,
+        sessionId: dbHistory.find(entry => entry.id === shiftId)?.sessionId,
       }
     });
   };
 
   const handleConfirmCheckout = async () => {
     if (!checkoutModal.item) return;
-    const shiftId = checkoutModal.item.shiftId;
-
-    setHistory(prev => prev.map(item => item.id === shiftId ? { ...item, isCompleted: true } : item));
-    setDbHistory(prev => prev.map(item => item.id === shiftId ? { ...item, isCompleted: true } : item));
-
-    if (mobileDrawerDayGroup) {
-      setMobileDrawerDayGroup(prev => {
-        if (!prev) return null;
-        const updatedShifts = { ...prev.shifts };
-        (Object.keys(updatedShifts) as (keyof typeof updatedShifts)[]).forEach(k => {
-          updatedShifts[k] = updatedShifts[k].map(item => item.id === shiftId ? { ...item, isCompleted: true } : item);
-        });
-        return { ...prev, shifts: updatedShifts };
-      });
-    }
-
-    if (scanResult && scanResult.shifts) {
-      const updatedShifts = scanResult.shifts.map((s: any) => {
-        if (s.id === shiftId) {
-          return {
-            ...s,
-            checkedIn: true,
-            checkedOut: true
-          };
+    const item = checkoutModal.item;
+    setCheckoutError('');
+    try {
+      const result = item.sessionId
+        ? await closeAttendanceSessionAction({ sessionId: item.sessionId })
+        : await checkOutVolunteer(item.shiftId);
+      if (!result.success) {
+        if ('requiresResolution' in result && result.requiresResolution && result.session) {
+          setCheckoutModal({ isOpen: false, item: null });
+          setMobileDrawerDayGroup(null);
+          setPendingExit({ session: result.session, volunteerName: item.volunteerName, assignedShiftKeys: result.assignedShiftKeys });
+          return;
         }
-        return s;
-      });
-
-      setScanResult({
-        ...scanResult,
-        shifts: updatedShifts
-      });
+        setCheckoutError(result.error || 'No se pudo guardar la salida. Intenta de nuevo.');
+        return;
+      }
+      const sessionId = 'session' in result ? result.session?.id : item.sessionId;
+      updateHistory(prev => prev.map(entry =>
+        entry.id === item.shiftId || (sessionId && entry.sessionId === sessionId)
+          ? { ...entry, isCompleted: true } : entry
+      ));
+      setCheckoutModal({ isOpen: false, item: null });
+      await Promise.all([refresh(true), fetchDbHistory()]);
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : 'No se pudo guardar la salida. Intenta de nuevo.');
     }
-
-    setCheckoutModal({ isOpen: false, item: null });
-
-    if (scanResult?.session?.id) {
-      await closeAttendanceSessionAction({ sessionId: scanResult.session.id });
-    } else {
-      await checkOutVolunteer(shiftId);
-    }
-    void refresh(true);
   };
 
   const handleMarkCompleted = async (shiftId: string) => {
@@ -842,7 +808,8 @@ export function CheckInScanner({
         playWarningBeep();
         triggerVibration(100);
         const entry: ScanEntry = {
-          id: crypto.randomUUID(),
+          id: res.shiftId || res.session?.id || crypto.randomUUID(),
+          sessionId: res.session?.id,
           volunteerId: res.volunteerId || res.session?.volunteer_id,
           volunteer: res.volunteer || "Voluntario",
           committee: res.committee || "Sin comité",
@@ -872,15 +839,11 @@ export function CheckInScanner({
             : `⚠ Sesión pendiente de ${dayLabel} (${startTimeStr})`,
           session: res.session
         });
-        setCheckoutModal({
-          isOpen: true,
-          item: {
-            shiftId: res.session?.id || 'stale-session',
-            volunteerName: res.volunteer || "Voluntario",
-            checkedInAt: `${dayLabel} ${startTimeStr}`,
-            outsideOperationalDay: isOutsideOperationalDay,
-            dayLabel,
-          }
+        setCheckoutModal({ isOpen: false, item: null });
+        if (res.session) setPendingExit({
+          session: res.session,
+          volunteerName: res.volunteer || 'Voluntario',
+          assignedShiftKeys: res.assignedShiftKeys || [],
         });
         setState('already_checked_in');
       } else if (res.action === 'confirm_checkout' || res.alreadyOpen) {
@@ -899,6 +862,7 @@ export function CheckInScanner({
           isOpen: true,
           item: {
             shiftId: res.session?.id || 'active-session',
+            sessionId: res.session?.id,
             volunteerName: res.volunteer || "Voluntario",
             checkedInAt: startTimeStr
           }
@@ -920,7 +884,8 @@ export function CheckInScanner({
         triggerVibration(150);
         setSessionCount(c => c + 1);
         const entry: ScanEntry = {
-          id: crypto.randomUUID(),
+          id: res.shiftId || res.session?.id || crypto.randomUUID(),
+          sessionId: res.session?.id,
           volunteerId: res.volunteerId || res.session?.volunteer_id,
           volunteer: res.volunteer || "Voluntario",
           committee: res.committee || "Sin comité",
@@ -963,7 +928,8 @@ export function CheckInScanner({
         triggerVibration(150);
         setSessionCount(c => c + 1);
         const entry: ScanEntry = {
-          id: crypto.randomUUID(),
+          id: res.shiftId || res.session?.id || crypto.randomUUID(),
+          sessionId: res.session?.id,
           volunteerId: res.volunteerId || res.session?.volunteer_id,
           volunteer: res.volunteer || "Voluntario",
           committee: res.committee || "Sin comité",
@@ -1036,6 +1002,22 @@ export function CheckInScanner({
 
   return (
     <div className="w-full pb-32 lg:pb-12 flex flex-col min-h-full">
+      {pendingExit && (
+        <AdminSessionCorrectionModal
+          key={pendingExit.session.id}
+          isOpen
+          session={pendingExit.session}
+          volunteerName={pendingExit.volunteerName}
+          assignedShiftKeys={pendingExit.assignedShiftKeys}
+          onClose={() => setPendingExit(null)}
+          onSuccess={async () => {
+            setPendingExit(null);
+            setScanResult(prev => prev ? { ...prev, shiftDetail: 'Salida pendiente resuelta. Vuelve a escanear el QR para iniciar el siguiente turno.' } : prev);
+            setState('success');
+            await Promise.all([refresh(true), fetchDbHistory()]);
+          }}
+        />
+      )}
 
       {/* ── Page Header ── */}
       <div className="sticky top-0 z-40 bg-dark/80 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 mb-6 shrink-0 border-b border-black/5 dark:border-white/5">
@@ -1497,6 +1479,8 @@ export function CheckInScanner({
                   {/* Main History Content Container: Grouped by Day Cards (Matching /shifts) */}
                   <div className="space-y-4">
 
+                    {historyError && <p role="alert" className="text-sm text-rose-500">{historyError}</p>}
+
                     {/* Loading State for DB tab */}
                     {historyTab === 'db' && loadingDbHistory && (
                       <div className="bg-dark3 border border-border rounded-[20px] p-12 text-center flex flex-col items-center justify-center">
@@ -1918,6 +1902,7 @@ export function CheckInScanner({
 
           return (
             <div className="flex flex-col gap-3 text-center">
+              {checkoutError && <p role="alert" className="text-sm text-rose-500">{checkoutError}</p>}
               <span>
                 {outsideOperationalDay ? (
                   <>Se encontró una sesión abierta de <strong>{name}</strong> en {checkoutModal.item?.dayLabel || 'una fecha'} sin un turno correspondiente en el cronograma. ¿Deseas cerrarla para continuar?</>
@@ -1925,6 +1910,7 @@ export function CheckInScanner({
                   <>¿Deseas marcar el turno de <strong>{name}</strong> como completado?</>
                 )}
               </span>
+              {!outsideOperationalDay && <span className="text-xs text-slate-500">Si pertenece a una sesión continua, se completarán todos los turnos asociados a esa sesión.</span>}
               {elapsedText && (
                 <div className="pt-3 border-t border-black/10 dark:border-white/10 flex flex-col items-center gap-1.5">
                   <span className="text-xs font-inter font-medium text-slate-500 dark:text-text-dim">

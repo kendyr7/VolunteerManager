@@ -4,16 +4,6 @@ import { AttendanceSession } from "@/lib/session-utils";
 // In-memory session store used ONLY when explicitly running tests
 const memorySessionStore = new Map<string, AttendanceSession>();
 
-function getSafeCachedSessions(dayKeys?: string[], committeeId?: string | null): AttendanceSession[] {
-  // AttendanceSession does not carry committee_id, so a committee-scoped DB
-  // failure must fail closed instead of returning another committee's cache.
-  if (committeeId) return [];
-  const sessions = Array.from(memorySessionStore.values());
-  if (!dayKeys?.length) return sessions;
-  const allowedDays = new Set(dayKeys);
-  return sessions.filter((session) => allowedDays.has(session.day_key));
-}
-
 export function isTestMode(): boolean {
   return (
     process.env.USE_TEST_SESSION_STORE === 'true' ||
@@ -41,7 +31,7 @@ export async function fetchAllAttendanceSessionsFromDb(
 
     if (error) {
       console.error("[SESSION STORE] Error fetching attendance sessions from DB:", error.message);
-      return getSafeCachedSessions(dayKeys, committeeId);
+      throw new Error('No se pudieron consultar las sesiones de asistencia. Intenta de nuevo.');
     }
 
     if (data) {
@@ -54,9 +44,10 @@ export async function fetchAllAttendanceSessionsFromDb(
     }
   } catch (e: any) {
     console.error("[SESSION STORE] Exception fetching attendance sessions:", e?.message);
+    throw e;
   }
 
-  return getSafeCachedSessions(dayKeys, committeeId);
+  return [];
 }
 
 export async function getOpenSessionForVolunteer(volunteerId: string): Promise<AttendanceSession | null> {
@@ -80,31 +71,27 @@ export async function getOpenSessionForVolunteer(volunteerId: string): Promise<A
 
     if (error) {
       console.error("[SESSION STORE] Error checking open session in DB:", error.message);
+      throw new Error('No se pudo verificar si existe una sesión abierta. Intenta de nuevo.');
     }
 
     if (data) {
       memorySessionStore.set(data.id, data);
       return data;
     }
+    for (const [id, cached] of memorySessionStore) {
+      if (cached.volunteer_id === volunteerId && cached.status === 'open') memorySessionStore.delete(id);
+    }
+    return null;
   } catch (e: any) {
     console.error("[SESSION STORE] Exception checking open session:", e?.message);
+    throw e;
   }
 
-  // Fallback to in-memory cache if available, but check DB first
-  for (const s of memorySessionStore.values()) {
-    if (s.volunteer_id === volunteerId && s.status === 'open') {
-      return s;
-    }
-  }
-
-  return null;
 }
 
 export async function saveAttendanceSession(session: AttendanceSession): Promise<AttendanceSession> {
-  // Always update local cache
-  memorySessionStore.set(session.id, session);
-
   if (isTestMode()) {
+    memorySessionStore.set(session.id, session);
     return session;
   }
 

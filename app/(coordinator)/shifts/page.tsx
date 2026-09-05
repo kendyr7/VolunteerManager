@@ -463,34 +463,6 @@ export default function ShiftsPage() {
   const checkedInMap = contextCheckedInMap;
   const checkedOutMap = contextCheckedOutMap;
 
-  // Track completed shifts in local storage / state
-  const [completedShiftsMap, setCompletedShiftsMap] = useState<Record<string, { checkedOutAt: string }>>({});
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("completed_shifts_map");
-        if (saved) {
-          setCompletedShiftsMap(JSON.parse(saved));
-        }
-      } catch (e) {}
-    }
-  }, []);
-
-  const markShiftCompleted = useCallback((volId: string, dayKey: string, shiftKey: string) => {
-    const key = `${volId}-${dayKey}-${shiftKey}`;
-    const info = { checkedOutAt: new Date().toISOString() };
-    setCompletedShiftsMap(prev => {
-      const next = { ...prev, [key]: info };
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.setItem("completed_shifts_map", JSON.stringify(next));
-        } catch (e) {}
-      }
-      return next;
-    });
-  }, []);
-
   const scopedCommittees = useMemo(() => getShiftCommitteeScope(
     committeesList.map(committee => committee.name), selectedCommittees, appliedSearch,
   ), [committeesList, selectedCommittees, appliedSearch]);
@@ -616,7 +588,6 @@ export default function ShiftsPage() {
 
       if (matchesFilters(vol, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole)) {
         const s = getShiftRecord(vol.id, dateKey, shiftId);
-        const completedLocal = completedShiftsMap[`${vol.id}-${dateKey}-${shiftId}`];
         const { isCheckedIn, isCheckedOut } = getShiftAttendanceState({
           shift: s,
           volunteerId: vol.id,
@@ -624,7 +595,6 @@ export default function ShiftsPage() {
           shiftKey: shiftId,
           checkedInMap: contextCheckedInMap,
           checkedOutMap: contextCheckedOutMap,
-          completed: Boolean(completedLocal),
         });
 
         if (viewMode === 'active') {
@@ -640,7 +610,7 @@ export default function ShiftsPage() {
     }
 
     return result.sort((a, b) => a.committee.localeCompare(b.committee));
-  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, completedShiftsMap, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet]);
+  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet]);
 
   const handleStartEditProfile = (vol: VolunteerType) => {
     const fn = (vol as any).first_name ?? vol.name ?? '';
@@ -837,7 +807,7 @@ export default function ShiftsPage() {
     }[] = [];
 
     rawShiftsData.forEach(s => {
-      if (s.checked_in && !s.checked_out) {
+      if (getShiftAttendanceState({ shift: s, volunteerId: s.volunteer_id, dayKey: s.day_key, shiftKey: s.shift_key, checkedInMap, checkedOutMap }).isCheckedIn) {
         const vol = volMap.get(s.volunteer_id);
         if (vol) {
           list.push({
@@ -878,39 +848,37 @@ export default function ShiftsPage() {
 
       return matchesSearch && matchesCommittee && matchesStake && matchesWard;
     });
-  }, [rawShiftsData, volunteers, currentRole, appliedSearch, selectedCommittees, selectedStakes, selectedWards]);
+  }, [rawShiftsData, volunteers, currentRole, appliedSearch, selectedCommittees, selectedStakes, selectedWards, checkedInMap, checkedOutMap]);
 
   const handleConfirmCheckout = async () => {
     if (!checkoutModal.item) return;
     const item = checkoutModal.item;
-    setCheckoutModal({ isOpen: false, item: null });
 
     const volId = item.volunteer?.id;
     const dayKey = item.dayKey || "";
     const shiftKey = item.shiftKey || "";
 
-    if (volId && dayKey && shiftKey) {
-      markShiftCompleted(volId, dayKey, shiftKey);
+    const shiftId = item.shiftId || getShiftRecord(volId, dayKey, shiftKey)?.id;
+    if (!shiftId) {
+      showToast('No se encontró el turno. Actualiza la página e intenta de nuevo.', 'error');
+      return;
     }
-
-    if (item.shiftId) {
-      await checkOutVolunteer(item.shiftId);
-    } else if (volId && dayKey && shiftKey) {
-      try {
-        const nowIso = new Date().toISOString();
-        await supabase
-          .from('shifts')
-          .upsert({
-            volunteer_id: volId,
-            day_key: dayKey,
-            shift_key: shiftKey,
-            checked_in: true,
-            checked_out: true,
-            checked_out_at: nowIso
-          }, { onConflict: 'volunteer_id,day_key,shift_key' });
-      } catch (e) {
-        console.error("Supabase upsert shift error:", e);
-      }
+    let result;
+    try {
+      result = await checkOutVolunteer(shiftId);
+    } catch {
+      showToast('No se pudo guardar la salida. Intenta de nuevo.', 'error');
+      return;
+    }
+    if (!result.success) {
+      showToast(result.error || 'No se pudo guardar la salida. Intenta de nuevo.', 'error');
+      return;
+    }
+    setCheckoutModal({ isOpen: false, item: null });
+    if ('session' in result && result.session) {
+      showToast(`Sesión completada para ${item.volunteer.name}. Se actualizaron los turnos asociados.`, 'success');
+      await refresh(true);
+      return;
     }
 
     const undoCheckout = async () => {
@@ -918,16 +886,6 @@ export default function ShiftsPage() {
       const dayKey = item.dayKey || item.dateKey;
       const shiftKey = item.shiftKey || item.shiftId;
       if (volId && dayKey && shiftKey) {
-        const key = `${volId}-${dayKey}-${shiftKey}`;
-        setCompletedShiftsMap(prev => {
-          const next = { ...prev };
-          delete next[key];
-          try {
-            localStorage.setItem('completed_shifts_map', JSON.stringify(next));
-          } catch (e) {}
-          return next;
-        });
-
         try {
           await supabase
             .from('shifts')
@@ -968,33 +926,12 @@ export default function ShiftsPage() {
     }
   };
 
-  const totalCompletedCount = useMemo(() => {
-    const dbCount = rawShiftsData.filter(
-      s => volunteerMap.has(s.volunteer_id) && s.checked_out === true
-    ).length;
-    let localCount = 0;
-    
-    // Contar los turnos en completedShiftsMap que NO están en dbCount (para evitar contar doble)
-    Object.keys(completedShiftsMap).forEach(key => {
-      const volId = Array.from(volunteerMap.keys()).find(id => key.startsWith(`${id}-`));
-      if (!volId) return;
-
-      const shiftSuffix = key.slice(volId.length + 1);
-      const lastSeparator = shiftSuffix.lastIndexOf('-');
-      if (lastSeparator === -1) return;
-
-      const dayKey = shiftSuffix.slice(0, lastSeparator);
-      const shiftKey = shiftSuffix.slice(lastSeparator + 1);
-      const isInDbAsCompleted = rawShiftsData.some(s => 
-        s.volunteer_id === volId && s.day_key === dayKey && s.shift_key === shiftKey && s.checked_out === true
-      );
-      if (!isInDbAsCompleted) {
-        localCount++;
-      }
-    });
-    
-    return dbCount + localCount;
-  }, [rawShiftsData, completedShiftsMap, volunteerMap]);
+  const totalCompletedCount = useMemo(() => rawShiftsData.filter(shift =>
+    volunteerMap.has(shift.volunteer_id) && getShiftAttendanceState({
+      shift, volunteerId: shift.volunteer_id, dayKey: shift.day_key, shiftKey: shift.shift_key,
+      checkedInMap, checkedOutMap,
+    }).isCheckedOut
+  ).length, [rawShiftsData, volunteerMap, checkedInMap, checkedOutMap]);
 
   const formatGuatemalaTime = (isoString?: string | null) => {
     if (!isoString) return undefined;
@@ -1379,7 +1316,6 @@ export default function ShiftsPage() {
                             <div className="space-y-1">
                               {displayedVols.map(vol => {
                                 const shiftRecord = getShiftRecord(vol.id, key, t);
-                                const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
                                 const { isCheckedIn, isCheckedOut } = getShiftAttendanceState({
                                   shift: shiftRecord,
                                   volunteerId: vol.id,
@@ -1387,14 +1323,13 @@ export default function ShiftsPage() {
                                   shiftKey: t,
                                   checkedInMap,
                                   checkedOutMap,
-                                  completed: Boolean(completedLocal),
                                 });
                                 const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                 const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                 const attendanceStartedAt = shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
                                 const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
-                                const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
-                                const elapsed = getElapsedInfoBetween(attendanceStartedAt, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
+                                const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at);
+                                const elapsed = getElapsedInfoBetween(attendanceStartedAt, shiftRecord?.checked_out_at);
 
                                 return (
                                   <div
@@ -1658,7 +1593,6 @@ export default function ShiftsPage() {
                                 (isShiftExpanded ? vols : vols.slice(0, limit)).map(vol => {
                                   const isMatch = appliedSearch.trim() !== '' && vol.name.toLowerCase().includes(appliedSearch.toLowerCase());
                                   const shiftRecord = getShiftRecord(vol.id, key, t);
-                                  const completedLocal = completedShiftsMap[`${vol.id}-${key}-${t}`];
                                   const { isCheckedIn, isCheckedOut } = getShiftAttendanceState({
                                     shift: shiftRecord,
                                     volunteerId: vol.id,
@@ -1666,14 +1600,13 @@ export default function ShiftsPage() {
                                     shiftKey: t,
                                     checkedInMap,
                                     checkedOutMap,
-                                    completed: Boolean(completedLocal),
                                   });
                                   const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                   const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                   const attendanceStartedAt = shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
                                   const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
-                                  const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
-                                  const elapsed = getElapsedInfoBetween(attendanceStartedAt, shiftRecord?.checked_out_at || completedLocal?.checkedOutAt);
+                                  const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at);
+                                  const elapsed = getElapsedInfoBetween(attendanceStartedAt, shiftRecord?.checked_out_at);
 
                                   return (
                                     <div
@@ -1993,6 +1926,7 @@ export default function ShiftsPage() {
           return (
             <div className="flex flex-col gap-3 text-center">
               <span>¿Deseas marcar el turno de <strong>{name}</strong> como completado?</span>
+              <span className="text-xs text-slate-500">Si pertenece a una sesión continua, se completarán todos los turnos asociados a esa sesión.</span>
               {elapsedText && (
                 <div className="pt-3 border-t border-black/10 dark:border-white/10 flex flex-col items-center gap-1.5">
                   <span className="text-xs font-inter font-medium text-slate-500 dark:text-text-dim">

@@ -46,7 +46,7 @@ import { AdminSessionCorrectionModal } from "./AdminSessionCorrectionModal";
 import { AdminCreateSessionModal } from "./AdminCreateSessionModal";
 import type { ShiftAreaDetails } from "@/lib/shift-area";
 import { ShiftChangeReasonSelector } from "@/components/ShiftChangeReasonSelector";
-import { getShiftAttendanceState } from "@/lib/coordinator-data";
+import { getShiftAttendanceState, processShiftsData } from "@/lib/coordinator-data";
 
 export interface VolunteerProfileData {
   id: string;
@@ -256,6 +256,12 @@ export function VolunteerProfileView({
     return fetchedDbRecords;
   }, [hasStoreEntry, storeShifts, coordinatorData?.shiftsData, fetchedDbRecords, volunteer.id]);
 
+  const sessionAttendance = useMemo(() => processShiftsData(
+    dbShiftRecords,
+    [{ id: volunteer.id }],
+    coordinatorData?.sessionsData ?? fetchedSessions,
+  ), [dbShiftRecords, volunteer.id, coordinatorData?.sessionsData, fetchedSessions]);
+
   // Permisos y Usuario
   const userRole = typeof window !== 'undefined' ? localStorage.getItem('mock_role') || 'Admin' : 'Admin';
   const userName = typeof window !== 'undefined' ? localStorage.getItem('mock_user_name') || 'Administrador' : 'Administrador';
@@ -349,7 +355,15 @@ export function VolunteerProfileView({
 
   const isShiftCheckedOut = useCallback((dayKey: string, shiftKey: string): boolean => {
     const dbRec = dbShiftRecords.find(r => r.day_key === dayKey && r.shift_key === shiftKey);
-    if (dbRec && (dbRec.checked_out || dbRec.checked_out_at || dbRec.status === 'completed')) return true;
+    if (dbRec) {
+      const map = externalCheckedOutMap || sessionAttendance.checkedOutMap;
+      const dayValue = map[dayKey];
+      return getShiftAttendanceState({
+        shift: dbRec, volunteerId: volunteer.id, dayKey, shiftKey,
+        checkedOutMap: map as Record<string, boolean>,
+        completed: Array.isArray(dayValue) && dayValue.includes(shiftKey),
+      }).isCheckedOut;
+    }
 
     // Check relevant audit logs for this specific shift sorted by newest first
     const relevantLogs = auditLogs.filter((l: any) => {
@@ -382,14 +396,19 @@ export function VolunteerProfileView({
       !!(map as Record<string, boolean>)[`${volunteer.id}-${dayKey}-${shiftKey}`] ||
       !!(map as Record<string, boolean>)[`${dayKey}-${shiftKey}`]
     );
-  }, [dbShiftRecords, auditLogs, externalCheckedOutMap, localCheckedOutMap, volunteer.id]);
+  }, [dbShiftRecords, auditLogs, externalCheckedOutMap, localCheckedOutMap, volunteer.id, sessionAttendance.checkedOutMap]);
 
   const isShiftCheckedIn = useCallback((dayKey: string, shiftKey: string): boolean => {
     if (isShiftCheckedOut(dayKey, shiftKey)) return false;
 
     const dbRec = dbShiftRecords.find(r => r.day_key === dayKey && r.shift_key === shiftKey);
-    if (dbRec && (dbRec.checked_in || dbRec.checked_in_at || dbRec.status === 'confirmed')) {
-      return true;
+    if (dbRec) {
+      const map = externalCheckedInMap || sessionAttendance.checkedInMap;
+      const dayValue = map[dayKey];
+      return (Array.isArray(dayValue) && dayValue.includes(shiftKey)) || getShiftAttendanceState({
+        shift: dbRec, volunteerId: volunteer.id, dayKey, shiftKey,
+        checkedInMap: map as Record<string, boolean>,
+      }).isCheckedIn;
     }
 
     const relevantLogs = auditLogs.filter((l: any) => {
@@ -426,7 +445,7 @@ export function VolunteerProfileView({
       shiftKey,
       checkedInMap: map as Record<string, boolean>,
     }).isCheckedIn;
-  }, [dbShiftRecords, auditLogs, isShiftCheckedOut, externalCheckedInMap, localCheckedInMap, volunteer.id]);
+  }, [dbShiftRecords, auditLogs, isShiftCheckedOut, externalCheckedInMap, localCheckedInMap, volunteer.id, sessionAttendance.checkedInMap]);
 
   // Contexto de validación para reagendamiento (turnos propios + capacidad por comité)
   const {
