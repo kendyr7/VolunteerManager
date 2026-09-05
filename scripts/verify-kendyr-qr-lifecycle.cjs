@@ -26,13 +26,14 @@ async function verify(name, run) {
   catch (error) { results.push({ name, passed: false }); console.log(`FAIL ${name}: ${error.message}`); }
 }
 
-function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true } = {}) {
+function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll = true, committeeId = null, canManage = true } = {}) {
   const tables = { volunteers: [clone(volunteer)], shifts: clone(seedShifts), attendance_sessions: [], activity_logs: [], profiles: [{ id: 'internal-test-actor' }] };
   tables.shifts.forEach((shift, i) => { shift.shift_key = shiftKeys[i]; });
   const events = [];
   const paths = [];
   let now = at('08:00');
   let failSessionUpdate = false;
+  let failShiftUpdate = false;
   class Clock extends Date {
     constructor(...args) { super(...(args.length ? args : [now])); }
     static now() { return new Date(now).getTime(); }
@@ -40,10 +41,11 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true } = {}) {
   class Query {
     constructor(table) { assert.ok(tables[table], `Unexpected table ${table}`); this.table = table; this.filters = []; this.mode = 'select'; this.columns = '*'; }
     select(columns = '*') { this.columns = columns; return this; }
-    eq(key, value) { this.filters.push(row => row[key] === value); return this; }
+    eq(key, value) { this.filters.push(row => key === 'volunteers.committee_id' ? tables.volunteers.find(v => v.id === row.volunteer_id)?.committee_id === value : row[key] === value); return this; }
     in(key, values) { this.filters.push(row => values.includes(row[key])); return this; }
     order(key, options = {}) { this.sort = [key, options]; return this; }
     limit(value) { this.cap = value; return this; }
+    range(from, to) { this.bounds = [from, to]; return this; }
     maybeSingle() { this.singleRow = true; return this; }
     single() { this.singleRow = true; this.mustExist = true; return this; }
     update(data) { this.mode = 'update'; this.payload = clone(data); return this; }
@@ -55,6 +57,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true } = {}) {
       let rows = table.filter(row => this.filters.every(fn => fn(row)));
       if (this.mode === 'update') {
         if (this.table === 'attendance_sessions' && failSessionUpdate) return { data: null, error: { message: 'Injected session update failure' } };
+        if (this.table === 'shifts' && failShiftUpdate) return { data: null, error: { message: 'Injected shift update failure' } };
         rows.forEach(row => Object.assign(row, this.payload));
       } else if (this.mode === 'insert' || this.mode === 'upsert') {
         const values = Array.isArray(this.payload) ? this.payload : [this.payload];
@@ -74,6 +77,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true } = {}) {
         });
       }
       if (this.cap !== undefined) rows = rows.slice(0, this.cap);
+      if (this.bounds) rows = rows.slice(this.bounds[0], this.bounds[1] + 1);
       rows = rows.map(row => {
         const value = clone(row);
         if (this.table === 'shifts' && this.columns.includes('volunteers')) value.volunteers = clone(tables.volunteers.find(v => v.id === row.volunteer_id) || null);
@@ -84,15 +88,16 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true } = {}) {
     }
   }
   const db = { from: table => new Query(table) };
-  const actor = { userId: 'internal-test-actor', name: 'Internal verification', userName: 'Internal verification', userRole: 'Admin', committeeId: null };
+  const actor = { userId: 'internal-test-actor', name: 'Internal verification', userName: 'Internal verification', userRole: 'Admin', committeeId };
   const mocks = {
     '@/lib/supabase/server': { getAdminClient: () => db },
     '@/lib/supabase/admin': { getAdminSupabase: async () => db },
     '@/lib/authorization': { requireCapability: async capability => {
       if (capability === 'correct_attendance_times' && !canCorrect) throw new Error('No autorizado para corregir horarios');
+      if (capability === 'manage_permissions' && !canManage) throw new Error('No autorizado para reabrir turnos');
       return actor;
     }, requireVolunteerCapability: async () => actor, requireVolunteerSelfOrCapability: async () => actor },
-    '@/lib/role-permissions': { hasCapability: () => true, roleDisplayName: () => 'Admin' },
+    '@/lib/role-permissions': { hasCapability: (_actor, capability) => capability === 'view_all_volunteers' ? canViewAll : true, roleDisplayName: () => 'Admin' },
     '@/lib/auth-helpers': { getCurrentUserSession: async () => actor },
     '@/lib/services/shift-broadcast.service': {
       broadcastShiftSync: payload => events.push(clone(payload)),
@@ -142,7 +147,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true } = {}) {
   function snapshot() {
     const data = domain.processShiftsData(tables.shifts, tables.volunteers, tables.attendance_sessions);
     return tables.shifts.map(shift => ({ shift: shift.shift_key, ...domain.getShiftAttendanceState({
-      shift, volunteerId: volunteer.id, dayKey: shift.day_key, shiftKey: shift.shift_key, ...data,
+      shift, volunteerId: shift.volunteer_id, dayKey: shift.day_key, shiftKey: shift.shift_key, ...data,
     }) }));
   }
   function scanner(variable = 'handleScannedData', initial = {}) {
@@ -162,6 +167,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true } = {}) {
     return ctx;
   }
   return { tables, events, paths, actions, qr, snapshot, scanner, metrics,
+    auditActions: load('@/app/actions/audit-actions'),
     correction: (variable = 'handleConfirmOfficial', initial = {}) => handler('components/AdminSessionCorrectionModal.tsx', variable, {
       ...actions, session: tables.attendance_sessions[0],
       block: load('@/lib/session-utils').getContinuousScheduledBlockForSession('jue 10', tables.attendance_sessions[0]?.started_at, shiftKeys),
@@ -169,7 +175,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true } = {}) {
     }),
     historyView: (items, dbHistory = [], checkedOutMap = {}) => handler('components/CheckInScanner.tsx', 'filteredList', {
       useMemo: fn => fn(), activeRawList: items, dbHistory, checkedOutMap,
-      searchQuery: '', selectedDayFilter: 'all',
+      searchQuery: '', selectedDayFilter: 'all', historyTab: 'db', todayDbHistory: [],
     }).runHandler,
     sessionStore: load('@/lib/services/session-store'),
     profile: () => {
@@ -189,6 +195,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true } = {}) {
     advance: time => { now = at(time); },
     advanceTo: iso => { now = iso; },
     failClose: () => { failSessionUpdate = true; },
+    failShiftUpdate: () => { failShiftUpdate = true; },
     shiftCheckout: () => handler('app/(coordinator)/shifts/page.tsx', 'handleConfirmCheckout', {
       ...actions, supabase: db, checkoutModal: { item: { shiftId: shiftIds[1], dayKey: 'jue 10', shiftKey: 'T2', volunteer: { ...volunteer, name: `${volunteer.first_name} ${volunteer.last_name}` } } },
       setCheckoutModal: () => {}, markShiftCompleted: () => {}, showToast: () => {}, refresh: async () => snapshot(),
@@ -447,6 +454,111 @@ async function run() {
     const again = await flow.actions.adjustSessionTimesAdminAction({ sessionId, endedAt: at('18:00'), correctionType: 'official_shift_end' });
     assert.equal(again.alreadyClosed, true);
     assert.equal(flow.tables.attendance_sessions[0].ended_at, at('12:00'));
+  });
+  await verify('Historial compartido del dia pagina mas de 1000 registros sin truncar a 150', async () => {
+    const flow = createHarness();
+    flow.tables.shifts = Array.from({ length: 1005 }, (_, i) => ({ ...seedShifts[0], id: `page-${String(i).padStart(4, '0')}`, checked_in: true, checked_in_at: at('08:00') }));
+    flow.tables.shifts.push({ ...seedShifts[0], id: 'other-day', day_key: 'vie 11', checked_in: true, checked_in_at: at('08:00') });
+    const before = JSON.stringify(flow.tables);
+    const rows = await flow.actions.getHistoricalAttendanceLogs(150, 'jue 10');
+    assert.equal(rows.length, 1005);
+    assert.ok(rows.every(row => row.dayKey === 'jue 10'));
+    assert.equal(JSON.stringify(flow.tables), before, 'La lectura no debe escribir asistencia');
+  });
+  await verify('Historial del dia respeta el comite autorizado en sesiones y turnos', async () => {
+    const flow = createHarness({ canViewAll: false, committeeId: 'allowed' });
+    flow.tables.volunteers[0].committee_id = 'allowed';
+    flow.tables.volunteers.push({ ...volunteer, id: 'not-authorized', committee_id: 'other' });
+    flow.tables.shifts.push({ ...seedShifts[0], id: 'private-shift', volunteer_id: 'not-authorized', checked_in: true, checked_in_at: at('08:00') });
+    flow.tables.attendance_sessions.push({ id: 'private-session', volunteer_id: 'not-authorized', day_key: 'jue 10', status: 'open', started_at: at('08:00') });
+    await flow.scanner().runHandler(flow.qr);
+    const rows = await flow.actions.getHistoricalAttendanceLogs(150, 'jue 10');
+    assert.equal(rows.length, 1);
+    assert.ok(rows.every(row => row.volunteerId === volunteer.id));
+    assert.equal((await createHarness({ canViewAll: false }).actions.getHistoricalAttendanceLogs(150, 'jue 10')).length, 0);
+  });
+  const arnaldoId = '8edf6a50-3437-4511-bdf6-aac9618bbf0c';
+  const reopenInput = { volunteerId: volunteer.id, dayKey: 'jue 10', shiftKey: 'T1', actorName: 'Untrusted client name' };
+  await verify('Reabrir Arnaldo conserva entrada 09:09 y no cambia otro voluntario ni otro dia', async () => {
+    const flow = createHarness();
+    flow.advanceTo('2026-09-05T09:30:00-06:00');
+    flow.tables.volunteers.push({ ...volunteer, id: arnaldoId, first_name: 'Arnaldo Jose', last_name: 'Rodriguez López' });
+    flow.tables.shifts.push({ ...seedShifts[0], id: 'arnaldo-other-day', volunteer_id: arnaldoId, day_key: 'lun 21' });
+    flow.tables.shifts.push({ ...seedShifts[0], id: 'f377d35b-9852-46d8-bb91-ebe300efe554', volunteer_id: arnaldoId, day_key: 'sáb 5', checked_in: true });
+    flow.tables.attendance_sessions.push({ id: '130ff8e7-aacd-4301-8c91-88442669b5eb', volunteer_id: arnaldoId, day_key: 'sáb 5', started_at: '2026-09-05T15:09:49.156Z', ended_at: '2026-09-05T15:10:59.685Z', status: 'completed', auto_closed: false });
+    const unrelated = JSON.stringify(flow.tables.shifts.filter(row => row.id !== 'f377d35b-9852-46d8-bb91-ebe300efe554'));
+    const result = await flow.auditActions.reopenCompletedShiftAction({ ...reopenInput, volunteerId: arnaldoId, dayKey: 'sáb 5' });
+    assert.equal(result.success, true);
+    assert.equal(result.session.status, 'open');
+    assert.equal(result.session.ended_at, null);
+    assert.equal(result.session.started_at, '2026-09-05T15:09:49.156Z');
+    assert.equal(flow.snapshot().at(-1).isCheckedIn, true);
+    assert.equal(flow.snapshot().at(-1).isCheckedOut, false);
+    assert.equal(JSON.stringify(flow.tables.shifts.filter(row => row.id !== 'f377d35b-9852-46d8-bb91-ebe300efe554')), unrelated);
+    assert.ok(flow.events.some(event => event.table === 'attendance_sessions' && event.record.volunteer_id === arnaldoId));
+  });
+  async function closedFlow(options = {}) {
+    const flow = createHarness(options);
+    await flow.scanner().runHandler(flow.qr);
+    flow.advance('15:00');
+    await flow.actions.closeAttendanceSessionAction({ sessionId: flow.tables.attendance_sessions[0].id });
+    return flow;
+  }
+  await verify('Reabrir turno continuo reabre su sesion y permite cerrarla otra vez', async () => {
+    const flow = await closedFlow();
+    const start = flow.tables.attendance_sessions[0].started_at;
+    Object.assign(flow.tables.shifts[1], { checked_in: true, checked_out: true, checked_out_at: at('15:00') });
+    const result = await flow.auditActions.reopenCompletedShiftAction(reopenInput);
+    assert.equal(result.success, true);
+    assert.deepEqual(flow.snapshot().map(row => row.isCheckedIn), [true, true]);
+    assert.equal(flow.tables.attendance_sessions.length, 1);
+    await flow.auditActions.reopenCompletedShiftAction(reopenInput);
+    assert.equal(flow.tables.attendance_sessions[0].started_at, start);
+    flow.advance('15:10');
+    assert.equal((await flow.actions.closeAttendanceSessionAction({ sessionId: result.session.id })).success, true);
+    assert.deepEqual(flow.snapshot().map(row => row.isCheckedOut), [true, true]);
+  });
+  await verify('Reabrir no devuelve exito ante fallo al actualizar la sesion', async () => {
+    const flow = await closedFlow();
+    const before = JSON.stringify(flow.tables);
+    flow.failClose();
+    const result = await flow.auditActions.reopenCompletedShiftAction(reopenInput);
+    assert.equal(result.success, false);
+    assert.equal(JSON.stringify(flow.tables), before);
+  });
+  await verify('Si falla sincronizar turnos, se revierte la reapertura y se informa error', async () => {
+    const flow = await closedFlow();
+    const end = flow.tables.attendance_sessions[0].ended_at;
+    flow.failShiftUpdate();
+    const result = await flow.auditActions.reopenCompletedShiftAction(reopenInput);
+    assert.equal(result.success, false);
+    assert.equal(flow.tables.attendance_sessions[0].status, 'completed');
+    assert.equal(flow.tables.attendance_sessions[0].ended_at, end);
+  });
+  await verify('Reabrir requiere autorizacion y rechaza turnos inexistentes o pendientes', async () => {
+    const denied = await closedFlow({ canManage: false });
+    assert.equal((await denied.auditActions.reopenCompletedShiftAction(reopenInput)).success, false);
+    assert.equal(denied.tables.attendance_sessions[0].status, 'completed');
+    const pending = createHarness();
+    assert.equal((await pending.auditActions.reopenCompletedShiftAction(reopenInput)).success, false);
+    assert.equal((await pending.auditActions.reopenCompletedShiftAction({ ...reopenInput, shiftKey: 'T4' })).success, false);
+  });
+  await verify('No se reabre una sesion si el voluntario ya tiene otra abierta', async () => {
+    const flow = await closedFlow();
+    flow.tables.attendance_sessions.push({ ...flow.tables.attendance_sessions[0], id: 'another-session', day_key: 'vie 11', status: 'open', ended_at: null });
+    const before = JSON.stringify(flow.tables);
+    assert.equal((await flow.auditActions.reopenCompletedShiftAction(reopenInput)).success, false);
+    assert.equal(JSON.stringify(flow.tables), before);
+  });
+  await verify('Reapertura manual sin sesion mantiene la entrada y solo afecta el turno indicado', async () => {
+    const flow = createHarness();
+    Object.assign(flow.tables.shifts[0], { checked_in: true, checked_out: true, checked_in_at: at('08:00'), checked_out_at: at('12:00') });
+    const other = JSON.stringify(flow.tables.shifts[1]);
+    assert.equal((await flow.auditActions.reopenCompletedShiftAction(reopenInput)).success, true);
+    assert.equal(flow.tables.shifts[0].checked_out, false);
+    assert.equal(flow.tables.shifts[0].checked_in_at, at('08:00'));
+    assert.equal(JSON.stringify(flow.tables.shifts[1]), other);
+    assert.equal(flow.tables.attendance_sessions.length, 0);
   });
   const passes = results.filter(r => r.passed).length;
   console.log(`RESULTADO: ${passes}/${results.length} aprobadas; ${results.length - passes} fallos reproducidos. Persistencia y autenticacion simuladas; datos de produccion intactos.`);

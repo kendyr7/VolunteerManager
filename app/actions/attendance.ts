@@ -18,6 +18,7 @@ import {
   completeOpenAttendanceSessionInDb,
 } from "@/lib/services/session-store";
 import { createEntryPassPayload, validateEntryPassQrValue } from "@/lib/entry-pass";
+import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
 
 export async function getAttendanceSessionsAction(requestedDayKeys?: string[]): Promise<AttendanceSession[]> {
   const authorization = await requireCapability('view_volunteers');
@@ -1131,7 +1132,7 @@ export async function reassignVolunteerShift(shiftId: string, newDayKey: string,
 }
 
 // 5. Fetch Historical Attendance Logs across all days from Supabase DB
-export async function getHistoricalAttendanceLogs(limit = 150) {
+export async function getHistoricalAttendanceLogs(limit = 150, dayKey?: string) {
   try {
     const actor = await requireCapability('scan_qr_attendance');
     const supabase = getAdminClient();
@@ -1153,12 +1154,26 @@ export async function getHistoricalAttendanceLogs(limit = 150) {
       legacyQuery = legacyQuery.eq('volunteers.committee_id', actor.committeeId);
       sessionsQuery = sessionsQuery.eq('volunteers.committee_id', actor.committeeId);
     }
-    const [legacyResult, sessionResult] = await Promise.all([legacyQuery, sessionsQuery]);
+    // Today's shared view must not be truncated by the historical 150-row limit.
+    // Paginate read-only queries with the same server-side committee scope.
+    const scopeDay = (query: any) => {
+      let scoped = query.eq('day_key', dayKey).order('id');
+      if (!canViewAll) scoped = scoped.eq('volunteers.committee_id', actor.committeeId);
+      return scoped;
+    };
+    const [legacyResult, sessionResult] = dayKey
+      ? await Promise.all([
+          fetchAllRowsStrict(supabase, 'shifts', selection, query => scopeDay(query).eq('checked_in', true)).then(data => ({ data, error: null })),
+          fetchAllRowsStrict<AttendanceSession>(supabase, 'attendance_sessions', '*, volunteers!inner(committee_id)', scopeDay).then(data => ({ data, error: null })),
+        ])
+      : await Promise.all([legacyQuery, sessionsQuery]);
     if (legacyResult.error) throw legacyResult.error;
     if (sessionResult.error) throw sessionResult.error;
     const sessions: AttendanceSession[] = sessionResult.data || [];
     let assignments: any[] = [];
-    if (sessions.length) {
+    if (sessions.length && dayKey) {
+      assignments = await fetchAllRowsStrict(supabase, 'shifts', selection, scopeDay);
+    } else if (sessions.length) {
       let assignmentsQuery = supabase.from('shifts').select(selection)
         .in('volunteer_id', [...new Set(sessions.map(s => s.volunteer_id))])
         .in('day_key', [...new Set(sessions.map(s => s.day_key))]);
@@ -1189,7 +1204,7 @@ export async function getHistoricalAttendanceLogs(limit = 150) {
     for (const shift of legacyResult.data || []) entries.set(shift.id, formatEntry(shift));
     // Newest session wins within each state; an open session takes precedence.
     const sessionEntries = new Map<string, ReturnType<typeof formatEntry>>();
-    for (const session of sessions) {
+    for (const session of [...sessions].sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())) {
       const assigned = assignments.filter(s => s.volunteer_id === session.volunteer_id && s.day_key === session.day_key);
       const related = new Set(inferShiftsForSession(session.day_key, session.started_at, session.ended_at, assigned.map(s => s.shift_key)).map(s => s.shiftKey));
       for (const shift of assigned.filter(s => related.has(s.shift_key))) {
@@ -1200,7 +1215,8 @@ export async function getHistoricalAttendanceLogs(limit = 150) {
       }
     }
     for (const [id, entry] of sessionEntries) entries.set(id, entry);
-    return [...entries.values()].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, maxRows);
+    const sorted = [...entries.values()].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return dayKey ? sorted : sorted.slice(0, maxRows);
   } catch (err) {
     console.error("Error in getHistoricalAttendanceLogs:", err);
     throw new Error('No se pudo actualizar el historial de asistencia. Intenta de nuevo.');

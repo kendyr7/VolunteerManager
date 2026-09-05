@@ -19,6 +19,7 @@ import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useHydrated } from "@/lib/use-hydrated";
+import { getGuatemalaDate, getGuatemalaDayKey, mergeTodayScanHistory, persistLocalScanHistory, readLocalScanHistory } from '@/lib/scan-history';
 
 interface CheckInScannerProps {
   coordinatorId: string;
@@ -159,51 +160,36 @@ export function CheckInScanner({
     setIsProfileDrawerOpen(true);
   };
 
-  // Load persistent scan history from localStorage on component mount (only keep current day session)
+  const [localHistoryError, setLocalHistoryError] = useState('');
+  const localHistoryRef = useRef<ScanEntry[]>([]);
+  // Restore the complete archive. Date filtering belongs to the view, never storage.
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("volunteer_manager_scan_history");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const todayStr = new Date().toDateString();
-        const todayItems = parsed.filter((item: any) => {
-          if (!item.timestamp) return false;
-          const itemDate = new Date(item.timestamp);
-          return !isNaN(itemDate.getTime()) && itemDate.toDateString() === todayStr;
-        });
-
-        setHistory(todayItems.map((item: any) => ({
-          ...item,
-          timestamp: new Date(item.timestamp)
-        })));
-      }
+      const restored = readLocalScanHistory<ScanEntry>(localStorage);
+      localHistoryRef.current = restored;
+      setHistory(restored);
     } catch (e) {
       console.error("Error restoring scan history:", e);
+      setLocalHistoryError('No se pudo leer la copia local. Se conservó sin cambios; no borres los datos del navegador.');
     }
   }, []);
 
   // Update history state and sync to localStorage
   const updateHistory = (updater: (prev: ScanEntry[]) => ScanEntry[]) => {
-    setHistory(prev => {
-      const next = updater(prev);
-      try {
-        localStorage.setItem("volunteer_manager_scan_history", JSON.stringify(next.slice(0, 50)));
-      } catch (e) {
-        console.error("Error saving scan history:", e);
-      }
-      return next;
-    });
-  };
-
-  const clearHistory = () => {
-    setHistory([]);
+    const next = updater(localHistoryRef.current);
+    localHistoryRef.current = next;
+    setHistory(next);
     try {
-      localStorage.removeItem("volunteer_manager_scan_history");
-    } catch (e) {}
+      persistLocalScanHistory(localStorage, next);
+    } catch (e) {
+      console.error("Error saving scan history:", e);
+      setLocalHistoryError('No se pudo actualizar la copia local. Los datos guardados anteriormente se conservaron.');
+    }
   };
 
   const [historyTab, setHistoryTab] = useState<'db' | 'session'>('db');
   const [dbHistory, setDbHistory] = useState<ScanEntry[]>([]);
+  const [todayDbHistory, setTodayDbHistory] = useState<ScanEntry[]>([]);
   const [loadingDbHistory, setLoadingDbHistory] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [checkoutError, setCheckoutError] = useState('');
@@ -215,46 +201,43 @@ export function CheckInScanner({
   const historyRequestRef = useRef(0);
   const { inputValue: searchInput, setInputValue: setSearchInput, appliedSearch: searchQuery, applySearch } = useDebouncedSearch();
   const [selectedDayFilter] = useState("all");
+  const todayDate = getGuatemalaDate();
+  const todayDayKey = getGuatemalaDayKey();
 
   const fetchDbHistory = useCallback(async () => {
     const requestId = ++historyRequestRef.current;
     setLoadingDbHistory(true);
     try {
-      const logs = await getHistoricalAttendanceLogs(150);
+      const [logs, todayLogs] = await Promise.all([
+        getHistoricalAttendanceLogs(150),
+        getHistoricalAttendanceLogs(150, todayDayKey),
+      ]);
       if (requestId !== historyRequestRef.current) return;
       const formattedLogs = logs.map((item: any) => ({
         ...item,
         timestamp: new Date(item.timestamp)
       }));
       setDbHistory(formattedLogs);
+      setTodayDbHistory(todayLogs.map((item: any) => ({ ...item, timestamp: new Date(item.timestamp) })));
       setHistoryError('');
-
-      // Sync completed status back to local session history array
-      setHistory(prev => prev.map(sessionItem => {
-        const matchingDbItem = formattedLogs.find((dbItem: any) => sessionItem.sessionId
-          ? dbItem.sessionId === sessionItem.sessionId
-          : dbItem.id === sessionItem.id);
-        if (matchingDbItem) {
-          return { ...sessionItem, isCompleted: matchingDbItem.isCompleted };
-        }
-        return sessionItem;
-      }));
     } catch (e) {
       console.error("Error fetching db history", e);
       if (requestId === historyRequestRef.current) setHistoryError('No se pudo actualizar el historial. Usa Actualizar para reintentar.');
     } finally {
       if (requestId === historyRequestRef.current) setLoadingDbHistory(false);
     }
-  }, []);
+  }, [todayDayKey]);
 
   useEffect(() => {
-    fetchDbHistory();
+    const timer = window.setTimeout(() => void fetchDbHistory(), 200);
+    return () => window.clearTimeout(timer);
   }, [fetchDbHistory, sessionsData, shiftsData]);
 
   // The shared coordinator context receives session_sync and shift_sync and
   // refreshes visible data periodically. Its changes reload history above.
 
-  const activeRawList = historyTab === 'session' ? history : dbHistory;
+  const sharedSessionHistory = useMemo(() => mergeTodayScanHistory(todayDbHistory, history, todayDate), [todayDbHistory, history, todayDate]);
+  const activeRawList = historyTab === 'session' ? sharedSessionHistory : dbHistory;
 
   const filteredList = useMemo(() => {
     return activeRawList.map(item => {
@@ -268,7 +251,7 @@ export function CheckInScanner({
         }
       }
 
-      const dbMatch = dbHistory.find(dbItem =>
+      const dbMatch = (historyTab === 'session' ? todayDbHistory : dbHistory).find(dbItem =>
         item.sessionId ? dbItem.sessionId === item.sessionId :
         dbItem.id === item.id ||
         ((item.volunteerId ? dbItem.volunteerId === item.volunteerId : dbItem.volunteer.toLowerCase() === item.volunteer.toLowerCase()) &&
@@ -297,7 +280,7 @@ export function CheckInScanner({
       }
       return true;
     });
-  }, [activeRawList, searchQuery, selectedDayFilter, checkedOutMap, dbHistory]);
+  }, [activeRawList, searchQuery, selectedDayFilter, checkedOutMap, dbHistory, historyTab, todayDbHistory]);
 
   const [expandedHistoryDays, setExpandedHistoryDays] = useState<Record<string, boolean>>({});
   const [mobileDrawerDayGroup, setMobileDrawerDayGroup] = useState<{
@@ -492,7 +475,7 @@ export function CheckInScanner({
     }
 
     const newShiftDetail = `${reassignDayKey} - ${reassignShiftKey}`;
-    setHistory(prev => prev.map(item => item.id === reassignTarget.shiftId ? { ...item, shiftDetail: newShiftDetail, dayKey: reassignDayKey, shiftKey: reassignShiftKey } : item));
+    updateHistory(prev => prev.map(item => item.id === reassignTarget.shiftId ? { ...item, shiftDetail: newShiftDetail, dayKey: reassignDayKey, shiftKey: reassignShiftKey } : item));
     setDbHistory(prev => prev.map(item => item.id === reassignTarget.shiftId ? { ...item, shiftDetail: newShiftDetail, dayKey: reassignDayKey, shiftKey: reassignShiftKey } : item));
 
     setReassignSuccessMsg(`Turno reasignado exitosamente a ${reassignShiftKey} (${reassignDayKey})`);
@@ -540,7 +523,7 @@ export function CheckInScanner({
         shiftId,
         volunteerName,
         checkedInAt,
-        sessionId: dbHistory.find(entry => entry.id === shiftId)?.sessionId,
+        sessionId: [...todayDbHistory, ...dbHistory].find(entry => entry.id === shiftId)?.sessionId,
       }
     });
   };
@@ -1189,17 +1172,17 @@ export function CheckInScanner({
             {/* KPIs */}
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-[20px] border border-black/8 dark:border-white/10 bg-dark2 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-2">Esta Sesión</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-2">Escaneos en este equipo</p>
                 <div className="flex items-end gap-1.5">
                   <span className="text-4xl font-black text-text leading-none">{sessionCount}</span>
                   <span className="text-xs font-inter font-bold text-text-dim pb-0.5">registros</span>
                 </div>
               </div>
               <div className="rounded-[20px] border border-black/8 dark:border-white/10 bg-dark2 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-2">Historial</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-2">Registros de hoy</p>
                 <div className="flex items-end gap-1.5">
-                  <span className="text-4xl font-black text-text leading-none">{history.length}</span>
-                  <span className="text-xs font-inter font-bold text-text-dim pb-0.5">escaneos</span>
+                  <span className="text-4xl font-black text-text leading-none">{sharedSessionHistory.length}</span>
+                  <span className="text-xs font-inter font-bold text-text-dim pb-0.5">registros</span>
                 </div>
               </div>
             </div>
@@ -1400,7 +1383,7 @@ export function CheckInScanner({
                           ? "bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30"
                           : "bg-white/5 text-text-dim border border-border/40"
                       )}>
-                        {history.length}
+                        {sharedSessionHistory.length}
                       </span>
                       {historyTab === 'session' && (
                         <motion.div
@@ -1437,18 +1420,8 @@ export function CheckInScanner({
                       )}
                     </button>
 
-                    {historyTab === 'session' && history.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={clearHistory}
-                        className="ml-auto text-[11px] font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
-                        title="Limpiar escaneos locales de esta sesión"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">delete</span>
-                        <span>Limpiar Historial Local</span>
-                      </button>
-                    )}
                   </div>
+                  {historyTab === 'session' && <p className="text-xs text-text-dim">Asistencias de hoy compartidas entre dispositivos, según tus permisos. Los intentos locales se conservan en este equipo.</p>}
 
                   {/* Search Bar */}
                   <div className="flex gap-2 w-full">
@@ -1461,7 +1434,7 @@ export function CheckInScanner({
                       inputClassName="h-11"
                     />
 
-                    {historyTab === 'db' && (
+                    {(
                       <button
                         type="button"
                         onClick={fetchDbHistory}
@@ -1480,9 +1453,10 @@ export function CheckInScanner({
                   <div className="space-y-4">
 
                     {historyError && <p role="alert" className="text-sm text-rose-500">{historyError}</p>}
+                    {localHistoryError && <p role="alert" className="text-sm text-amber-500">{localHistoryError}</p>}
 
                     {/* Loading State for DB tab */}
-                    {historyTab === 'db' && loadingDbHistory && (
+                    {loadingDbHistory && filteredList.length === 0 && (
                       <div className="bg-dark3 border border-border rounded-[20px] p-12 text-center flex flex-col items-center justify-center">
                         <div className="w-10 h-10 border-2 border-[#4d7cfe] border-t-transparent rounded-full animate-spin mb-3" />
                         <p className="text-xs font-bold font-inter text-text-dim">Cargando registros históricos...</p>
@@ -1500,14 +1474,14 @@ export function CheckInScanner({
                         </p>
                         <p className="text-xs text-text-dim font-inter max-w-[240px] leading-relaxed">
                           {historyTab === 'session'
-                            ? 'Los escaneos que realices en esta sesión se irán guardando aquí.'
+                            ? 'Aquí aparecerán las asistencias de hoy registradas desde los dispositivos autorizados.'
                             : 'No se encontraron asistencias en los días seleccionados.'}
                         </p>
                       </div>
                     )}
 
                     {/* ACCORDION CARDS BY DAY (Matching /shifts page structure) */}
-                    {(!loadingDbHistory && filteredList.length > 0) && (
+                    {filteredList.length > 0 && (
                       <div className="space-y-4">
                         {groupedHistoryDays.map(dayGroup => {
                           const isDayExpanded = !!expandedHistoryDays[dayGroup.dayKey];
