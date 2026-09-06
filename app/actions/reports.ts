@@ -190,7 +190,7 @@ function parseGuatemalaShiftEnd(dayKey: string, shiftKey: string): Date {
 
 export async function getReportsData(options: { includeSimulation?: boolean } = {}): Promise<{ error?: string; data?: ReportsData }> {
   try {
-    const includeSimulation = options.includeSimulation === true;
+    const includeSimulation = options.includeSimulation !== undefined ? options.includeSimulation : true;
     const authorization = await requireCapability('view_reports');
     const canSeeGlobalReports = hasCapability(authorization, 'view_global_reports');
     const userCommitteeId = authorization.committeeId;
@@ -486,6 +486,13 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
         status,
         durationMinutes
       });
+    });
+
+    items.sort((a, b) => {
+      const dateCmp = a.date.localeCompare(b.date);
+      if (dateCmp !== 0) return dateCmp;
+      if (a.shiftNumber !== b.shiftNumber) return a.shiftNumber - b.shiftNumber;
+      return a.volunteerName.localeCompare(b.volunteerName, 'es', { sensitivity: 'base' });
     });
 
     /* Removed: audit logs must never synthesize attendance or worked hours.

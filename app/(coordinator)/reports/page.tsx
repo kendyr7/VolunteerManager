@@ -135,7 +135,7 @@ export default function ReportsPage() {
   const [data, setData] = useState<ReportsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [includeSimulation, setIncludeSimulation] = useState(false);
+  const [includeSimulation, setIncludeSimulation] = useState(true);
   const [activeTab, setActiveTab] = useState<'history' | 'volunteers' | 'recruitment' | 'daily'>('history');
 
   // Filters State (Multi-Selection arrays)
@@ -152,7 +152,7 @@ export default function ReportsPage() {
   }, [requestedSearch, requestedTab, setAppliedSearch, setInputValue]);
 
   // Table Column Sort States
-  const [historySortField, setHistorySortField] = useState<HistorySortField | null>(null);
+  const [historySortField, setHistorySortField] = useState<HistorySortField | null>('date');
   const [historySortOrder, setHistorySortOrder] = useState<SortOrder>('asc');
 
   const handleHistorySort = (field: HistorySortField) => {
@@ -294,7 +294,7 @@ export default function ReportsPage() {
   useEffect(() => {
     if (hasLoadedReportsRef.current) return;
     hasLoadedReportsRef.current = true;
-    loadData(false);
+    loadData(true);
   }, []);
 
   const items = useMemo(() => data?.items || [], [data?.items]);
@@ -623,26 +623,42 @@ export default function ReportsPage() {
   }, [dailySortDirection, dailySortField, filteredDailyCoverage]);
 
   const sortedHistoryItems = useMemo(() => {
-    if (!historySortField) return filteredItems;
+    const field = historySortField || 'date';
+    const order = historySortOrder || 'asc';
 
     return [...filteredItems].sort((a, b) => {
-      let valA: any = a[historySortField];
-      let valB: any = b[historySortField];
+      if (field === 'date') {
+        const dateCmp = a.date.localeCompare(b.date);
+        if (dateCmp !== 0) return order === 'asc' ? dateCmp : -dateCmp;
+        const shiftCmp = a.shiftNumber - b.shiftNumber;
+        if (shiftCmp !== 0) return order === 'asc' ? shiftCmp : -shiftCmp;
+        return a.volunteerName.localeCompare(b.volunteerName, 'es', { sensitivity: 'base' });
+      }
 
+      let valA: any = a[field];
+      let valB: any = b[field];
+
+      let cmp = 0;
       if (typeof valA === 'string' || typeof valB === 'string') {
         valA = (valA || '').trim();
         valB = (valB || '').trim();
-        const cmp = valA.localeCompare(valB, 'es', { sensitivity: 'base', numeric: true });
-        return historySortOrder === 'asc' ? cmp : -cmp;
-      }
-
-      if (typeof valA === 'number' || typeof valB === 'number') {
+        cmp = valA.localeCompare(valB, 'es', { sensitivity: 'base', numeric: true });
+      } else if (typeof valA === 'number' || typeof valB === 'number') {
         const numA = valA ?? 0;
         const numB = valB ?? 0;
-        return historySortOrder === 'asc' ? numA - numB : numB - numA;
+        cmp = numA - numB;
       }
 
-      return 0;
+      if (cmp !== 0) {
+        return order === 'asc' ? cmp : -cmp;
+      }
+
+      // Tie-breaker: date ascending, then shiftNumber, then volunteerName
+      const dateCmp = a.date.localeCompare(b.date);
+      if (dateCmp !== 0) return dateCmp;
+      const shiftCmp = a.shiftNumber - b.shiftNumber;
+      if (shiftCmp !== 0) return shiftCmp;
+      return a.volunteerName.localeCompare(b.volunteerName, 'es', { sensitivity: 'base' });
     });
   }, [filteredItems, historySortField, historySortOrder]);
 
@@ -702,7 +718,7 @@ export default function ReportsPage() {
 
     if (activeTab === 'history') {
       headers = ["Nombre Voluntario", "Teléfono", "Comité", "Barrio / Rama", "Estaca", "Fecha", "Turno", "Horario", "Duración", "Estado"];
-      rows = filteredItems.map(item => [
+      rows = sortedHistoryItems.map(item => [
         item.volunteerName,
         item.phone,
         item.committeeName,
@@ -719,7 +735,7 @@ export default function ReportsPage() {
       filename = `historial_asistencia_${new Date().toISOString().split('T')[0]}.csv`;
     } else {
       headers = ["Nombre Voluntario", "Teléfono", "Comité", "Barrio / Rama", "Estaca", "Turnos Totales", "Asistidos", "Ausencias", "Fiabilidad (%)", "Total Tiempo"];
-      rows = volunteerRanking.map(v => [
+      rows = sortedVolunteerRanking.map(v => [
         v.name,
         v.phone,
         v.committee,
