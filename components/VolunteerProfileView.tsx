@@ -70,6 +70,7 @@ export interface VolunteerProfileViewProps {
   shiftsByDay?: Record<string, string[]>;
   checkedInMap?: Record<string, boolean> | Record<string, string[]>;
   checkedOutMap?: Record<string, boolean> | Record<string, string[]>;
+  attendanceSessions?: any[];
   shiftAreasBySlot?: Record<string, ShiftAreaDetails | null>;
   pendingShiftKeys?: ReadonlySet<string>;
 
@@ -195,6 +196,7 @@ export function VolunteerProfileView({
   shiftsByDay: externalShiftsByDay,
   checkedInMap: externalCheckedInMap,
   checkedOutMap: externalCheckedOutMap,
+  attendanceSessions: preloadedAttendanceSessions,
   shiftAreasBySlot,
   pendingShiftKeys,
   onToggleShift: externalOnToggleShift,
@@ -258,7 +260,8 @@ export function VolunteerProfileView({
 
   const volunteerSessions = useMemo(() => {
     const merged = new Map<string, any>();
-    const contextSessions = (coordinatorData?.sessionsData || [])
+    const sharedSessions = preloadedAttendanceSessions ?? coordinatorData?.sessionsData ?? [];
+    const contextSessions = sharedSessions
       .filter((session: any) => (session.volunteer_id || session.volunteerId) === volunteer.id);
     const directlyFetchedSessions = fetchedSessions
       .filter((session: any) => (session.volunteer_id || session.volunteerId) === volunteer.id);
@@ -275,7 +278,7 @@ export function VolunteerProfileView({
       new Date(right.started_at || right.startedAt || 0).getTime()
       - new Date(left.started_at || left.startedAt || 0).getTime()
     ));
-  }, [coordinatorData?.sessionsData, fetchedSessions, volunteer.id]);
+  }, [coordinatorData?.sessionsData, fetchedSessions, preloadedAttendanceSessions, volunteer.id]);
 
   const sessionAttendance = useMemo(() => processShiftsData(
     dbShiftRecords,
@@ -552,6 +555,9 @@ export function VolunteerProfileView({
     const fullName = volunteer.first_name
       ? `${volunteer.first_name} ${volunteer.last_name || ''}`.trim()
       : volunteer.name;
+    const sessionsPromise = preloadedAttendanceSessions !== undefined
+      ? Promise.resolve({ success: true, sessions: preloadedAttendanceSessions })
+      : fetchVolunteerAttendanceSessionsAction(volunteer.id);
     const [auditRes, shiftRecordsRes, sessionsRes] = await Promise.all([
       fetchVolunteerAuditLogsAction(
         volunteer.id,
@@ -560,7 +566,7 @@ export function VolunteerProfileView({
         (volunteer as any).created_at
       ),
       fetchVolunteerShiftRecordsAction(volunteer.id),
-      fetchVolunteerAttendanceSessionsAction(volunteer.id)
+      sessionsPromise
     ]);
 
     if (auditRes.success && auditRes.logs) {
@@ -580,6 +586,7 @@ export function VolunteerProfileView({
   }, [volunteer.id]);
 
   useEffect(() => {
+    if (preloadedAttendanceSessions !== undefined) return;
     let cancelled = false;
     const loadSessions = async () => {
       const result = await fetchVolunteerAttendanceSessionsAction(volunteer.id);
@@ -591,7 +598,7 @@ export function VolunteerProfileView({
     return () => {
       cancelled = true;
     };
-  }, [volunteer.id]);
+  }, [preloadedAttendanceSessions, volunteer.id]);
 
   useEffect(() => {
     if (activeTab === 'audit') {

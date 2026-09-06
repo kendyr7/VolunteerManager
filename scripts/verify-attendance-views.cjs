@@ -123,4 +123,12 @@ check('Esta sesion es la pestana inicial y sus datos del servidor no esperan esc
   assert.ok(page.includes("params.view === 'scanner' ? 'scanner' : 'history'"));
   assert.ok(page.includes('initialHistory={initialHistory}'));
 });
+check('Drawer precarga las horas desde el contexto sin consulta individual al abrir', () => {
+  const drawer = fs.readFileSync(path.join(root, 'components/VolunteerProfileDrawer.tsx'), 'utf8');
+  const profile = fs.readFileSync(path.join(root, 'components/VolunteerProfileView.tsx'), 'utf8');
+  assert.ok(drawer.includes('sessionsData = []'));
+  assert.ok(drawer.includes('attendanceSessions={activeVolunteerSessions}'));
+  assert.ok(profile.includes('if (preloadedAttendanceSessions !== undefined) return;'));
+  assert.ok(profile.includes('preloadedAttendanceSessions ?? coordinatorData?.sessionsData ?? []'));
+});
 console.log(`${count}/${count} verificaciones aprobadas. Sin escrituras en produccion.`);

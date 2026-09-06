@@ -76,6 +76,7 @@ export function VolunteerProfileDrawer({
     rawVolunteers = [],
     committeesList = [],
     shiftsData = [],
+    sessionsData = [],
     globalShifts = {},
     checkedInMap = {},
     checkedOutMap = {},
@@ -216,6 +217,13 @@ export function VolunteerProfileDrawer({
 
     return result;
   }, [baseShiftsByDay, optimisticShiftStates]);
+
+  const activeVolunteerSessions = useMemo(() => {
+    if (!activeVolunteer?.id) return [];
+    return sessionsData.filter((session: any) => (
+      (session.volunteer_id || session.volunteerId) === activeVolunteer.id
+    ));
+  }, [activeVolunteer?.id, sessionsData]);
 
   useEffect(() => {
     setOptimisticShiftStates({});
@@ -446,6 +454,7 @@ export function VolunteerProfileDrawer({
                   <VolunteerProfileView
                     volunteer={activeVolunteer}
                     mode={mode}
+                    attendanceSessions={activeVolunteerSessions}
                     shiftsByDay={shiftsByDay}
                     checkedInMap={checkedInMap}
                     checkedOutMap={checkedOutMap}
