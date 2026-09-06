@@ -36,6 +36,7 @@ import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 import { withShiftAreaDetails } from '@/lib/shift-area';
 
 const STALE_TIME_MS = 60_000;
+const SESSION_SYNC_INTERVAL_MS = 10_000;
 const SAFE_VOLUNTEER_FIELDS = 'id, first_name, last_name, phone, stake, neighborhood, committee_id, age, status, created_at, committees(name)';
 const OPERATIONAL_EVENT_DAY_KEYS = buildEventDayKeys();
 
@@ -108,6 +109,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   const lastFetchedAtRef = useRef(0);
   const lastCacheKeyRef = useRef('');
   const fetchPromiseRef = useRef<Promise<void> | null>(null);
+  const sessionsFetchPromiseRef = useRef<Promise<void> | null>(null);
   const visibleVolunteerIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -300,6 +302,33 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
     [supabase]
   );
 
+  const refreshAttendanceSessions = useCallback(async () => {
+    if (sessionsFetchPromiseRef.current) {
+      await sessionsFetchPromiseRef.current;
+      return;
+    }
+
+    const promise = (async () => {
+      try {
+        const { authenticated } = getAuthScope();
+        if (!authenticated) {
+          setSessionsData([]);
+          return;
+        }
+        const { getAttendanceSessionsAction } = await import('@/app/actions/attendance');
+        const latestSessions = await getAttendanceSessionsAction(OPERATIONAL_EVENT_DAY_KEYS);
+        setSessionsData(latestSessions ?? []);
+      } catch (error) {
+        console.error('Error refreshing attendance sessions:', error);
+      } finally {
+        sessionsFetchPromiseRef.current = null;
+      }
+    })();
+
+    sessionsFetchPromiseRef.current = promise;
+    await promise;
+  }, []);
+
   useEffect(() => {
     fetchData();
     const handleAuthorizationChange = () => void fetchData(true);
@@ -315,6 +344,16 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('focus', refreshVisibleData);
     };
   }, [fetchData]);
+
+  // Broadcast updates remain immediate; this lightweight reconciliation makes
+  // every open coordinator converge even if a device briefly misses a message.
+  useEffect(() => {
+    const reconcileSessions = () => {
+      if (document.visibilityState === 'visible') void refreshAttendanceSessions();
+    };
+    const timer = window.setInterval(reconcileSessions, SESSION_SYNC_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [refreshAttendanceSessions]);
 
   // Set up Supabase Realtime for instant synchronization across all active coordinators
   useEffect(() => {
@@ -448,6 +487,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             next[index] = mergeRealtimeRecord(existing, record);
             return next;
           });
+          void refreshAttendanceSessions();
         }
       )
       .on(
@@ -530,7 +570,7 @@ broadcast: session_sync
           `);
           useRealtimeStore.getState().recordHeartbeat();
           void SupabaseReconnectManager.getInstance().recoverMissedEvents();
-          fetchData(false);
+          void refreshAttendanceSessions();
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
           useRealtimeStore.getState().setStatus('reconnecting');
         }
@@ -539,7 +579,7 @@ broadcast: session_sync
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, fetchData, eventQueue]);
+  }, [supabase, fetchData, eventQueue, refreshAttendanceSessions]);
 
   const value = useMemo<CoordinatorDataContextValue>(
     () => ({

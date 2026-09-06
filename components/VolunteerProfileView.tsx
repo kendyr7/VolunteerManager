@@ -256,11 +256,32 @@ export function VolunteerProfileView({
     return fetchedDbRecords;
   }, [hasStoreEntry, storeShifts, coordinatorData?.shiftsData, fetchedDbRecords, volunteer.id]);
 
+  const volunteerSessions = useMemo(() => {
+    const merged = new Map<string, any>();
+    const contextSessions = (coordinatorData?.sessionsData || [])
+      .filter((session: any) => (session.volunteer_id || session.volunteerId) === volunteer.id);
+    const directlyFetchedSessions = fetchedSessions
+      .filter((session: any) => (session.volunteer_id || session.volunteerId) === volunteer.id);
+
+    for (const session of [...contextSessions, ...directlyFetchedSessions]) {
+      if (!session?.id) continue;
+      const existing = merged.get(session.id);
+      const existingTime = new Date(existing?.updated_at || existing?.started_at || 0).getTime();
+      const incomingTime = new Date(session.updated_at || session.started_at || 0).getTime();
+      if (!existing || incomingTime >= existingTime) merged.set(session.id, session);
+    }
+
+    return [...merged.values()].sort((left, right) => (
+      new Date(right.started_at || right.startedAt || 0).getTime()
+      - new Date(left.started_at || left.startedAt || 0).getTime()
+    ));
+  }, [coordinatorData?.sessionsData, fetchedSessions, volunteer.id]);
+
   const sessionAttendance = useMemo(() => processShiftsData(
     dbShiftRecords,
     [{ id: volunteer.id }],
-    coordinatorData?.sessionsData ?? fetchedSessions,
-  ), [dbShiftRecords, volunteer.id, coordinatorData?.sessionsData, fetchedSessions]);
+    volunteerSessions,
+  ), [dbShiftRecords, volunteer.id, volunteerSessions]);
 
   // Permisos y Usuario
   const userRole = typeof window !== 'undefined' ? localStorage.getItem('mock_role') || 'Admin' : 'Admin';
@@ -487,7 +508,7 @@ export function VolunteerProfileView({
     : { committeeName: '', count: 0, maxReq: 0, isFull: false };
 
   const staleOpenSession = useMemo(() => {
-    const openSess = fetchedSessions.find((s: any) => s.status === 'open');
+    const openSess = volunteerSessions.find((s: any) => s.status === 'open');
     if (!openSess) return null;
     const guatemalaString = new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" });
     const guatemalaNow = new Date(guatemalaString);
@@ -497,7 +518,7 @@ export function VolunteerProfileView({
       return openSess;
     }
     return null;
-  }, [fetchedSessions]);
+  }, [volunteerSessions]);
 
   const isSourceDayFullyCompleted = (dayKey: string) => {
     const shifts = shiftsByDay[dayKey] || [];
@@ -548,6 +569,20 @@ export function VolunteerProfileView({
   }, [volunteer.id]);
 
   useEffect(() => {
+    let cancelled = false;
+    const loadSessions = async () => {
+      const result = await fetchVolunteerAttendanceSessionsAction(volunteer.id);
+      if (!cancelled && result.success && result.sessions) {
+        setFetchedSessions(result.sessions);
+      }
+    };
+    void loadSessions();
+    return () => {
+      cancelled = true;
+    };
+  }, [volunteer.id]);
+
+  useEffect(() => {
     if (activeTab === 'audit') {
       loadAuditLogs();
     }
@@ -561,9 +596,21 @@ export function VolunteerProfileView({
     return formatUnifiedDuration(totalMins);
   }, []);
 
+  const formatSessionClock = useCallback((value?: string | null) => {
+    if (!value) return 'En curso';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return 'Sin hora';
+    return parsed.toLocaleTimeString('es-GT', {
+      timeZone: 'America/Guatemala',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }, []);
+
   const getShiftTimesFormatted = useCallback((dayKey: string, shiftKey: string) => {
-    return getUnifiedShiftTimes(dayKey, shiftKey, dbShiftRecords, auditLogs);
-  }, [dbShiftRecords, auditLogs]);
+    return getUnifiedShiftTimes(dayKey, shiftKey, dbShiftRecords, auditLogs, volunteerSessions, volunteer.id);
+  }, [dbShiftRecords, auditLogs, volunteerSessions, volunteer.id]);
 
   const getShiftWorkedMinutes = useCallback((dayKey: string, shiftKey: string) => {
     if (!isShiftCheckedOut(dayKey, shiftKey)) return 0;
@@ -809,8 +856,8 @@ export function VolunteerProfileView({
   const nameParts = (volunteer.name || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`).trim().split(/\s+/).filter(Boolean);
 
   const profileMetrics = useMemo(() => {
-    return getVolunteerProfileMetrics(volunteer.id, dbShiftRecords, auditLogs, fetchedSessions);
-  }, [volunteer.id, dbShiftRecords, auditLogs, fetchedSessions]);
+    return getVolunteerProfileMetrics(volunteer.id, dbShiftRecords, auditLogs, volunteerSessions);
+  }, [volunteer.id, dbShiftRecords, auditLogs, volunteerSessions]);
 
   const kpiHoursDisplay = useMemo(() => {
     return {
@@ -1223,6 +1270,9 @@ export function VolunteerProfileView({
                 const area = shiftAreasBySlot?.[`${dayKey}:${shiftKey}`] || null;
                 return area ? [{ shiftKey, area }] : [];
               });
+              const daySessions = profileMetrics.sessionsList.filter((session) => (
+                session.dayKey.toLowerCase().trim() === dayKey.toLowerCase().trim()
+              ));
               const dayAbbr = d.label.substring(0, 3);
               const bgColors = [
                 'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
@@ -1382,6 +1432,21 @@ export function VolunteerProfileView({
                     })}
                   </div>
                   </div>
+
+                  {daySessions.length > 0 && (
+                    <div className="ml-2 flex flex-col gap-1 border-t border-border bg-dark3/30 px-3 py-2 sm:px-4">
+                      {daySessions.map((session) => (
+                        <div key={session.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-bold text-text-dim">
+                          <span className={session.status === 'open' ? 'text-emerald-500' : 'text-slate-500'}>
+                            {session.relatedShiftKeys.length > 0 ? session.relatedShiftKeys.join(' + ') : 'Asistencia'}
+                          </span>
+                          <span>Entrada: {formatSessionClock(session.startedAt)}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>Salida: {formatSessionClock(session.endedAt)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {assignedAreas.length > 0 && (
                     <div className="ml-2 flex flex-wrap gap-2 border-t border-border bg-dark3/45 px-3 py-2.5 sm:px-4">

@@ -346,9 +346,14 @@ export async function getOpenAttendanceSessionAction(volunteerId: string) {
 // 3.5. Fetch Volunteer Attendance Sessions Action (Safe for Client Components)
 export async function fetchVolunteerAttendanceSessionsAction(volunteerId: string) {
   try {
-    const all = await fetchAllAttendanceSessionsFromDb();
-    const volunteerSessions = all.filter(s => s.volunteer_id === volunteerId);
-    return { success: true, sessions: volunteerSessions };
+    await requireVolunteerSelfOrCapability('view_volunteers', volunteerId);
+    const { data, error } = await getAdminClient()
+      .from('attendance_sessions')
+      .select('*')
+      .eq('volunteer_id', volunteerId)
+      .order('started_at', { ascending: false });
+    if (error) throw error;
+    return { success: true, sessions: data || [] };
   } catch (e: any) {
     return { success: false, error: e?.message || "Error al cargar sesiones", sessions: [] };
   }

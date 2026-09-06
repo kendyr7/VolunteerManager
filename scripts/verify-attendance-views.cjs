@@ -7,7 +7,8 @@ const ts = require('typescript');
 const { createJiti } = require('jiti');
 const root = path.resolve(__dirname, '..');
 const jiti = createJiti(__filename, { alias: { '@': root } });
-const { resolveShiftView, isLiveShiftRoster, attendanceSortPriority } = jiti('../lib/shift-view.ts');
+const { resolveShiftView, isLiveShiftRoster, attendanceSortPriority, getOpenAttendanceVolunteerIds } = jiti('../lib/shift-view.ts');
+const { getUnifiedShiftTimes } = jiti('../lib/shift-calculations.ts');
 const { getShiftAttendanceState } = jiti('../lib/coordinator-data.ts');
 const at = time => new Date(`2026-09-05T${time}:00-06:00`);
 let count = 0;
@@ -45,7 +46,7 @@ function roster(mode, now = at('10:00'), day = 'sáb 5', hasOpen = true) {
     getShiftRecord: id => shifts.find(s => s.volunteer_id === id),
     getShiftAttendanceState, contextCheckedInMap: {}, contextCheckedOutMap: {},
     viewMode: mode, isLiveShiftRoster, attendanceSortPriority,
-    activeShiftKeys: new Set(hasOpen ? [`${day}|T1`] : []), rosterNow: now,
+    attendanceShiftKeys: new Set(hasOpen ? [`${day}|T1`] : []), rosterNow: now,
   })(day, 'T1');
 }
 check('Turnos abre En turno con asistentes y Programacion sin asistentes', () => {
@@ -58,22 +59,39 @@ check('Se respeta una seleccion explicita aunque cambie el conteo', () => {
   assert.equal(resolveShiftView('active', 0), 'active');
   assert.equal(resolveShiftView('completed', 90), 'completed');
 });
-check('En turno ordena pendientes antes de presentes, excluye completados y otros comites', () => {
+check('En turno ordena pendientes, presentes y completados en gris dentro del roster diario', () => {
   const rows = roster('active');
-  assert.deepEqual(Array.from(rows, r => r.id), ['pending', 'arrived']);
+  assert.deepEqual(Array.from(rows, r => r.id), ['pending', 'arrived', 'closed']);
   assert.equal(shifts[1].checked_in, false);
 });
 check('Los pendientes futuros no aparecen como si estuvieran en turno', () => {
-  assert.deepEqual(Array.from(roster('active', at('10:00'), 'jue 10'), r => r.id), ['arrived']);
+  assert.deepEqual(Array.from(roster('active', at('10:00'), 'jue 10'), r => r.id), []);
   assert.equal(isLiveShiftRoster('sáb 5', 'T1', false, at('08:00')), false);
 });
 check('Turno sin escaneos dentro del horario muestra pendientes al abrirlo explicitamente', () => {
   assert.equal(isLiveShiftRoster('sáb 5', 'T1', false, at('09:00')), true);
   assert.ok(roster('active', at('10:00'), 'sáb 5', false).some(v => v.id === 'pending'));
 });
-check('Despues del horario se conservan pendientes mientras siga asistencia abierta en ese turno', () => {
+check('Despues del horario el roster permanece por cualquier asistencia y desaparece a medianoche', () => {
   assert.equal(isLiveShiftRoster('sáb 5', 'T1', true, at('15:00')), true);
   assert.equal(isLiveShiftRoster('sáb 5', 'T1', false, at('15:00')), false);
+  assert.equal(isLiveShiftRoster('sáb 5', 'T1', true, new Date('2026-09-06T00:01:00-06:00')), false);
+});
+check('El contador usa personas con sesion abierta hoy, no banderas antiguas del turno', () => {
+  const sessions = [
+    { volunteer_id: 'arrived', day_key: 'sáb 5', status: 'open', ended_at: null },
+    { volunteer_id: 'closed', day_key: 'sáb 5', status: 'completed', ended_at: at('14:00').toISOString() },
+    { volunteer_id: 'old', day_key: 'vie 4', status: 'open', ended_at: null },
+  ];
+  assert.deepEqual([...getOpenAttendanceVolunteerIds(sessions, 'sáb 5')], ['arrived']);
+});
+check('El perfil muestra las horas reales de attendance_sessions', () => {
+  const times = getUnifiedShiftTimes('sáb 5', 'T1', shifts, [], [{
+    id: 'session-1', volunteer_id: 'closed', day_key: 'sáb 5',
+    status: 'completed', started_at: '2026-09-05T14:54:00.000Z', ended_at: '2026-09-05T20:58:00.000Z',
+  }], 'closed');
+  assert.match(times.startTime, /08:54/);
+  assert.match(times.endTime, /02:58/);
 });
 check('Programacion y Completados conservan sus filtros de asistencia', () => {
   assert.deepEqual(Array.from(roster('completed'), r => r.id), ['closed']);

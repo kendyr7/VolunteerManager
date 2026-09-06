@@ -29,7 +29,9 @@ import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 import { getShiftCapacityStatus, getShiftCommitteeScope } from "@/lib/shift-capacity";
 import { getShiftAttendanceState } from "@/lib/coordinator-data";
-import { attendanceSortPriority, isLiveShiftRoster, resolveShiftView, type ShiftViewMode } from '@/lib/shift-view';
+import { attendanceSortPriority, getOpenAttendanceVolunteerIds, isLiveShiftRoster, resolveShiftView, type ShiftViewMode } from '@/lib/shift-view';
+import { getGuatemalaDayKey } from '@/lib/scan-history';
+import { findAttendanceSessionForShift } from '@/lib/shift-calculations';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -217,6 +219,7 @@ export default function ShiftsPage() {
     indexedAssignments: contextIndexedAssignments,
     checkedInMap: contextCheckedInMap,
     checkedOutMap: contextCheckedOutMap,
+    sessionsData: contextSessionsData,
     activeSessionsByVolunteer,
     shiftCounts: contextShiftCounts,
     loading,
@@ -578,23 +581,25 @@ export default function ShiftsPage() {
     return volunteers.filter(v => matchesFilters(v, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole));
   }, [volunteers, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, matchesFilters]);
 
-  const activeShiftKeys = useMemo(() => {
+  const attendanceShiftKeys = useMemo(() => {
     const keys = new Set<string>();
     rawShiftsData.forEach(shift => {
-      if (getShiftAttendanceState({ shift, volunteerId: shift.volunteer_id, dayKey: shift.day_key, shiftKey: shift.shift_key,
-        checkedInMap: contextCheckedInMap, checkedOutMap: contextCheckedOutMap }).isCheckedIn) {
+      const attendance = getShiftAttendanceState({ shift, volunteerId: shift.volunteer_id, dayKey: shift.day_key, shiftKey: shift.shift_key,
+        checkedInMap: contextCheckedInMap, checkedOutMap: contextCheckedOutMap });
+      if (attendance.isCheckedIn || attendance.isCheckedOut) {
         keys.add(`${shift.day_key}|${shift.shift_key}`);
       }
     });
     return keys;
   }, [rawShiftsData, contextCheckedInMap, contextCheckedOutMap]);
 
-  const totalActiveCount = useMemo(() => rawShiftsData.filter(shift => {
-    const vol = volunteerMap.get(shift.volunteer_id);
-    if (!vol || !scopedCommitteeSet.has(vol.committee) || !matchesFilters(vol, '', [], [], [], currentRole)) return false;
-    return getShiftAttendanceState({ shift, volunteerId: shift.volunteer_id, dayKey: shift.day_key, shiftKey: shift.shift_key,
-      checkedInMap: contextCheckedInMap, checkedOutMap: contextCheckedOutMap }).isCheckedIn;
-  }).length, [rawShiftsData, volunteerMap, scopedCommitteeSet, matchesFilters, currentRole, contextCheckedInMap, contextCheckedOutMap]);
+  const totalActiveCount = useMemo(() => {
+    const activeVolunteerIds = getOpenAttendanceVolunteerIds(contextSessionsData, getGuatemalaDayKey(rosterNow));
+    return [...activeVolunteerIds].filter(volunteerId => {
+      const vol = volunteerMap.get(volunteerId);
+      return Boolean(vol && scopedCommitteeSet.has(vol.committee) && matchesFilters(vol, '', [], [], [], currentRole));
+    }).length;
+  }, [contextSessionsData, rosterNow, volunteerMap, scopedCommitteeSet, matchesFilters, currentRole]);
   const viewMode = resolveShiftView(selectedViewMode ?? requestedView, totalActiveCount);
 
   // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales
@@ -607,7 +612,7 @@ export default function ShiftsPage() {
     const allCandidateIds = Array.from(new Set([...assignedIdsFromProps, ...dbShiftVols]));
     const result: VolunteerType[] = [];
     const priorities = new Map<string, number>();
-    const liveRoster = isLiveShiftRoster(dateKey, shiftId, activeShiftKeys.has(`${dateKey}|${shiftId}`), rosterNow);
+    const liveRoster = isLiveShiftRoster(dateKey, shiftId, attendanceShiftKeys.has(`${dateKey}|${shiftId}`), rosterNow);
 
     for (const id of allCandidateIds) {
       const vol = volunteerMap.get(id);
@@ -625,9 +630,9 @@ export default function ShiftsPage() {
         });
 
         if (viewMode === 'active') {
-          // Keep pending arrivals visible in today's running roster, without
-          // treating them as checked in or including future days and shifts.
-          if (isCheckedOut || (!isCheckedIn && !liveRoster)) continue;
+          // Keep today's full roster visible until midnight: pending first,
+          // currently present next, and completed attendees in gray last.
+          if (!liveRoster) continue;
         } else if (viewMode === 'completed') {
           // Completados: Muestra únicamente los que ya registraron salida
           if (!isCheckedOut) continue;
@@ -640,7 +645,13 @@ export default function ShiftsPage() {
 
     return result.sort((a, b) => (viewMode === 'active' ? (priorities.get(a.id)! - priorities.get(b.id)!) : 0)
       || a.committee.localeCompare(b.committee) || a.name.localeCompare(b.name));
-  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet, activeShiftKeys, rosterNow]);
+  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet, attendanceShiftKeys, rosterNow]);
+
+  const totalRosterCount = useMemo(() => EVENT_DAYS.reduce((total, day) => (
+    total + getAvailableShiftKeys(day.key).reduce((dayTotal, shiftKey) => (
+      dayTotal + getAssignedVolunteers(day.key, shiftKey).length
+    ), 0)
+  ), 0), [EVENT_DAYS, getAssignedVolunteers]);
 
   const handleStartEditProfile = (vol: VolunteerType) => {
     const fn = (vol as any).first_name ?? vol.name ?? '';
@@ -1340,10 +1351,12 @@ export default function ShiftsPage() {
                                 });
                                 const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                 const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
-                                const attendanceStartedAt = shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
+                                const attendanceSession = findAttendanceSessionForShift(key, t, contextSessionsData, rawShiftsData, vol.id);
+                                const attendanceStartedAt = attendanceSession?.started_at || shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
+                                const attendanceEndedAt = attendanceSession?.ended_at || shiftRecord?.checked_out_at;
                                 const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
-                                const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at);
-                                const elapsed = getElapsedInfoBetween(attendanceStartedAt, shiftRecord?.checked_out_at);
+                                const checkOutTimeStr = formatGuatemalaTime(attendanceEndedAt);
+                                const elapsed = getElapsedInfoBetween(attendanceStartedAt, attendanceEndedAt);
 
                                 return (
                                   <div
@@ -1619,10 +1632,12 @@ export default function ShiftsPage() {
                                   });
                                   const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                   const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
-                                  const attendanceStartedAt = shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
+                                  const attendanceSession = findAttendanceSessionForShift(key, t, contextSessionsData, rawShiftsData, vol.id);
+                                  const attendanceStartedAt = attendanceSession?.started_at || shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
+                                  const attendanceEndedAt = attendanceSession?.ended_at || shiftRecord?.checked_out_at;
                                   const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
-                                  const checkOutTimeStr = formatGuatemalaTime(shiftRecord?.checked_out_at);
-                                  const elapsed = getElapsedInfoBetween(attendanceStartedAt, shiftRecord?.checked_out_at);
+                                  const checkOutTimeStr = formatGuatemalaTime(attendanceEndedAt);
+                                  const elapsed = getElapsedInfoBetween(attendanceStartedAt, attendanceEndedAt);
 
                                   return (
                                     <div
@@ -1860,11 +1875,11 @@ export default function ShiftsPage() {
 
       {viewMode === 'active' && (
         <p className="px-4 sm:px-6 lg:px-8 mb-3 text-xs text-text-dim">
-          Primero se muestran los pendientes de entrada del turno en curso. El contador de En turno incluye solo entradas confirmadas.
+          Pendientes primero, asistentes activos después y salidas completadas en gris hasta medianoche. El contador incluye solo sesiones abiertas.
         </p>
       )}
 
-      {viewMode === 'active' && totalActiveCount === 0 && (
+      {viewMode === 'active' && totalRosterCount === 0 && (
         <div className="w-full px-4 sm:px-6 lg:px-8 mb-4">
           <div className="bg-dark2 border border-white/10 p-4 rounded-2xl flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20 shrink-0">
