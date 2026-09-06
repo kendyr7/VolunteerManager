@@ -112,6 +112,11 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
   useEffect(() => {
     loadShifts();
 
+    const reconcileWhileVisible = () => {
+      if (document.visibilityState === 'visible') void loadShifts();
+    };
+    const reconciliationTimer = window.setInterval(reconcileWhileVisible, 10_000);
+
     const channel = supabase
       .channel(`volunteer_calendar_${volunteerId}`)
       .on(
@@ -131,9 +136,20 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
           }
         }
       )
+      .on(
+        'broadcast',
+        { event: 'session_sync' },
+        (eventPayload) => {
+          const payload = eventPayload?.payload;
+          if (payload?.table === 'attendance_sessions' && payload?.record?.volunteer_id === volunteerId) {
+            void loadShifts();
+          }
+        }
+      )
       .subscribe();
 
     return () => {
+      window.clearInterval(reconciliationTimer);
       supabase.removeChannel(channel);
     };
   }, [loadShifts, supabase, volunteerId]);

@@ -93,6 +93,17 @@ check('El perfil muestra las horas reales de attendance_sessions', () => {
   assert.match(times.startTime, /08:54/);
   assert.match(times.endTime, /02:58/);
 });
+check('Calendario personal y tooltip consumen sesiones compartidas sin quedar recortados', () => {
+  const scheduleService = fs.readFileSync(path.join(root, 'lib/services/volunteer-schedule.service.ts'), 'utf8');
+  const calendar = fs.readFileSync(path.join(root, 'components/ShiftCalendar.tsx'), 'utf8');
+  const profile = fs.readFileSync(path.join(root, 'components/VolunteerProfileView.tsx'), 'utf8');
+  assert.ok(scheduleService.includes(".from('attendance_sessions')"));
+  assert.ok(scheduleService.includes('findAttendanceSessionForShift'));
+  assert.ok(calendar.includes("{ event: 'session_sync' }"));
+  assert.ok(profile.includes('<Popover.Portal>'));
+  assert.ok(profile.includes('className="z-[320]"'));
+  assert.ok(!profile.includes('activeShiftTooltipKey'));
+});
 check('Programacion y Completados conservan sus filtros de asistencia', () => {
   assert.deepEqual(Array.from(roster('completed'), r => r.id), ['closed']);
   assert.equal(roster('turnos').length, 3);

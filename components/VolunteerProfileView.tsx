@@ -377,7 +377,13 @@ export function VolunteerProfileView({
   const isShiftCheckedOut = useCallback((dayKey: string, shiftKey: string): boolean => {
     const dbRec = dbShiftRecords.find(r => r.day_key === dayKey && r.shift_key === shiftKey);
     if (dbRec) {
-      const map = externalCheckedOutMap || sessionAttendance.checkedOutMap;
+      const sessionState = getShiftAttendanceState({
+        shift: dbRec, volunteerId: volunteer.id, dayKey, shiftKey,
+        checkedOutMap: sessionAttendance.checkedOutMap,
+      });
+      if (sessionState.isCheckedOut) return true;
+
+      const map = externalCheckedOutMap || {};
       const dayValue = map[dayKey];
       return getShiftAttendanceState({
         shift: dbRec, volunteerId: volunteer.id, dayKey, shiftKey,
@@ -424,7 +430,13 @@ export function VolunteerProfileView({
 
     const dbRec = dbShiftRecords.find(r => r.day_key === dayKey && r.shift_key === shiftKey);
     if (dbRec) {
-      const map = externalCheckedInMap || sessionAttendance.checkedInMap;
+      const sessionState = getShiftAttendanceState({
+        shift: dbRec, volunteerId: volunteer.id, dayKey, shiftKey,
+        checkedInMap: sessionAttendance.checkedInMap,
+      });
+      if (sessionState.isCheckedIn) return true;
+
+      const map = externalCheckedInMap || {};
       const dayValue = map[dayKey];
       return (Array.isArray(dayValue) && dayValue.includes(shiftKey)) || getShiftAttendanceState({
         shift: dbRec, volunteerId: volunteer.id, dayKey, shiftKey,
@@ -476,7 +488,6 @@ export function VolunteerProfileView({
   } = useVolunteerRescheduleContext(volunteer.id);
 
   // Reagendamiento State
-  const [activeShiftTooltipKey, setActiveShiftTooltipKey] = useState<string | null>(null);
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
   const [allRequests, setAllRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
@@ -1344,61 +1355,71 @@ export function VolunteerProfileView({
                         : baseTitleText;
 
                       const tooltipKey = `${dayKey}-${t}`;
-                      const isTooltipOpen = activeShiftTooltipKey === tooltipKey;
                       const isSavingShift = pendingShiftKeys?.has(tooltipKey) ?? false;
+                      const shiftButtonClassName = cn(
+                        "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all cursor-pointer",
+                        statusStyle,
+                        (canClick || outCheck) && !isSavingShift && "hover:bg-dark hover:border-border active:scale-95",
+                        isSavingShift && "cursor-progress"
+                      );
+                      const shiftButtonContent = (
+                        <>
+                          <div className="h-4 flex items-center justify-center">
+                            {iconContent}
+                          </div>
+                          <span className={cn("font-inter text-[10px] uppercase tracking-wider mt-0.5", labelColor)}>
+                            {t}
+                          </span>
+                        </>
+                      );
 
                       return (
-                        <div key={t} className="flex flex-col items-center relative group">
-                          <button
-                            type="button"
-                            disabled={isSavingShift}
-                            aria-busy={isSavingShift}
-                            onClick={(e) => {
-                              if (outCheck) {
-                                e.stopPropagation();
-                                setActiveShiftTooltipKey(prev => prev === tooltipKey ? null : tooltipKey);
-                              } else if (canClick) {
-                                handleToggleShift(dayKey, t);
-                              }
-                            }}
-                            className={cn(
-                              "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all cursor-pointer",
-                              statusStyle,
-                              (canClick || outCheck) && !isSavingShift && "hover:bg-dark hover:border-border active:scale-95",
-                              isSavingShift && "cursor-progress"
-                            )}
-                            title={titleText}
-                          >
-                            <div className="h-4 flex items-center justify-center">
-                              {iconContent}
-                            </div>
-                            <span className={cn("font-inter text-[10px] uppercase tracking-wider mt-0.5", labelColor)}>
-                              {t}
-                            </span>
-                          </button>
-
-                          {/* Micro-Tooltip inteligente adaptado a los bordes de la pantalla (Hover Desktop + Touch/Tap Móvil) */}
-                          {outCheck && (
-                            <div
-                              className={cn(
-                                "absolute bottom-full mb-2 flex-col z-[100] transition-all duration-200",
-                                isTooltipOpen ? "flex" : "hidden group-hover:flex",
-                                t === 'T4' || t === 'T3' ? 'right-0 items-end' : t === 'T1' ? 'left-0 items-start' : 'left-1/2 -translate-x-1/2 items-center'
-                              )}
+                        <div key={t} className="flex flex-col items-center relative">
+                          {outCheck ? (
+                            <Popover.Root>
+                              <Popover.Trigger
+                                type="button"
+                                disabled={isSavingShift}
+                                aria-busy={isSavingShift}
+                                aria-label={`Ver horas del turno ${t}`}
+                                className={shiftButtonClassName}
+                                title={titleText}
+                              >
+                                {shiftButtonContent}
+                              </Popover.Trigger>
+                              <Popover.Portal>
+                                <Popover.Positioner
+                                  side="top"
+                                  align="center"
+                                  sideOffset={8}
+                                  collisionPadding={12}
+                                  className="z-[320]"
+                                >
+                                  <Popover.Popup className="w-max max-w-[calc(100vw-1.5rem)] rounded-lg bg-[#18181b] px-3 py-2 text-[10px] font-semibold text-white shadow-md ring-1 ring-slate-700/90 transition duration-150 data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none sm:text-[11px]">
+                                    <Popover.Title className="sr-only">Horas del turno {t}</Popover.Title>
+                                    <Popover.Description className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5">
+                                      <span className="size-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden="true" />
+                                      <span><strong className="font-bold text-slate-300">Entrada:</strong> {times.startTime}</span>
+                                      <span className="text-slate-500" aria-hidden="true">·</span>
+                                      <span><strong className="font-bold text-slate-300">Salida:</strong> {times.endTime}</span>
+                                    </Popover.Description>
+                                  </Popover.Popup>
+                                </Popover.Positioner>
+                              </Popover.Portal>
+                            </Popover.Root>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={isSavingShift}
+                              aria-busy={isSavingShift}
+                              onClick={() => {
+                                if (canClick) handleToggleShift(dayKey, t);
+                              }}
+                              className={shiftButtonClassName}
+                              title={titleText}
                             >
-                              <div className="bg-[#18181b] border border-slate-700/90 text-white text-[10px] sm:text-[11px] font-semibold px-2.5 py-1.5 rounded-lg shadow-2xl whitespace-nowrap flex items-center gap-1.5 border-t-2 border-t-slate-400">
-                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
-                                <span><strong className="text-slate-300 font-bold">Entrada:</strong> {times.startTime}</span>
-                                <span className="text-slate-500">·</span>
-                                <span><strong className="text-slate-300 font-bold">Salida:</strong> {times.endTime}</span>
-                              </div>
-                              <div
-                                className={cn(
-                                  "w-2 h-2 bg-[#18181b] border-r border-b border-slate-700/90 rotate-45 -mt-1",
-                                  t === 'T4' || t === 'T3' ? 'mr-4' : t === 'T1' ? 'ml-4' : ''
-                                )}
-                              />
-                            </div>
+                              {shiftButtonContent}
+                            </button>
                           )}
 
                           {/* Acciones de Reversión Exclusivas para Admin (Espacio de altura fija para evitar desalineación) */}
