@@ -59,9 +59,9 @@ check('Se respeta una seleccion explicita aunque cambie el conteo', () => {
   assert.equal(resolveShiftView('active', 0), 'active');
   assert.equal(resolveShiftView('completed', 90), 'completed');
 });
-check('En turno ordena pendientes, presentes y completados en gris dentro del roster diario', () => {
+check('En turno ordena pendientes, completados en gris y presentes dentro del roster diario', () => {
   const rows = roster('active');
-  assert.deepEqual(Array.from(rows, r => r.id), ['pending', 'arrived', 'closed']);
+  assert.deepEqual(Array.from(rows, r => r.id), ['pending', 'closed', 'arrived']);
   assert.equal(shifts[1].checked_in, false);
 });
 check('Los pendientes futuros no aparecen como si estuvieran en turno', () => {
@@ -104,9 +104,9 @@ check('Calendario personal y tooltip consumen sesiones compartidas sin quedar re
   assert.ok(profile.includes('className="z-[320]"'));
   assert.ok(!profile.includes('activeShiftTooltipKey'));
 });
-check('Programacion y Completados conservan sus filtros de asistencia', () => {
+check('Programacion comparte el orden de asistencia y Completados conserva su filtro', () => {
   assert.deepEqual(Array.from(roster('completed'), r => r.id), ['closed']);
-  assert.equal(roster('turnos').length, 3);
+  assert.deepEqual(Array.from(roster('turnos'), r => r.id), ['pending', 'closed', 'arrived']);
 });
 check('Esta sesion es la pestana inicial y sus datos del servidor no esperan escaneos locales', () => {
   const file = 'components/CheckInScanner.tsx';
@@ -115,6 +115,10 @@ check('Esta sesion es la pestana inicial y sus datos del servidor no esperan esc
   assert.equal(evaluate(file, 'historyTab', bindings)[0], 'session');
   assert.equal(evaluate(file, 'todayDbHistory', bindings)[0].length, 90);
   assert.equal(evaluate(file, 'loadingDbHistory', bindings)[0], false);
+  const scanner = fs.readFileSync(path.join(root, file), 'utf8');
+  assert.ok(scanner.includes('const sharedSessionHistory = todayDbHistory'));
+  assert.ok(scanner.includes('{sharedSessionCount}'));
+  assert.ok(scanner.includes('attendanceSortPriority(Boolean(a.checkedIn && !a.checkedOut), Boolean(a.checkedOut))'));
   const page = fs.readFileSync(path.join(root, 'app/(coordinator)/check-in/page.tsx'), 'utf8');
   assert.ok(page.includes("params.view === 'scanner' ? 'scanner' : 'history'"));
   assert.ok(page.includes('initialHistory={initialHistory}'));

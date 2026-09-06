@@ -631,7 +631,7 @@ export default function ShiftsPage() {
 
         if (viewMode === 'active') {
           // Keep today's full roster visible until midnight: pending first,
-          // currently present next, and completed attendees in gray last.
+          // completed attendees in gray next, and currently present last.
           if (!liveRoster) continue;
         } else if (viewMode === 'completed') {
           // Completados: Muestra únicamente los que ya registraron salida
@@ -643,7 +643,7 @@ export default function ShiftsPage() {
       }
     }
 
-    return result.sort((a, b) => (viewMode === 'active' ? (priorities.get(a.id)! - priorities.get(b.id)!) : 0)
+    return result.sort((a, b) => (viewMode !== 'completed' ? (priorities.get(a.id)! - priorities.get(b.id)!) : 0)
       || a.committee.localeCompare(b.committee) || a.name.localeCompare(b.name));
   }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet, attendanceShiftKeys, rosterNow]);
 

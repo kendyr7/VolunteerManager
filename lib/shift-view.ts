@@ -43,5 +43,6 @@ export function getOpenAttendanceVolunteerIds(
 }
 
 export function attendanceSortPriority(isCheckedIn: boolean, isCheckedOut: boolean): number {
-  return isCheckedOut ? 2 : isCheckedIn ? 1 : 0;
+  if (!isCheckedIn && !isCheckedOut) return 0;
+  return isCheckedOut ? 1 : 2;
 }

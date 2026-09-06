@@ -19,7 +19,8 @@ import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useHydrated } from "@/lib/use-hydrated";
-import { getGuatemalaDate, getGuatemalaDayKey, mergeTodayScanHistory, persistLocalScanHistory, readLocalScanHistory } from '@/lib/scan-history';
+import { getGuatemalaDate, getGuatemalaDayKey, persistLocalScanHistory, readLocalScanHistory } from '@/lib/scan-history';
+import { attendanceSortPriority } from '@/lib/shift-view';
 
 interface CheckInScannerProps {
   coordinatorId: string;
@@ -131,7 +132,6 @@ export function CheckInScanner({
     session?: any;
     outsideOperationalDay?: boolean;
   } | null>(null);
-  const [history, setHistory] = useState<ScanEntry[]>([]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setMainView(initialView));
@@ -171,7 +171,6 @@ export function CheckInScanner({
     try {
       const restored = readLocalScanHistory<ScanEntry>(localStorage);
       localHistoryRef.current = restored;
-      setHistory(restored);
     } catch (e) {
       console.error("Error restoring scan history:", e);
       setLocalHistoryError('No se pudo leer la copia local. Se conservó sin cambios; no borres los datos del navegador.');
@@ -182,7 +181,6 @@ export function CheckInScanner({
   const updateHistory = (updater: (prev: ScanEntry[]) => ScanEntry[]) => {
     const next = updater(localHistoryRef.current);
     localHistoryRef.current = next;
-    setHistory(next);
     try {
       persistLocalScanHistory(localStorage, next);
     } catch (e) {
@@ -206,11 +204,10 @@ export function CheckInScanner({
   const historyRequestRef = useRef(0);
   const { inputValue: searchInput, setInputValue: setSearchInput, appliedSearch: searchQuery, applySearch } = useDebouncedSearch();
   const [selectedDayFilter] = useState("all");
-  const [historyDay, setHistoryDay] = useState(() => ({
+  const [, setHistoryDay] = useState(() => ({
     date: initialHistory?.date || getGuatemalaDate(),
     dayKey: initialHistory?.dayKey || getGuatemalaDayKey(),
   }));
-  const todayDate = historyDay.date;
 
   const fetchDbHistory = useCallback(async () => {
     const requestId = ++historyRequestRef.current;
@@ -254,7 +251,12 @@ export function CheckInScanner({
   // The shared coordinator context receives session_sync and shift_sync and
   // refreshes visible data periodically. Its changes reload history above.
 
-  const sharedSessionHistory = useMemo(() => mergeTodayScanHistory(todayDbHistory, history, todayDate), [todayDbHistory, history, todayDate]);
+  // "Esta sesión" is the authoritative attendance ledger. Local scan attempts
+  // remain safely archived on this device, but never inflate the shared total.
+  const sharedSessionHistory = todayDbHistory;
+  const sharedSessionCount = useMemo(() => new Set(sharedSessionHistory.map(item => (
+    item.sessionId || `${item.volunteerId || item.id}|${getGuatemalaDate(item.timestamp)}`
+  ))).size, [sharedSessionHistory]);
   const activeRawList = historyTab === 'session' ? sharedSessionHistory : dbHistory;
 
   const filteredList = useMemo(() => {
@@ -297,6 +299,12 @@ export function CheckInScanner({
         if (dayPart !== selectedDayFilter.toLowerCase()) return false;
       }
       return true;
+    }).sort((a, b) => {
+      const attendanceDifference = attendanceSortPriority(!a.isCompleted, Boolean(a.isCompleted))
+        - attendanceSortPriority(!b.isCompleted, Boolean(b.isCompleted));
+      return attendanceDifference
+        || a.committee.localeCompare(b.committee, 'es')
+        || a.volunteer.localeCompare(b.volunteer, 'es');
     });
   }, [activeRawList, searchQuery, selectedDayFilter, checkedOutMap, dbHistory, historyTab, todayDbHistory]);
 
@@ -403,6 +411,9 @@ export function CheckInScanner({
         const dayDifference = (dayOrder.get(normalizeSearch(a.dayKey)) ?? Number.MAX_SAFE_INTEGER)
           - (dayOrder.get(normalizeSearch(b.dayKey)) ?? Number.MAX_SAFE_INTEGER);
         if (dayDifference !== 0) return dayDifference;
+        const attendanceDifference = attendanceSortPriority(Boolean(a.checkedIn && !a.checkedOut), Boolean(a.checkedOut))
+          - attendanceSortPriority(Boolean(b.checkedIn && !b.checkedOut), Boolean(b.checkedOut));
+        if (attendanceDifference !== 0) return attendanceDifference;
         return String(a.shiftKey || '').localeCompare(String(b.shiftKey || ''), 'es', { numeric: true });
       })
       .forEach((shift: any) => {
@@ -1199,7 +1210,7 @@ export function CheckInScanner({
               <div className="rounded-[20px] border border-black/8 dark:border-white/10 bg-dark2 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-text-dim mb-2">Registros de hoy</p>
                 <div className="flex items-end gap-1.5">
-                  <span className="text-4xl font-black text-text leading-none">{sharedSessionHistory.length}</span>
+                  <span className="text-4xl font-black text-text leading-none">{sharedSessionCount}</span>
                   <span className="text-xs font-inter font-bold text-text-dim pb-0.5">registros</span>
                 </div>
               </div>
@@ -1401,7 +1412,7 @@ export function CheckInScanner({
                           ? "bg-[#4d7cfe]/15 text-[#4d7cfe] border border-[#4d7cfe]/30"
                           : "bg-white/5 text-text-dim border border-border/40"
                       )}>
-                        {sharedSessionHistory.length}
+                        {sharedSessionCount}
                       </span>
                       {historyTab === 'session' && (
                         <motion.div
@@ -1439,7 +1450,7 @@ export function CheckInScanner({
                     </button>
 
                   </div>
-                  {historyTab === 'session' && <p className="text-xs text-text-dim">Asistencias de hoy compartidas entre dispositivos, según tus permisos. Los intentos locales se conservan en este equipo.</p>}
+                  {historyTab === 'session' && <p className="text-xs text-text-dim">Asistencias confirmadas hoy en la base compartida, según tus permisos. Los intentos locales se conservan en este equipo sin alterar el total.</p>}
 
                   {/* Search Bar */}
                   <div className="flex gap-2 w-full">
