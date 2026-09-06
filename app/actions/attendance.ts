@@ -347,13 +347,15 @@ export async function getOpenAttendanceSessionAction(volunteerId: string) {
 export async function fetchVolunteerAttendanceSessionsAction(volunteerId: string) {
   try {
     await requireVolunteerSelfOrCapability('view_volunteers', volunteerId);
+    const allowedDayKeys = new Set(buildEventDayKeys());
     const { data, error } = await getAdminClient()
       .from('attendance_sessions')
       .select('*')
       .eq('volunteer_id', volunteerId)
       .order('started_at', { ascending: false });
     if (error) throw error;
-    return { success: true, sessions: data || [] };
+    const validSessions = ((data || []) as any[]).filter((s: any) => s.day_key && allowedDayKeys.has(s.day_key));
+    return { success: true, sessions: validSessions };
   } catch (e: any) {
     return { success: false, error: e?.message || "Error al cargar sesiones", sessions: [] };
   }

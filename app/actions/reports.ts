@@ -4,10 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase-helpers";
 import { requireCapability } from "@/lib/authorization";
 import { hasCapability } from "@/lib/role-permissions";
-import { getActiveEventDays, getAvailableShiftKeys, getOfficialShiftTime, getOperationalEventDays, isSimulationEventDay } from "@/lib/dates";
+import { getActiveEventDays, getAvailableShiftKeys, getOfficialShiftTime, getOperationalEventDays, isSimulationEventDay, isOperationalEventDay } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { getGuatemalaHourFloat } from "@/lib/session-utils";
+import { getGuatemalaHourFloat, calculateSessionMinutes, inferShiftsForSession } from "@/lib/session-utils";
 
 export interface ReportItem {
   registrationId: string;
@@ -246,6 +246,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
       const volunteer = volunteersById.get(shift.volunteer_id);
       return Boolean(volunteer)
         && (volunteer?.committees?.status || '').toLowerCase() !== 'archived'
+        && isOperationalEventDay(shift.day_key)
         && (includeSimulation || !isSimulationEventDay(shift.day_key));
     });
 
@@ -261,34 +262,73 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
     const attendanceByShift = new Map<string, SessionAttendance>();
 
     (sessionsData || []).forEach(session => {
-      if (!session.volunteer_id || !session.day_key || !session.started_at) return;
+      if (!session.volunteer_id || !session.day_key || !session.started_at || !isOperationalEventDay(session.day_key)) return;
       const dayKey = normalizeDayKey(session.day_key);
       const assignmentKey = `${session.volunteer_id}|${dayKey}`;
       const assignedShiftKeys = assignedShiftsByVolunteerDay.get(assignmentKey);
       if (!assignedShiftKeys?.size) return;
 
+      const assignedKeysList = Array.from(assignedShiftKeys);
       const startHour = getGuatemalaHourFloat(session.started_at);
       let endHour = session.ended_at ? getGuatemalaHourFloat(session.ended_at) : startHour;
       if (session.ended_at && endHour < startHour) endHour += 24;
 
-      assignedShiftKeys.forEach(shiftKey => {
-        const official = getOfficialShiftTime(session.day_key, shiftKey);
-        const overlapStart = Math.max(startHour, official.startHour);
-        const overlapEnd = Math.min(endHour, official.endHour);
-        const hasCompletedOverlap = session.status === 'completed' && Boolean(session.ended_at) && overlapEnd > overlapStart;
+      const matchedShifts = inferShiftsForSession(
+        session.day_key,
+        session.started_at,
+        session.ended_at,
+        assignedKeysList
+      );
+      const matchedKeys = matchedShifts.map(s => s.shiftKey);
+      const targetKeys = matchedKeys.length > 0 ? matchedKeys : assignedKeysList;
 
-        // Open sessions are indexed only when their start falls within the assigned slot.
-        const hasOpenOverlap = session.status === 'open' && startHour < official.endHour && startHour >= official.startHour;
-        if (!hasCompletedOverlap && !hasOpenOverlap) return;
+      if (session.status === 'completed' && Boolean(session.ended_at)) {
+        const calc = calculateSessionMinutes(session.started_at, session.ended_at);
+        const totalSessionMinutes = calc.isClosed ? calc.totalWorkedMinutes : 0;
 
-        const key = `${session.volunteer_id}|${dayKey}|${shiftKey}`;
-        const current = attendanceByShift.get(key) || { completedMinutes: 0, hasOpen: false };
-        if (hasCompletedOverlap) {
-          current.completedMinutes += Math.round((overlapEnd - overlapStart) * 60);
+        if (totalSessionMinutes > 0) {
+          if (targetKeys.length === 1) {
+            const shiftKey = targetKeys[0];
+            const key = `${session.volunteer_id}|${dayKey}|${shiftKey}`;
+            const current = attendanceByShift.get(key) || { completedMinutes: 0, hasOpen: false };
+            current.completedMinutes += totalSessionMinutes;
+            attendanceByShift.set(key, current);
+          } else {
+            const overlaps = targetKeys.map(shiftKey => {
+              const official = getOfficialShiftTime(session.day_key, shiftKey);
+              const oStart = Math.max(startHour, official.startHour);
+              const oEnd = Math.min(endHour, official.endHour);
+              const overlap = Math.max(0, oEnd - oStart);
+              return { shiftKey, overlap: overlap > 0 ? overlap : official.hours };
+            });
+            const totalOverlap = overlaps.reduce((sum, o) => sum + o.overlap, 0);
+
+            let allocated = 0;
+            overlaps.forEach((o, index) => {
+              const isLast = index === overlaps.length - 1;
+              const mins = isLast
+                ? Math.max(0, totalSessionMinutes - allocated)
+                : Math.round(totalSessionMinutes * (o.overlap / totalOverlap));
+              allocated += mins;
+
+              const key = `${session.volunteer_id}|${dayKey}|${o.shiftKey}`;
+              const current = attendanceByShift.get(key) || { completedMinutes: 0, hasOpen: false };
+              current.completedMinutes += mins;
+              attendanceByShift.set(key, current);
+            });
+          }
         }
-        if (hasOpenOverlap) current.hasOpen = true;
-        attendanceByShift.set(key, current);
-      });
+      } else if (session.status === 'open') {
+        targetKeys.forEach(shiftKey => {
+          const official = getOfficialShiftTime(session.day_key, shiftKey);
+          if (startHour < official.endHour && startHour >= official.startHour) {
+            const key = `${session.volunteer_id}|${dayKey}|${shiftKey}`;
+            const current = attendanceByShift.get(key) || { completedMinutes: 0, hasOpen: false };
+            current.hasOpen = true;
+            attendanceByShift.set(key, current);
+          }
+        });
+      }
     });
 
     // Build requirements map: committeeId -> shiftKey -> required

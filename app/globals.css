@@ -403,26 +403,33 @@ body[data-scroll-locked] {
   .text-nav-link { font-size: 14px; font-weight: 500; line-height: 1.4; }
   .text-drawer-title { font-size: 22px; font-weight: 900; letter-spacing: -0.03em; line-height: 1.25; }
   .text-drawer-subtitle { font-size: 13px; font-weight: 600; }
-  .text-drawer-kpi-value { font-size: 32px; line-height: 36px; font-weight: 900; letter-spacing: -0.05em; }
-  .text-drawer-kpi-duration {
-    display: inline-flex;
-    max-width: 100%;
-    align-items: baseline;
-    justify-content: center;
-    white-space: nowrap;
-    font-size: 20px;
-    line-height: 36px;
+  .drawer-kpi-grid {
+    display: grid;
+    grid-template-columns: 0.9fr 1.75fr 1.05fr 0.85fr;
+    width: 100%;
+    container-type: inline-size;
+  }
+  .text-drawer-kpi-value {
+    font-size: clamp(18px, 5.5vw, 32px);
+    line-height: 1.15;
+    font-weight: 900;
     letter-spacing: -0.03em;
-    font-variant-numeric: tabular-nums;
   }
-  .text-drawer-kpi-duration-unit {
-    margin-left: 0.08em;
-    font-size: 0.58em;
-    line-height: 1;
-    letter-spacing: 0;
+  .text-drawer-kpi-label {
+    font-size: clamp(9px, 2.5vw, 11px);
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
   }
-  .text-drawer-kpi-duration-minutes { margin-left: 0.24em; }
-  .text-drawer-kpi-label { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+  @container (min-width: 0px) {
+    .text-drawer-kpi-value {
+      font-size: clamp(17px, 6.5cqw, 27px);
+      line-height: 1.15;
+    }
+    .text-drawer-kpi-label {
+      font-size: clamp(8.5px, 2.6cqw, 11px);
+    }
+  }
   .text-drawer-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1; }
   
   .volunteer-name-text {
@@ -437,10 +444,6 @@ body[data-scroll-locked] {
   
   .font-dela {
     font-family: var(--font-outfit), system-ui, -apple-system, sans-serif;
-  }
-
-  @media (min-width: 400px) {
-    .text-drawer-kpi-duration { font-size: 24px; }
   }
   
   .font-outfit {

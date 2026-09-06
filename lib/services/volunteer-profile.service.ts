@@ -1,6 +1,6 @@
 import { getUnifiedShiftTimes, getUnifiedShiftWorkedMinutes, formatUnifiedDuration } from '@/lib/shift-calculations';
 import { inferShiftsForSession, calculateSessionMinutes } from '@/lib/session-utils';
-import { isSimulationEventDay } from '@/lib/dates';
+import { isSimulationEventDay, isOperationalEventDay } from '@/lib/dates';
 
 export interface VolunteerShiftItem {
   id: string;
@@ -106,7 +106,11 @@ export function getVolunteerProfileMetrics(
     const endedAt = sess.ended_at || sess.endedAt || null;
     const status = sess.status || (endedAt ? 'completed' : 'open');
     const autoClosed = Boolean(sess.auto_closed || sess.autoClosed);
-    const countsTowardOfficialMetrics = includeSimulation || !isSimulationEventDay(dayKey);
+
+    const isOperationalDay = isOperationalEventDay(dayKey);
+    if (!isOperationalDay) return;
+
+    const countsTowardOfficialMetrics = isOperationalDay && (includeSimulation || !isSimulationEventDay(dayKey));
 
     if (dayKey) {
       daysWithSessionsSet.add(dayKey.toLowerCase().trim());
@@ -162,9 +166,12 @@ export function getVolunteerProfileMetrics(
     const shiftKey = rec.shift_key || rec.shiftKey || '';
     if (!dayKey || !shiftKey) return;
 
+    const isOperationalDay = isOperationalEventDay(dayKey);
+    if (!isOperationalDay) return;
+
     const normDayKey = dayKey.toLowerCase().trim();
     const hasSessionForThisDay = daysWithSessionsSet.has(normDayKey);
-    const countsTowardOfficialMetrics = includeSimulation || !isSimulationEventDay(dayKey);
+    const countsTowardOfficialMetrics = isOperationalDay && (includeSimulation || !isSimulationEventDay(dayKey));
 
     const key = `${dayKey}-${shiftKey}`;
     const isCheckedOut = Boolean(rec.checked_out || rec.checked_out_at || rec.status === 'completed');
@@ -209,9 +216,10 @@ export function getVolunteerProfileMetrics(
     kpiLabel = 'HORAS';
   }
 
-  const scheduledShiftsCount = userShifts.filter((shift: any) =>
-    includeSimulation || !isSimulationEventDay(shift.day_key || shift.dayKey)
-  ).length;
+  const scheduledShiftsCount = userShifts.filter((shift: any) => {
+    const dKey = shift.day_key || shift.dayKey;
+    return isOperationalEventDay(dKey) && (includeSimulation || !isSimulationEventDay(dKey));
+  }).length;
   const attendancePercentage = scheduledShiftsCount > 0
     ? Math.round((completedShiftsCount / scheduledShiftsCount) * 100)
     : 100;

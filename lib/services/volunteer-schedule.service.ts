@@ -3,6 +3,7 @@ import 'server-only';
 import { getAdminSupabase } from '@/lib/supabase/admin';
 import type { VolunteerScheduleShift } from '@/lib/types/volunteer-schedule';
 import { findAttendanceSessionForShift } from '@/lib/shift-calculations';
+import { buildEventDayKeys } from '@/lib/coordinator-data';
 
 interface VolunteerScheduleRow {
   id: string;
@@ -67,8 +68,9 @@ export class VolunteerScheduleService {
     if (shiftsResult.error) throw new Error(`No se pudo cargar el horario del voluntario: ${shiftsResult.error.message}`);
     if (sessionsResult.error) throw new Error(`No se pudo cargar la asistencia del voluntario: ${sessionsResult.error.message}`);
 
+    const allowedDayKeys = new Set(buildEventDayKeys());
     const shifts = (shiftsResult.data || []) as VolunteerScheduleRow[];
-    const sessions = sessionsResult.data || [];
+    const sessions = ((sessionsResult.data || []) as any[]).filter((s: any) => s.day_key && allowedDayKeys.has(s.day_key));
 
     return shifts.map((shift) => {
       const attendanceSession = findAttendanceSessionForShift(

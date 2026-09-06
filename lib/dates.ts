@@ -57,6 +57,34 @@ export function isSimulationEventDay(dayKey?: string | Date | null): boolean {
   return Boolean(parts && parts.year === 2026 && parts.month === 9 && parts.day === 5);
 }
 
+export function isOperationalEventDay(dayKey?: string | Date | null): boolean {
+  if (!dayKey) return false;
+  const parts = readEventDateParts(dayKey);
+  if (!parts || parts.year !== 2026 || parts.month !== 9) return false;
+  if (parts.day === 5) {
+    if (typeof dayKey === 'string') {
+      const raw = dayKey.trim().toLowerCase();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        return raw === 'sáb 5' || raw === 'sab 5';
+      }
+    }
+    return true;
+  }
+  if (parts.day >= 10 && parts.day <= 26) {
+    const d = new Date(2026, 8, parts.day);
+    if (d.getDay() === 0) return false; // Exclude Sundays
+    if (typeof dayKey === 'string') {
+      const raw = dayKey.trim().toLowerCase();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        const expectedKey = formatDateShort(d).toLowerCase();
+        return raw === expectedKey;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
 export function getEventDayKind(dayKey?: string | Date | null): EventDayKind {
   return isSimulationEventDay(dayKey) ? 'simulation' : 'official';
 }

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { ShiftCalendar, VolunteerInfo } from "@/components/ShiftCalendar";
 import { verifySessionToken } from "@/lib/auth";
 import { VolunteerScheduleService } from "@/lib/services/volunteer-schedule.service";
+import { buildEventDayKeys } from "@/lib/coordinator-data";
 
 export const metadata = {
   title: "Mi Calendario | Volunteer Manager",
@@ -28,19 +29,28 @@ export default async function CalendarPage() {
     )
     : await createClient();
 
-  const [{ data: volunteer, error }, initialShifts] = await Promise.all([
+  const allowedDayKeys = new Set(buildEventDayKeys());
+
+  const [{ data: volunteer, error }, initialShifts, sessionsRes] = await Promise.all([
     supabase
       .from('volunteers')
       .select('*, committees(name)')
       .eq('id', volunteerId)
       .maybeSingle(),
-    VolunteerScheduleService.getSchedule(volunteerId)
+    VolunteerScheduleService.getSchedule(volunteerId),
+    supabase
+      .from('attendance_sessions')
+      .select('*')
+      .eq('volunteer_id', volunteerId)
+      .order('started_at', { ascending: false }),
   ]);
 
   if (error || !volunteer) {
     console.error("CALENDAR_PAGE_ERROR:", error);
     redirect('/login');
   }
+
+  const initialSessions = (sessionsRes.data || []).filter((s: any) => s.day_key && allowedDayKeys.has(s.day_key));
 
   const fullName = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim();
   const commName = (volunteer.committees as any)?.name || session.committee || 'Sin comité';
@@ -71,7 +81,12 @@ export default async function CalendarPage() {
 
       {/* Main Content - Full 100% Width */}
       <main className="w-full px-4 sm:px-6 lg:px-8 mt-4 flex-1">
-        <ShiftCalendar volunteerId={volunteerId} volunteerInfo={volunteerInfo} initialShifts={initialShifts} />
+        <ShiftCalendar
+          volunteerId={volunteerId}
+          volunteerInfo={volunteerInfo}
+          initialShifts={initialShifts}
+          initialSessions={initialSessions}
+        />
       </main>
     </div>
   );

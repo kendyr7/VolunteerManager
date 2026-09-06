@@ -16,6 +16,7 @@ interface ShiftCalendarProps {
   volunteerId: string;
   volunteerInfo?: VolunteerInfo;
   initialShifts?: VolunteerScheduleShift[];
+  initialSessions?: any[];
 }
 
 function areaSlotKey(dayKey: string, shiftKey: string) {
@@ -61,7 +62,7 @@ function parseShifts(data: VolunteerScheduleShift[] = []) {
   return { mapped, confirmed, checkedOut, areas };
 }
 
-export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }: ShiftCalendarProps) {
+export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [], initialSessions = [] }: ShiftCalendarProps) {
   const supabase = useMemo(() => createClient(), []);
 
   const initialParsed = parseShifts(initialShifts);
@@ -212,6 +213,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [] }
       <VolunteerProfileView
         volunteer={volunteerData}
         mode="volunteer"
+        attendanceSessions={initialSessions}
         shiftsByDay={shiftsByDay}
         checkedInMap={checkedInShifts}
         checkedOutMap={checkedOutShifts}
