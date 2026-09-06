@@ -404,6 +404,24 @@ body[data-scroll-locked] {
   .text-drawer-title { font-size: 22px; font-weight: 900; letter-spacing: -0.03em; line-height: 1.25; }
   .text-drawer-subtitle { font-size: 13px; font-weight: 600; }
   .text-drawer-kpi-value { font-size: 32px; line-height: 36px; font-weight: 900; letter-spacing: -0.05em; }
+  .text-drawer-kpi-duration {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: baseline;
+    justify-content: center;
+    white-space: nowrap;
+    font-size: 20px;
+    line-height: 36px;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .text-drawer-kpi-duration-unit {
+    margin-left: 0.08em;
+    font-size: 0.58em;
+    line-height: 1;
+    letter-spacing: 0;
+  }
+  .text-drawer-kpi-duration-minutes { margin-left: 0.24em; }
   .text-drawer-kpi-label { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
   .text-drawer-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1; }
   
@@ -419,6 +437,10 @@ body[data-scroll-locked] {
   
   .font-dela {
     font-family: var(--font-outfit), system-ui, -apple-system, sans-serif;
+  }
+
+  @media (min-width: 400px) {
+    .text-drawer-kpi-duration { font-size: 24px; }
   }
   
   .font-outfit {

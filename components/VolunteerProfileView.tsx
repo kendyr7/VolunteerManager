@@ -104,6 +104,25 @@ function AreaChipLabel({ shiftKey, areaName }: { shiftKey: string; areaName: str
   );
 }
 
+function ServiceHoursKpiValue({ value }: { value: string }) {
+  const duration = /^(\d+)h\s+(\d+)m$/.exec(value.trim());
+
+  if (!duration) {
+    return <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{value}</span>;
+  }
+
+  const [, hours, minutes] = duration;
+  return (
+    <span
+      className="text-drawer-kpi-duration font-black text-text drop-shadow-sm"
+      aria-label={`${hours} horas y ${minutes} minutos`}
+    >
+      <span>{hours}</span><span className="text-drawer-kpi-duration-unit">h</span>
+      <span className="text-drawer-kpi-duration-minutes">{minutes}</span><span className="text-drawer-kpi-duration-unit">m</span>
+    </span>
+  );
+}
+
 function AssignedAreaChip({ shiftKey, area }: { shiftKey: string; area: ShiftAreaDetails }) {
   const description = area.description || 'Esta área no tiene una descripción registrada.';
   const accessibleLabel = `Ver descripción del área ${area.name} para el turno ${shiftKey}`;
@@ -1051,22 +1070,22 @@ export function VolunteerProfileView({
 
       {/* 2. Top Stats Row */}
       <div className="flex items-center mb-6 py-3 border-y border-border w-full">
-        <div className="flex flex-col items-center flex-1 border-r border-border">
+        <div className="flex min-w-0 flex-col items-center flex-1 border-r border-border">
           <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{totalTurnos}</span>
           <span className="text-drawer-kpi-label text-text-dim mt-1.5 font-inter font-extrabold">Turnos</span>
         </div>
-        <div className="flex flex-col items-center flex-1 border-r border-border">
-          <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{kpiHoursDisplay.value}</span>
+        <div className="flex min-w-0 flex-col items-center flex-1 border-r border-border">
+          <ServiceHoursKpiValue value={kpiHoursDisplay.value} />
           <span className="text-drawer-kpi-label text-text-dim mt-1.5 font-inter font-extrabold uppercase">{kpiHoursDisplay.label}</span>
         </div>
-        <div className="flex flex-col items-center flex-1 border-r border-border">
+        <div className="flex min-w-0 flex-col items-center flex-1 border-r border-border">
           <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">
             {reliabilityScore}
             <span className="text-[15px] font-bold text-text-dim ml-0.5">%</span>
           </span>
           <span className="text-drawer-kpi-label text-text-dim mt-1.5 font-inter font-extrabold">Confia.</span>
         </div>
-        <div className="flex flex-col items-center flex-1">
+        <div className="flex min-w-0 flex-col items-center flex-1">
           <span className="text-drawer-kpi-value font-black text-text drop-shadow-sm">{volunteer.age || '-'}</span>
           <span className="text-drawer-kpi-label text-text-dim mt-1.5 font-inter font-extrabold">Edad</span>
         </div>

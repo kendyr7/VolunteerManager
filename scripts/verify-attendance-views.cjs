@@ -144,4 +144,13 @@ check('KPI del perfil incluye las horas verificadas de la jornada de simulacion'
   const profile = fs.readFileSync(path.join(root, 'components/VolunteerProfileView.tsx'), 'utf8');
   assert.ok(profile.includes('{ includeSimulation: true }'));
 });
+check('KPI de horas y minutos permanece compacto y alineado en telefonos', () => {
+  const profile = fs.readFileSync(path.join(root, 'components/VolunteerProfileView.tsx'), 'utf8');
+  const styles = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+  assert.ok(profile.includes('<ServiceHoursKpiValue value={kpiHoursDisplay.value} />'));
+  assert.ok(profile.includes('aria-label={`${hours} horas y ${minutes} minutos`}'));
+  assert.ok(styles.includes('.text-drawer-kpi-duration'));
+  assert.ok(styles.includes('white-space: nowrap'));
+  assert.ok(styles.includes('@media (min-width: 400px)'));
+});
 console.log(`${count}/${count} verificaciones aprobadas. Sin escrituras en produccion.`);
