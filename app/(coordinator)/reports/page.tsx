@@ -75,6 +75,7 @@ function formatMinutes(totalMinutes: number): string {
 type SortOrder = 'asc' | 'desc';
 type HistorySortField = 'volunteerName' | 'committeeName' | 'neighborhood' | 'date' | 'durationMinutes' | 'status';
 type VolunteerSortField = 'name' | 'committee' | 'confirmed' | 'reliability' | 'minutes';
+type CommitteeSortField = 'name' | 'volunteers' | 'shifts' | 'confirmed' | 'absent' | 'rate' | 'minutes' | 'avgMinutes';
 type DailySortField = 'date' | 'required' | 'assigned' | 'checkedIn' | 'missing' | 'coverageRate';
 
 function ReportPagination({
@@ -136,7 +137,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [includeSimulation, setIncludeSimulation] = useState(true);
-  const [activeTab, setActiveTab] = useState<'history' | 'volunteers' | 'recruitment' | 'daily'>('history');
+  const [activeTab, setActiveTab] = useState<'history' | 'volunteers' | 'committees' | 'recruitment' | 'daily'>('history');
 
   // Filters State (Multi-Selection arrays)
   const { inputValue, setInputValue, appliedSearch, setAppliedSearch, applySearch } = useDebouncedSearch();
@@ -146,7 +147,7 @@ export default function ReportsPage() {
       setInputValue(requestedSearch);
       setAppliedSearch(requestedSearch);
     }
-    if (requestedTab === 'history' || requestedTab === 'volunteers' || requestedTab === 'recruitment' || requestedTab === 'daily') {
+    if (requestedTab === 'history' || requestedTab === 'volunteers' || requestedTab === 'committees' || requestedTab === 'recruitment' || requestedTab === 'daily') {
       setActiveTab(requestedTab);
     }
   }, [requestedSearch, requestedTab, setAppliedSearch, setInputValue]);
@@ -166,6 +167,19 @@ export default function ReportsPage() {
 
   const [volunteerSortField, setVolunteerSortField] = useState<VolunteerSortField | null>(null);
   const [volunteerSortOrder, setVolunteerSortOrder] = useState<SortOrder>('asc');
+
+  const [committeeSortField, setCommitteeSortField] = useState<CommitteeSortField>('minutes');
+  const [committeeSortOrder, setCommitteeSortOrder] = useState<SortOrder>('desc');
+
+  const handleCommitteeSort = (field: CommitteeSortField) => {
+    if (committeeSortField === field) {
+      setCommitteeSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setCommitteeSortField(field);
+      setCommitteeSortOrder('desc');
+    }
+  };
+
   const [dailySortField, setDailySortField] = useState<DailySortField>('date');
   const [dailySortDirection, setDailySortDirection] = useState<TableSortDirection>('asc');
 
@@ -471,6 +485,170 @@ export default function ReportsPage() {
     }).sort((a, b) => b.minutes - a.minutes);
   }, [filteredItems]);
 
+  // Dynamic Committee Attendance Summary (Resumen por Comité)
+  const committeeAttendanceSummary = useMemo(() => {
+    if (!data) return [];
+
+    const activeCommittees = data.uniqueCommittees.filter(c => {
+      if (selectedCommittees.length > 0) {
+        return selectedCommittees.includes(c.id) || selectedCommittees.includes(c.name);
+      }
+      return true;
+    });
+
+    return activeCommittees.map(c => {
+      const commItems = filteredItems.filter(i => 
+        i.committeeId === c.id || i.committeeName.trim().toLowerCase() === c.name.trim().toLowerCase()
+      );
+
+      const uniqueVolunteersSet = new Set<string>();
+      const attendedVolunteersSet = new Set<string>();
+      let confirmed = 0;
+      let absent = 0;
+      let pending = 0;
+      let totalMinutes = 0;
+
+      for (let i = 0; i < commItems.length; i++) {
+        const item = commItems[i];
+        uniqueVolunteersSet.add(item.volunteerId);
+
+        if (item.status === 'confirmed') {
+          confirmed++;
+          totalMinutes += item.durationMinutes;
+          attendedVolunteersSet.add(item.volunteerId);
+        } else if (item.status === 'absent') {
+          absent++;
+        } else if (item.status === 'registered') {
+          pending++;
+        }
+      }
+
+      const totalShifts = commItems.length;
+      const decidedShifts = confirmed + absent;
+      const attendanceRate = decidedShifts > 0
+        ? Math.round((confirmed / decidedShifts) * 100)
+        : (totalShifts > 0 ? Math.round((confirmed / totalShifts) * 100) : 0);
+
+      const uniqueAttendees = attendedVolunteersSet.size;
+      const avgMinutes = uniqueAttendees > 0
+        ? Math.round(totalMinutes / uniqueAttendees)
+        : 0;
+
+      return {
+        id: c.id,
+        name: c.name,
+        volunteersCount: uniqueVolunteersSet.size,
+        attendeesCount: uniqueAttendees,
+        totalShifts,
+        confirmed,
+        absent,
+        pending,
+        attendanceRate,
+        totalMinutes,
+        avgMinutes
+      };
+    });
+  }, [data, filteredItems, selectedCommittees]);
+
+  const sortedCommitteeSummary = useMemo(() => {
+    return [...committeeAttendanceSummary].sort((a, b) => {
+      let valA: any;
+      let valB: any;
+
+      switch (committeeSortField) {
+        case 'name':
+          valA = a.name;
+          valB = b.name;
+          break;
+        case 'volunteers':
+          valA = a.volunteersCount;
+          valB = b.volunteersCount;
+          break;
+        case 'shifts':
+          valA = a.totalShifts;
+          valB = b.totalShifts;
+          break;
+        case 'confirmed':
+          valA = a.confirmed;
+          valB = b.confirmed;
+          break;
+        case 'absent':
+          valA = a.absent;
+          valB = b.absent;
+          break;
+        case 'rate':
+          valA = a.attendanceRate;
+          valB = b.attendanceRate;
+          break;
+        case 'minutes':
+          valA = a.totalMinutes;
+          valB = b.totalMinutes;
+          break;
+        case 'avgMinutes':
+          valA = a.avgMinutes;
+          valB = b.avgMinutes;
+          break;
+        default:
+          valA = a.totalMinutes;
+          valB = b.totalMinutes;
+      }
+
+      if (typeof valA === 'string' || typeof valB === 'string') {
+        const cmp = String(valA || '').localeCompare(String(valB || ''), 'es', { sensitivity: 'base' });
+        return committeeSortOrder === 'asc' ? cmp : -cmp;
+      }
+
+      const numA = Number(valA ?? 0);
+      const numB = Number(valB ?? 0);
+      return committeeSortOrder === 'asc' ? numA - numB : numB - numA;
+    });
+  }, [committeeAttendanceSummary, committeeSortField, committeeSortOrder]);
+
+  const committeeTotals = useMemo(() => {
+    let totalShifts = 0;
+    let confirmed = 0;
+    let absent = 0;
+    let pending = 0;
+    let totalMinutes = 0;
+    const allVolunteersSet = new Set<string>();
+    const allAttendeesSet = new Set<string>();
+
+    for (const item of filteredItems) {
+      allVolunteersSet.add(item.volunteerId);
+      totalShifts++;
+      if (item.status === 'confirmed') {
+        confirmed++;
+        totalMinutes += item.durationMinutes;
+        allAttendeesSet.add(item.volunteerId);
+      } else if (item.status === 'absent') {
+        absent++;
+      } else if (item.status === 'registered') {
+        pending++;
+      }
+    }
+
+    const decided = confirmed + absent;
+    const rate = decided > 0
+      ? Math.round((confirmed / decided) * 100)
+      : (totalShifts > 0 ? Math.round((confirmed / totalShifts) * 100) : 0);
+
+    const avg = allAttendeesSet.size > 0
+      ? Math.round(totalMinutes / allAttendeesSet.size)
+      : 0;
+
+    return {
+      volunteersCount: allVolunteersSet.size,
+      attendeesCount: allAttendeesSet.size,
+      totalShifts,
+      confirmed,
+      absent,
+      pending,
+      attendanceRate: rate,
+      totalMinutes,
+      avgMinutes: avg
+    };
+  }, [filteredItems]);
+
   // Dynamic Recruitment Summary filtered by active filters
   const filteredRecruitmentSummary = useMemo(() => {
     if (!data || activeTab !== 'recruitment') return [];
@@ -733,6 +911,29 @@ export default function ReportsPage() {
         item.status === 'absent' ? 'Ausente' : 'Reemplazado'
       ]);
       filename = `historial_asistencia_${new Date().toISOString().split('T')[0]}.csv`;
+    } else if (activeTab === 'committees') {
+      headers = ["Comité", "Voluntarios Involucrados", "Turnos Programados", "Asistencias Confirmadas", "Ausencias", "Tasa Asistencia (%)", "Horas Totales Servidas", "Promedio Horas / Asistente"];
+      rows = sortedCommitteeSummary.map(c => [
+        c.name,
+        c.volunteersCount,
+        c.totalShifts,
+        c.confirmed,
+        c.absent,
+        `${c.attendanceRate}%`,
+        formatMinutes(c.totalMinutes),
+        formatMinutes(c.avgMinutes)
+      ]);
+      rows.push([
+        "TOTAL GENERAL",
+        committeeTotals.volunteersCount,
+        committeeTotals.totalShifts,
+        committeeTotals.confirmed,
+        committeeTotals.absent,
+        `${committeeTotals.attendanceRate}%`,
+        formatMinutes(committeeTotals.totalMinutes),
+        formatMinutes(committeeTotals.avgMinutes)
+      ]);
+      filename = `resumen_comites_${new Date().toISOString().split('T')[0]}.csv`;
     } else {
       headers = ["Nombre Voluntario", "Teléfono", "Comité", "Barrio / Rama", "Estaca", "Turnos Totales", "Asistidos", "Ausencias", "Fiabilidad (%)", "Total Tiempo"];
       rows = sortedVolunteerRanking.map(v => [
@@ -1217,11 +1418,11 @@ export default function ReportsPage() {
         </div>
       </div>
 
-        {/* Tab Selection: Segmented 4-Column Control on Mobile, Underline Tabs on Desktop */}
-        <div className="grid grid-cols-4 sm:flex border-b border-border mb-6 gap-1 sm:gap-6 bg-dark2/60 sm:bg-transparent p-1 sm:p-0 rounded-2xl sm:rounded-none">
+        {/* Tab Selection: Segmented 5-Column Control on Mobile, Underline Tabs on Desktop */}
+        <div className="grid grid-cols-5 sm:flex border-b border-border mb-6 gap-1 sm:gap-6 bg-dark2/60 sm:bg-transparent p-1 sm:p-0 rounded-2xl sm:rounded-none">
           <button
             onClick={() => setActiveTab('history')}
-            className={`py-2.5 sm:pb-3 font-inter font-bold text-[11px] sm:text-sm transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer rounded-xl sm:rounded-none ${
+            className={`py-2.5 sm:pb-3 font-inter font-bold text-[10px] sm:text-sm transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer rounded-xl sm:rounded-none ${
               activeTab === 'history'
                 ? 'bg-[#4d7cfe] sm:bg-transparent text-white sm:text-[#4d7cfe] sm:border-b-2 sm:border-[#4d7cfe] shadow-sm sm:shadow-none'
                 : 'text-text-dim hover:text-text sm:border-b-2 sm:border-transparent'
@@ -1234,7 +1435,7 @@ export default function ReportsPage() {
 
           <button
             onClick={() => setActiveTab('volunteers')}
-            className={`py-2.5 sm:pb-3 font-inter font-bold text-[11px] sm:text-sm transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer rounded-xl sm:rounded-none ${
+            className={`py-2.5 sm:pb-3 font-inter font-bold text-[10px] sm:text-sm transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer rounded-xl sm:rounded-none ${
               activeTab === 'volunteers'
                 ? 'bg-[#4d7cfe] sm:bg-transparent text-white sm:text-[#4d7cfe] sm:border-b-2 sm:border-[#4d7cfe] shadow-sm sm:shadow-none'
                 : 'text-text-dim hover:text-text sm:border-b-2 sm:border-transparent'
@@ -1246,8 +1447,21 @@ export default function ReportsPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab('committees')}
+            className={`py-2.5 sm:pb-3 font-inter font-bold text-[10px] sm:text-sm transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer rounded-xl sm:rounded-none ${
+              activeTab === 'committees'
+                ? 'bg-[#4d7cfe] sm:bg-transparent text-white sm:text-[#4d7cfe] sm:border-b-2 sm:border-[#4d7cfe] shadow-sm sm:shadow-none'
+                : 'text-text-dim hover:text-text sm:border-b-2 sm:border-transparent'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">domain</span>
+            <span className="hidden sm:inline">Totales por Comité ({sortedCommitteeSummary.length})</span>
+            <span className="inline sm:hidden">Comités</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('recruitment')}
-            className={`py-2.5 sm:pb-3 font-inter font-bold text-[11px] sm:text-sm transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer rounded-xl sm:rounded-none ${
+            className={`py-2.5 sm:pb-3 font-inter font-bold text-[10px] sm:text-sm transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 cursor-pointer rounded-xl sm:rounded-none ${
               activeTab === 'recruitment'
                 ? 'bg-[#4d7cfe] sm:bg-transparent text-white sm:text-[#4d7cfe] sm:border-b-2 sm:border-[#4d7cfe] shadow-sm sm:shadow-none'
                 : 'text-text-dim hover:text-text sm:border-b-2 sm:border-transparent'
@@ -1255,7 +1469,7 @@ export default function ReportsPage() {
           >
             <span className="material-symbols-outlined text-[16px]">group_add</span>
             <span className="hidden sm:inline">Reclutamiento y Edades</span>
-            <span className="inline sm:hidden">Reclutamiento</span>
+            <span className="inline sm:hidden">Recluta.</span>
           </button>
 
           <button
@@ -1673,6 +1887,284 @@ export default function ReportsPage() {
                     pageSize={pageSize}
                     onPageChange={setCurrentPage}
                   />
+                </motion.div>
+              ) : activeTab === 'committees' ? (
+                <motion.div
+                  key="committees-tab"
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 5 }}
+                  transition={{ duration: 0.2 }}
+                  className="bg-dark2 border border-border rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full"
+                >
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block overflow-x-auto overscroll-contain">
+                    <table className="w-full text-sm text-left border-separate border-spacing-0">
+                      <thead className="bg-dark3/80 sticky top-0 z-10 backdrop-blur-md text-[10px] font-inter font-bold text-text-dim uppercase tracking-wider select-none">
+                        <tr>
+                          <th className="px-5 py-4 font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleCommitteeSort('name')}
+                              className="flex items-center gap-1.5 hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Comité"
+                            >
+                              <span className={cn(committeeSortField === 'name' && "text-[#4d7cfe] font-extrabold")}>Comité</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                committeeSortField === 'name' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {committeeSortField === 'name' ? (committeeSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleCommitteeSort('volunteers')}
+                              className="flex items-center justify-center gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Voluntarios"
+                            >
+                              <span className={cn(committeeSortField === 'volunteers' && "text-[#4d7cfe] font-extrabold")}>Voluntarios</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                committeeSortField === 'volunteers' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {committeeSortField === 'volunteers' ? (committeeSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleCommitteeSort('shifts')}
+                              className="flex items-center justify-center gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Turnos Programados"
+                            >
+                              <span className={cn(committeeSortField === 'shifts' && "text-[#4d7cfe] font-extrabold")}>Programados</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                committeeSortField === 'shifts' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {committeeSortField === 'shifts' ? (committeeSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleCommitteeSort('confirmed')}
+                              className="flex items-center justify-center gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Asistencias Confirmadas"
+                            >
+                              <span className={cn(committeeSortField === 'confirmed' && "text-[#4d7cfe] font-extrabold")}>Asistencias</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                committeeSortField === 'confirmed' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {committeeSortField === 'confirmed' ? (committeeSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleCommitteeSort('absent')}
+                              className="flex items-center justify-center gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Ausencias"
+                            >
+                              <span className={cn(committeeSortField === 'absent' && "text-[#4d7cfe] font-extrabold")}>Ausencias</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                committeeSortField === 'absent' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {committeeSortField === 'absent' ? (committeeSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-4 py-4 text-center font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleCommitteeSort('rate')}
+                              className="flex items-center justify-center gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Tasa de Asistencia"
+                            >
+                              <span className={cn(committeeSortField === 'rate' && "text-[#4d7cfe] font-extrabold")}>Tasa Asistencia</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                committeeSortField === 'rate' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {committeeSortField === 'rate' ? (committeeSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-5 py-4 text-right font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleCommitteeSort('minutes')}
+                              className="flex items-center justify-end gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Horas Totales"
+                            >
+                              <span className={cn(committeeSortField === 'minutes' && "text-[#4d7cfe] font-extrabold")}>Horas Totales</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                committeeSortField === 'minutes' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {committeeSortField === 'minutes' ? (committeeSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                          <th className="px-5 py-4 text-right font-inter font-bold">
+                            <button
+                              type="button"
+                              onClick={() => handleCommitteeSort('avgMinutes')}
+                              className="flex items-center justify-end gap-1.5 w-full hover:text-text transition-colors cursor-pointer group"
+                              title="Ordenar por Promedio por Voluntario"
+                            >
+                              <span className={cn(committeeSortField === 'avgMinutes' && "text-[#4d7cfe] font-extrabold")}>Promedio / Asistente</span>
+                              <span className={cn(
+                                "material-symbols-outlined text-[14px] transition-all",
+                                committeeSortField === 'avgMinutes' ? "text-[#4d7cfe] opacity-100 font-extrabold" : "opacity-40 group-hover:opacity-100"
+                              )}>
+                                {committeeSortField === 'avgMinutes' ? (committeeSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                              </span>
+                            </button>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {sortedCommitteeSummary.map((c) => (
+                          <tr key={c.id} className="hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors group">
+                            <td className="px-5 py-4 font-inter">
+                              <Badge variant="outline" className={`font-inter font-bold text-xs py-1 px-3 border ${getCommitteeColor(c.name)}`}>
+                                {c.name}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-4 text-center font-inter font-bold text-[13px] text-text tabular-nums">
+                              {c.volunteersCount}
+                            </td>
+                            <td className="px-4 py-4 text-center font-inter font-bold text-[13px] text-text tabular-nums">
+                              {c.totalShifts}
+                            </td>
+                            <td className="px-4 py-4 text-center font-inter font-bold text-[13px] text-emerald-500 tabular-nums">
+                              {c.confirmed}
+                            </td>
+                            <td className="px-4 py-4 text-center font-inter font-bold text-[13px] text-rose-400 tabular-nums">
+                              {c.absent}
+                            </td>
+                            <td className="px-4 py-4 text-center font-inter">
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`text-[12px] font-bold tabular-nums ${
+                                  c.attendanceRate >= 85 ? 'text-emerald-500' :
+                                  c.attendanceRate >= 60 ? 'text-amber-500' : 'text-rose-500'
+                                }`}>
+                                  {c.attendanceRate}%
+                                </span>
+                                <div className="w-16 h-1 bg-dark3 border border-border rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${
+                                      c.attendanceRate >= 85 ? 'bg-emerald-500' :
+                                      c.attendanceRate >= 60 ? 'bg-amber-500' : 'bg-rose-500'
+                                    }`}
+                                    style={{ width: `${c.attendanceRate}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 text-right font-inter font-bold text-text text-sm tabular-nums">
+                              <span className="text-[#4d7cfe] font-extrabold">{formatMinutes(c.totalMinutes)}</span>
+                            </td>
+                            <td className="px-5 py-4 text-right font-inter font-bold text-text-dim text-[13px] tabular-nums">
+                              {formatMinutes(c.avgMinutes)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      {/* Footer: TOTAL CONSOLIDADO */}
+                      <tfoot className="bg-dark3/90 border-t-2 border-border font-inter font-bold text-text">
+                        <tr>
+                          <td className="px-5 py-4 text-sm font-black uppercase tracking-wider text-text">
+                            Total General
+                          </td>
+                          <td className="px-4 py-4 text-center text-sm font-black text-text tabular-nums">
+                            {committeeTotals.volunteersCount}
+                          </td>
+                          <td className="px-4 py-4 text-center text-sm font-black text-text tabular-nums">
+                            {committeeTotals.totalShifts}
+                          </td>
+                          <td className="px-4 py-4 text-center text-sm font-black text-emerald-400 tabular-nums">
+                            {committeeTotals.confirmed}
+                          </td>
+                          <td className="px-4 py-4 text-center text-sm font-black text-rose-400 tabular-nums">
+                            {committeeTotals.absent}
+                          </td>
+                          <td className="px-4 py-4 text-center text-sm font-black text-emerald-400 tabular-nums">
+                            {committeeTotals.attendanceRate}%
+                          </td>
+                          <td className="px-5 py-4 text-right text-base font-black text-[#4d7cfe] tabular-nums">
+                            {formatMinutes(committeeTotals.totalMinutes)}
+                          </td>
+                          <td className="px-5 py-4 text-right text-sm font-black text-text-dim tabular-nums">
+                            {formatMinutes(committeeTotals.avgMinutes)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {/* Mobile Cards View */}
+                  <div className="block md:hidden divide-y divide-border bg-dark2">
+                    {sortedCommitteeSummary.map((c) => (
+                      <div key={c.id} className="p-4 flex flex-col gap-3 hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                        <div className="flex items-center justify-between gap-2">
+                          <Badge variant="outline" className={`font-inter font-bold text-xs py-1 px-3 border ${getCommitteeColor(c.name)}`}>
+                            {c.name}
+                          </Badge>
+                          <span className="font-inter font-bold text-[#4d7cfe] text-base tabular-nums">
+                            {formatMinutes(c.totalMinutes)}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-4 gap-2 bg-dark3/40 p-2.5 rounded-xl border border-border text-center">
+                          <div>
+                            <span className="text-[9px] font-inter font-bold text-text-dim uppercase block">Vols</span>
+                            <span className="text-xs font-bold text-text tabular-nums">{c.volunteersCount}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-inter font-bold text-text-dim uppercase block">Turnos</span>
+                            <span className="text-xs font-bold text-text tabular-nums">{c.totalShifts}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-inter font-bold text-text-dim uppercase block">Asist.</span>
+                            <span className="text-xs font-bold text-emerald-400 tabular-nums">{c.confirmed}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-inter font-bold text-text-dim uppercase block">Tasa</span>
+                            <span className="text-xs font-bold text-emerald-400 tabular-nums">{c.attendanceRate}%</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] font-inter font-bold text-text-dim pt-0.5">
+                          <span>Promedio por asistente:</span>
+                          <span className="text-text tabular-nums">{formatMinutes(c.avgMinutes)}</span>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Mobile Total Card */}
+                    <div className="p-4 bg-dark3/80 border-t-2 border-border flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-inter font-black text-sm uppercase text-text">Total General</span>
+                        <span className="font-inter font-black text-[#4d7cfe] text-lg tabular-nums">
+                          {formatMinutes(committeeTotals.totalMinutes)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs font-inter font-bold text-text-dim">
+                        <span>{committeeTotals.volunteersCount} voluntarios · {committeeTotals.confirmed}/{committeeTotals.totalShifts} turnos ({committeeTotals.attendanceRate}%)</span>
+                        <span>Prom. {formatMinutes(committeeTotals.avgMinutes)}</span>
+                      </div>
+                    </div>
+                  </div>
                 </motion.div>
               ) : activeTab === 'recruitment' ? (
                 <motion.div
