@@ -29,6 +29,7 @@ import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 import { getShiftCapacityStatus, getShiftCommitteeScope } from "@/lib/shift-capacity";
 import { getShiftAttendanceState } from "@/lib/coordinator-data";
+import { attendanceSortPriority, isLiveShiftRoster, resolveShiftView, type ShiftViewMode } from '@/lib/shift-view';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -177,7 +178,12 @@ export default function ShiftsPage() {
   const [selectedStakes, setSelectedStakes] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
-  const [viewMode, setViewMode] = useState<'turnos' | 'active' | 'completed'>('turnos');
+  const [selectedViewMode, setViewMode] = useState<ShiftViewMode | null>(null);
+  const [rosterNow, setRosterNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setRosterNow(new Date()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [checkoutModal, setCheckoutModal] = useState<{ isOpen: boolean; item: any | null }>({ isOpen: false, item: null });
 
   // Reassign State
@@ -196,7 +202,7 @@ export default function ShiftsPage() {
     if (requestedView === 'turnos' || requestedView === 'active' || requestedView === 'completed') {
       setViewMode(requestedView);
     } else {
-      setViewMode('turnos');
+      setViewMode(null);
     }
   }, [requestedSearch, requestedView, setAppliedSearch, setInputValue]);
   const supabase = createClient();
@@ -572,6 +578,25 @@ export default function ShiftsPage() {
     return volunteers.filter(v => matchesFilters(v, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole));
   }, [volunteers, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, matchesFilters]);
 
+  const activeShiftKeys = useMemo(() => {
+    const keys = new Set<string>();
+    rawShiftsData.forEach(shift => {
+      if (getShiftAttendanceState({ shift, volunteerId: shift.volunteer_id, dayKey: shift.day_key, shiftKey: shift.shift_key,
+        checkedInMap: contextCheckedInMap, checkedOutMap: contextCheckedOutMap }).isCheckedIn) {
+        keys.add(`${shift.day_key}|${shift.shift_key}`);
+      }
+    });
+    return keys;
+  }, [rawShiftsData, contextCheckedInMap, contextCheckedOutMap]);
+
+  const totalActiveCount = useMemo(() => rawShiftsData.filter(shift => {
+    const vol = volunteerMap.get(shift.volunteer_id);
+    if (!vol || !scopedCommitteeSet.has(vol.committee) || !matchesFilters(vol, '', [], [], [], currentRole)) return false;
+    return getShiftAttendanceState({ shift, volunteerId: shift.volunteer_id, dayKey: shift.day_key, shiftKey: shift.shift_key,
+      checkedInMap: contextCheckedInMap, checkedOutMap: contextCheckedOutMap }).isCheckedIn;
+  }).length, [rawShiftsData, volunteerMap, scopedCommitteeSet, matchesFilters, currentRole, contextCheckedInMap, contextCheckedOutMap]);
+  const viewMode = resolveShiftView(selectedViewMode ?? requestedView, totalActiveCount);
+
   // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales
   const getAssignedVolunteers = useCallback((dateKey: string, shiftId: string) => {
     const dayAssignments = contextIndexedAssignments[dateKey]?.[shiftId] || {};
@@ -581,6 +606,8 @@ export default function ShiftsPage() {
 
     const allCandidateIds = Array.from(new Set([...assignedIdsFromProps, ...dbShiftVols]));
     const result: VolunteerType[] = [];
+    const priorities = new Map<string, number>();
+    const liveRoster = isLiveShiftRoster(dateKey, shiftId, activeShiftKeys.has(`${dateKey}|${shiftId}`), rosterNow);
 
     for (const id of allCandidateIds) {
       const vol = volunteerMap.get(id);
@@ -598,19 +625,22 @@ export default function ShiftsPage() {
         });
 
         if (viewMode === 'active') {
-          // En Turno: Muestra solo los que hicieron check-in y AÚN NO han completado/marcado salida.
-          if (!isCheckedIn || isCheckedOut) continue;
+          // Keep pending arrivals visible in today's running roster, without
+          // treating them as checked in or including future days and shifts.
+          if (isCheckedOut || (!isCheckedIn && !liveRoster)) continue;
         } else if (viewMode === 'completed') {
           // Completados: Muestra únicamente los que ya registraron salida
           if (!isCheckedOut) continue;
         }
 
+        priorities.set(vol.id, attendanceSortPriority(isCheckedIn, isCheckedOut));
         result.push(vol);
       }
     }
 
-    return result.sort((a, b) => a.committee.localeCompare(b.committee));
-  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet]);
+    return result.sort((a, b) => (viewMode === 'active' ? (priorities.get(a.id)! - priorities.get(b.id)!) : 0)
+      || a.committee.localeCompare(b.committee) || a.name.localeCompare(b.name));
+  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet, activeShiftKeys, rosterNow]);
 
   const handleStartEditProfile = (vol: VolunteerType) => {
     const fn = (vol as any).first_name ?? vol.name ?? '';
@@ -776,22 +806,6 @@ export default function ShiftsPage() {
     mobileQuery: '(max-width: 767px)',
     closeThreshold: 120,
   });
-
-  const totalActiveCount = useMemo(() => {
-    return rawShiftsData.filter(
-      (shift) => {
-        if (!volunteerMap.has(shift.volunteer_id)) return false;
-        return getShiftAttendanceState({
-          shift,
-          volunteerId: shift.volunteer_id,
-          dayKey: shift.day_key,
-          shiftKey: shift.shift_key,
-          checkedInMap,
-          checkedOutMap,
-        }).isCheckedIn;
-      }
-    ).length;
-  }, [rawShiftsData, volunteerMap, checkedInMap, checkedOutMap]);
 
   const activeVolunteers = useMemo(() => {
     if (!rawShiftsData || rawShiftsData.length === 0 || volunteers.length === 0) return [];
@@ -1384,6 +1398,8 @@ export default function ShiftsPage() {
                                           }`}>
                                             En turno {checkInTimeStr ? `· ${checkInTimeStr}` : ''}
                                           </span>
+                                        ) : viewMode === 'active' ? (
+                                          <span className="font-inter font-bold text-[10px] text-amber-700 dark:text-amber-300">Sin entrada</span>
                                         ) : null}
                                       </div>
                                     </div>
@@ -1665,7 +1681,7 @@ export default function ShiftsPage() {
                                             </span>
                                           ) : (
                                             <span className="font-inter text-[10px] text-white/60 truncate">
-                                              {[vol.committee, vol.ward].filter(Boolean).join(' · ')}
+                                              {[viewMode === 'active' ? 'Sin entrada' : '', vol.committee, vol.ward].filter(Boolean).join(' · ')}
                                             </span>
                                           )}
                                         </div>
@@ -1841,6 +1857,12 @@ export default function ShiftsPage() {
           />
         </motion.div>
       </div>
+
+      {viewMode === 'active' && (
+        <p className="px-4 sm:px-6 lg:px-8 mb-3 text-xs text-text-dim">
+          Primero se muestran los pendientes de entrada del turno en curso. El contador de En turno incluye solo entradas confirmadas.
+        </p>
+      )}
 
       {viewMode === 'active' && totalActiveCount === 0 && (
         <div className="w-full px-4 sm:px-6 lg:px-8 mb-4">

@@ -31,11 +31,13 @@ function refreshHandler() {
   const ctx = vm.createContext({
     Date, Promise, console: { error: () => {} }, useCallback: fn => fn,
     todayDayKey: 'jue 10', historyRequestRef: { current: 0 },
+    setHistoryDay: value => { state.day = value; },
     setLoadingDbHistory: value => { state.loading = value; },
     setDbHistory: value => { state.db = value; },
     setTodayDbHistory: value => { state.today = value; },
     setHistoryError: value => { state.error = value; },
     getHistoricalAttendanceLogs: async () => [],
+    getCurrentAttendanceHistoryAction: async () => ({ date: '2026-09-10', dayKey: 'jue 10', logs: [] }),
   });
   const code = ts.transpileModule(`globalThis.run = ${initializer.getText(source)};`, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText;
   vm.runInContext(code, ctx);
@@ -96,6 +98,7 @@ async function run() {
   await check('Actualizar incorpora la respuesta compartida a Esta sesion', async () => {
     const { ctx, state } = refreshHandler();
     ctx.getHistoricalAttendanceLogs = async (_limit, day) => [record(day ? 'remote-today' : 'older')];
+    ctx.getCurrentAttendanceHistoryAction = async () => ({ date: '2026-09-10', dayKey: 'jue 10', logs: [record('remote-today')] });
     await ctx.run();
     assert.equal(state.today[0].id, 'remote-today');
     assert.equal(state.db[0].id, 'older');
@@ -104,6 +107,7 @@ async function run() {
   await check('Error de red conserva la ultima lista visible e informa el fallo', async () => {
     const { ctx, state } = refreshHandler();
     ctx.getHistoricalAttendanceLogs = async () => { throw new Error('offline'); };
+    ctx.getCurrentAttendanceHistoryAction = ctx.getHistoricalAttendanceLogs;
     await ctx.run();
     assert.equal(state.today[0].id, 'previous');
     assert.equal(state.db[0].id, 'previous');
@@ -114,6 +118,7 @@ async function run() {
     const { ctx, state } = refreshHandler();
     const pending = [];
     ctx.getHistoricalAttendanceLogs = () => new Promise(resolve => pending.push(resolve));
+    ctx.getCurrentAttendanceHistoryAction = () => new Promise(resolve => pending.push(logs => resolve({ date: '2026-09-10', dayKey: 'jue 10', logs })));
     const older = ctx.run();
     const latest = ctx.run();
     pending[2]([record('new')]); pending[3]([record('new', { isCompleted: true })]);
@@ -122,6 +127,38 @@ async function run() {
     await older;
     assert.equal(state.today[0].id, 'new');
     assert.equal(state.today[0].isCompleted, true);
+  });
+  await check('Fallo de Dias anteriores no vacia Esta sesion ni sus 90 registros compartidos', async () => {
+    const { ctx, state } = refreshHandler();
+    ctx.getHistoricalAttendanceLogs = async () => { throw new Error('old-history-failed'); };
+    ctx.getCurrentAttendanceHistoryAction = async () => ({ date: '2026-09-10', dayKey: 'jue 10', logs: Array.from({ length: 90 }, (_, i) => record(`remote-${i}`)) });
+    await ctx.run();
+    assert.equal(state.today.length, 90);
+    assert.equal(state.db[0].id, 'previous');
+    assert.ok(state.error.includes('Días anteriores'));
+    assert.equal(mergeTodayScanHistory(state.today, [], state.day.date).length, 90);
+  });
+  await check('Fallo de hoy conserva su ultima lista y permite actualizar Dias anteriores', async () => {
+    const { ctx, state } = refreshHandler();
+    ctx.getHistoricalAttendanceLogs = async () => [record('older-updated')];
+    ctx.getCurrentAttendanceHistoryAction = async () => { throw new Error('today-failed'); };
+    await ctx.run();
+    assert.equal(state.today[0].id, 'previous');
+    assert.equal(state.db[0].id, 'older-updated');
+    assert.ok(state.error.includes('Esta sesión'));
+  });
+  await check('La fecha del servidor determina hoy aunque el reloj del dispositivo difiera', async () => {
+    const { ctx, state } = refreshHandler();
+    ctx.getCurrentAttendanceHistoryAction = async () => ({ date: '2026-09-10', dayKey: 'jue 10', logs: [record('today')] });
+    await ctx.run();
+    assert.equal(state.day.date, '2026-09-10');
+    assert.equal(mergeTodayScanHistory(state.today, [], state.day.date).length, 1);
+  });
+  await check('Las claves de dias coinciden con la base sin depender de abreviaturas del navegador', () => {
+    assert.equal(getGuatemalaDayKey(new Date('2026-09-05T15:00:00Z')), 'sáb 5');
+    assert.equal(getGuatemalaDayKey(new Date('2026-09-09T15:00:00Z')), 'mié 9');
+    assert.equal(getGuatemalaDayKey(new Date('2026-09-11T05:59:59Z')), 'jue 10');
+    assert.equal(getGuatemalaDayKey(new Date('2026-09-11T06:00:00Z')), 'vie 11');
   });
   console.log(`${count}/${count} verificaciones aprobadas. Sin escrituras en produccion.`);
 }

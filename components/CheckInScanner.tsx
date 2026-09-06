@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { checkInVolunteer, getHistoricalAttendanceLogs, checkOutVolunteer, reassignVolunteerShift, closeAttendanceSessionAction } from "@/app/actions/attendance";
+import { checkInVolunteer, getHistoricalAttendanceLogs, getCurrentAttendanceHistoryAction, checkOutVolunteer, reassignVolunteerShift, closeAttendanceSessionAction } from "@/app/actions/attendance";
 import { canQrCheckin } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,6 +27,8 @@ interface CheckInScannerProps {
   role: string;
   committeeName: string;
   initialView?: 'scanner' | 'history';
+  initialHistory?: Awaited<ReturnType<typeof getCurrentAttendanceHistoryAction>>;
+  initialHistoryError?: string;
 }
 
 type ScannerState = 'idle' | 'scanning' | 'loading' | 'success' | 'already_checked_in' | 'manual_selection' | 'error';
@@ -109,7 +111,9 @@ export function CheckInScanner({
   coordinatorName,
   role,
   committeeName,
-  initialView = 'scanner',
+  initialView = 'history',
+  initialHistory,
+  initialHistoryError = '',
 }: CheckInScannerProps) {
   const { refresh, sessionsData, shiftsData, checkedOutMap, rawVolunteers } = useCoordinatorData();
   const [state, setState] = useState<ScannerState>('idle');
@@ -187,11 +191,12 @@ export function CheckInScanner({
     }
   };
 
-  const [historyTab, setHistoryTab] = useState<'db' | 'session'>('db');
+  const [historyTab, setHistoryTab] = useState<'db' | 'session'>('session');
   const [dbHistory, setDbHistory] = useState<ScanEntry[]>([]);
-  const [todayDbHistory, setTodayDbHistory] = useState<ScanEntry[]>([]);
-  const [loadingDbHistory, setLoadingDbHistory] = useState(false);
-  const [historyError, setHistoryError] = useState('');
+  const [todayDbHistory, setTodayDbHistory] = useState<ScanEntry[]>(() =>
+    (initialHistory?.logs || []).map(item => ({ ...item, timestamp: new Date(item.timestamp) })));
+  const [loadingDbHistory, setLoadingDbHistory] = useState(!initialHistory);
+  const [historyError, setHistoryError] = useState(initialHistoryError);
   const [checkoutError, setCheckoutError] = useState('');
   const [pendingExit, setPendingExit] = useState<{
     session: AttendanceSession;
@@ -201,37 +206,50 @@ export function CheckInScanner({
   const historyRequestRef = useRef(0);
   const { inputValue: searchInput, setInputValue: setSearchInput, appliedSearch: searchQuery, applySearch } = useDebouncedSearch();
   const [selectedDayFilter] = useState("all");
-  const todayDate = getGuatemalaDate();
-  const todayDayKey = getGuatemalaDayKey();
+  const [historyDay, setHistoryDay] = useState(() => ({
+    date: initialHistory?.date || getGuatemalaDate(),
+    dayKey: initialHistory?.dayKey || getGuatemalaDayKey(),
+  }));
+  const todayDate = historyDay.date;
 
   const fetchDbHistory = useCallback(async () => {
     const requestId = ++historyRequestRef.current;
     setLoadingDbHistory(true);
     try {
-      const [logs, todayLogs] = await Promise.all([
+      const [olderResult, todayResult] = await Promise.allSettled([
         getHistoricalAttendanceLogs(150),
-        getHistoricalAttendanceLogs(150, todayDayKey),
+        getCurrentAttendanceHistoryAction(),
       ]);
       if (requestId !== historyRequestRef.current) return;
-      const formattedLogs = logs.map((item: any) => ({
-        ...item,
-        timestamp: new Date(item.timestamp)
-      }));
-      setDbHistory(formattedLogs);
-      setTodayDbHistory(todayLogs.map((item: any) => ({ ...item, timestamp: new Date(item.timestamp) })));
-      setHistoryError('');
+      if (olderResult.status === 'fulfilled') {
+        setDbHistory(olderResult.value.map((item: any) => ({ ...item, timestamp: new Date(item.timestamp) })));
+      }
+      if (todayResult.status === 'fulfilled') {
+        const today = todayResult.value;
+        setHistoryDay({ date: today.date, dayKey: today.dayKey });
+        setTodayDbHistory(today.logs.map((item: any) => ({ ...item, timestamp: new Date(item.timestamp) })));
+      }
+      const failedTabs = [olderResult.status === 'rejected' ? 'Días anteriores' : '', todayResult.status === 'rejected' ? 'Esta sesión' : ''].filter(Boolean);
+      setHistoryError(failedTabs.length ? `No se pudo actualizar ${failedTabs.join(' y ')}. Se conserva la última lista; usa Actualizar para reintentar.` : '');
     } catch (e) {
       console.error("Error fetching db history", e);
       if (requestId === historyRequestRef.current) setHistoryError('No se pudo actualizar el historial. Usa Actualizar para reintentar.');
     } finally {
       if (requestId === historyRequestRef.current) setLoadingDbHistory(false);
     }
-  }, [todayDayKey]);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void fetchDbHistory(), 200);
     return () => window.clearTimeout(timer);
   }, [fetchDbHistory, sessionsData, shiftsData]);
+
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState === 'visible') void fetchDbHistory(); };
+    window.addEventListener('focus', onFocus);
+    const timer = window.setInterval(onFocus, 60000);
+    return () => { window.removeEventListener('focus', onFocus); window.clearInterval(timer); };
+  }, [fetchDbHistory]);
 
   // The shared coordinator context receives session_sync and shift_sync and
   // refreshes visible data periodically. Its changes reload history above.
@@ -1464,7 +1482,7 @@ export function CheckInScanner({
                     )}
 
                     {/* Empty state */}
-                    {(!loadingDbHistory && filteredList.length === 0) && (
+                    {(!loadingDbHistory && !historyError && filteredList.length === 0) && (
                       <div className="bg-dark3 border border-border rounded-[20px] p-12 text-center flex flex-col items-center justify-center">
                         <div className="w-14 h-14 bg-black/5 dark:bg-white/5 border border-border rounded-full flex items-center justify-center mb-3">
                           <span className="material-symbols-outlined text-[24px] text-text-dim">barcode_reader</span>

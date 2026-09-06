@@ -11,12 +11,20 @@ interface HistoryRecord {
 
 export function getGuatemalaDate(value: Date | string = new Date()): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' });
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Guatemala', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const part = (type: string) => parts.find(item => item.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
 export function getGuatemalaDayKey(value: Date = new Date()): string {
-  const parts = new Intl.DateTimeFormat('es', { timeZone: 'America/Guatemala', weekday: 'short', day: 'numeric' }).formatToParts(value);
-  return `${parts.find(part => part.type === 'weekday')?.value.replace('.', '')} ${parts.find(part => part.type === 'day')?.value}`;
+  const date = getGuatemalaDate(value);
+  if (!date) return '';
+  const calendarDate = new Date(`${date}T12:00:00Z`);
+  const weekdays = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+  return `${weekdays[calendarDate.getUTCDay()]} ${calendarDate.getUTCDate()}`;
 }
 
 function localRecordKey(record: HistoryRecord): string {

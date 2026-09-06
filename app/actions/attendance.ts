@@ -19,6 +19,7 @@ import {
 } from "@/lib/services/session-store";
 import { createEntryPassPayload, validateEntryPassQrValue } from "@/lib/entry-pass";
 import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
+import { getGuatemalaDate, getGuatemalaDayKey } from '@/lib/scan-history';
 
 export async function getAttendanceSessionsAction(requestedDayKeys?: string[]): Promise<AttendanceSession[]> {
   const authorization = await requireCapability('view_volunteers');
@@ -1059,6 +1060,15 @@ export async function reassignVolunteerShift(shiftId: string, newDayKey: string,
     console.error("Error reassigning shift:", err);
     return { error: err.message || "Error al reasignar el turno" };
   }
+}
+
+/** Server clock and permission-scoped records define today's shared history. */
+export async function getCurrentAttendanceHistoryAction() {
+  const now = new Date();
+  const date = getGuatemalaDate(now);
+  const dayKey = getGuatemalaDayKey(now);
+  const logs = await getHistoricalAttendanceLogs(150, dayKey);
+  return { date, dayKey, logs };
 }
 
 // 5. Fetch Historical Attendance Logs across all days from Supabase DB
