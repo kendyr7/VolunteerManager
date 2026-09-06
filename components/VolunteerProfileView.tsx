@@ -874,7 +874,15 @@ export function VolunteerProfileView({
   const nameParts = (volunteer.name || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`).trim().split(/\s+/).filter(Boolean);
 
   const profileMetrics = useMemo(() => {
-    return getVolunteerProfileMetrics(volunteer.id, dbShiftRecords, auditLogs, volunteerSessions);
+    // The profile is the volunteer's personal service record, so verified
+    // simulation attendance belongs here even when official reports exclude it.
+    return getVolunteerProfileMetrics(
+      volunteer.id,
+      dbShiftRecords,
+      auditLogs,
+      volunteerSessions,
+      { includeSimulation: true },
+    );
   }, [volunteer.id, dbShiftRecords, auditLogs, volunteerSessions]);
 
   const kpiHoursDisplay = useMemo(() => {

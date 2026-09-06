@@ -10,6 +10,7 @@ const jiti = createJiti(__filename, { alias: { '@': root } });
 const { resolveShiftView, isLiveShiftRoster, attendanceSortPriority, getOpenAttendanceVolunteerIds } = jiti('../lib/shift-view.ts');
 const { getUnifiedShiftTimes } = jiti('../lib/shift-calculations.ts');
 const { getShiftAttendanceState } = jiti('../lib/coordinator-data.ts');
+const { getVolunteerProfileMetrics } = jiti('../lib/services/volunteer-profile.service.ts');
 const at = time => new Date(`2026-09-05T${time}:00-06:00`);
 let count = 0;
 function check(name, run) { run(); count++; console.log(`PASS ${name}`); }
@@ -130,5 +131,17 @@ check('Drawer precarga las horas desde el contexto sin consulta individual al ab
   assert.ok(drawer.includes('attendanceSessions={activeVolunteerSessions}'));
   assert.ok(profile.includes('if (preloadedAttendanceSessions !== undefined) return;'));
   assert.ok(profile.includes('preloadedAttendanceSessions ?? coordinatorData?.sessionsData ?? []'));
+});
+check('KPI del perfil incluye las horas verificadas de la jornada de simulacion', () => {
+  const metrics = getVolunteerProfileMetrics('simulation-volunteer', [{
+    id: 'simulation-shift', volunteer_id: 'simulation-volunteer', day_key: 'sáb 5', shift_key: 'T1',
+  }], [], [{
+    id: 'simulation-session', volunteer_id: 'simulation-volunteer', day_key: 'sáb 5',
+    status: 'completed', started_at: '2026-09-05T15:00:00.000Z', ended_at: '2026-09-05T20:00:00.000Z',
+  }], { includeSimulation: true });
+  assert.equal(metrics.totalWorkedMinutes, 300);
+  assert.equal(metrics.kpiValue, '5h');
+  const profile = fs.readFileSync(path.join(root, 'components/VolunteerProfileView.tsx'), 'utf8');
+  assert.ok(profile.includes('{ includeSimulation: true }'));
 });
 console.log(`${count}/${count} verificaciones aprobadas. Sin escrituras en produccion.`);
