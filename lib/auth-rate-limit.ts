@@ -17,6 +17,13 @@ export type RateLimitResult = {
   retryAfterSeconds: number;
 };
 
+export function logAuthRateLimitBlock(scope: string, result: RateLimitResult): void {
+  console.warn('[AUTH_RATE_LIMIT_BLOCKED]', JSON.stringify({
+    scope,
+    retryAfterSeconds: result.retryAfterSeconds,
+  }));
+}
+
 function hashIdentifier(scope: string, identifier: string): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) {

@@ -45,6 +45,23 @@ type DashboardGreeting = {
 const EMPTY_HEATMAP: DashboardOperationalData['heatmapMatrix'] = [];
 const EMPTY_DAILY_COUNTS: Record<string, number> = {};
 
+type DashboardReturnState = {
+  authorizationKey: string;
+  committee: string;
+  includeSimulation: boolean;
+  fullscreen: boolean;
+  scrollTop: number;
+  heatmapScrollLeft: number;
+  chartMetric: 'volunteers' | 'shifts';
+  distributionView: 'list' | 'chart';
+  distributionMetric: 'volunteers' | 'shifts';
+};
+
+function readDashboardReturnState(authorizationKey: string): DashboardReturnState | null {
+  const saved = window.history.state?.dashboardReturn as DashboardReturnState | undefined;
+  return saved?.authorizationKey === authorizationKey ? saved : null;
+}
+
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -126,6 +143,9 @@ export default function CoordinatorDashboard() {
   const insightRequestRef = useRef(0);
   const lastInsightScopeRef = useRef<string | null>(null);
   const preparedSessionCheckedRef = useRef(false);
+  const returnStateCheckedRef = useRef(false);
+  const pendingReturnRef = useRef<DashboardReturnState | null>(null);
+  const heatmapScrollRef = useRef<HTMLDivElement>(null);
   const supabase = useMemo(() => createClient(), []);
 
   // Keep the complete visible snapshot during filter changes, never across
@@ -269,6 +289,26 @@ export default function CoordinatorDashboard() {
     touchStartYRef.current = null;
   }, [handlePrevCommittee, handleNextCommittee]);
 
+  const saveDashboardReturnState = useCallback(() => {
+    // Keep this snapshot on the source history entry, so Back restores this
+    // visit without affecting a fresh navigation to the dashboard.
+    window.history.replaceState({
+      ...window.history.state,
+      dashboardReturn: {
+        authorizationKey,
+        committee: displayedCommittee,
+        includeSimulation: displayedSimulation,
+        fullscreen: isHeatmapFullscreen,
+        scrollTop: document.querySelector('main')?.scrollTop ?? 0,
+        heatmapScrollLeft: heatmapScrollRef.current?.scrollLeft ?? 0,
+        chartMetric,
+        distributionView,
+        distributionMetric,
+      } satisfies DashboardReturnState,
+    }, '');
+  }, [authorizationKey, displayedCommittee, displayedSimulation, isHeatmapFullscreen,
+    chartMetric, distributionView, distributionMetric]);
+
   const openVolunteersForHeatmapSlot = useCallback((dayKey: string, shiftKey: string) => {
     const params = new URLSearchParams({ day: dayKey, shift: shiftKey });
     if (
@@ -279,12 +319,12 @@ export default function CoordinatorDashboard() {
       params.set('committee', displayedCommittee);
     }
 
-    setIsHeatmapFullscreen(false);
+    saveDashboardReturnState();
     if (document.fullscreenElement) {
       void document.exitFullscreen().catch(() => {});
     }
     router.push(`/volunteers?${params.toString()}`);
-  }, [router, displayedCommittee]);
+  }, [router, displayedCommittee, saveDashboardReturnState]);
 
   const openVolunteersForChartDay = useCallback((dayKey: string) => {
     const params = new URLSearchParams({ day: dayKey });
@@ -296,8 +336,9 @@ export default function CoordinatorDashboard() {
       params.set('committee', displayedCommittee);
     }
 
+    saveDashboardReturnState();
     router.push(`/volunteers?${params.toString()}`);
-  }, [router, displayedCommittee]);
+  }, [router, displayedCommittee, saveDashboardReturnState]);
 
   const toggleSimulation = useCallback(() => {
     setIncludeSimulation(currentValue => {
@@ -584,7 +625,21 @@ export default function CoordinatorDashboard() {
     const applyAuthorizationSnapshot = (snapshot: AuthorizationSnapshot) => {
       if (!active) return;
       const committee = snapshot.committeeName || '';
-      setAuthorizationKey(getDashboardAuthorizationKey(snapshot));
+      const nextAuthorizationKey = getDashboardAuthorizationKey(snapshot);
+      setAuthorizationKey(nextAuthorizationKey);
+      if (!returnStateCheckedRef.current) {
+        returnStateCheckedRef.current = true;
+        const saved = readDashboardReturnState(nextAuthorizationKey);
+        pendingReturnRef.current = saved;
+        if (saved) {
+          setSelectedHeatmapCommittee(saved.committee);
+          setIncludeSimulation(saved.includeSimulation);
+          setIsHeatmapFullscreen(saved.fullscreen);
+          setChartMetric(saved.chartMetric);
+          setDistributionView(saved.distributionView);
+          setDistributionMetric(saved.distributionMetric);
+        }
+      }
       setUserCommittee(committee);
       if (!hasCapability(snapshot, 'view_global_reports')) {
         setSelectedHeatmapCommittee(committee);
@@ -623,6 +678,23 @@ export default function CoordinatorDashboard() {
     && operationalScopeKey === currentOperationalScopeKey
     && dashboardScopeMatches(operationalData.effectiveCommitteeScope, selectedHeatmapCommittee);
   const isFilterUpdating = canDisplayOperationalData && !isOperationalSynced;
+  useEffect(() => {
+    const saved = pendingReturnRef.current;
+    if (!saved || dashboardAccess !== 'allowed' || !isOperationalSynced) return;
+    if (saved.authorizationKey !== authorizationKey) {
+      pendingReturnRef.current = null;
+      return;
+    }
+
+    // Loading placeholders have no scroll height. Wait for the actual data
+    // and restore the layout's scroll container once the dashboard is painted.
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector('main')?.scrollTo({ top: saved.scrollTop, behavior: 'instant' });
+      heatmapScrollRef.current?.scrollTo({ left: saved.heatmapScrollLeft, behavior: 'instant' });
+      pendingReturnRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [authorizationKey, dashboardAccess, isOperationalSynced]);
   const displayedScopeLabel = dashboardScopeMatches(displayedCommittee, 'todos') ? 'Todos los comités' : displayedCommittee;
   const filterStatus = isFilterUpdating
     ? operationalError ? 'No se pudo cambiar el filtro.' : 'Actualizando…'
@@ -1485,7 +1557,7 @@ export default function CoordinatorDashboard() {
             )}
           </p>
         )}
-        <div className="overflow-x-auto w-full">
+        <div ref={heatmapScrollRef} className="overflow-x-auto w-full">
           <div className="min-w-full flex">
             <div className="w-16 sm:w-20 shrink-0 bg-dark3 border-r border-border flex flex-col pt-8">
               {heatmapMatrix.map((dayData) => {

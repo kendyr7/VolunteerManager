@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminSupabase } from '@/lib/supabase/admin';
-import { consumeAuthRateLimit, getClientIp } from '@/lib/auth-rate-limit';
+import { consumeAuthRateLimit, getClientIp, logAuthRateLimitBlock } from '@/lib/auth-rate-limit';
+import { AUTH_RATE_LIMITS, AUTH_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/auth-rate-limit-policy';
 import { formatE164 } from '@/lib/whatsapp';
 
 export async function GET(request: Request) {
@@ -14,26 +15,29 @@ export async function GET(request: Request) {
 
     const formattedPhone = formatE164(rawPhoneInput);
     const rawDigits = rawPhoneInput.replace(/\D/g, '');
-    const [ipLimit, phoneLimit] = await Promise.all([
+    const clientIp = getClientIp(request.headers);
+    const [networkVolumeLimit, phoneLimit] = await Promise.all([
       consumeAuthRateLimit({
-        scope: 'webauthn-check-ip',
-        identifier: getClientIp(request.headers),
-        limit: 60,
-        windowSeconds: 60,
+        scope: 'webauthn-check-volume-ip',
+        identifier: clientIp,
+        limit: AUTH_RATE_LIMITS.sharedNetworkVolume,
+        windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
       }),
       consumeAuthRateLimit({
         scope: 'webauthn-check-phone',
         identifier: formattedPhone || rawDigits || rawPhoneInput,
-        limit: 20,
-        windowSeconds: 15 * 60,
+        limit: AUTH_RATE_LIMITS.passkeyChecksPerPhone,
+        windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
       }),
     ]);
 
-    if (!ipLimit.allowed || !phoneLimit.allowed) {
-      const retryAfter = Math.max(ipLimit.retryAfterSeconds, phoneLimit.retryAfterSeconds);
+    if (!networkVolumeLimit.allowed || !phoneLimit.allowed) {
+      const blockedScope = !networkVolumeLimit.allowed ? 'webauthn-check-volume-ip' : 'webauthn-check-phone';
+      const blockedLimit = !networkVolumeLimit.allowed ? networkVolumeLimit : phoneLimit;
+      logAuthRateLimitBlock(blockedScope, blockedLimit);
       return NextResponse.json(
         { hasPasskey: false, error: 'Demasiadas consultas. Inténtalo más tarde.' },
-        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+        { status: 429, headers: { 'Retry-After': String(blockedLimit.retryAfterSeconds) } }
       );
     }
 
@@ -59,6 +63,19 @@ export async function GET(request: Request) {
     ];
 
     if (userIds.length === 0) {
+      const unknownPhoneLimit = await consumeAuthRateLimit({
+        scope: 'webauthn-check-miss-ip',
+        identifier: clientIp,
+        limit: AUTH_RATE_LIMITS.unknownPhoneLookupsPerNetwork,
+        windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+      });
+      if (!unknownPhoneLimit.allowed) {
+        logAuthRateLimitBlock('webauthn-check-miss-ip', unknownPhoneLimit);
+        return NextResponse.json(
+          { hasPasskey: false, error: 'Demasiadas consultas. Inténtalo más tarde.' },
+          { status: 429, headers: { 'Retry-After': String(unknownPhoneLimit.retryAfterSeconds) } }
+        );
+      }
       return NextResponse.json({ hasPasskey: false });
     }
 

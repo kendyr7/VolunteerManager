@@ -2,23 +2,41 @@ import { NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
 import { getAdminSupabase } from '@/lib/supabase/admin';
-import { consumeAuthRateLimit, getClientIp } from '@/lib/auth-rate-limit';
+import { consumeAuthRateLimit, getClientIp, logAuthRateLimitBlock } from '@/lib/auth-rate-limit';
+import { AUTH_RATE_LIMITS, AUTH_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/auth-rate-limit-policy';
 import { SESSION_MAX_AGE_SECONDS, signSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
+    const clientIp = getClientIp(request.headers);
     const ipLimit = await consumeAuthRateLimit({
-      scope: 'webauthn-verify-ip',
-      identifier: getClientIp(request.headers),
-      limit: 30,
-      windowSeconds: 15 * 60,
+      scope: 'webauthn-verify-volume-ip',
+      identifier: clientIp,
+      limit: AUTH_RATE_LIMITS.sharedNetworkVolume,
+      windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
     });
     if (!ipLimit.allowed) {
+      logAuthRateLimitBlock('webauthn-verify-volume-ip', ipLimit);
       return NextResponse.json(
         { error: 'Demasiados intentos. Inténtalo más tarde.' },
         { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfterSeconds) } }
       );
     }
+
+    const failedVerificationLimit = async () => {
+      const failureLimit = await consumeAuthRateLimit({
+        scope: 'webauthn-verify-ip',
+        identifier: clientIp,
+        limit: AUTH_RATE_LIMITS.passkeyFailuresPerNetwork,
+        windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+      });
+      if (failureLimit.allowed) return null;
+      logAuthRateLimitBlock('webauthn-verify-ip', failureLimit);
+      return NextResponse.json(
+        { error: 'Demasiados intentos. Inténtalo más tarde.' },
+        { status: 429, headers: { 'Retry-After': String(failureLimit.retryAfterSeconds) } }
+      );
+    };
 
     const body = await request.json();
     
@@ -27,6 +45,8 @@ export async function POST(request: Request) {
     const authUserInfo = cookieStore.get('webauthn_auth_user')?.value;
 
     if (!expectedChallenge || !authUserInfo) {
+      const blocked = await failedVerificationLimit();
+      if (blocked) return blocked;
       return NextResponse.json({ error: 'Falta el desafío de sesión' }, { status: 400 });
     }
 
@@ -47,11 +67,15 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (!passkey) {
+      const blocked = await failedVerificationLimit();
+      if (blocked) return blocked;
       return NextResponse.json({ error: 'Credencial no encontrada o no pertenece al usuario' }, { status: 400 });
     }
 
     const owner = candidates.find(candidate => candidate.userId === passkey.user_id);
     if (!owner) {
+      const blocked = await failedVerificationLimit();
+      if (blocked) return blocked;
       return NextResponse.json({ error: 'La credencial no pertenece a este intento de acceso' }, { status: 400 });
     }
     const { userId, userType } = owner;
@@ -78,6 +102,8 @@ export async function POST(request: Request) {
       });
     } catch (error: any) {
       console.error('WebAuthn verification error:', error);
+      const blocked = await failedVerificationLimit();
+      if (blocked) return blocked;
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
@@ -181,6 +207,8 @@ export async function POST(request: Request) {
       });
     }
 
+    const blocked = await failedVerificationLimit();
+    if (blocked) return blocked;
     return NextResponse.json({ verified: false }, { status: 400 });
   } catch (error: any) {
     console.error('Error verifying auth:', error);

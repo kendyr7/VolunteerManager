@@ -16,7 +16,10 @@
     "preview:whatsapp-reminders": "node --no-warnings --experimental-strip-types scripts/preview-automatic-reminders.mts",
     "test:authorization": "node scripts/test_authorization_suite.js",
     "test:dashboard": "node scripts/test-dashboard-kpis.js",
-    "test:settings-authorization": "node scripts/test_settings_authorization.js"
+    "test:settings-authorization": "node scripts/test_settings_authorization.js",
+    "test:auth-rate-limit": "node --no-warnings --experimental-strip-types scripts/test-auth-rate-limit-policy.mts",
+    "test:reports": "jiti scripts/test-reports-data.mts",
+    "test:report-excel": "jiti scripts/test-report-excel-stage3.mts && jiti scripts/test-report-excel-stage4.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -33,6 +36,7 @@
     "exceljs": "^4.4.0",
     "framer-motion": "^12.40.0",
     "fuse.js": "^7.5.0",
+    "html-to-image": "^1.11.13",
     "html5-qrcode": "^2.3.8",
     "lucide-react": "^1.17.0",
     "material-symbols": "^0.45.0",

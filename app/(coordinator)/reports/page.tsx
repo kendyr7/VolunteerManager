@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { getReportsData, ReportsData } from "@/app/actions/reports";
+import { buildReportView } from "@/lib/reports/aggregate";
+import type { ReportShiftStatus } from "@/lib/reports/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -214,6 +216,9 @@ export default function ReportsPage() {
     onClose: () => setIsFilterDrawerOpen(false),
   });
   const [isMobile, setIsMobile] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
 
   // Pagination State (30 items per page for instant 1ms DOM rendering)
   const [currentPage, setCurrentPage] = useState(1);
@@ -311,14 +316,24 @@ export default function ReportsPage() {
     loadData(true);
   }, []);
 
-  const items = useMemo(() => data?.items || [], [data?.items]);
-  const itemSearchIndex = useMemo(() => {
-    const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    return new Map(items.map(item => [
-      item.registrationId,
-      normalize(`${item.volunteerName} ${item.phone} ${item.neighborhood} ${item.stake} ${item.committeeName} ${item.committeeId}`),
-    ]));
-  }, [items]);
+  const reportView = useMemo(() => data ? buildReportView(data, {
+    search: appliedSearch,
+    committeeIds: selectedCommittees,
+    neighborhoods: selectedNeighborhoods,
+    stakes: selectedStakes,
+    statuses: selectedStatuses as ReportShiftStatus[],
+    dates: selectedDates,
+  }) : null, [
+    data,
+    appliedSearch,
+    selectedCommittees,
+    selectedNeighborhoods,
+    selectedStakes,
+    selectedStatuses,
+    selectedDates,
+  ]);
+
+  const items = useMemo(() => data?.items || [], [data]);
 
   // Compute official days and optionally add the September 5 simulation day.
   const allEventDays = useMemo(() => {
@@ -344,211 +359,23 @@ export default function ReportsPage() {
     return new Set(items.map(i => i.date));
   }, [items]);
 
-  // Memoized Item Filtering with applied search term
-  const filteredItems = useMemo(() => {
-    if (items.length === 0) return [];
+  const filteredItems = useMemo(() => reportView?.items || [], [reportView]);
 
-    const searchTerms = appliedSearch
-      .split(',')
-      .map(term => term.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase())
-      .filter(Boolean);
-
-    return items.filter(item => {
-      // 1. Search term
-      if (searchTerms.length > 0) {
-        const searchText = itemSearchIndex.get(item.registrationId) || '';
-        if (!searchTerms.every(term => searchText.includes(term))) return false;
-      }
-      
-      // 2. Committee filter (check both ID and Name)
-      if (selectedCommittees.length > 0) {
-        const matchesComm = selectedCommittees.includes(item.committeeId) || selectedCommittees.includes(item.committeeName);
-        if (!matchesComm) return false;
-      }
-
-      // 3. Neighborhood filter
-      if (selectedNeighborhoods.length > 0) {
-        if (!selectedNeighborhoods.includes(item.neighborhood)) return false;
-      }
-
-      // 4. Stake filter
-      if (selectedStakes.length > 0) {
-        if (!selectedStakes.includes(item.stake)) return false;
-      }
-
-      // 5. Status filter
-      if (selectedStatuses.length > 0) {
-        if (!selectedStatuses.includes(item.status)) return false;
-      }
-
-      // 6. Multi-Date filter
-      if (selectedDates.length > 0) {
-        if (!selectedDates.includes(item.date)) return false;
-      }
-
-      return true;
-    });
-  }, [items, itemSearchIndex, appliedSearch, selectedCommittees, selectedNeighborhoods, selectedStakes, selectedStatuses, selectedDates]);
-
-  // Single-pass calculation of KPIs from filtered items
-  const kpiStats = useMemo(() => {
-    let confirmed = 0;
-    let absent = 0;
-    let registered = 0;
-    let replaced = 0;
-    let totalMins = 0;
-
-    for (let i = 0; i < filteredItems.length; i++) {
-      const st = filteredItems[i].status;
-      if (st === 'confirmed') {
-        confirmed++;
-        totalMins += filteredItems[i].durationMinutes;
-      } else if (st === 'absent') {
-        absent++;
-      } else if (st === 'registered') {
-        registered++;
-      } else if (st === 'replaced') {
-        replaced++;
-      }
-    }
-
-    const total = filteredItems.length;
-    const completedOrAbsent = confirmed + absent;
-    const attRate = completedOrAbsent > 0 
-      ? Math.round((confirmed / completedOrAbsent) * 100) 
-      : (total > 0 ? Math.round((confirmed / total) * 100) : 0);
-
-    return {
-      totalShifts: total,
-      confirmedShifts: confirmed,
-      absentShifts: absent,
-      pendingShifts: registered,
-      replacedShifts: replaced,
-      totalMinutes: totalMins,
-      attendanceRate: attRate
-    };
-  }, [filteredItems]);
+  const kpiStats = reportView?.kpiStats || {
+    totalShifts: 0,
+    confirmedShifts: 0,
+    absentShifts: 0,
+    pendingShifts: 0,
+    replacedShifts: 0,
+    totalMinutes: 0,
+    attendanceRate: 0,
+  };
 
   const { confirmedShifts, absentShifts, pendingShifts, totalMinutes, attendanceRate } = kpiStats;
 
-  // Memoized volunteer summary ranking calculation
-  const volunteerRanking = useMemo(() => {
-    if (filteredItems.length === 0) return [];
+  const volunteerRanking = useMemo(() => reportView?.volunteerRanking || [], [reportView]);
 
-    const volunteerMap = new Map<string, {
-      id: string;
-      name: string;
-      phone: string;
-      neighborhood: string;
-      stake: string;
-      committee: string;
-      totalShifts: number;
-      confirmed: number;
-      absent: number;
-      reliability: number;
-      minutes: number;
-    }>();
-
-    for (let i = 0; i < filteredItems.length; i++) {
-      const item = filteredItems[i];
-      let v = volunteerMap.get(item.volunteerId);
-      if (!v) {
-        v = {
-          id: item.volunteerId,
-          name: item.volunteerName,
-          phone: item.phone,
-          neighborhood: item.neighborhood,
-          stake: item.stake,
-          committee: item.committeeName,
-          totalShifts: 0,
-          confirmed: 0,
-          absent: 0,
-          reliability: 100,
-          minutes: 0
-        };
-        volunteerMap.set(item.volunteerId, v);
-      }
-
-      v.totalShifts += 1;
-      if (item.status === 'confirmed') {
-        v.confirmed += 1;
-        v.minutes += item.durationMinutes;
-      } else if (item.status === 'absent') {
-        v.absent += 1;
-      }
-    }
-
-    return Array.from(volunteerMap.values()).map(v => {
-      const totalCount = v.confirmed + v.absent;
-      v.reliability = totalCount > 0 ? Math.round((v.confirmed / totalCount) * 100) : 100;
-      return v;
-    }).sort((a, b) => b.minutes - a.minutes);
-  }, [filteredItems]);
-
-  // Dynamic Committee Attendance Summary (Resumen por Comité)
-  const committeeAttendanceSummary = useMemo(() => {
-    if (!data) return [];
-
-    const activeCommittees = data.uniqueCommittees.filter(c => {
-      if (selectedCommittees.length > 0) {
-        return selectedCommittees.includes(c.id) || selectedCommittees.includes(c.name);
-      }
-      return true;
-    });
-
-    return activeCommittees.map(c => {
-      const commItems = filteredItems.filter(i => 
-        i.committeeId === c.id || i.committeeName.trim().toLowerCase() === c.name.trim().toLowerCase()
-      );
-
-      const uniqueVolunteersSet = new Set<string>();
-      const attendedVolunteersSet = new Set<string>();
-      let confirmed = 0;
-      let absent = 0;
-      let pending = 0;
-      let totalMinutes = 0;
-
-      for (let i = 0; i < commItems.length; i++) {
-        const item = commItems[i];
-        uniqueVolunteersSet.add(item.volunteerId);
-
-        if (item.status === 'confirmed') {
-          confirmed++;
-          totalMinutes += item.durationMinutes;
-          attendedVolunteersSet.add(item.volunteerId);
-        } else if (item.status === 'absent') {
-          absent++;
-        } else if (item.status === 'registered') {
-          pending++;
-        }
-      }
-
-      const totalShifts = commItems.length;
-      const decidedShifts = confirmed + absent;
-      const attendanceRate = decidedShifts > 0
-        ? Math.round((confirmed / decidedShifts) * 100)
-        : (totalShifts > 0 ? Math.round((confirmed / totalShifts) * 100) : 0);
-
-      const uniqueAttendees = attendedVolunteersSet.size;
-      const avgMinutes = uniqueAttendees > 0
-        ? Math.round(totalMinutes / uniqueAttendees)
-        : 0;
-
-      return {
-        id: c.id,
-        name: c.name,
-        volunteersCount: uniqueVolunteersSet.size,
-        attendeesCount: uniqueAttendees,
-        totalShifts,
-        confirmed,
-        absent,
-        pending,
-        attendanceRate,
-        totalMinutes,
-        avgMinutes
-      };
-    });
-  }, [data, filteredItems, selectedCommittees]);
+  const committeeAttendanceSummary = useMemo(() => reportView?.committeeSummary || [], [reportView]);
 
   const sortedCommitteeSummary = useMemo(() => {
     return [...committeeAttendanceSummary].sort((a, b) => {
@@ -604,190 +431,28 @@ export default function ReportsPage() {
     });
   }, [committeeAttendanceSummary, committeeSortField, committeeSortOrder]);
 
-  const committeeTotals = useMemo(() => {
-    let totalShifts = 0;
-    let confirmed = 0;
-    let absent = 0;
-    let pending = 0;
-    let totalMinutes = 0;
-    const allVolunteersSet = new Set<string>();
-    const allAttendeesSet = new Set<string>();
+  const committeeTotals = reportView?.committeeTotals || {
+    volunteersCount: 0,
+    attendeesCount: 0,
+    totalShifts: 0,
+    confirmed: 0,
+    absent: 0,
+    pending: 0,
+    attendanceRate: 0,
+    totalMinutes: 0,
+    avgMinutes: 0,
+  };
 
-    for (const item of filteredItems) {
-      allVolunteersSet.add(item.volunteerId);
-      totalShifts++;
-      if (item.status === 'confirmed') {
-        confirmed++;
-        totalMinutes += item.durationMinutes;
-        allAttendeesSet.add(item.volunteerId);
-      } else if (item.status === 'absent') {
-        absent++;
-      } else if (item.status === 'registered') {
-        pending++;
-      }
-    }
-
-    const decided = confirmed + absent;
-    const rate = decided > 0
-      ? Math.round((confirmed / decided) * 100)
-      : (totalShifts > 0 ? Math.round((confirmed / totalShifts) * 100) : 0);
-
-    const avg = allAttendeesSet.size > 0
-      ? Math.round(totalMinutes / allAttendeesSet.size)
-      : 0;
-
-    return {
-      volunteersCount: allVolunteersSet.size,
-      attendeesCount: allAttendeesSet.size,
-      totalShifts,
-      confirmed,
-      absent,
-      pending,
-      attendanceRate: rate,
-      totalMinutes,
-      avgMinutes: avg
-    };
-  }, [filteredItems]);
-
-  // Dynamic Recruitment Summary filtered by active filters
-  const filteredRecruitmentSummary = useMemo(() => {
-    if (!data || activeTab !== 'recruitment') return [];
-
-    const activeCommittees = data.uniqueCommittees.filter(c => {
-      if (selectedCommittees.length > 0) {
-        return selectedCommittees.includes(c.id) || selectedCommittees.includes(c.name);
-      }
-      return true;
-    });
-
-    return activeCommittees.map(c => {
-      const commItems = filteredItems.filter(i => i.committeeId === c.id || i.committeeName.trim().toLowerCase() === c.name.trim().toLowerCase());
-      const uniqueVolIds = new Set(commItems.map(i => i.volunteerId));
-      const totalVolunteers = uniqueVolIds.size;
-
-      const origRec = data.recruitmentSummary.find(r => r.committeeId === c.id || r.committeeName.trim().toLowerCase() === c.name.trim().toLowerCase());
-      
-      let totalRequiredShifts = origRec ? origRec.totalRequiredShifts : 0;
-      if (selectedDates.length > 0 && data.dailyCoverage.length > 0) {
-        const dateRatio = selectedDates.length / data.dailyCoverage.length;
-        totalRequiredShifts = Math.round(totalRequiredShifts * dateRatio);
-      }
-
-      const assignedShifts = commItems.length;
-      const missingShifts = Math.max(0, totalRequiredShifts - assignedShifts);
-      const coverageRate = totalRequiredShifts > 0 ? Math.round((assignedShifts / totalRequiredShifts) * 100) : 0;
-
-      return {
-        committeeId: c.id,
-        committeeName: c.name,
-        totalVolunteers,
-        totalRequiredShifts,
-        assignedShifts,
-        missingShifts,
-        coverageRate,
-      };
-    });
-  }, [data, filteredItems, selectedCommittees, selectedDates, activeTab]);
-
-  // Dynamic Age Segmentation filtered by active filters
-  const filteredAgeSegmentation = useMemo(() => {
-    if (activeTab !== 'recruitment') return [];
-    const ageCounts: Record<string, number> = {
-      '< 18': 0,
-      '18 - 25': 0,
-      '26 - 35': 0,
-      '36 - 50': 0,
-      '50+': 0,
-      'Sin edad': 0,
-    };
-
-    const uniqueVolMap = new Map<string, number | null>();
-    filteredItems.forEach(item => {
-      if (!uniqueVolMap.has(item.volunteerId)) {
-        uniqueVolMap.set(item.volunteerId, item.age ?? null);
-      }
-    });
-
-    uniqueVolMap.forEach((ageNum) => {
-      if (ageNum === null || isNaN(ageNum) || ageNum <= 0) {
-        ageCounts['Sin edad']++;
-      } else if (ageNum < 18) {
-        ageCounts['< 18']++;
-      } else if (ageNum <= 25) {
-        ageCounts['18 - 25']++;
-      } else if (ageNum <= 35) {
-        ageCounts['26 - 35']++;
-      } else if (ageNum <= 50) {
-        ageCounts['36 - 50']++;
-      } else {
-        ageCounts['50+']++;
-      }
-    });
-
-    const totalVolsCount = uniqueVolMap.size;
-    return Object.entries(ageCounts).map(([range, count]) => ({
-      range,
-      count,
-      percentage: totalVolsCount > 0 ? Math.round((count / totalVolsCount) * 100) : 0,
-    }));
-  }, [filteredItems, activeTab]);
-
-  // Dynamic Daily Coverage filtered by active filters
-  const filteredDailyCoverage = useMemo(() => {
-    if (!data || activeTab !== 'daily') return [];
-
-    const activeDays = data.dailyCoverage.filter(day => selectedDates.length === 0 || selectedDates.includes(day.date));
-
-    return activeDays.map(day => {
-      const dayItems = filteredItems.filter(i => i.date === day.date);
-
-      let dayRequired = day.required;
-      if (selectedCommittees.length > 0 && data.uniqueCommittees.length > 0) {
-        const commRatio = selectedCommittees.length / data.uniqueCommittees.length;
-        dayRequired = Math.round(day.required * commRatio);
-      }
-
-      const dayAssigned = dayItems.length;
-      const dayCheckedIn = dayItems.filter(i => i.status === 'confirmed').length;
-      const missing = Math.max(0, dayRequired - dayAssigned);
-
-      const byShift: Record<string, { required: number; assigned: number; checkedIn: number; missing: number }> = {
-        T1: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
-        T2: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
-        T3: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
-        T4: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
-      };
-
-      ['T1', 'T2', 'T3', 'T4'].forEach(sk => {
-        const shiftNum = parseInt(sk.substring(1));
-        const shiftItems = dayItems.filter(i => i.shiftNumber === shiftNum);
-        const shiftAssigned = shiftItems.length;
-        const shiftCheckedIn = shiftItems.filter(i => i.status === 'confirmed').length;
-        const origReq = day.byShift[sk]?.required || 0;
-        const shiftRequired = selectedCommittees.length > 0 && data.uniqueCommittees.length > 0
-          ? Math.round(origReq * (selectedCommittees.length / data.uniqueCommittees.length))
-          : origReq;
-
-        byShift[sk] = {
-          required: shiftRequired,
-          assigned: shiftAssigned,
-          checkedIn: shiftCheckedIn,
-          missing: Math.max(0, shiftRequired - shiftAssigned),
-        };
-      });
-
-      return {
-        date: day.date,
-        dayLabel: day.dayLabel,
-        required: dayRequired,
-        assigned: dayAssigned,
-        checkedIn: dayCheckedIn,
-        missing,
-        coverageRate: dayRequired > 0 ? Math.round((dayAssigned / dayRequired) * 100) : 0,
-        byShift,
-      };
-    });
-  }, [data, filteredItems, selectedCommittees, selectedDates, activeTab]);
+  const filteredRecruitmentSummary = reportView?.recruitmentSummary || [];
+  const filteredAgeSegmentation = reportView?.ageSegmentation || [];
+  const filteredDailyCoverage = useMemo(() => reportView?.dailyCoverage || [], [reportView]);
+  const hasSchedulePopulationFilter = selectedStatuses.length > 0 || selectedDates.length > 0;
+  const recruitmentPopulationLabel = hasSchedulePopulationFilter
+    ? 'Voluntarios filtrados'
+    : 'Voluntarios registrados';
+  const recruitmentPopulationDescription = hasSchedulePopulationFilter
+    ? 'Voluntarios con al menos un turno que cumple los filtros de fecha o estado aplicados.'
+    : 'Todos los voluntarios registrados, incluso quienes todavía no tienen turnos.';
 
   const sortedDailyCoverage = useMemo(() => {
     return [...filteredDailyCoverage].sort((left, right) => {
@@ -888,80 +553,46 @@ export default function ReportsPage() {
     );
   }
 
-  // CSV Export
-  const handleExportCSV = () => {
-    let headers: string[] = [];
-    let rows: any[][] = [];
-    let filename = "";
+  const handleExportExcel = async (mode: 'static' | 'interactive') => {
+    if (!data || !reportView || isExporting) return;
 
-    if (activeTab === 'history') {
-      headers = ["Nombre Voluntario", "Teléfono", "Comité", "Barrio / Rama", "Estaca", "Fecha", "Turno", "Horario", "Duración", "Estado"];
-      rows = sortedHistoryItems.map(item => [
-        item.volunteerName,
-        item.phone,
-        item.committeeName,
-        item.neighborhood,
-        item.stake,
-        item.date,
-        `T${item.shiftNumber}`,
-        `${item.startTime}-${item.endTime}`,
-        formatMinutes(item.durationMinutes),
-        item.status === 'confirmed' ? 'Asistió' :
-        item.status === 'registered' ? 'Pendiente' :
-        item.status === 'absent' ? 'Ausente' : 'Reemplazado'
-      ]);
-      filename = `historial_asistencia_${new Date().toISOString().split('T')[0]}.csv`;
-    } else if (activeTab === 'committees') {
-      headers = ["Comité", "Voluntarios Involucrados", "Turnos Programados", "Asistencias Confirmadas", "Ausencias", "Tasa Asistencia (%)", "Horas Totales Servidas", "Promedio Horas / Asistente"];
-      rows = sortedCommitteeSummary.map(c => [
-        c.name,
-        c.volunteersCount,
-        c.totalShifts,
-        c.confirmed,
-        c.absent,
-        `${c.attendanceRate}%`,
-        formatMinutes(c.totalMinutes),
-        formatMinutes(c.avgMinutes)
-      ]);
-      rows.push([
-        "TOTAL GENERAL",
-        committeeTotals.volunteersCount,
-        committeeTotals.totalShifts,
-        committeeTotals.confirmed,
-        committeeTotals.absent,
-        `${committeeTotals.attendanceRate}%`,
-        formatMinutes(committeeTotals.totalMinutes),
-        formatMinutes(committeeTotals.avgMinutes)
-      ]);
-      filename = `resumen_comites_${new Date().toISOString().split('T')[0]}.csv`;
-    } else {
-      headers = ["Nombre Voluntario", "Teléfono", "Comité", "Barrio / Rama", "Estaca", "Turnos Totales", "Asistidos", "Ausencias", "Fiabilidad (%)", "Total Tiempo"];
-      rows = sortedVolunteerRanking.map(v => [
-        v.name,
-        v.phone,
-        v.committee,
-        v.neighborhood,
-        v.stake,
-        v.totalShifts,
-        v.confirmed,
-        v.absent,
-        `${v.reliability}%`,
-        formatMinutes(v.minutes)
-      ]);
-      filename = `ranking_horas_voluntarios_${new Date().toISOString().split('T')[0]}.csv`;
+    setIsExportDialogOpen(false);
+    setIsExporting(true);
+    setExportError('');
+    try {
+      const workbookInput = {
+        data,
+        view: reportView,
+        filters: {
+          search: appliedSearch,
+          committeeIds: [...selectedCommittees],
+          neighborhoods: [...selectedNeighborhoods],
+          stakes: [...selectedStakes],
+          statuses: selectedStatuses as ReportShiftStatus[],
+          dates: [...selectedDates],
+        },
+        includeSimulation,
+        generatedAt: new Date(),
+        historyItems: [...sortedHistoryItems],
+        volunteerRanking: [...sortedVolunteerRanking],
+        committeeSummary: [...sortedCommitteeSummary],
+        recruitmentSummary: [...filteredRecruitmentSummary],
+        ageSegmentation: [...filteredAgeSegmentation],
+        dailyCoverage: [...sortedDailyCoverage],
+      };
+      if (mode === 'interactive') {
+        const { downloadInteractiveReportWorkbook } = await import('@/lib/reports/export/interactive');
+        await downloadInteractiveReportWorkbook(workbookInput);
+      } else {
+        const { downloadStaticReportWorkbook } = await import('@/lib/reports/export/workbook');
+        await downloadStaticReportWorkbook(workbookInput);
+      }
+    } catch (error) {
+      console.error('Error exporting reports workbook:', error);
+      setExportError('No se pudo generar el archivo Excel. Intenta nuevamente.');
+    } finally {
+      setIsExporting(false);
     }
-
-    let csvContent = "\uFEFF"; // UTF-8 BOM
-    csvContent += [headers.join(","), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const clearFilters = () => {
@@ -1244,12 +875,13 @@ export default function ReportsPage() {
               )}
             </Button>
             <Button
-              onClick={handleExportCSV}
+              onClick={() => setIsExportDialogOpen(true)}
               className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold font-inter transition-all active:scale-[0.97] flex items-center gap-1.5"
-              disabled={filteredItems.length === 0}
+              disabled={!data || !reportView || isExporting || loading}
+              aria-busy={isExporting}
             >
-              <span className="material-symbols-outlined text-[16px]">download</span>
-              <span className="hidden sm:inline">Exportar</span>
+              <span className={cn('material-symbols-outlined text-[16px]', isExporting && 'animate-spin')}>{isExporting ? 'progress_activity' : 'download'}</span>
+              <span className="hidden sm:inline">{isExporting ? 'Generando…' : 'Exportar Excel'}</span>
             </Button>
           </div>
         </div>
@@ -1266,7 +898,85 @@ export default function ReportsPage() {
           placeholder="Buscar por nombre, teléfono, barrio, estaca o subcomité..."
           className="z-10"
         />
+        {exportError && (
+          <p role="alert" className="text-xs font-bold font-inter text-rose-400">
+            {exportError}
+          </p>
+        )}
       </div>
+
+      <AnimatePresence>
+        {isExportDialogOpen && (
+          <motion.div
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsExportDialogOpen(false)}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="export-excel-title"
+              className="w-full max-w-xl rounded-[28px] border border-border bg-dark2 p-5 shadow-2xl sm:p-6"
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              onClick={event => event.stopPropagation()}
+            >
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <h2 id="export-excel-title" className="text-xl font-black text-text">Exportar Excel</h2>
+                  <p className="mt-1 text-xs font-inter text-text-dim">Elige el tipo de archivo que necesitas.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsExportDialogOpen(false)}
+                  className="grid size-9 shrink-0 place-items-center rounded-full border border-border text-text-dim transition-colors hover:bg-dark3 hover:text-text"
+                  aria-label="Cerrar"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+
+              <div className="grid gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleExportExcel('static')}
+                  className="group rounded-2xl border border-[#4d7cfe]/40 bg-[#4d7cfe]/10 p-4 text-left transition-colors hover:bg-[#4d7cfe]/15"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined mt-0.5 text-[#4d7cfe]">description</span>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-inter text-sm font-bold text-text">Reporte filtrado</span>
+                        <span className="rounded-full bg-[#4d7cfe] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">Recomendado</span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-text-dim">Resumen y las cinco pestañas con todos los registros que cumplen los filtros actuales.</p>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleExportExcel('interactive')}
+                  className="group rounded-2xl border border-border bg-dark3/60 p-4 text-left transition-colors hover:border-[#4d7cfe]/40 hover:bg-dark3"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined mt-0.5 text-emerald-400">dashboard</span>
+                    <div>
+                      <span className="font-inter text-sm font-bold text-text">Panel interactivo</span>
+                      <p className="mt-1 text-xs leading-5 text-text-dim">Incluye el reporte filtrado, controles editables y los datos completos autorizados para cambiar filtros en Excel 365.</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <p className="mt-4 text-[11px] leading-5 text-text-dim">El archivo es una instantánea. No consulta el sistema ni incluye datos fuera de tus permisos.</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="flex-1 px-4 sm:px-6 lg:px-8 w-full">
         {/* Primary KPIs - Edge to Edge Fine Line Grid matching Dashboard */}
@@ -2184,7 +1894,7 @@ export default function ReportsPage() {
                           Reclutamiento y Meta por Comité
                         </h3>
                         <p className="text-xs text-text-dim mt-0.5 font-inter">
-                          Total de voluntarios registrados, turnos asignados vs requeridos y faltantes por comité.
+                          {recruitmentPopulationDescription}
                         </p>
                       </div>
                     </div>
@@ -2198,17 +1908,19 @@ export default function ReportsPage() {
                                 {rec.committeeName}
                               </span>
                               <Badge variant="outline" className={`text-[10px] font-bold ${rec.missingShifts === 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
-                                {rec.missingShifts === 0 ? 'Completado' : `Faltan ${rec.missingShifts} turnos`}
+                                {rec.missingShifts === 0
+                                  ? 'Meta cubierta'
+                                  : `Faltan ${rec.missingShifts} ${rec.missingShifts === 1 ? 'cupo' : 'cupos'}`}
                               </Badge>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 my-3 pt-2 border-t border-white/5 text-xs font-inter">
                               <div className="bg-dark2/60 p-2.5 rounded-lg border border-white/5">
-                                <span className="text-[9px] text-text-dim uppercase font-bold block">Voluntarios</span>
+                                <span className="text-[9px] text-text-dim uppercase font-bold block">{recruitmentPopulationLabel}</span>
                                 <span className="text-base font-bold text-text">{rec.totalVolunteers}</span>
                               </div>
                               <div className="bg-dark2/60 p-2.5 rounded-lg border border-white/5">
-                                <span className="text-[9px] text-text-dim uppercase font-bold block">Faltan Turnos</span>
+                                <span className="text-[9px] text-text-dim uppercase font-bold block">Cupos faltantes</span>
                                 <span className={`text-base font-bold ${rec.missingShifts > 0 ? 'text-rose-400 font-extrabold' : 'text-emerald-400'}`}>
                                   {rec.missingShifts}
                                 </span>
@@ -2218,8 +1930,8 @@ export default function ReportsPage() {
 
                           <div className="space-y-1.5 pt-2 border-t border-white/5">
                             <div className="flex justify-between text-[11px] font-inter font-bold">
-                              <span className="text-text-dim">Cobertura de Turnos:</span>
-                              <span className="text-text">{rec.assignedShifts} / {rec.totalRequiredShifts} ({rec.coverageRate}%)</span>
+                              <span className="text-text-dim">Meta cubierta por turno:</span>
+                              <span className="text-text">{rec.coveredRequiredShifts} / {rec.totalRequiredShifts} ({rec.coverageRate}%)</span>
                             </div>
                             <div className="w-full bg-dark2 h-2 rounded-full overflow-hidden border border-white/5">
                               <div
@@ -2227,6 +1939,9 @@ export default function ReportsPage() {
                                 style={{ width: `${Math.min(100, rec.coverageRate)}%` }}
                               />
                             </div>
+                            <p className="text-[10px] font-inter font-bold text-text-dim text-right">
+                              {rec.assignedShifts} asignaciones totales
+                            </p>
                           </div>
                         </div>
                       ))}
@@ -2241,7 +1956,7 @@ export default function ReportsPage() {
                         Segmentación Demográfica por Edad
                       </h3>
                       <p className="text-xs text-text-dim mt-0.5 font-inter">
-                        Distribución de voluntarios registrados por rangos de edad.
+                        Distribución de {recruitmentPopulationLabel.toLocaleLowerCase('es')} por rangos de edad.
                       </p>
                     </div>
 

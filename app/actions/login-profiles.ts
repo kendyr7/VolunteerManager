@@ -1,7 +1,13 @@
 "use server";
 
 import { getAdminSupabase } from "@/lib/supabase/admin";
-import { consumeAuthRateLimit, getServerActionClientIp, rateLimitMinutes } from "@/lib/auth-rate-limit";
+import {
+  consumeAuthRateLimit,
+  getServerActionClientIp,
+  logAuthRateLimitBlock,
+  rateLimitMinutes,
+} from "@/lib/auth-rate-limit";
+import { AUTH_RATE_LIMITS, AUTH_RATE_LIMIT_WINDOW_SECONDS } from "@/lib/auth-rate-limit-policy";
 
 export type LoginProfile = {
   id: string;
@@ -20,13 +26,27 @@ export async function getLoginProfiles(phone: string): Promise<{ profiles?: Logi
 
   try {
     const ip = await getServerActionClientIp();
-    const limits = await Promise.all([
-      consumeAuthRateLimit({ scope: "login-lookup-ip", identifier: ip, limit: 20, windowSeconds: 900 }),
-      consumeAuthRateLimit({ scope: "login-lookup-phone", identifier: phone, limit: 10, windowSeconds: 900 }),
+    const [networkVolumeLimit, phoneLimit] = await Promise.all([
+      consumeAuthRateLimit({
+        scope: "login-lookup-volume-ip",
+        identifier: ip,
+        limit: AUTH_RATE_LIMITS.sharedNetworkVolume,
+        windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+      }),
+      consumeAuthRateLimit({
+        scope: "login-lookup-phone",
+        identifier: phone,
+        limit: AUTH_RATE_LIMITS.profileLookupsPerPhone,
+        windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+      }),
     ]);
-    const blocked = limits.filter(limit => !limit.allowed);
-    if (blocked.length) {
-      return { error: `Demasiadas consultas. Inténtalo en ${rateLimitMinutes(Math.max(...blocked.map(limit => limit.retryAfterSeconds)))} minutos.` };
+    if (!networkVolumeLimit.allowed) {
+      logAuthRateLimitBlock('login-lookup-volume-ip', networkVolumeLimit);
+      return { error: `Esta conexión tiene un volumen inusual de accesos. Inténtalo en ${rateLimitMinutes(networkVolumeLimit.retryAfterSeconds)} minutos.` };
+    }
+    if (!phoneLimit.allowed) {
+      logAuthRateLimitBlock('login-lookup-phone', phoneLimit);
+      return { error: `Demasiadas consultas para este teléfono. Inténtalo en ${rateLimitMinutes(phoneLimit.retryAfterSeconds)} minutos.` };
     }
 
     const supabase = await getAdminSupabase();
@@ -43,7 +63,22 @@ export async function getLoginProfiles(phone: string): Promise<{ profiles?: Logi
       ...(staff.data || []).map(person => ({ id: person.id, firstName: person.full_name || "Coordinador", lastName: "", committee: "", userType: "profile" as const })),
       ...(volunteers.data || []).map(person => ({ id: person.id, firstName: person.first_name || "Voluntario", lastName: person.last_name || "", committee: "", userType: "volunteer" as const })),
     ];
-    return profiles.length ? { profiles } : { error: "No encontramos una cuenta con ese teléfono. Revisa el número o contacta a tu coordinador." };
+    if (profiles.length) return { profiles };
+
+    // Unknown-number enumeration remains tightly constrained without making
+    // successful volunteers on the same venue network consume that budget.
+    const unknownPhoneLimit = await consumeAuthRateLimit({
+      scope: 'login-lookup-miss-ip',
+      identifier: ip,
+      limit: AUTH_RATE_LIMITS.unknownPhoneLookupsPerNetwork,
+      windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+    });
+    if (!unknownPhoneLimit.allowed) {
+      logAuthRateLimitBlock('login-lookup-miss-ip', unknownPhoneLimit);
+      return { error: `Demasiadas consultas desconocidas desde esta conexión. Inténtalo en ${rateLimitMinutes(unknownPhoneLimit.retryAfterSeconds)} minutos.` };
+    }
+
+    return { error: "No encontramos una cuenta con ese teléfono. Revisa el número o contacta a tu coordinador." };
   } catch {
     return { error: "No pudimos consultar tu perfil de forma segura. Inténtalo de nuevo." };
   }

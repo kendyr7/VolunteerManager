@@ -1,92 +1,16 @@
 'use server'
 
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllRows } from "@/lib/supabase-helpers";
+import { fetchAllRowsStrict } from "@/lib/supabase-helpers";
 import { requireCapability } from "@/lib/authorization";
 import { hasCapability } from "@/lib/role-permissions";
 import { getActiveEventDays, getAvailableShiftKeys, getOfficialShiftTime, getOperationalEventDays, isSimulationEventDay, isOperationalEventDay } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { getGuatemalaHourFloat, calculateSessionMinutes, inferShiftsForSession } from "@/lib/session-utils";
+import type { ReportItem, ReportsData } from "@/lib/reports/types";
 
-export interface ReportItem {
-  registrationId: string;
-  volunteerId: string;
-  volunteerName: string;
-  age?: number | null;
-  phone: string;
-  neighborhood: string;
-  stake: string;
-  committeeId: string;
-  committeeName: string;
-  date: string;
-  shiftNumber: number;
-  startTime: string;
-  endTime: string;
-  isExtended: boolean;
-  status: 'registered' | 'confirmed' | 'absent' | 'replaced';
-  durationMinutes: number;
-}
-
-export interface CommitteeAttendance {
-  committeeId: string;
-  committeeName: string;
-  assigned: number;
-  checkedIn: number;
-  absent: number;
-  required: number;  // sum of all shift requirements for this committee
-  attendanceRate: number;
-  coverageRate: number; // checked-in / required
-}
-
-export interface AttendanceSummary {
-  totalAssigned: number;
-  totalCheckedIn: number;
-  totalAbsent: number;
-  totalRequired: number;
-  attendanceRate: number;   // checkedIn / assigned
-  coverageRate: number;     // checkedIn / required
-  byCommittee: CommitteeAttendance[];
-  byShift: { shiftKey: string; assigned: number; checkedIn: number; required: number; rate: number }[];
-}
-
-export interface CommitteeRecruitment {
-  committeeId: string;
-  committeeName: string;
-  totalVolunteers: number;
-  totalRequiredShifts: number;
-  assignedShifts: number;
-  missingShifts: number;
-  coverageRate: number;
-}
-
-export interface AgeSegmentation {
-  range: string;
-  count: number;
-  percentage: number;
-}
-
-export interface DailyCoverage {
-  date: string;       // ISO date "2026-09-10"
-  dayLabel: string;   // Short label "Jue 10 Sep"
-  required: number;
-  assigned: number;
-  checkedIn: number;
-  missing: number;
-  coverageRate: number;
-  byShift: Record<string, { required: number; assigned: number; checkedIn: number; missing: number }>;
-}
-
-export interface ReportsData {
-  items: ReportItem[];
-  uniqueNeighborhoods: string[];
-  uniqueStakes: string[];
-  uniqueCommittees: { id: string; name: string }[];
-  attendanceSummary: AttendanceSummary;
-  recruitmentSummary: CommitteeRecruitment[];
-  ageSegmentation: AgeSegmentation[];
-  dailyCoverage: DailyCoverage[];
-}
+export type { ReportItem, ReportsData } from "@/lib/reports/types";
 
 interface ReportVolunteerRow {
   id: string;
@@ -209,28 +133,35 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
 
     // Fetch independent report datasets concurrently and request only the fields used below.
     const [volsData, commsData, shiftsData, sessionsData, reqsData] = await Promise.all([
-      fetchAllRows<ReportVolunteerRow>(
+      fetchAllRowsStrict<ReportVolunteerRow>(
         supabase,
         'volunteers',
         'id, first_name, last_name, age, phone, neighborhood, stake, status, committee_id, committees(id, name, status)',
-        query => query.or('status.is.null,status.neq.archived')
+        query => query.or('status.is.null,status.neq.archived').order('id')
       ),
-      fetchAllRows<ReportCommitteeRow>(
+      fetchAllRowsStrict<ReportCommitteeRow>(
         supabase,
         'committees',
         'id, name, status',
-        query => query.or('status.is.null,status.neq.archived')
+        query => query.or('status.is.null,status.neq.archived').order('id')
       ),
-      fetchAllRows<ReportShiftRow>(supabase, 'shifts', 'id, volunteer_id, day_key, shift_key'),
-      fetchAllRows<ReportSessionRow>(
+      fetchAllRowsStrict<ReportShiftRow>(
+        supabase,
+        'shifts',
+        'id, volunteer_id, day_key, shift_key',
+        query => query.order('id')
+      ),
+      fetchAllRowsStrict<ReportSessionRow>(
         supabase,
         'attendance_sessions',
-        'id, volunteer_id, day_key, started_at, ended_at, status'
+        'id, volunteer_id, day_key, started_at, ended_at, status',
+        query => query.order('id')
       ),
-      fetchAllRows<ReportRequirementRow>(
+      fetchAllRowsStrict<ReportRequirementRow>(
         supabase,
         'committee_shift_requirements',
-        'committee_id, shift_key, required'
+        'committee_id, shift_key, required',
+        query => query.order('id')
       ),
     ]);
 
@@ -331,17 +262,18 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
       }
     });
 
-    // Build requirements map: committeeId -> shiftKey -> required
-    const reqsMap: Record<string, Record<string, number>> = {};
-    (reqsData || []).forEach(r => {
-      if (!reqsMap[r.committee_id]) reqsMap[r.committee_id] = {};
-      reqsMap[r.committee_id][r.shift_key] = r.required;
+    // Requirements are configured by committee and shift. They are expanded into
+    // explicit committee/date/shift rows below; absent configuration means zero,
+    // never an invented default requirement.
+    const configuredRequirements = new Map<string, number>();
+    (reqsData || []).forEach((requirement) => {
+      configuredRequirements.set(
+        `${requirement.committee_id}|${requirement.shift_key}`,
+        Math.max(0, Number(requirement.required || 0)),
+      );
     });
-
-    // Default requirements if table is empty
-    const DEFAULT_REQ = 4;
-    const getRequired = (commId: string, shiftKey: string) =>
-      reqsMap[commId]?.[shiftKey] ?? DEFAULT_REQ;
+    const getRequired = (committeeId: string, shiftKey: string) =>
+      configuredRequirements.get(`${committeeId}|${shiftKey}`) || 0;
 
     // 5. Process data in memory
     const items: ReportItem[] = [];
@@ -357,6 +289,32 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
         }
         committeesMap.set(c.id, c.name);
       }
+    });
+
+    const reportVolunteers = (volsData || [])
+      .filter((volunteer) => (
+        (volunteer.status || '').toLowerCase() !== 'archived'
+        && (volunteer.committees?.status || '').toLowerCase() !== 'archived'
+        && (canSeeGlobalReports || volunteer.committee_id === userCommitteeId)
+      ))
+      .map((volunteer) => {
+        const committeeId = volunteer.committees?.id || volunteer.committee_id || 'sin-comite';
+        const committeeName = volunteer.committees?.name || 'Sin comité';
+        committeesMap.set(committeeId, committeeName);
+        return {
+          id: volunteer.id,
+          name: `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || 'Voluntario',
+          age: volunteer.age == null || Number.isNaN(Number(volunteer.age)) ? null : Number(volunteer.age),
+          phone: volunteer.phone || '',
+          neighborhood: volunteer.neighborhood || 'Sin barrio',
+          stake: volunteer.stake || 'Sin estaca',
+          committeeId,
+          committeeName,
+        };
+      });
+    reportVolunteers.forEach((volunteer) => {
+      neighborhoodsSet.add(volunteer.neighborhood);
+      stakesSet.add(volunteer.stake);
     });
     
     const now = new Date();
@@ -548,244 +506,39 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
       }
     }); */
 
-    const uniqueNeighborhoods = Array.from(neighborhoodsSet).sort();
-    const uniqueStakes = Array.from(stakesSet).sort();
-    const uniqueCommittees = Array.from(committeesMap.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-
-    // Calculate requirements accurately per unique (day_key, shift_key) slot
-    const activeDayShiftSlots = new Set<string>();
-    reportShifts.forEach(s => {
-      if (s.day_key && s.shift_key) {
-        activeDayShiftSlots.add(`${s.day_key}_${s.shift_key}`);
-      }
-    });
-
-    const commAttMap: Record<string, CommitteeAttendance> = {};
-    const shiftAttMap: Record<string, { assigned: number; checkedIn: number; required: number }> = {};
-    for (const sk of ['T1', 'T2', 'T3', 'T4']) {
-      shiftAttMap[sk] = { assigned: 0, checkedIn: 0, required: 0 };
-    }
-
-    // Initialize committee required totals based on unique slots
-    uniqueCommittees.forEach(c => {
-      let commReqTotal = 0;
-      activeDayShiftSlots.forEach(slot => {
-        const sk = slot.split('_')[1];
-        commReqTotal += getRequired(c.id, sk);
-      });
-
-      commAttMap[c.id] = {
-        committeeId: c.id,
-        committeeName: c.name,
-        assigned: 0,
-        checkedIn: 0,
-        absent: 0,
-        required: commReqTotal,
-        attendanceRate: 0,
-        coverageRate: 0,
-      };
-    });
-
-    // Calculate shift requirements per shift key across committees
-    activeDayShiftSlots.forEach(slot => {
-      const sk = slot.split('_')[1];
-      if (shiftAttMap[sk]) {
-        uniqueCommittees.forEach(c => {
-          shiftAttMap[sk].required += getRequired(c.id, sk);
-        });
-      }
-    });
-
-    items.forEach(item => {
-      const cId = item.committeeId;
-      const sk = `T${item.shiftNumber}`;
-
-      if (!commAttMap[cId]) {
-        commAttMap[cId] = {
-          committeeId: cId,
-          committeeName: item.committeeName,
-          assigned: 0, checkedIn: 0, absent: 0, required: 0,
-          attendanceRate: 0, coverageRate: 0,
-        };
-      }
-
-      commAttMap[cId].assigned++;
-      if (shiftAttMap[sk]) shiftAttMap[sk].assigned++;
-
-      if (item.status === 'confirmed') {
-        commAttMap[cId].checkedIn++;
-        if (shiftAttMap[sk]) shiftAttMap[sk].checkedIn++;
-      } else if (item.status === 'absent') {
-        commAttMap[cId].absent++;
-      }
-    });
-
-    const byCommittee: CommitteeAttendance[] = Object.values(commAttMap).map(c => ({
-      ...c,
-      attendanceRate: c.assigned > 0 ? Math.round((c.checkedIn / c.assigned) * 100) : 0,
-      coverageRate: c.required > 0 ? Math.round((c.checkedIn / c.required) * 100) : 0,
-    }));
-
-    const byShift = ['T1', 'T2', 'T3', 'T4'].map(sk => ({
-      shiftKey: sk,
-      ...shiftAttMap[sk],
-      rate: shiftAttMap[sk].assigned > 0
-        ? Math.round((shiftAttMap[sk].checkedIn / shiftAttMap[sk].assigned) * 100) : 0,
-    }));
-
-    const totalCheckedIn = items.filter(i => i.status === 'confirmed').length;
-    const totalAbsent = items.filter(i => i.status === 'absent').length;
-    const totalAssigned = items.length;
-    const totalRequired = Object.values(commAttMap).reduce((s, c) => s + c.required, 0);
-
-    const attendanceSummary: AttendanceSummary = {
-      totalAssigned,
-      totalCheckedIn,
-      totalAbsent,
-      totalRequired,
-      attendanceRate: totalAssigned > 0 ? Math.round((totalCheckedIn / totalAssigned) * 100) : 0,
-      coverageRate: totalRequired > 0 ? Math.round((totalCheckedIn / totalRequired) * 100) : 0,
-      byCommittee,
-      byShift,
-    };
-
-    // --- 1. RECRUITMENT BY COMMITTEE (Voluntarios por Comité y Faltantes) ---
-    const recruitmentSummary: CommitteeRecruitment[] = uniqueCommittees.map(c => {
-      // Filter volunteers belonging to this committee
-      const committeeVols = (volsData || []).filter((v: any) => {
-        const commName = v.committees?.name || 'Sin comité';
-        const commId = v.committees?.id || 'sin-comite';
-        return commId === c.id || commName.trim().toLowerCase() === c.name.trim().toLowerCase();
-      });
-
-      const totalVolunteers = committeeVols.length;
-      const commAtt = commAttMap[c.id];
-      const totalRequiredShifts = commAtt ? commAtt.required : 0;
-      const assignedShifts = commAtt ? commAtt.assigned : 0;
-      const missingShifts = Math.max(0, totalRequiredShifts - assignedShifts);
-      const coverageRate = totalRequiredShifts > 0 ? Math.round((assignedShifts / totalRequiredShifts) * 100) : 0;
-
+    const uniqueNeighborhoods = Array.from(neighborhoodsSet).sort((left, right) => left.localeCompare(right, 'es'));
+    const uniqueStakes = Array.from(stakesSet).sort((left, right) => left.localeCompare(right, 'es'));
+    const uniqueCommittees = Array.from(committeesMap.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((left, right) => left.name.localeCompare(right.name, 'es', { sensitivity: 'base' }));
+    const eventDays = getActiveEventDays({ includeSimulation }).map((date) => {
+      const dayKey = format(date, 'EEE d', { locale: es }).toLowerCase();
+      const dayLabel = format(date, 'EEE d MMM', { locale: es });
       return {
-        committeeId: c.id,
-        committeeName: c.name,
-        totalVolunteers,
-        totalRequiredShifts,
-        assignedShifts,
-        missingShifts,
-        coverageRate,
-      };
-    });
-
-    // --- 2. AGE SEGMENTATION (Distribución Demográfica por Edad) ---
-    const ageCounts: Record<string, number> = {
-      '< 18': 0,
-      '18 - 25': 0,
-      '26 - 35': 0,
-      '36 - 50': 0,
-      '50+': 0,
-      'Sin edad': 0,
-    };
-
-    const relevantVols = (volsData || []).filter((v: any) => {
-      return canSeeGlobalReports || v.committee_id === userCommitteeId;
-    });
-
-    relevantVols.forEach((v: any) => {
-      const ageNum = parseInt(v.age);
-      if (isNaN(ageNum) || ageNum <= 0) {
-        ageCounts['Sin edad']++;
-      } else if (ageNum < 18) {
-        ageCounts['< 18']++;
-      } else if (ageNum <= 25) {
-        ageCounts['18 - 25']++;
-      } else if (ageNum <= 35) {
-        ageCounts['26 - 35']++;
-      } else if (ageNum <= 50) {
-        ageCounts['36 - 50']++;
-      } else {
-        ageCounts['50+']++;
-      }
-    });
-
-    const totalVolsCount = relevantVols.length;
-    const ageSegmentation: AgeSegmentation[] = Object.entries(ageCounts).map(([range, count]) => ({
-      range,
-      count,
-      percentage: totalVolsCount > 0 ? Math.round((count / totalVolsCount) * 100) : 0,
-    }));
-
-    // --- 3. DAILY COVERAGE BREAKDOWN (Informe de Cobertura por Día) ---
-    const dailyCoverageMap: Record<string, DailyCoverage> = {};
-
-    for (const dateObj of getActiveEventDays({ includeSimulation })) {
-      const isoDate = format(dateObj, 'yyyy-MM-dd');
-      const dayLabel = format(dateObj, 'EEE d MMM', { locale: es });
-      const dayKeyStr = format(dateObj, 'EEE d', { locale: es }).toLowerCase();
-
-      let dayRequired = 0;
-      const byShift: Record<string, { required: number; assigned: number; checkedIn: number; missing: number }> = {
-        T1: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
-        T2: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
-        T3: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
-        T4: { required: 0, assigned: 0, checkedIn: 0, missing: 0 },
-      };
-
-      const availableShiftKeys = getAvailableShiftKeys(dayKeyStr);
-
-      uniqueCommittees.forEach(c => {
-        availableShiftKeys.forEach(sk => {
-          const req = getRequired(c.id, sk);
-          byShift[sk].required += req;
-          dayRequired += req;
-        });
-      });
-
-      // Filter shifts for this date
-      const dayShifts = items.filter(i => i.date === isoDate);
-
-      let dayAssigned = 0;
-      let dayCheckedIn = 0;
-
-      dayShifts.forEach(i => {
-        const sk = `T${i.shiftNumber}`;
-        dayAssigned++;
-        if (byShift[sk]) byShift[sk].assigned++;
-
-        if (i.status === 'confirmed') {
-          dayCheckedIn++;
-          if (byShift[sk]) byShift[sk].checkedIn++;
-        }
-      });
-
-      availableShiftKeys.forEach(sk => {
-        byShift[sk].missing = Math.max(0, byShift[sk].required - byShift[sk].assigned);
-      });
-
-      dailyCoverageMap[isoDate] = {
-        date: isoDate,
+        date: format(date, 'yyyy-MM-dd'),
         dayLabel: dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1),
-        required: dayRequired,
-        assigned: dayAssigned,
-        checkedIn: dayCheckedIn,
-        missing: Math.max(0, dayRequired - dayAssigned),
-        coverageRate: dayRequired > 0 ? Math.round((dayAssigned / dayRequired) * 100) : 0,
-        byShift,
+        shiftKeys: getAvailableShiftKeys(dayKey),
       };
-    }
-
-    const dailyCoverage = Object.values(dailyCoverageMap);
+    });
+    const requirements = eventDays.flatMap((day) => uniqueCommittees.flatMap((committee) => (
+      day.shiftKeys.map((shiftKey) => ({
+        committeeId: committee.id,
+        date: day.date,
+        shiftKey,
+        required: getRequired(committee.id, shiftKey),
+      }))
+    )));
 
     return {
       data: {
         items,
+        volunteers: reportVolunteers,
+        requirements,
+        eventDays,
         uniqueNeighborhoods,
         uniqueStakes,
         uniqueCommittees,
-        attendanceSummary,
-        recruitmentSummary,
-        ageSegmentation,
-        dailyCoverage,
-      }
+      },
     };
   } catch (err: any) {
     console.error("Critical error in getReportsData action:", err);

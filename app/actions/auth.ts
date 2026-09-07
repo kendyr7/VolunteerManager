@@ -6,8 +6,10 @@ import {
   clearAuthRateLimit,
   consumeAuthRateLimit,
   getServerActionClientIp,
+  logAuthRateLimitBlock,
   rateLimitMinutes,
 } from '@/lib/auth-rate-limit'
+import { AUTH_RATE_LIMITS, AUTH_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/auth-rate-limit-policy'
 import { getAdminSupabase } from '@/lib/supabase/admin'
 import { formatE164 } from '@/lib/whatsapp'
 import { revokePushDevice } from '@/lib/push/device'
@@ -32,9 +34,6 @@ export type AuthState = {
     userType: 'profile' | 'volunteer';
   }>;
 }
-
-const PIN_FAILED_ATTEMPT_LIMIT = 4;
-const IP_LOGIN_ATTEMPT_LIMIT = 40;
 
 type LoginCandidate = {
   id: string;
@@ -86,24 +85,35 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     // One shared budget for security checks + credential lookup. An unavailable
     // service must fail closed, not retry invisibly for another seven seconds.
     const signal = AbortSignal.timeout(4000);
+    let clientIp = '';
     try {
-      const [phoneLimit, ipLimit] = await timing.measure('rateLimit', async () => {
-        const clientIp = await getServerActionClientIp();
+      const [phoneLimit, networkVolumeLimit] = await timing.measure('rateLimit', async () => {
+        clientIp = await getServerActionClientIp();
         return Promise.all([
-          consumeAuthRateLimit({ scope: 'login-phone', identifier: phoneRateLimitKey, limit: PIN_FAILED_ATTEMPT_LIMIT, windowSeconds: 900, signal }),
-          consumeAuthRateLimit({ scope: 'login-ip', identifier: clientIp, limit: IP_LOGIN_ATTEMPT_LIMIT, windowSeconds: 900, signal }),
+          consumeAuthRateLimit({
+            scope: 'login-phone', identifier: phoneRateLimitKey,
+            limit: AUTH_RATE_LIMITS.pinFailuresPerPhone,
+            windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS, signal,
+          }),
+          consumeAuthRateLimit({
+            scope: 'login-volume-ip', identifier: clientIp,
+            limit: AUTH_RATE_LIMITS.sharedNetworkVolume,
+            windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS, signal,
+          }),
         ]);
       });
       if (!phoneLimit.allowed) {
         outcome = 'rate_limited';
+        logAuthRateLimitBlock('login-phone', phoneLimit);
         return {
-          error: `Ya utilizaste ${PIN_FAILED_ATTEMPT_LIMIT} intentos de PIN. Inténtalo de nuevo en ${rateLimitMinutes(phoneLimit.retryAfterSeconds)} minutos.`,
+          error: `Ya utilizaste ${AUTH_RATE_LIMITS.pinFailuresPerPhone} intentos de PIN. Inténtalo de nuevo en ${rateLimitMinutes(phoneLimit.retryAfterSeconds)} minutos.`,
         };
       }
-      if (!ipLimit.allowed) {
+      if (!networkVolumeLimit.allowed) {
         outcome = 'rate_limited';
+        logAuthRateLimitBlock('login-volume-ip', networkVolumeLimit);
         return {
-          error: `Se alcanzó temporalmente el límite de accesos desde esta conexión. Inténtalo de nuevo en ${rateLimitMinutes(ipLimit.retryAfterSeconds)} minutos.`,
+          error: `Esta conexión tiene un volumen inusual de accesos. Inténtalo de nuevo en ${rateLimitMinutes(networkVolumeLimit.retryAfterSeconds)} minutos.`,
         };
       }
     } catch {
@@ -157,6 +167,25 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
     ];
 
     if (candidates.length === 0) {
+      try {
+        const networkFailureLimit = await timing.measure('failureLimit', () => consumeAuthRateLimit({
+          scope: 'login-ip',
+          identifier: clientIp,
+          limit: AUTH_RATE_LIMITS.pinFailuresPerNetwork,
+          windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+          signal: AbortSignal.timeout(4000),
+        }));
+        if (!networkFailureLimit.allowed) {
+          outcome = 'rate_limited';
+          logAuthRateLimitBlock('login-ip', networkFailureLimit);
+          return {
+            error: `Se alcanzó temporalmente el límite de PIN incorrectos desde esta conexión. Inténtalo de nuevo en ${rateLimitMinutes(networkFailureLimit.retryAfterSeconds)} minutos.`,
+          };
+        }
+      } catch {
+        outcome = 'security_unavailable';
+        return { error: 'No pudimos verificar el acceso por un problema de conexión. Inténtalo nuevamente.' };
+      }
       outcome = 'invalid_pin';
       return { error: 'El teléfono o PIN es incorrecto.' };
     }

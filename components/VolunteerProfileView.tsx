@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Dialog } from '@base-ui/react/dialog';
 import { Popover } from '@base-ui/react/popover';
 import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, isSimulationEventDay } from "@/lib/dates";
@@ -14,6 +15,7 @@ import {
   canEditVolunteerPersonalInfo,
   canQrCheckin,
   canRegisterMissingAttendance,
+  getAuthorizationSnapshotCache,
   getNormalizedRole,
 } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -47,6 +49,9 @@ import { AdminCreateSessionModal } from "./AdminCreateSessionModal";
 import type { ShiftAreaDetails } from "@/lib/shift-area";
 import { ShiftChangeReasonSelector } from "@/components/ShiftChangeReasonSelector";
 import { getShiftAttendanceState, processShiftsData } from "@/lib/coordinator-data";
+import { ScheduleCaptureCard, DayScheduleItem } from "@/components/ScheduleCaptureCard";
+import { downloadScheduleImage } from "@/lib/utils/capture-schedule";
+import { Toast } from "@/components/ui/toast";
 
 export interface VolunteerProfileData {
   id: string;
@@ -228,6 +233,64 @@ export function VolunteerProfileView({
   const mayCorrectAttendance = canCorrectAttendanceTimes();
   const mayRegisterMissingAttendance = canRegisterMissingAttendance();
   const mayEditPersonalInfo = canEditVolunteerPersonalInfo(volunteer.committee_id);
+
+  const authSnapshot = getAuthorizationSnapshotCache();
+  const canCaptureSchedule = mode === 'coordinator' && (
+    authSnapshot.role === 'Admin' ||
+    authSnapshot.role === 'Editor' ||
+    (typeof window !== 'undefined' && ['Admin', 'Editor', 'admin', 'coordinator'].includes(localStorage.getItem('mock_role') || ''))
+  );
+  const captureRef = useRef<HTMLDivElement>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [captureToast, setCaptureToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    return typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : true;
+  });
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const syncTheme = () => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    };
+    syncTheme();
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('theme-preference-changed', syncTheme);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('theme-preference-changed', syncTheme);
+    };
+  }, []);
+
+  const handleCaptureSchedule = async () => {
+    if (!captureRef.current || isCapturing) return;
+    setIsCapturing(true);
+    try {
+      const currentIsDark = typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : isDarkMode;
+      const volunteerDisplayName = volunteer.name || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || 'Voluntario';
+      const res = await downloadScheduleImage(captureRef.current, volunteerDisplayName, currentIsDark);
+      if (res.success) {
+        setCaptureToast({
+          message: `Captura del cronograma de ${volunteerDisplayName} descargada correctamente.`,
+          type: 'success',
+        });
+      } else {
+        setCaptureToast({
+          message: res.error || 'No se pudo generar la imagen del cronograma.',
+          type: 'error',
+        });
+      }
+    } catch (e: any) {
+      console.error("Error al capturar cronograma:", e);
+      setCaptureToast({
+        message: 'Error al generar la imagen del cronograma.',
+        type: 'error',
+      });
+    } finally {
+      setIsCapturing(false);
+    }
+  };
 
   const [showLegend, setShowLegend] = useState(false);
   const [activeTab, setActiveTab] = useState<'schedule' | 'requests' | 'audit'>('schedule');
@@ -892,6 +955,63 @@ export function VolunteerProfileView({
     };
   }, [profileMetrics]);
 
+  const captureDays: DayScheduleItem[] = useMemo(() => {
+    const bgColors = [
+      '#10a562', '#4aa9df', '#f1c130', '#d54134',
+      '#981e32', '#2c44c2', '#f1c130', '#ed1b24'
+    ];
+
+    return EVENT_DAYS.map((d, index) => {
+      const dayKey = d.key;
+      const assignedListFromProps = shiftsByDay[dayKey] || [];
+      const assignedListFromDb = dbShiftRecords.filter(r => r.day_key === dayKey).map(r => r.shift_key);
+      const assignedList = externalShiftsByDay
+        ? assignedListFromProps
+        : Array.from(new Set([...assignedListFromProps, ...assignedListFromDb]));
+
+      const assignedAreas = assignedList.flatMap((shiftKey) => {
+        const area = shiftAreasBySlot?.[`${dayKey}:${shiftKey}`] || null;
+        return area ? [{ shiftKey, area }] : [];
+      });
+
+      const daySessions = profileMetrics.sessionsList.filter((session) => (
+        session.dayKey.toLowerCase().trim() === dayKey.toLowerCase().trim()
+      ));
+
+      const shifts = getAvailableShiftKeys(dayKey).map((t) => {
+        const active = assignedList.includes(t);
+        const inCheck = isShiftCheckedIn(dayKey, t);
+        const outCheck = isShiftCheckedOut(dayKey, t);
+        return {
+          shiftKey: t,
+          isActive: active,
+          isCheckedIn: inCheck,
+          isCheckedOut: outCheck,
+        };
+      });
+
+      return {
+        dayKey,
+        dayLabel: d.label.substring(0, 3),
+        dayNum: d.dateNum,
+        isSimulation: isSimulationEventDay(dayKey),
+        colorBg: bgColors[index % bgColors.length],
+        shifts,
+        assignedAreas,
+        daySessions,
+      };
+    });
+  }, [
+    EVENT_DAYS,
+    shiftsByDay,
+    dbShiftRecords,
+    externalShiftsByDay,
+    shiftAreasBySlot,
+    profileMetrics.sessionsList,
+    isShiftCheckedIn,
+    isShiftCheckedOut,
+  ]);
+
   return (
     <div className="flex flex-col w-full max-w-full overflow-x-hidden relative">
       {/* Mensaje de auditoría */}
@@ -1249,37 +1369,63 @@ export function VolunteerProfileView({
               </div>
             </div>
 
-            {canEditShifts && (onStartEditShifts || !externalOnToggleShift) && (
-              <div>
-                {(isEditingShifts || localEditingShifts) ? (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      if (onSaveShifts) onSaveShifts();
-                      setLocalEditingShifts(false);
-                    }}
-                    disabled={isPendingSave}
-                    className="h-8 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-[14px]">save</span>
-                    <span>{isPendingSave ? 'Guardando...' : 'Guardar'}</span>
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      if (onStartEditShifts) onStartEditShifts();
-                      setLocalEditingShifts(true);
-                    }}
-                    className="h-8 px-2.5 text-xs font-bold text-[#4d7cfe] hover:bg-[#4d7cfe]/10 rounded-full transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-[14px]">edit</span>
-                    <span>Editar Turnos</span>
-                  </Button>
-                )}
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {canCaptureSchedule && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  type="button"
+                  onClick={handleCaptureSchedule}
+                  disabled={isCapturing}
+                  className="h-8 px-2.5 text-xs font-bold text-text-dim hover:text-text hover:bg-dark3 border-border rounded-full transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  title="Descargar captura del cronograma completo en alta calidad"
+                >
+                  {isCapturing ? (
+                    <>
+                      <span className="material-symbols-outlined text-[14px] animate-spin text-[#4d7cfe]">progress_activity</span>
+                      <span>Generando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">photo_camera</span>
+                      <span>Capturar</span>
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {canEditShifts && (onStartEditShifts || !externalOnToggleShift) && (
+                <div>
+                  {(isEditingShifts || localEditingShifts) ? (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (onSaveShifts) onSaveShifts();
+                        setLocalEditingShifts(false);
+                      }}
+                      disabled={isPendingSave}
+                      className="h-8 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">save</span>
+                      <span>{isPendingSave ? 'Guardando...' : 'Guardar'}</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        if (onStartEditShifts) onStartEditShifts();
+                        setLocalEditingShifts(true);
+                      }}
+                      className="h-8 px-2.5 text-xs font-bold text-[#4d7cfe] hover:bg-[#4d7cfe]/10 rounded-full transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">edit</span>
+                      <span>Editar Turnos</span>
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {savedNotice && (
@@ -1927,6 +2073,39 @@ export function VolunteerProfileView({
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* Toast de confirmación de captura */}
+      <Toast
+        isVisible={!!captureToast}
+        message={captureToast?.message || ''}
+        type={captureToast?.type || 'success'}
+        onClose={() => setCaptureToast(null)}
+      />
+
+      {/* Contenedor oculto fuera de pantalla montado en document.body para evitar cualquier restricción de transform del drawer */}
+      {canCaptureSchedule && typeof document !== 'undefined' && createPortal(
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            left: '-9999px',
+            top: 0,
+            width: '640px',
+            pointerEvents: 'none',
+            zIndex: -999,
+          }}
+        >
+          <ScheduleCaptureCard
+            ref={captureRef}
+            volunteerName={volunteer.name || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || 'Voluntario'}
+            committeeName={volunteer.committee}
+            days={captureDays}
+            formatSessionClock={formatSessionClock}
+            isDark={isDarkMode}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

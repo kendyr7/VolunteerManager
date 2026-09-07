@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
 import { cookies } from 'next/headers';
 import { getAdminSupabase } from '@/lib/supabase/admin';
-import { consumeAuthRateLimit, getClientIp } from '@/lib/auth-rate-limit';
+import { consumeAuthRateLimit, getClientIp, logAuthRateLimitBlock } from '@/lib/auth-rate-limit';
+import { AUTH_RATE_LIMITS, AUTH_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/auth-rate-limit-policy';
 import { formatE164 } from '@/lib/whatsapp';
 
 export async function POST(request: Request) {
@@ -16,26 +17,29 @@ export async function POST(request: Request) {
 
     const formattedPhone = formatE164(rawPhoneInput);
     const rawDigits = rawPhoneInput.replace(/\D/g, '');
-    const [ipLimit, phoneLimit] = await Promise.all([
+    const clientIp = getClientIp(request.headers);
+    const [networkVolumeLimit, phoneLimit] = await Promise.all([
       consumeAuthRateLimit({
-        scope: 'webauthn-options-ip',
-        identifier: getClientIp(request.headers),
-        limit: 30,
-        windowSeconds: 15 * 60,
+        scope: 'webauthn-options-volume-ip',
+        identifier: clientIp,
+        limit: AUTH_RATE_LIMITS.sharedNetworkVolume,
+        windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
       }),
       consumeAuthRateLimit({
         scope: 'webauthn-options-phone',
         identifier: formattedPhone || rawDigits || rawPhoneInput,
-        limit: 10,
-        windowSeconds: 15 * 60,
+        limit: AUTH_RATE_LIMITS.passkeyOptionsPerPhone,
+        windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
       }),
     ]);
 
-    if (!ipLimit.allowed || !phoneLimit.allowed) {
-      const retryAfter = Math.max(ipLimit.retryAfterSeconds, phoneLimit.retryAfterSeconds);
+    if (!networkVolumeLimit.allowed || !phoneLimit.allowed) {
+      const blockedScope = !networkVolumeLimit.allowed ? 'webauthn-options-volume-ip' : 'webauthn-options-phone';
+      const blockedLimit = !networkVolumeLimit.allowed ? networkVolumeLimit : phoneLimit;
+      logAuthRateLimitBlock(blockedScope, blockedLimit);
       return NextResponse.json(
         { error: 'Demasiados intentos. Inténtalo más tarde.' },
-        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+        { status: 429, headers: { 'Retry-After': String(blockedLimit.retryAfterSeconds) } }
       );
     }
 
@@ -71,6 +75,19 @@ export async function POST(request: Request) {
       : matchedUsers;
 
     if (candidateUsers.length === 0) {
+      const unknownPhoneLimit = await consumeAuthRateLimit({
+        scope: 'webauthn-options-miss-ip',
+        identifier: clientIp,
+        limit: AUTH_RATE_LIMITS.unknownPhoneLookupsPerNetwork,
+        windowSeconds: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+      });
+      if (!unknownPhoneLimit.allowed) {
+        logAuthRateLimitBlock('webauthn-options-miss-ip', unknownPhoneLimit);
+        return NextResponse.json(
+          { error: 'Demasiados intentos. Inténtalo más tarde.' },
+          { status: 429, headers: { 'Retry-After': String(unknownPhoneLimit.retryAfterSeconds) } }
+        );
+      }
       return NextResponse.json({ error: 'Usuario no encontrado con ese teléfono' }, { status: 404 });
     }
 

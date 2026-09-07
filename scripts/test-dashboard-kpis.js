@@ -18,7 +18,9 @@ let authorization = technology;
 function data(profile = authorization, target = 'todos', coverage = 84) {
   return { authorizationKey: scope.getDashboardAuthorizationKey(profile),
     canSeeGlobal: roles.hasCapability(profile, 'view_global_reports'), effectiveCommitteeScope: target,
-    heatmapMatrix: [], volsPerDay: {}, shiftsPerDay: {}, totalVolsWithShifts: 0,
+    heatmapMatrix: [{ day: 'Lun 7', shortLabel: 'Lun', dayLabel: '7', shifts:
+      ['T1', 'T2', 'T3', 'T4'].map(shift => ({ shift, required: 10, assigned: 8, coverage: 0.8 })) }],
+    volsPerDay: {}, shiftsPerDay: {}, totalVolsWithShifts: 0,
     committeeStatus: [], criticalShifts: [], globalStats: {
       totalRecruited: 1, targetVolunteers: 100, recruitmentPercentage: 1,
       globalCoveragePercentage: coverage, criticalAlerts: 0, attendanceRate: 0,
@@ -73,7 +75,19 @@ const react = {
 const listeners = new Map(), timers = new Map();
 let timerId = 0;
 const storage = { getItem: () => null, setItem() {} };
+const animationFrames = new Map();
+const mainScroll = { scrollTop: 0, scrollTo({ top }) { this.scrollTop = top; } };
+const heatmapScroll = { scrollLeft: 0, scrollTo({ left }) { this.scrollLeft = left; } };
+const historyEntries = [{ __NA: true, tree: 'next-router-tree' }];
+let historyIndex = 0;
+let destination = '';
 const windowMock = { localStorage: storage, location: { search: '' }, queueMicrotask,
+  history: {
+    get state() { return historyEntries[historyIndex]; },
+    replaceState(value) { historyEntries[historyIndex] = value; },
+  },
+  requestAnimationFrame(fn) { animationFrames.set(++timerId, fn); return timerId; },
+  cancelAnimationFrame(id) { animationFrames.delete(id); },
   addEventListener(name, fn) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(fn); },
   removeEventListener(name, fn) { listeners.get(name)?.delete(fn); },
   setTimeout(fn) { timers.set(++timerId, fn); return timerId; }, clearTimeout(id) { timers.delete(id); },
@@ -87,7 +101,10 @@ const components = new Proxy({}, { get: (_, name) => String(name) });
 const moduleMocks = {
   react,
   'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'fragment' },
-  'next/navigation': { useRouter: () => ({}), useSearchParams: () => ({ get: () => null }) },
+  'next/navigation': { useRouter: () => ({ push(url) {
+    destination = url;
+    historyEntries.splice(++historyIndex, Infinity, { __NA: true });
+  } }), useSearchParams: () => ({ get: () => null }) },
   'next/link': { default: 'a' },
   'framer-motion': { motion: components, AnimatePresence: 'presence', useReducedMotion: () => true },
   '@/lib/supabase/client': { createClient: () => supabase },
@@ -113,12 +130,17 @@ vm.runInNewContext(compiled, {
     if (name.startsWith('@/components/')) return components;
     throw new Error(`Unexpected dependency: ${name}`);
   }, window: windowMock, localStorage: storage,
-  document: { visibilityState: 'visible' }, console, URLSearchParams,
+  document: { visibilityState: 'visible', querySelector: () => mainScroll,
+    body: { style: { overflow: '' } }, documentElement: {} }, console, URLSearchParams,
   setInterval: windowMock.setInterval, clearInterval: windowMock.clearInterval,
 });
 async function settle() {
   for (let n = 0; n < 20; n++) {
-    if (dirty) { dirty = false; cursor = 0; tree = exportsObject.default(); }
+    if (dirty) {
+      dirty = false; cursor = 0; tree = exportsObject.default();
+      const heatmap = allNodes(tree).find(node => node.props?.ref && node.props.className === 'overflow-x-auto w-full');
+      if (heatmap) heatmap.props.ref.current = heatmapScroll;
+    }
     const pending = effects; effects = []; pending.forEach(fn => fn());
     await Promise.resolve();
     if (n >= 10 && !dirty && !effects.length) return;
@@ -137,6 +159,14 @@ function allNodes(node) {
   return [node, ...allNodes(node.props?.children)];
 }
 function hasCoverage(value) { return textOf(tree).includes(`${value} %`); }
+function unmount() {
+  hooks.forEach(hook => hook?.cleanup?.());
+  hooks = []; effects = []; dirty = true;
+}
+function paint() {
+  const frames = [...animationFrames.values()]; animationFrames.clear();
+  frames.forEach(fn => fn());
+}
 async function run() {
   await settle();
   assert(hasCoverage(84), 'prepared server percentage is immediately visible');
@@ -215,5 +245,49 @@ async function run() {
   console.log('PASS: rapid filter changes ignore out-of-order responses');
   console.log('PASS: filters preserve the dashboard and matching analysis with temporary feedback; retries recover');
   console.log('PASS: permission changes clear global KPIs and load the authorized committee');
+
+  // Exercise leaving via a real heatmap cell and returning after an unmount,
+  // including delayed data, repeated visits, and an unrelated fresh visit.
+  unmount(); authorization = technology; await settle();
+  selectCommittee('Committee A'); await settle();
+  requests.at(-1).resolve({ data: data(technology, 'Committee A'), insight: null }); await settle();
+  for (const fullscreen of [false, true]) {
+    if (fullscreen) {
+      allNodes(tree).find(node => node.props?.['aria-label'] === 'Pantalla completa').props.onClick();
+      await settle();
+    }
+    mainScroll.scrollTop = fullscreen ? 960 : 1240;
+    heatmapScroll.scrollLeft = 120;
+    allNodes(tree).find(node => node.props?.['aria-label'] === 'Ver voluntarios de T2 el Lun 7').props.onClick();
+    assert.equal(destination, '/volunteers?day=Lun+7&shift=T2&committee=Committee+A');
+    const sourceEntry = historyEntries[historyIndex - 1];
+    assert.equal(sourceEntry.tree, 'next-router-tree', 'saving the return state preserves Next history');
+    assert.equal(sourceEntry.dashboardReturn.fullscreen, fullscreen);
+    assert.equal(windowMock.history.state.dashboardReturn, undefined, 'destination has its own history entry');
+    unmount(); mainScroll.scrollTop = 0; heatmapScroll.scrollLeft = 0;
+    historyIndex -= 1; await settle(); paint();
+    assert.equal(requests.at(-1).target, 'Committee A', 'Back reloads the selected committee');
+    assert.equal(mainScroll.scrollTop, 0, 'scroll restoration waits for the real dashboard');
+    requests.at(-1).resolve({ data: data(technology, 'Committee A'), insight: null });
+    await settle(); paint();
+    assert.equal(mainScroll.scrollTop, sourceEntry.dashboardReturn.scrollTop);
+    assert.equal(heatmapScroll.scrollLeft, 120, 'horizontal heatmap position is restored');
+    assert.equal(documentFullscreenVisible(), fullscreen, 'Back restores the expanded heatmap');
+    mainScroll.scrollTop = 400;
+    listeners.get('focus').forEach(fn => fn()); await settle();
+    requests.at(-1).resolve({ data: data(technology, 'Committee A'), insight: null }); await settle(); paint();
+    assert.equal(mainScroll.scrollTop, 400, 'refresh must not pull the user back to the saved position');
+  }
+  unmount(); historyEntries.push({ __NA: true }); historyIndex = historyEntries.length - 1;
+  mainScroll.scrollTop = 0; await settle(); paint();
+  assert.equal(mainScroll.scrollTop, 0, 'fresh dashboard visits do not inherit the saved scroll');
+  assert.equal(allNodes(tree).find(node => node.type === 'Select' && node.props.onValueChange).props.value, 'todos');
+  unmount(); historyIndex = 0; authorization = admin; await settle(); paint();
+  assert.equal(requests.at(-1).target, 'todos', 'another identity cannot inherit the saved committee');
+  console.log('PASS: heatmap Back restores committee, vertical/horizontal scroll and expanded view after loading');
+  console.log('PASS: repeat visits, refresh, fresh navigation and identity changes keep their own context');
+}
+function documentFullscreenVisible() {
+  return allNodes(tree).some(node => node.props?.onClick && node.props?.title === 'Salir de pantalla completa (Esc)');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

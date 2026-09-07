@@ -1,6 +1,6 @@
 import 'server-only';
 
-type AuthPhase = 'rateLimit' | 'lookup' | 'finalize';
+type AuthPhase = 'rateLimit' | 'lookup' | 'failureLimit' | 'finalize';
 export type AuthOutcome = 'invalid_input' | 'rate_limited' | 'security_unavailable' |
   'lookup_unavailable' | 'invalid_pin' | 'ambiguous_pin' | 'choose_volunteer' |
   'change_pin' | 'success' | 'error';
