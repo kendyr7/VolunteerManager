@@ -52,6 +52,7 @@ interface ScanEntry {
 type ScannerCamera = { id: string; label: string };
 
 const PREFERRED_CAMERA_STORAGE_KEY = 'volunteer_manager_preferred_camera_id';
+const SCAN_CONFIRMATION_DURATION_MS = 4000;
 
 function getCameraPriority(camera: ScannerCamera, preferredCameraId: string | null): number {
   if (camera.id === preferredCameraId) return 10_000;
@@ -915,7 +916,7 @@ export function CheckInScanner({
 
         autoResetTimeoutRef.current = setTimeout(() => {
           startScanning();
-        }, 3000);
+        }, SCAN_CONFIRMATION_DURATION_MS);
       }
     } catch (e) {
       console.error("Error in check-in transaction:", e);
@@ -959,7 +960,7 @@ export function CheckInScanner({
 
         autoResetTimeoutRef.current = setTimeout(() => {
           startScanning();
-        }, 3000);
+        }, SCAN_CONFIRMATION_DURATION_MS);
       }
     } catch (e) {
       setErrorMsg("Ocurrió un error durante el check-in manual.");
@@ -1122,7 +1123,7 @@ export function CheckInScanner({
               {!isActive && (
                 <div className="p-5 flex flex-col gap-4">
                   {/* Status icon area */}
-                  <div className="flex flex-col items-center text-center pt-2">
+                  <div className="flex flex-col items-center text-center pt-2" role="status" aria-live="polite" aria-atomic="true">
                     <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 transition-colors duration-300 ${
                       state === 'success' ? 'bg-emerald-500/15 border border-emerald-500/20' :
                       state === 'already_checked_in' ? 'bg-amber-500/15 border border-amber-500/20' :
@@ -1148,13 +1149,27 @@ export function CheckInScanner({
                        state === 'error' ? 'Fallo de Validación' :
                        'Procesando...'}
                     </h2>
-                    <p className="text-[11px] text-text-dim font-inter leading-relaxed">
-                      {state === 'idle' ? 'Activa la cámara y apunta al QR.' :
-                       state === 'success' ? `${scanResult?.volunteer}` :
-                       state === 'already_checked_in' ? `${scanResult?.volunteer}` :
-                       state === 'error' ? errorMsg :
-                       'Registrando asistencia...'}
-                    </p>
+                    {(state === 'success' || state === 'already_checked_in') && scanResult ? (
+                      <div className="mt-2 w-full min-w-0 space-y-1.5">
+                        <p className="text-2xl font-extrabold text-text leading-tight break-words">
+                          {scanResult.volunteer}
+                        </p>
+                        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed break-words">
+                          {scanResult.committee}
+                        </p>
+                        {state === 'success' && (
+                          <p className="pt-1 text-xs text-slate-600 dark:text-slate-300">
+                            Puedes continuar con «Escanear siguiente».
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-text-dim font-inter leading-relaxed">
+                        {state === 'idle' ? 'Activa la cámara y apunta al QR.' :
+                         state === 'error' ? errorMsg :
+                         'Registrando asistencia...'}
+                      </p>
+                    )}
                   </div>
 
                   {/* Primary Action Button */}
