@@ -106,9 +106,11 @@ assert.equal(workbook.getWorksheet('Selecciones'), undefined);
 const shiftData = workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.shiftsData)!;
 const volunteerData = workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.volunteersData)!;
 assert.equal(workbook.getWorksheet('Historial'), undefined, 'The interactive workbook does not duplicate the six fixed report sheets');
-assert.equal(shiftData.rowCount, source.items.length + 6, 'The panel base includes all authorized assignments');
-assert.equal(volunteerData.rowCount, source.volunteers.length + 6, 'The panel base includes the volunteer without a shift');
-assert.equal(shiftData.getCell('A10').value, 'María Ruiz', 'Authorized data outside the original filters remains available to panel controls');
+assert.equal(shiftData.rowCount, view.items.length + 6, 'The panel base includes only assignments matching the active filters');
+assert.equal(volunteerData.rowCount, 8, 'The volunteer base respects the active committee filter');
+assert.equal(shiftData.getCell('A7').value, 'Ana Pérez');
+assert.equal(shiftData.getCell('A8').value, 'José López');
+assert.equal(shiftData.getCell('A9').value, null, 'Other committees are excluded from the exported base');
 assert.equal(shiftData.getCell('G7').value, 'Recepción norte', 'Assigned area is present in the interactive detail base');
 const shiftHeaders = shiftData.getRow(6).values;
 const volunteerHeaders = volunteerData.getRow(6).values;
@@ -129,9 +131,11 @@ const calculations = workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.calculation
 assert.equal(calculations.state, 'hidden');
 assert.match((calculations.getCell('I5').value as { formula: string }).formula, /PRODUCT\(B5:F5,H5\)/);
 assert.equal((calculations.getCell('I5').value as { result: number }).result, 1);
-assert.notEqual((calculations.getCell('I7').value as { result?: number }).result, 1);
+assert.match((calculations.getCell('R5').value as { formula: string }).formula, /COUNTIFS/);
 const detail = workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.detail)!;
-assert.match((detail.getCell('A7').value as { formula: string }).formula, /^FILTER\(/);
+assert.match((detail.getCell('A7').value as { formula: string }).formula, /^IFERROR\(INDEX\(/);
+assert.equal((detail.getCell('A7').value as { result: string }).result, 'Ana Pérez');
+assert.equal((detail.getCell('A8').value as { result: string }).result, 'José López');
 assert.equal(workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.catalogs)?.state, 'hidden');
 
 const outputDirectory = path.resolve('outputs/excel-etapa-4');
@@ -145,6 +149,6 @@ console.log(JSON.stringify({
   sheets: workbook.worksheets.length,
   bytes: (await fs.stat(outputPath)).size,
   filteredRows: view.items.length,
-  authorizedShiftRows: source.items.length,
-  authorizedVolunteerRows: source.volunteers.length,
+  exportedShiftRows: view.items.length,
+  exportedVolunteerRows: 2,
 }));

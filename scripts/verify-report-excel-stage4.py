@@ -37,7 +37,7 @@ with ZipFile(BOOK) as archive:
 
     detail = ET.fromstring(archive.read(target_by_name['Detalle del panel']))
     formulas = [node.text or '' for node in detail.findall('.//s:f', NS)]
-    assert any('FILTER(' in formula for formula in formulas)
+    assert formulas and all('IFERROR(INDEX(' in formula for formula in formulas)
     calculations = ET.fromstring(archive.read(target_by_name['Cálculos']))
     calculation_formulas = [node.text or '' for node in calculations.findall('.//s:f', NS)]
     assert any('COUNTIFS(' in formula for formula in calculation_formulas)

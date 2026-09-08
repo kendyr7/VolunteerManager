@@ -1,6 +1,6 @@
 import type { Cell, Workbook, Worksheet } from 'exceljs';
 import { isSimulationEventDay } from '../../dates';
-import { filterReportItems, filterReportRequirements } from '../filter';
+import { filterReportItems, filterReportRequirements, filterReportVolunteers } from '../filter';
 import type { ReportFilters, ReportItem, ReportShiftStatus } from '@/lib/reports/types';
 import {
   loadReportLogoBase64,
@@ -14,6 +14,7 @@ const STATUS_OPTIONS: Array<{ key: ReportShiftStatus; label: string }> = [
   { key: 'absent', label: 'Ausente' },
   { key: 'replaced', label: 'Reemplazado' },
 ];
+const STATUS_LABELS = new Map(STATUS_OPTIONS.map(value => [value.key, value.label]));
 
 const CATEGORY_MODES = ['Al exportar', 'Todos', 'Un valor'] as const;
 const DATE_MODES = ['Al exportar', 'Todas', 'Intervalo'] as const;
@@ -54,6 +55,14 @@ function originalSelected(values: readonly string[] | undefined, value: string, 
 
 function distinct(values: Iterable<string>): string[] {
   return [...new Set([...values].map(safeText))].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+}
+
+function shiftDisplayValues(item: ReportItem): Array<string | number | Date | null> {
+  return [
+    safeText(item.volunteerName), item.age, safeText(item.phone), displayValue(item.neighborhood),
+    displayValue(item.stake), safeText(item.committeeName), safeText(item.areaName || 'Sin área asignada'),
+    toExcelDate(item.date), `T${item.shiftNumber}`, STATUS_LABELS.get(item.status) || item.status, item.durationMinutes,
+  ];
 }
 
 function styleFont(cell: Cell, options: { bold?: boolean; size?: number; color?: string } = {}) {
@@ -202,7 +211,7 @@ function buildSelections(input: StaticReportWorkbookInput): SelectionRow[] {
 function addVolunteersDataSheet(workbook: Workbook, input: StaticReportWorkbookInput, logoImageId?: number) {
   const sheet = workbook.addWorksheet(INTERACTIVE_REPORT_SHEETS.volunteersData, { properties: { tabColor: { argb: REPORT_THEME.colors.divider } } });
   baseSheet(sheet, [29, 10, 18, 22, 23, 25], 6);
-  addTitle(sheet, 'Datos de voluntarios', 'Base completa autorizada · Incluye personas que todavía no tienen turnos.', 6, logoImageId);
+  addTitle(sheet, 'Datos de voluntarios', 'Datos que cumplen los filtros aplicados · Incluye personas que todavía no tienen turnos.', 6, logoImageId);
   sheet.getCell('A4').value = `${input.data.volunteers.length} voluntarios autorizados en esta instantánea`;
   styleFont(sheet.getCell('A4'), { color: REPORT_THEME.colors.muted });
   writeHeader(sheet, 6, ['Voluntario', 'Edad', 'Teléfono', 'Barrio / rama', 'Estaca', 'Comité']);
@@ -221,21 +230,16 @@ function addVolunteersDataSheet(workbook: Workbook, input: StaticReportWorkbookI
 function addShiftsDataSheet(workbook: Workbook, input: StaticReportWorkbookInput, logoImageId?: number) {
   const sheet = workbook.addWorksheet(INTERACTIVE_REPORT_SHEETS.shiftsData, { properties: { tabColor: { argb: REPORT_THEME.colors.divider } } });
   baseSheet(sheet, [29, 9, 18, 22, 22, 25, 25, 16, 10, 17, 16], 6);
-  addTitle(sheet, 'Datos de turnos', 'Base completa autorizada · Los filtros del encabezado sirven solamente para inspeccionar estas filas.', 11, logoImageId);
+  addTitle(sheet, 'Datos de turnos', 'Datos que cumplen los filtros aplicados · Los filtros del encabezado sirven para inspeccionar estas filas.', 11, logoImageId);
   sheet.getCell('A4').value = `${input.data.items.length} asignaciones autorizadas en esta instantánea`;
   styleFont(sheet.getCell('A4'), { color: REPORT_THEME.colors.muted });
   writeHeader(sheet, 6, [
     'Voluntario', 'Edad', 'Teléfono', 'Barrio / rama', 'Estaca', 'Comité',
     'Área asignada', 'Fecha', 'Turno', 'Estado', 'Minutos servidos',
   ]);
-  const statusLabels = new Map(STATUS_OPTIONS.map(value => [value.key, value.label]));
   input.data.items.forEach((item, index) => {
     const rowNumber = index + 7;
-    sheet.getRow(rowNumber).values = [
-      safeText(item.volunteerName), item.age, safeText(item.phone), displayValue(item.neighborhood),
-      displayValue(item.stake), safeText(item.committeeName), safeText(item.areaName || 'Sin área asignada'),
-      toExcelDate(item.date), `T${item.shiftNumber}`, statusLabels.get(item.status) || item.status, item.durationMinutes,
-    ];
+    sheet.getRow(rowNumber).values = shiftDisplayValues(item);
     styleDataRow(sheet, rowNumber, 11);
     sheet.getCell(rowNumber, 8).numFmt = 'dd mmm yyyy';
     sheet.getCell(rowNumber, 11).numFmt = '#,##0';
@@ -247,7 +251,7 @@ function addShiftsDataSheet(workbook: Workbook, input: StaticReportWorkbookInput
 function addRequirementsSheet(workbook: Workbook, input: StaticReportWorkbookInput, logoImageId?: number) {
   const sheet = workbook.addWorksheet(INTERACTIVE_REPORT_SHEETS.requirements, { properties: { tabColor: { argb: REPORT_THEME.colors.divider } } });
   baseSheet(sheet, [27, 16, 11, 14], 6);
-  addTitle(sheet, 'Requerimientos', 'Metas operativas completas autorizadas por comité, fecha y turno.', 4, logoImageId);
+  addTitle(sheet, 'Requerimientos', 'Metas operativas que cumplen los filtros de comité y fecha.', 4, logoImageId);
   sheet.getCell('A4').value = `${input.data.requirements.length} metas en esta instantánea`;
   styleFont(sheet.getCell('A4'), { color: REPORT_THEME.colors.muted });
   writeHeader(sheet, 6, ['Comité', 'Fecha', 'Turno', 'Requeridos']);
@@ -319,7 +323,7 @@ function addPanelSheet(
   sheet.views = [{ state: 'frozen', ySplit: 6, showGridLines: false, zoomScale: 90 }];
   addTitle(sheet, 'Panel interactivo', 'Cambia las celdas azules. El panel se recalcula en Microsoft Excel 365 sin macros ni conexiones externas.', 10, logoImageId);
   sheet.mergeCells('B4:I4');
-  sheet.getCell('B4').value = 'Base del panel: todos los datos que este usuario tenía autorización para consultar al generar el archivo.';
+  sheet.getCell('B4').value = 'Base del panel: datos que cumplen los filtros aplicados al generar el archivo.';
   styleFont(sheet.getCell('B4'), { color: REPORT_THEME.colors.muted });
   sheet.getCell('B4').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: REPORT_THEME.colors.softBlue } };
 
@@ -373,7 +377,7 @@ function addPanelSheet(
   const filteredRequirements = filterReportRequirements(input.data.requirements, panelFilters, committeeNames);
   const metricRows = [
     ['Turnos coincidentes', `SUM('${INTERACTIVE_REPORT_SHEETS.calculations}'!$I$5:$I$${calculationShiftEnd})`, filteredItems.length, 'Asignaciones que cumplen los controles'],
-    ['Voluntarios con turnos coincidentes', `IF(SUM('${INTERACTIVE_REPORT_SHEETS.calculations}'!$I$5:$I$${calculationShiftEnd})=0,0,IFERROR(ROWS(UNIQUE(FILTER('${INTERACTIVE_REPORT_SHEETS.calculations}'!$A$5:$A$${calculationShiftEnd},'${INTERACTIVE_REPORT_SHEETS.calculations}'!$I$5:$I$${calculationShiftEnd}=1))),0))`, new Set(filteredItems.map(item => item.volunteerId)).size, 'Personas únicas dentro de esos turnos'],
+    ['Voluntarios con turnos coincidentes', `SUM('${INTERACTIVE_REPORT_SHEETS.calculations}'!$R$5:$R$${calculationShiftEnd})`, new Set(filteredItems.map(item => item.volunteerId)).size, 'Personas únicas dentro de esos turnos'],
     ['Cupos requeridos', `SUMPRODUCT('${INTERACTIVE_REPORT_SHEETS.requirements}'!$D$7:$D$${reqEnd},'${INTERACTIVE_REPORT_SHEETS.calculations}'!$Q$5:$Q$${calculationRequirementEnd})`, filteredRequirements.reduce((sum, item) => sum + item.required, 0), 'La meta depende de comité y fecha'],
   ] as const;
   writeHeader(sheet, 16, ['', 'Indicador', 'Resultado', 'Definición']);
@@ -435,19 +439,25 @@ function originalDimensionMatch(filters: ReportFilters, item: ReportItem) {
 
 function addCalculationsSheet(workbook: Workbook, input: StaticReportWorkbookInput, selections: SelectionRow[]) {
   const sheet = workbook.addWorksheet(INTERACTIVE_REPORT_SHEETS.calculations);
-  baseSheet(sheet, [23, 15, 15, 15, 15, 15, 13, 15, 13, 4, 23, 16, 13, 15, 15, 15, 13], 4);
+  baseSheet(sheet, [23, 15, 15, 15, 15, 15, 13, 15, 13, 15, 23, 16, 13, 15, 15, 15, 13, 15], 4);
   sheet.state = 'hidden';
   writeHeader(sheet, 4, [
-    'Voluntario ID', 'Comité', 'Barrio', 'Estaca', 'Estado', 'Fecha', 'Es simulación', 'Simulación coincide', 'Coincide', '',
-    'Comité', 'Fecha', 'Es simulación', 'Comité coincide', 'Fecha coincide', 'Simulación coincide', 'Meta coincide',
+    'Voluntario ID', 'Comité', 'Barrio', 'Estaca', 'Estado', 'Fecha', 'Es simulación', 'Simulación coincide', 'Coincide', 'Orden detalle',
+    'Comité', 'Fecha', 'Es simulación', 'Comité coincide', 'Fecha coincide', 'Simulación coincide', 'Meta coincide', 'Voluntario único',
   ]);
   const catalogEnd = Math.max(2, selections.length + 1);
   const panelFilters: ReportFilters = { ...input.filters, search: '' };
   const filteredRegistrationIds = new Set(filterReportItems(input.data.items, panelFilters).map(item => item.registrationId));
+  const seenVolunteerIds = new Set<string>();
+  let detailOrder = 0;
   input.data.items.forEach((item, index) => {
     const rowNumber = index + 5;
     const dataRow = index + 7;
     const initial = originalDimensionMatch(input.filters, item);
+    const matches = filteredRegistrationIds.has(item.registrationId);
+    if (matches) detailOrder += 1;
+    const isFirstVolunteerMatch = matches && !seenVolunteerIds.has(item.volunteerId);
+    if (matches) seenVolunteerIds.add(item.volunteerId);
     const values = [
       safeText(item.volunteerId),
       { formula: selectionFormula('Comité', `'${INTERACTIVE_REPORT_SHEETS.shiftsData}'!$F$${dataRow}`, `'${INTERACTIVE_REPORT_SHEETS.panel}'!$C$7`, `'${INTERACTIVE_REPORT_SHEETS.panel}'!$D$7`, catalogEnd), result: initial.committee },
@@ -457,10 +467,15 @@ function addCalculationsSheet(workbook: Workbook, input: StaticReportWorkbookInp
       { formula: dateFormula(`'${INTERACTIVE_REPORT_SHEETS.shiftsData}'!$H$${dataRow}`, catalogEnd), result: initial.date },
       isSimulationEventDay(item.date) ? 'Sí' : 'No',
       { formula: simulationFormula(`$G${rowNumber}`, input.includeSimulation), result: 1 },
-      { formula: `PRODUCT(B${rowNumber}:F${rowNumber},H${rowNumber})`, result: filteredRegistrationIds.has(item.registrationId) ? 1 : 0 },
+      { formula: `PRODUCT(B${rowNumber}:F${rowNumber},H${rowNumber})`, result: matches ? 1 : 0 },
+      { formula: `IF(I${rowNumber}=1,COUNTIF($I$5:I${rowNumber},1),"")`, result: matches ? detailOrder : '' },
     ];
     sheet.getRow(rowNumber).values = values;
-    styleDataRow(sheet, rowNumber, 9);
+    sheet.getCell(rowNumber, 18).value = {
+      formula: `IF(I${rowNumber}=1,--(COUNTIFS($A$5:A${rowNumber},A${rowNumber},$I$5:I${rowNumber},1)=1),0)`,
+      result: isFirstVolunteerMatch ? 1 : 0,
+    };
+    styleDataRow(sheet, rowNumber, 18);
   });
 
   const committeeNames = new Map(input.data.uniqueCommittees.map(value => [value.id, value.name]));
@@ -501,12 +516,24 @@ function addDetailSheet(workbook: Workbook, input: StaticReportWorkbookInput, lo
   ]);
   const shiftEnd = Math.max(7, input.data.items.length + 6);
   const calcEnd = Math.max(5, input.data.items.length + 4);
-  sheet.getCell('A7').value = {
-    formula: `FILTER('${INTERACTIVE_REPORT_SHEETS.shiftsData}'!A7:K${shiftEnd},'${INTERACTIVE_REPORT_SHEETS.calculations}'!I5:I${calcEnd}=1,"Sin registros")`,
-    result: input.data.items.length ? 'Excel 365 recalculará este detalle al abrir el archivo' : 'Sin registros',
-  };
-  styleFont(sheet.getCell('A7'), { color: REPORT_THEME.colors.muted });
-  sheet.getCell('H7').numFmt = 'dd mmm yyyy';
+  const initialItems = filterReportItems(input.data.items, { ...input.filters, search: '' });
+  const rowCount = Math.max(1, input.data.items.length);
+  for (let index = 0; index < rowCount; index += 1) {
+    const rowNumber = index + 7;
+    const initialValues = initialItems[index] ? shiftDisplayValues(initialItems[index]) : [];
+    for (let column = 1; column <= 11; column += 1) {
+      const sourceColumn = String.fromCharCode(64 + column);
+      sheet.getCell(rowNumber, column).value = {
+        formula: `IFERROR(INDEX('${INTERACTIVE_REPORT_SHEETS.shiftsData}'!$A$7:$K$${shiftEnd},MATCH(ROWS($A$7:$A${rowNumber}),'${INTERACTIVE_REPORT_SHEETS.calculations}'!$J$5:$J$${calcEnd},0),COLUMN(${sourceColumn}1)),"")`,
+        result: initialValues[column - 1] ?? '',
+      };
+    }
+    styleDataRow(sheet, rowNumber, 11);
+    sheet.getCell(rowNumber, 8).numFmt = 'dd mmm yyyy';
+    sheet.getCell(rowNumber, 11).numFmt = '#,##0';
+  }
+  const lastRow = rowCount + 6;
+  sheet.autoFilter = { from: { row: 6, column: 1 }, to: { row: lastRow, column: 11 } };
 }
 
 function makeDownload(workbook: Workbook, generatedAt: Date, prefix: string): Promise<string> {
@@ -530,26 +557,77 @@ function makeDownload(workbook: Workbook, generatedAt: Date, prefix: string): Pr
   });
 }
 
+function scopeInteractiveInput(input: StaticReportWorkbookInput): StaticReportWorkbookInput {
+  const committeeNameById = new Map(input.data.uniqueCommittees.map(value => [value.id, value.name]));
+  input.data.items.forEach(value => committeeNameById.set(value.committeeId, value.committeeName));
+  input.data.volunteers.forEach(value => committeeNameById.set(value.committeeId, value.committeeName));
+
+  const items = filterReportItems(input.data.items, input.filters);
+  const volunteers = filterReportVolunteers(input.data.volunteers, input.filters);
+  const requirements = filterReportRequirements(input.data.requirements, input.filters, committeeNameById);
+  const includedCommitteeIds = new Set<string>([
+    ...items.map(value => value.committeeId),
+    ...volunteers.map(value => value.committeeId),
+    ...requirements.map(value => value.committeeId),
+  ]);
+  input.filters.committeeIds?.forEach(value => {
+    const match = input.data.uniqueCommittees.find(committee => committee.id === value || committee.name === value);
+    if (match) includedCommitteeIds.add(match.id);
+  });
+
+  const uniqueCommittees = [...includedCommitteeIds]
+    .map(id => ({ id, name: committeeNameById.get(id) || id }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+  const uniqueNeighborhoods = distinct([
+    ...items.map(value => value.neighborhood),
+    ...volunteers.map(value => value.neighborhood),
+    ...(input.filters.neighborhoods || []),
+  ]);
+  const uniqueStakes = distinct([
+    ...items.map(value => value.stake),
+    ...volunteers.map(value => value.stake),
+    ...(input.filters.stakes || []),
+  ]);
+  const eventDays = input.filters.dates?.length
+    ? input.data.eventDays.filter(day => input.filters.dates?.includes(day.date))
+    : input.data.eventDays;
+
+  return {
+    ...input,
+    data: {
+      ...input.data,
+      items,
+      volunteers,
+      requirements,
+      eventDays,
+      uniqueCommittees,
+      uniqueNeighborhoods,
+      uniqueStakes,
+    },
+  };
+}
+
 export async function buildInteractiveReportWorkbook(input: StaticReportWorkbookInput): Promise<Workbook> {
-  const logoBase64 = input.logoBase64 === undefined ? await loadReportLogoBase64() : input.logoBase64;
+  const scopedInput = scopeInteractiveInput(input);
+  const logoBase64 = scopedInput.logoBase64 === undefined ? await loadReportLogoBase64() : scopedInput.logoBase64;
   const { Workbook: ExcelWorkbook } = await import('exceljs');
   const workbook = new ExcelWorkbook();
   workbook.creator = 'VolunteerManager';
   workbook.lastModifiedBy = 'VolunteerManager';
-  workbook.created = input.generatedAt || new Date();
-  workbook.modified = input.generatedAt || new Date();
+  workbook.created = scopedInput.generatedAt || new Date();
+  workbook.modified = scopedInput.generatedAt || new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
   workbook.views = [{ x: 0, y: 0, width: 12000, height: 20000, firstSheet: 0, activeTab: 0, visibility: 'visible' }];
   const logoImageId = logoBase64 ? workbook.addImage({ base64: logoBase64, extension: 'png' }) : undefined;
-  const selections = buildSelections(input);
+  const selections = buildSelections(scopedInput);
 
-  addVolunteersDataSheet(workbook, input, logoImageId);
-  addShiftsDataSheet(workbook, input, logoImageId);
-  addRequirementsSheet(workbook, input, logoImageId);
+  addVolunteersDataSheet(workbook, scopedInput, logoImageId);
+  addShiftsDataSheet(workbook, scopedInput, logoImageId);
+  addRequirementsSheet(workbook, scopedInput, logoImageId);
   const catalogRanges = addCatalogsSheet(workbook, selections);
-  addPanelSheet(workbook, input, selections, catalogRanges, logoImageId);
-  addCalculationsSheet(workbook, input, selections);
-  addDetailSheet(workbook, input, logoImageId);
+  addPanelSheet(workbook, scopedInput, selections, catalogRanges, logoImageId);
+  addCalculationsSheet(workbook, scopedInput, selections);
+  addDetailSheet(workbook, scopedInput, logoImageId);
 
   const order = [
     INTERACTIVE_REPORT_SHEETS.panel, INTERACTIVE_REPORT_SHEETS.detail,
