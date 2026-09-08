@@ -276,19 +276,19 @@ export function VolunteerRequestsClient({
                       {/* Estado */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         {isPending && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                             En revisión
                           </span>
                         )}
                         {isApproved && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-800 dark:text-emerald-400 border border-emerald-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                             Aprobada
                           </span>
                         )}
                         {isRejected && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-rose-500/15 text-rose-800 dark:text-rose-400 border border-rose-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                             Rechazada
                           </span>
@@ -297,14 +297,14 @@ export function VolunteerRequestsClient({
 
                       {/* Turno Actual */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className="text-rose-400 font-bold bg-rose-500/10 px-2.5 py-1 rounded-lg border border-rose-500/20 text-xs">
+                        <span className="text-rose-800 dark:text-rose-400 font-bold bg-rose-500/10 px-2.5 py-1 rounded-lg border border-rose-500/20 text-xs">
                           {req.current_shift_key} <span className="font-normal text-text-dim text-[11px]">({req.current_day_key})</span>
                         </span>
                       </td>
 
                       {/* Turno Solicitado */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className="text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 text-xs">
+                        <span className="text-emerald-800 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 text-xs">
                           {req.requested_shift_key} <span className="font-normal text-text-dim text-[11px]">({req.requested_day_key})</span>
                         </span>
                       </td>
@@ -343,19 +343,19 @@ export function VolunteerRequestsClient({
                   {/* Top line: Status Pill & Date */}
                   <div className="flex items-center justify-between gap-2">
                     {isPending && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-500/30">
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                         En revisión
                       </span>
                     )}
                     {isApproved && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-800 dark:text-emerald-400 border border-emerald-500/30">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                         Aprobada
                       </span>
                     )}
                     {isRejected && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/15 text-rose-800 dark:text-rose-400 border border-rose-500/30">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                         Rechazada
                       </span>
@@ -369,7 +369,7 @@ export function VolunteerRequestsClient({
                   <div className="flex items-center justify-between bg-dark3/60 p-2 rounded-lg border border-border/60 text-xs">
                     <div className="min-w-0">
                       <span className="text-[9px] uppercase font-bold text-text-dim block mb-0.5">Original</span>
-                      <span className="text-rose-400 font-bold">
+                      <span className="text-rose-800 dark:text-rose-400 font-bold">
                         {req.current_shift_key} <span className="text-[10px] text-text-dim">({req.current_day_key})</span>
                       </span>
                     </div>
@@ -378,7 +378,7 @@ export function VolunteerRequestsClient({
 
                     <div className="text-right min-w-0">
                       <span className="text-[9px] uppercase font-bold text-text-dim block mb-0.5">Solicitado</span>
-                      <span className="text-emerald-400 font-bold">
+                      <span className="text-emerald-800 dark:text-emerald-400 font-bold">
                         {req.requested_shift_key} <span className="text-[10px] text-text-dim">({req.requested_day_key})</span>
                       </span>
                     </div>
@@ -425,24 +425,24 @@ export function VolunteerRequestsClient({
             </div>
 
             {submitSuccess ? (
-              <div className="p-6 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-center space-y-2">
-                <span className="material-symbols-outlined text-[48px] text-emerald-400">check_circle</span>
+              <div className="p-6 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-center space-y-2">
+                <span className="material-symbols-outlined text-[48px] text-emerald-800 dark:text-emerald-400">check_circle</span>
                 <p className="font-bold text-sm">{submitSuccess}</p>
               </div>
             ) : (
               <div className="space-y-5">
                 {submitError && (
-                  <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold">
+                  <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-bold">
                     {submitError}
                   </div>
                 )}
 
                 {sourceShiftCompleted && (
-                  <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
-                    <span className="material-symbols-outlined text-[20px] text-rose-400 shrink-0">block</span>
+                  <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-rose-800 dark:text-rose-400 shrink-0">block</span>
                     <div>
-                      <p className="text-rose-200 font-extrabold text-xs mb-0.5">Turno Origen Completado</p>
-                      <p className="text-[11px] text-rose-300/90 font-medium leading-relaxed">
+                      <p className="text-rose-900 dark:text-rose-200 font-extrabold text-xs mb-0.5">Turno Origen Completado</p>
+                      <p className="text-[11px] text-rose-800 dark:text-rose-300/90 font-medium leading-relaxed">
                         Este turno ya fue completado y finalizado. No es posible solicitar un cambio para un turno en estado completado.
                       </p>
                     </div>
@@ -592,7 +592,9 @@ export function VolunteerRequestsClient({
                                 className={`py-2 rounded-xl border text-xs font-bold transition-all relative ${
                                   showFull
                                     ? 'bg-full-bg border-full-border text-full-text cursor-not-allowed opacity-100'
-                                  : isBtnDisabled
+                                  : tAssigned
+                                    ? 'bg-dark2 border-border text-text cursor-not-allowed'
+                                    : isBtnDisabled
                                     ? 'bg-dark2 border-border text-text-dim/40 cursor-not-allowed opacity-40'
                                     : isSelected
                                     ? 'bg-emerald-600 border-emerald-600 text-white shadow-md cursor-pointer'
@@ -605,11 +607,11 @@ export function VolunteerRequestsClient({
                                 ) : tCompleted ? (
                                   <span className="block text-[8px] text-text-dim/60 font-normal leading-none">Completado</span>
                                 ) : tAssigned ? (
-                                  <span className="block text-[8px] text-amber-400 font-bold leading-none">Asignado</span>
+                                  <span className="block text-[8px] text-amber-800 dark:text-amber-400 font-bold leading-none">Asignado</span>
                                 ) : isRescheduleContextRefreshing ? (
                                   <span className="block text-[8px] text-text-dim/70 font-normal leading-none">Actualizando…</span>
                                 ) : availabilityUnavailable ? (
-                                  <span className="block text-[8px] text-rose-400 font-bold leading-none">No disponible</span>
+                                  <span className="block text-[8px] text-rose-800 dark:text-rose-400 font-bold leading-none">No disponible</span>
                                 ) : showFull ? (
                                   <span className="block text-[8px] text-full-text font-bold leading-none">Lleno ({capInfo.count}/{capInfo.maxReq})</span>
                                 ) : (
@@ -642,40 +644,40 @@ export function VolunteerRequestsClient({
 
                 {/* Advertencias de validación del turno destino */}
                 {targetShiftStatus.isSource && (
-                  <div className="p-3.5 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-inter font-bold flex items-center gap-2.5 animate-in fade-in zoom-in-95">
-                    <span className="material-symbols-outlined text-[20px] text-purple-400 shrink-0">info</span>
+                  <div className="p-3.5 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-800 dark:text-purple-300 text-xs font-inter font-bold flex items-center gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-purple-800 dark:text-purple-400 shrink-0">info</span>
                     <span>Este es el turno actual origen. Selecciona otro horario o día para solicitar el cambio.</span>
                   </div>
                 )}
                 {!targetShiftStatus.isSource && targetShiftStatus.isCompleted && (
-                  <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
-                    <span className="material-symbols-outlined text-[20px] text-rose-400 shrink-0">block</span>
+                  <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-rose-800 dark:text-rose-400 shrink-0">block</span>
                     <div>
-                      <p className="text-rose-200 font-extrabold text-xs mb-0.5">Turno Ya Completado</p>
-                      <p className="text-[11px] text-rose-300/90 font-medium leading-relaxed">
+                      <p className="text-rose-900 dark:text-rose-200 font-extrabold text-xs mb-0.5">Turno Ya Completado</p>
+                      <p className="text-[11px] text-rose-800 dark:text-rose-300/90 font-medium leading-relaxed">
                         Ya completaste este turno previamente. No es posible solicitar un cambio hacia un turno ya completado.
                       </p>
                     </div>
                   </div>
                 )}
                 {!targetShiftStatus.isSource && !targetShiftStatus.isCompleted && targetShiftStatus.isAssigned && (
-                  <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
-                    <span className="material-symbols-outlined text-[20px] text-amber-400 shrink-0">warning</span>
+                  <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-amber-800 dark:text-amber-400 shrink-0">warning</span>
                     <div>
-                      <p className="text-amber-200 font-extrabold text-xs mb-0.5">Turno Ya Asignado</p>
-                      <p className="text-[11px] text-amber-300/90 font-medium leading-relaxed">
+                      <p className="text-amber-900 dark:text-amber-200 font-extrabold text-xs mb-0.5">Turno Ya Asignado</p>
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300/90 font-medium leading-relaxed">
                         Ya cuentas con este turno activo asignado. Elige un horario o día distinto.
                       </p>
                     </div>
                   </div>
                 )}
                 {!targetShiftStatus.isSource && !targetShiftStatus.isCompleted && !targetShiftStatus.isAssigned && targetCapacity.isFull && (
-                  <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
-                    <span className="material-symbols-outlined text-[20px] text-amber-400 shrink-0">warning</span>
+                  <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-amber-800 dark:text-amber-400 shrink-0">warning</span>
                     <div>
-                      <p className="text-amber-200 font-extrabold text-xs mb-0.5">Cobertura Completa</p>
-                      <p className="text-[11px] text-amber-300/90 font-medium leading-relaxed">
-                        El turno <strong className="text-white">{targetShiftKey}</strong> del <strong className="text-white">{targetDayKey}</strong> ya tiene la cobertura completa para <strong className="text-white">{targetCapacity.committeeName}</strong> ({targetCapacity.count}/{targetCapacity.maxReq}). Selecciona otra fecha u horario.
+                      <p className="text-amber-900 dark:text-amber-200 font-extrabold text-xs mb-0.5">Cobertura Completa</p>
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300/90 font-medium leading-relaxed">
+                        El turno <strong className="text-amber-950 dark:text-white">{targetShiftKey}</strong> del <strong className="text-amber-950 dark:text-white">{targetDayKey}</strong> ya tiene la cobertura completa para <strong className="text-amber-950 dark:text-white">{targetCapacity.committeeName}</strong> ({targetCapacity.count}/{targetCapacity.maxReq}). Selecciona otra fecha u horario.
                       </p>
                     </div>
                   </div>

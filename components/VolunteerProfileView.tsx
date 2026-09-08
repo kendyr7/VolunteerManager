@@ -1110,19 +1110,19 @@ export function VolunteerProfileView({
 
       {/* Pending Shift Change Banner */}
       {pendingRequests.length > 0 && (
-        <div className="mb-4 p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center justify-between gap-3 animate-in fade-in shadow-lg">
+        <div className="mb-4 p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-medium flex items-center justify-between gap-3 animate-in fade-in shadow-lg">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[18px] text-amber-400">schedule</span>
+              <span className="material-symbols-outlined text-[18px] text-amber-800 dark:text-amber-400">schedule</span>
             </div>
             <div>
-              <span className="font-bold text-amber-300 block text-xs">Solicitud de reagendamiento pendiente</span>
+              <span className="font-bold text-amber-800 dark:text-amber-300 block text-xs">Solicitud de reagendamiento pendiente</span>
               <span className="text-text-dim text-[11px]">
                 {pendingRequests[0].current_shift_key} ({pendingRequests[0].current_day_key}) ➔ {pendingRequests[0].requested_shift_key} ({pendingRequests[0].requested_day_key})
               </span>
             </div>
           </div>
-          <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] shrink-0 font-bold">
+          <Badge className="bg-amber-500/20 text-amber-800 dark:text-amber-400 border border-amber-500/40 text-[10px] shrink-0 font-bold">
             En revisión
           </Badge>
         </div>
@@ -1294,7 +1294,7 @@ export function VolunteerProfileView({
                 "px-1.5 py-0.5 text-[10px] rounded-full font-bold transition-colors shrink-0",
                 activeTab === 'requests'
                   ? "bg-white/25 text-white"
-                  : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                  : "bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30"
               )}>
                 {allRequests.length}
               </span>
@@ -1672,9 +1672,9 @@ export function VolunteerProfileView({
                     </span>
                     <Badge className={cn(
                       "text-[9px] uppercase font-bold px-2 py-0.5 rounded-full",
-                      r.status === 'approved' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
-                      r.status === 'rejected' ? "bg-rose-500/20 text-rose-400 border-rose-500/30" :
-                      "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                      r.status === 'approved' ? "bg-emerald-500/20 text-emerald-800 dark:text-emerald-400 border-emerald-500/30" :
+                      r.status === 'rejected' ? "bg-rose-500/20 text-rose-800 dark:text-rose-400 border-rose-500/30" :
+                      "bg-amber-500/20 text-amber-800 dark:text-amber-400 border-amber-500/30"
                     )}>
                       {r.status === 'approved' ? 'Aprobada' : r.status === 'rejected' ? 'Rechazada' : 'Pendiente'}
                     </Badge>
@@ -1788,23 +1788,23 @@ export function VolunteerProfileView({
 
             <div className="min-h-0 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
             {submitSuccess ? (
-              <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-2xl text-center">
+              <div className="p-4 bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-400 text-xs font-bold rounded-2xl text-center">
                 {submitSuccess}
               </div>
             ) : (
               <div className="space-y-4">
                 {submitError && (
-                  <div className="p-3 bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-bold rounded-xl">
+                  <div className="p-3 bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-400 text-xs font-bold rounded-xl">
                     {submitError}
                   </div>
                 )}
 
                 {sourceShiftCompleted && (
-                  <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
-                    <span className="material-symbols-outlined text-[20px] text-rose-400 shrink-0">block</span>
+                  <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-rose-800 dark:text-rose-400 shrink-0">block</span>
                     <div>
-                      <p className="text-rose-200 font-extrabold text-xs mb-0.5">Turno Origen Completado</p>
-                      <p className="text-[11px] text-rose-300/90 font-medium leading-relaxed">
+                      <p className="text-rose-900 dark:text-rose-200 font-extrabold text-xs mb-0.5">Turno Origen Completado</p>
+                      <p className="text-[11px] text-rose-800 dark:text-rose-300/90 font-medium leading-relaxed">
                         Este turno ya fue completado y finalizado. No es posible solicitar un cambio para un turno en estado completado.
                       </p>
                     </div>
@@ -1817,7 +1817,7 @@ export function VolunteerProfileView({
                     1. Selecciona el turno asignado que deseas cambiar:
                   </label>
                   {assignedDayKeys.length === 0 ? (
-                    <p className="text-xs text-amber-400 italic">No tienes turnos asignados actualmente.</p>
+                    <p className="text-xs text-amber-800 dark:text-amber-400 italic">No tienes turnos asignados actualmente.</p>
                   ) : (
                     <div className="space-y-2">
                       <div className="grid grid-cols-4 gap-2">
@@ -1955,7 +1955,9 @@ export function VolunteerProfileView({
                                 className={`py-2 rounded-xl border text-xs font-bold transition-all relative ${
                                   showFull
                                     ? 'bg-full-bg border-full-border text-full-text cursor-not-allowed opacity-100'
-                                  : isBtnDisabled
+                                  : tAssigned
+                                    ? 'bg-dark2 border-border text-text cursor-not-allowed'
+                                    : isBtnDisabled
                                     ? 'bg-dark2 border-border text-text-dim/40 cursor-not-allowed opacity-40'
                                     : isSelected
                                     ? 'bg-emerald-600 border-emerald-600 text-white shadow-md cursor-pointer'
@@ -1968,11 +1970,11 @@ export function VolunteerProfileView({
                                 ) : tCompleted ? (
                                   <span className="block text-[8px] text-text-dim/60 font-normal leading-none">Completado</span>
                                 ) : tAssigned ? (
-                                  <span className="block text-[8px] text-amber-400 font-bold leading-none">Asignado</span>
+                                  <span className="block text-[8px] text-amber-800 dark:text-amber-400 font-bold leading-none">Asignado</span>
                                 ) : isRescheduleContextRefreshing ? (
                                   <span className="block text-[8px] text-text-dim/70 font-normal leading-none">Actualizando…</span>
                                 ) : availabilityUnavailable ? (
-                                  <span className="block text-[8px] text-rose-400 font-bold leading-none">No disponible</span>
+                                  <span className="block text-[8px] text-rose-800 dark:text-rose-400 font-bold leading-none">No disponible</span>
                                 ) : showFull ? (
                                   <span className="block text-[8px] text-full-text font-bold leading-none">Lleno ({capInfo.count}/{capInfo.maxReq})</span>
                                 ) : (
@@ -2005,40 +2007,40 @@ export function VolunteerProfileView({
 
                 {/* Advertencias de validación del turno destino */}
                 {targetShiftStatus.isSource && (
-                  <div className="p-3.5 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-inter font-bold flex items-center gap-2.5 animate-in fade-in zoom-in-95">
-                    <span className="material-symbols-outlined text-[20px] text-purple-400 shrink-0">info</span>
+                  <div className="p-3.5 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-800 dark:text-purple-300 text-xs font-inter font-bold flex items-center gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-purple-800 dark:text-purple-400 shrink-0">info</span>
                     <span>Este es el turno actual origen. Selecciona otro horario o día para solicitar el cambio.</span>
                   </div>
                 )}
                 {!targetShiftStatus.isSource && targetShiftStatus.isCompleted && (
-                  <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
-                    <span className="material-symbols-outlined text-[20px] text-rose-400 shrink-0">block</span>
+                  <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-rose-800 dark:text-rose-400 shrink-0">block</span>
                     <div>
-                      <p className="text-rose-200 font-extrabold text-xs mb-0.5">Turno Ya Completado</p>
-                      <p className="text-[11px] text-rose-300/90 font-medium leading-relaxed">
+                      <p className="text-rose-900 dark:text-rose-200 font-extrabold text-xs mb-0.5">Turno Ya Completado</p>
+                      <p className="text-[11px] text-rose-800 dark:text-rose-300/90 font-medium leading-relaxed">
                         Ya completaste este turno previamente. No es posible solicitar un cambio hacia un turno ya completado.
                       </p>
                     </div>
                   </div>
                 )}
                 {!targetShiftStatus.isSource && !targetShiftStatus.isCompleted && targetShiftStatus.isAssigned && (
-                  <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
-                    <span className="material-symbols-outlined text-[20px] text-amber-400 shrink-0">warning</span>
+                  <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-amber-800 dark:text-amber-400 shrink-0">warning</span>
                     <div>
-                      <p className="text-amber-200 font-extrabold text-xs mb-0.5">Turno Ya Asignado</p>
-                      <p className="text-[11px] text-amber-300/90 font-medium leading-relaxed">
+                      <p className="text-amber-900 dark:text-amber-200 font-extrabold text-xs mb-0.5">Turno Ya Asignado</p>
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300/90 font-medium leading-relaxed">
                         Ya cuentas con este turno activo asignado. Elige un horario o día distinto.
                       </p>
                     </div>
                   </div>
                 )}
                 {!targetShiftStatus.isSource && !targetShiftStatus.isCompleted && !targetShiftStatus.isAssigned && targetCapacity.isFull && (
-                  <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
-                    <span className="material-symbols-outlined text-[20px] text-amber-400 shrink-0">warning</span>
+                  <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-inter font-bold flex items-start gap-2.5 animate-in fade-in zoom-in-95">
+                    <span className="material-symbols-outlined text-[20px] text-amber-800 dark:text-amber-400 shrink-0">warning</span>
                     <div>
-                      <p className="text-amber-200 font-extrabold text-xs mb-0.5">Cobertura Completa</p>
-                      <p className="text-[11px] text-amber-300/90 font-medium leading-relaxed">
-                        El turno <strong className="text-white">{targetShiftKey}</strong> del <strong className="text-white">{targetDayKey}</strong> ya tiene la cobertura completa para <strong className="text-white">{targetCapacity.committeeName}</strong> ({targetCapacity.count}/{targetCapacity.maxReq}). Selecciona otra fecha u horario.
+                      <p className="text-amber-900 dark:text-amber-200 font-extrabold text-xs mb-0.5">Cobertura Completa</p>
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300/90 font-medium leading-relaxed">
+                        El turno <strong className="text-amber-950 dark:text-white">{targetShiftKey}</strong> del <strong className="text-amber-950 dark:text-white">{targetDayKey}</strong> ya tiene la cobertura completa para <strong className="text-amber-950 dark:text-white">{targetCapacity.committeeName}</strong> ({targetCapacity.count}/{targetCapacity.maxReq}). Selecciona otra fecha u horario.
                       </p>
                     </div>
                   </div>
