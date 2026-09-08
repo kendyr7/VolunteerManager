@@ -33,6 +33,8 @@ function createItemsForDay(day: string, assignments: Record<number, number>): Re
       stake: volunteer.stake,
       committeeId: volunteer.committeeId,
       committeeName: volunteer.committeeName,
+      areaId: index === 0 ? 'area-reception' : null,
+      areaName: index === 0 ? 'Recepción norte' : 'Sin área asignada',
       date: day,
       shiftNumber,
       startTime: shiftNumber === 1 ? '7:00 AM' : `${8 + shiftNumber}:00 AM`,
@@ -103,12 +105,15 @@ for (const sheet of workbook.worksheets.slice(1)) {
 const summary = workbook.getWorksheet('Resumen');
 assert.equal(summary?.getCell('B6').value, 7, 'Summary uses the filtered volunteer population');
 assert.equal(summary?.getCell('H9').value, 0.96, 'Summary coverage matches the rounded screen value');
+const summaryLogo = summary?.getImages()[0]?.range as { ext?: { width?: number; height?: number } } | undefined;
+assert.equal(summaryLogo?.ext?.width, summaryLogo?.ext?.height, 'The summary logo keeps its square aspect ratio');
 const recruitment = workbook.getWorksheet('Reclutamiento y edades');
 assert.equal(recruitment?.getCell('F7').value, 2, 'Recruitment preserves the T1 shortage');
 const history = workbook.getWorksheet('Historial');
 assert.ok((history?.rowCount || 0) > 30, 'History exports rows beyond the screen page size');
-assert.ok(history?.getCell('F7').value instanceof Date, 'History dates remain typed');
-assert.equal(history?.getCell('J7').numFmt, '[h]:mm', 'Durations use an Excel duration format');
+assert.equal(history?.getCell('D7').value, 'Recepción norte', 'History exposes the assigned area');
+assert.ok(history?.getCell('G7').value instanceof Date, 'History dates remain typed');
+assert.equal(history?.getCell('K7').numFmt, '[h]:mm', 'Durations use an Excel duration format');
 
 const outputDirectory = path.resolve('outputs/excel-etapa-3');
 await fs.mkdir(outputDirectory, { recursive: true });

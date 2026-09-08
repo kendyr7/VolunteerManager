@@ -25,7 +25,7 @@ const source: ReportsData = {
     { committeeId: 'security', date: '2026-09-11', shiftKey: 'T1', required: 2 },
   ],
   items: [
-    { registrationId: 'one', volunteerId: 'ana', volunteerName: 'Ana Pérez', age: 20, phone: '111', neighborhood: 'Norte', stake: 'Norte', committeeId: 'guides', committeeName: 'Guías', date: '2026-09-10', shiftNumber: 1, startTime: '7:00 AM', endTime: '12:00 PM', isExtended: false, status: 'confirmed', durationMinutes: 120 },
+    { registrationId: 'one', volunteerId: 'ana', volunteerName: 'Ana Pérez', age: 20, phone: '111', neighborhood: 'Norte', stake: 'Norte', committeeId: 'guides', committeeName: 'Guías', areaId: 'reception', areaName: 'Recepción norte', date: '2026-09-10', shiftNumber: 1, startTime: '7:00 AM', endTime: '12:00 PM', isExtended: false, status: 'confirmed', durationMinutes: 120 },
     { registrationId: 'two', volunteerId: 'ana', volunteerName: 'Ana Pérez', age: 20, phone: '111', neighborhood: 'Norte', stake: 'Norte', committeeId: 'guides', committeeName: 'Guías', date: '2026-09-11', shiftNumber: 1, startTime: '7:00 AM', endTime: '12:00 PM', isExtended: false, status: 'absent', durationMinutes: 0 },
     { registrationId: 'three', volunteerId: 'maria', volunteerName: 'María López', age: 55, phone: '333', neighborhood: 'Centro', stake: 'Norte', committeeId: 'security', committeeName: 'Seguridad', date: '2026-09-10', shiftNumber: 1, startTime: '7:00 AM', endTime: '12:00 PM', isExtended: false, status: 'registered', durationMinutes: 0 },
   ],

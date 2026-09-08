@@ -10,6 +10,8 @@ export interface ReportItem {
   stake: string;
   committeeId: string;
   committeeName: string;
+  areaId?: string | null;
+  areaName?: string;
   date: string;
   shiftNumber: number;
   startTime: string;

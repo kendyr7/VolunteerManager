@@ -966,7 +966,7 @@ export default function ReportsPage() {
                     <span className="material-symbols-outlined mt-0.5 text-emerald-400">dashboard</span>
                     <div>
                       <span className="font-inter text-sm font-bold text-text">Panel interactivo</span>
-                      <p className="mt-1 text-xs leading-5 text-text-dim">Incluye el reporte filtrado, controles editables y los datos completos autorizados para cambiar filtros en Excel 365.</p>
+                      <p className="mt-1 text-xs leading-5 text-text-dim">Incluye el panel, controles editables, detalle y los datos completos autorizados para cambiar filtros en Excel 365.</p>
                     </div>
                   </div>
                 </button>
@@ -1238,6 +1238,7 @@ export default function ReportsPage() {
                               </span>
                             </button>
                           </th>
+                          <th className="px-4 py-4 font-inter font-bold">Área asignada</th>
                           <th className="px-4 py-4 font-inter font-bold">
                             <button
                               type="button"
@@ -1327,6 +1328,9 @@ export default function ReportsPage() {
                               <p className="font-inter font-bold text-text text-sm tracking-tight"><HighlightText text={item.volunteerName} term={appliedSearch} /></p>
                               <p className="text-[11px] text-text-dim font-inter font-bold mt-0.5">{item.phone}</p>
                             </td>
+                            <td className="px-4 py-4 font-inter font-bold text-[13px] text-text">
+                              <HighlightText text={item.areaName || 'Sin área asignada'} term={appliedSearch} />
+                            </td>
                             <td className="px-4 py-4 font-inter font-bold text-[13px] text-text-dim"><HighlightText text={item.committeeName} term={appliedSearch} /></td>
                             <td className="px-4 py-4 font-inter">
                               <p className="leading-snug text-text font-inter font-bold text-[13px]">{item.neighborhood}</p>
@@ -1375,6 +1379,10 @@ export default function ReportsPage() {
                               </Badge>
                             )}
                           </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] font-inter font-bold text-text-dim">
+                          <span className="material-symbols-outlined text-[14px] text-[#4d7cfe]">location_on</span>
+                          <HighlightText text={item.areaName || 'Sin área asignada'} term={appliedSearch} />
                         </div>
                         
                         {/* Line 2: Phone + Turno Info on left, Duration on right */}

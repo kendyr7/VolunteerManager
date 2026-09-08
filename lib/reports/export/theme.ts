@@ -37,7 +37,6 @@ export const REPORT_SHEET_ORDER = [
 
 export const INTERACTIVE_REPORT_SHEETS = {
   panel: 'Panel interactivo',
-  selections: 'Selecciones',
   detail: 'Detalle del panel',
   volunteersData: 'Datos voluntarios',
   shiftsData: 'Datos turnos',
@@ -47,9 +46,7 @@ export const INTERACTIVE_REPORT_SHEETS = {
 } as const;
 
 export const INTERACTIVE_REPORT_SHEET_ORDER = [
-  ...REPORT_SHEET_ORDER,
   INTERACTIVE_REPORT_SHEETS.panel,
-  INTERACTIVE_REPORT_SHEETS.selections,
   INTERACTIVE_REPORT_SHEETS.detail,
   INTERACTIVE_REPORT_SHEETS.volunteersData,
   INTERACTIVE_REPORT_SHEETS.shiftsData,

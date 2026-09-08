@@ -36,6 +36,8 @@ interface ReportShiftRow {
   volunteer_id: string;
   day_key: string;
   shift_key: string;
+  area_id: string | null;
+  committee_areas: { name: string } | Array<{ name: string }> | null;
 }
 
 interface ReportSessionRow {
@@ -51,6 +53,11 @@ interface ReportRequirementRow {
   committee_id: string;
   shift_key: string;
   required: number;
+}
+
+function relationName(value: ReportShiftRow['committee_areas']): string | null {
+  if (Array.isArray(value)) return value[0]?.name || null;
+  return value?.name || null;
 }
 
 
@@ -148,7 +155,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
       fetchAllRowsStrict<ReportShiftRow>(
         supabase,
         'shifts',
-        'id, volunteer_id, day_key, shift_key',
+        'id, volunteer_id, day_key, shift_key, area_id, committee_areas(name)',
         query => query.order('id')
       ),
       fetchAllRowsStrict<ReportSessionRow>(
@@ -436,6 +443,8 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
         stake: vol.stake || 'Sin estaca',
         committeeId: committeeId,
         committeeName: committeeName,
+        areaId: s.area_id || null,
+        areaName: relationName(s.committee_areas) || 'Sin área asignada',
         date: dateStr,
         shiftNumber: shiftNum,
         startTime: shiftMeta.start,

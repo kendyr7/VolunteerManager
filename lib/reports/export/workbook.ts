@@ -310,7 +310,11 @@ function addSummarySheet(
   sheet.getCell('A2').value = `Corte generado el ${formatGeneratedAt(input.generatedAt)} · Microsoft Excel 365`;
   sheet.getCell('A2').font = { name: REPORT_THEME.font, size: 11, color: { argb: REPORT_THEME.colors.muted } };
   if (logoImageId != null) {
-    sheet.addImage(logoImageId, 'G1:H3');
+    sheet.addImage(logoImageId, {
+      tl: { col: 6.7, row: 0.15 },
+      ext: { width: 56, height: 56 },
+      editAs: 'oneCell',
+    });
   }
 
   const missing = input.view.recruitmentSummary.reduce((total, row) => total + row.missingShifts, 0);
@@ -383,7 +387,7 @@ function addHistorySheet(workbook: Workbook, input: StaticReportWorkbookInput, l
   const sheet = workbook.addWorksheet(REPORT_SHEETS.history, { properties: { tabColor: { argb: REPORT_THEME.colors.accent } } });
   const columns: TableColumn[] = [
     { header: 'Voluntario', width: 28 }, { header: 'Teléfono', width: 16 }, { header: 'Comité', width: 23 },
-    { header: 'Barrio / Rama', width: 22 }, { header: 'Estaca', width: 19 }, { header: 'Fecha', width: 15, numberFormat: 'dd mmm yyyy', alignment: 'center' },
+    { header: 'Área asignada', width: 24 }, { header: 'Barrio / Rama', width: 22 }, { header: 'Estaca', width: 19 }, { header: 'Fecha', width: 15, numberFormat: 'dd mmm yyyy', alignment: 'center' },
     { header: 'Turno', width: 10, alignment: 'center' }, { header: 'Horario', width: 20, alignment: 'center' },
     { header: 'Estado', width: 15, alignment: 'center' }, { header: 'Duración', width: 13, numberFormat: '[h]:mm', alignment: 'right' },
   ];
@@ -391,11 +395,11 @@ function addHistorySheet(workbook: Workbook, input: StaticReportWorkbookInput, l
   writeContext(sheet, buildCompactFilterContext(input.data, input.filters, input.includeSimulation));
   const items = input.historyItems || input.view.items;
   writeTable(sheet, columns, items.map(item => [
-    safeText(item.volunteerName), safeText(item.phone), safeText(item.committeeName), safeText(item.neighborhood), safeText(item.stake),
+    safeText(item.volunteerName), safeText(item.phone), safeText(item.committeeName), safeText(item.areaName || 'Sin área asignada'), safeText(item.neighborhood), safeText(item.stake),
     toExcelDate(item.date), `T${item.shiftNumber}`, `${safeText(item.startTime)} – ${safeText(item.endTime)}`,
     STATUS_LABELS[item.status] || item.status, item.durationMinutes / 1440,
   ]), {
-    totalRow: ['TOTAL', `${items.length} turnos`, null, null, null, null, null, null, null, input.view.kpiStats.totalMinutes / 1440],
+    totalRow: ['TOTAL', `${items.length} turnos`, null, null, null, null, null, null, null, null, input.view.kpiStats.totalMinutes / 1440],
   });
 }
 

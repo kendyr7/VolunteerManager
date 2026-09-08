@@ -33,6 +33,8 @@ function item(
     stake: volunteer.stake,
     committeeId: volunteer.committeeId,
     committeeName: volunteer.committeeName,
+    areaId: volunteerIndex === 0 ? 'area-reception' : null,
+    areaName: volunteerIndex === 0 ? 'Recepción norte' : 'Sin área asignada',
     date,
     shiftNumber,
     startTime: shiftNumber === 1 ? '7:00 AM' : '11:00 AM',
@@ -67,10 +69,9 @@ const source: ReportsData = {
   ],
 };
 
-const filters = { committeeIds: ['history'], dates: [officialDate], search: 'pérez' };
+const filters = { committeeIds: ['history'], dates: [officialDate] };
 const view = buildReportView(source, filters);
-assert.equal(view.items.length, 1);
-assert.equal(view.items[0].registrationId, 'r1');
+assert.equal(view.items.length, 2);
 
 const logo = await fs.readFile(path.resolve('public/app-icon-512.png'));
 const workbook = await buildInteractiveReportWorkbook({
@@ -83,7 +84,7 @@ const workbook = await buildInteractiveReportWorkbook({
 });
 
 assert.deepEqual(workbook.worksheets.map(sheet => sheet.name), [...INTERACTIVE_REPORT_SHEET_ORDER]);
-assert.equal(workbook.views[0]?.activeTab, 6);
+assert.equal(workbook.views[0]?.activeTab, 0);
 for (const sheet of workbook.worksheets) {
   assert.ok(sheet.views.length > 0 && sheet.views.every(viewValue => viewValue.showGridLines === false), `${sheet.name} must hide gridlines`);
   let foundFont = false;
@@ -92,32 +93,43 @@ for (const sheet of workbook.worksheets) {
 }
 
 const panel = workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.panel)!;
+assert.match(String(panel.getCell('A2').value), /Microsoft Excel 365/, 'The panel subtitle is preserved');
 assert.equal(panel.getCell('C7').value, 'Al exportar');
-assert.equal(panel.getCell('C14').value, 'No disponible en este archivo');
-assert.equal((panel.getCell('C19').value as { result: number }).result, 1, 'Initial turn count reproduces the filtered report');
-assert.equal((panel.getCell('C20').value as { result: number }).result, 1, 'Initial unique count reproduces the filtered report');
-assert.equal((panel.getCell('C21').value as { result: number }).result, 3, 'Initial requirements reproduce the operational target');
+assert.equal(panel.getCell('C12').value, 'No disponible en este archivo');
+assert.equal((panel.getCell('C17').value as { result: number }).result, 2, 'Initial turn count reproduces the filtered report');
+assert.equal((panel.getCell('C18').value as { result: number }).result, 2, 'Initial unique count reproduces the filtered report');
+assert.equal((panel.getCell('C19').value as { result: number }).result, 3, 'Initial requirements reproduce the operational target');
 assert.equal(panel.getCell('C7').dataValidation.type, 'list');
-assert.equal(panel.getCell('D8').dataValidation.type, 'list');
+assert.equal(panel.getCell('D7').dataValidation.type, 'list');
+assert.equal(workbook.getWorksheet('Selecciones'), undefined);
 
-const selections = workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.selections)!;
-assert.ok(selections.getColumn(5).values.includes('Sí'));
-assert.equal(selections.getCell('E6').dataValidation.type, 'list');
-
-const history = workbook.getWorksheet('Historial')!;
 const shiftData = workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.shiftsData)!;
 const volunteerData = workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.volunteersData)!;
-assert.equal(history.rowCount, 8, 'The static history contains one matching row plus its total');
+assert.equal(workbook.getWorksheet('Historial'), undefined, 'The interactive workbook does not duplicate the six fixed report sheets');
 assert.equal(shiftData.rowCount, source.items.length + 6, 'The panel base includes all authorized assignments');
 assert.equal(volunteerData.rowCount, source.volunteers.length + 6, 'The panel base includes the volunteer without a shift');
-assert.equal(shiftData.getCell('C10').value, 'María Ruiz', 'Authorized data outside the original filters remains available to panel controls');
+assert.equal(shiftData.getCell('A10').value, 'María Ruiz', 'Authorized data outside the original filters remains available to panel controls');
+assert.equal(shiftData.getCell('G7').value, 'Recepción norte', 'Assigned area is present in the interactive detail base');
+const shiftHeaders = shiftData.getRow(6).values;
+const volunteerHeaders = volunteerData.getRow(6).values;
+const requirementHeaders = workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.requirements)!.getRow(6).values;
+assert.ok(Array.isArray(shiftHeaders) && Array.isArray(volunteerHeaders) && Array.isArray(requirementHeaders));
+assert.deepEqual(shiftHeaders.slice(1), [
+  'Voluntario', 'Edad', 'Teléfono', 'Barrio / rama', 'Estaca', 'Comité',
+  'Área asignada', 'Fecha', 'Turno', 'Estado', 'Minutos servidos',
+]);
+assert.deepEqual(volunteerHeaders.slice(1), [
+  'Voluntario', 'Edad', 'Teléfono', 'Barrio / rama', 'Estaca', 'Comité',
+]);
+assert.deepEqual(requirementHeaders.slice(1), [
+  'Comité', 'Fecha', 'Turno', 'Requeridos',
+]);
 
 const calculations = workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.calculations)!;
 assert.equal(calculations.state, 'hidden');
-console.log('calculation samples', calculations.getCell('I5').value, calculations.getCell('I6').value);
-assert.match((calculations.getCell('I5').value as { formula: string }).formula, /PRODUCT\(B5:H5\)/);
+assert.match((calculations.getCell('I5').value as { formula: string }).formula, /PRODUCT\(B5:F5,H5\)/);
 assert.equal((calculations.getCell('I5').value as { result: number }).result, 1);
-assert.equal((calculations.getCell('I6').value as { result: number }).result, 0);
+assert.notEqual((calculations.getCell('I7').value as { result?: number }).result, 1);
 const detail = workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.detail)!;
 assert.match((detail.getCell('A7').value as { formula: string }).formula, /^FILTER\(/);
 assert.equal(workbook.getWorksheet(INTERACTIVE_REPORT_SHEETS.catalogs)?.state, 'hidden');

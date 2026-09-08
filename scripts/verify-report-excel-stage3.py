@@ -41,6 +41,10 @@ with ZipFile(FILE) as archive:
     fonts = xml("xl/styles.xml").findall("s:fonts/s:font/s:name", NS)
     assert any(font.get("val") == "Aptos Narrow" for font in fonts)
     assert any(name.startswith("xl/media/") and name.endswith(".png") for name in names)
+    drawing_ns = {"xdr": "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"}
+    for drawing_name in [name for name in names if name.startswith("xl/drawings/drawing") and name.endswith(".xml")]:
+        extent = xml(drawing_name).find("xdr:oneCellAnchor/xdr:ext", drawing_ns)
+        assert extent is not None and extent.get("cx") == extent.get("cy"), f"Stretched logo in {drawing_name}"
     assert not any("vbaProject" in name or name.startswith("xl/externalLinks/") for name in names)
 
 result = {

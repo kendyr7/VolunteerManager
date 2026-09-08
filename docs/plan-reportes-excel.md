@@ -6,7 +6,7 @@ Estado: etapas 0 a 3 completadas. La etapa 4 queda pendiente de revisión funcio
 
 Generar archivos `.xlsx` profesionales desde Reportes, con todas las pestañas actuales, filtros fieles a la aplicación y un panel interactivo que permita explorar la información incluida en el archivo. Construir mediante entregas pequeñas, verificables y utilizables.
 
-Requisitos visuales: Aptos Narrow, encabezados con colores consistentes, logotipo existente, cuadrículas desactivadas en vista e impresión y ausencia de bordes innecesarios. Requisitos funcionales: exportar todas las filas, conservar filtros y selecciones múltiples, respetar permisos, recalcular resultados del panel y abrir sin reparación ni macros.
+Requisitos visuales: Aptos Narrow, encabezados con colores consistentes, logotipo existente, cuadrículas desactivadas en vista e impresión y ausencia de bordes innecesarios. Requisitos funcionales: exportar todas las filas, conservar los filtros aplicados, respetar permisos, recalcular resultados del panel y abrir sin reparación ni macros.
 
 Versión objetivo confirmada por el usuario: **Excel Microsoft 365**. Validar el panel en Microsoft 365 para Windows y Excel web. El reporte estático seguirá siendo la alternativa para clientes que no soporten las fórmulas del panel. No anunciar compatibilidad con otras versiones sin probarlas.
 
@@ -27,11 +27,11 @@ Versión objetivo confirmada por el usuario: **Excel Microsoft 365**. Validar el
 Un botón «Exportar Excel» permitirá elegir:
 
 1. **Reporte filtrado**: las cinco pestañas y un resumen, con todos los registros que cumplen los filtros actuales. Opción inicial predeterminada.
-2. **Reporte con panel interactivo**: el mismo reporte filtrado, el panel, sus controles y las bases completas autorizadas necesarias para ampliar el análisis. La interfaz indicará «Incluye los datos completos autorizados para cambiar los filtros en Excel».
+2. **Reporte con panel interactivo**: el panel, sus controles, detalle y las bases completas autorizadas necesarias para ampliar el análisis. Las seis hojas del reporte filtrado se descargan únicamente con la primera opción para evitar duplicación. La interfaz indica «Incluye los datos completos autorizados para cambiar los filtros en Excel».
 
 En ambos casos se fija una instantánea al iniciar la exportación: filtros aplicados, ordenación, fecha de corte y datos correspondientes. Si el usuario modifica controles durante la generación, el archivo sigue representando esa instantánea. Deshabilitar la exportación mientras se carga una selección de simulación diferente para evitar mezclar filtros y datos.
 
-«Datos completos» significa todos los registros del evento que el usuario puede consultar. En el modo interactivo, las selecciones de comité, barrio, estaca, estado, fechas y búsqueda se convierten en valores iniciales editables, no en límites de la base exportada. La autorización del servidor sigue siendo un límite absoluto.
+«Datos completos» significa todos los registros del evento que el usuario puede consultar. En el modo interactivo, las selecciones de comité, barrio, estaca, estado y fechas se convierten en valores iniciales editables, no en límites de la base exportada. La búsqueda de texto permanece como filtro del reporte fijo y no se replica en el panel. La autorización del servidor sigue siendo un límite absoluto.
 
 El interruptor de simulación determina si esos registros se incluyen físicamente. Si están incluidos, el panel puede ocultarlos o mostrarlos. Si no están incluidos, el panel indica que no están disponibles y no ofrece activarlos. El archivo es un corte de datos; cambiar filtros no consulta el sistema ni incorpora registros posteriores.
 
@@ -46,15 +46,14 @@ El interruptor de simulación determina si esos registros se incluyen físicamen
 | Reclutamiento y edades | Reclutamiento y distribución etaria en dos secciones con su población indicada | Reporte filtrado completo |
 | Cobertura por día | Requeridos, asignados, asistentes, faltantes y desglose por turno | Reporte filtrado completo |
 | Panel interactivo | Controles rápidos, métricas, comparaciones y acceso al detalle | Se recalcula; modo interactivo |
-| Selecciones | Selección múltiple de categorías y fechas | Editable; modo interactivo |
 | Detalle del panel | Filas que cumplen los controles actuales | Se recalcula; modo interactivo |
 | Datos de voluntarios | Una fila por voluntario autorizado, incluyendo personas sin turno | Base del modo interactivo |
-| Datos de turnos | Una fila por unidad de reporte definida, con identificadores y duración atribuida | Base del modo interactivo |
+| Datos de turnos | Una fila por unidad de reporte definida, con datos legibles y duración atribuida | Base del modo interactivo |
 | Requerimientos | Comité, fecha, turno y meta correspondiente | Base del modo interactivo |
 | Catálogos | Valores autorizados y claves para los controles | Auxiliar; modo interactivo |
 | Cálculos | Máscaras y agregados intermedios auditables | Auxiliar; modo interactivo |
 
-El reporte siempre incluye las cinco pestañas, incluso cuando estén vacías. Los auxiliares podrán ocultarse por orden visual; ocultar hojas no se considera una medida de autorización. No incluir columnas internas o personales que no aporten al reporte.
+El reporte filtrado siempre incluye las cinco pestañas de análisis y el Resumen, incluso cuando estén vacías. El archivo interactivo contiene únicamente el panel, el detalle, sus bases visibles y dos auxiliares ocultas. Ocultar hojas no se considera una medida de autorización. No incluir columnas internas o personales que no aporten al reporte.
 
 Las hojas del corte llevan el contexto «Filtros al exportar». El panel muestra «Filtros actuales del panel». Un cambio en el panel no altera silenciosamente el corte compartible. Las cinco áreas de análisis estarán representadas también en el panel o su detalle dinámico, sin duplicar cinco reportes completos adicionales.
 
@@ -71,15 +70,13 @@ Las hojas del corte llevan el contexto «Filtros al exportar». El panel muestra
 
 ### Controles del panel
 
-Cada dimensión categórica tendrá una elección de modo: «Al exportar», «Todos», «Un valor» o «Selección múltiple». Un segundo desplegable permite elegir el valor único cuando corresponda. La hoja Selecciones contiene los valores y una columna editable «Incluir: Sí/No» para selecciones múltiples, sin límites arbitrarios de cantidad.
+Cada dimensión categórica tendrá una elección de modo: «Al exportar», «Todos» o «Un valor». Un segundo desplegable permite elegir el valor único cuando corresponda.
 
-Las fechas tendrán los modos «Al exportar», «Todas», «Intervalo» y «Fechas seleccionadas». En el último, usar la lista real de fechas del evento con inclusión Sí/No. Una selección personalizada vacía significa cero coincidencias y se señala claramente; no equivale a Todos.
+Las fechas tendrán los modos «Al exportar», «Todas» e «Intervalo», usando la lista real de fechas del evento.
 
-La búsqueda tendrá modo «Al exportar», «Sin búsqueda» o «Personalizada», con una celda de texto. Simulación será editable únicamente si el archivo contiene esos registros.
+La búsqueda no forma parte del panel interactivo. Simulación será editable únicamente si el archivo contiene esos registros.
 
-Un control global «Usar filtros: Al exportar / Personalizados» permite volver al resultado original sin macros y sin simular botones que no funcionan. Las selecciones personalizadas se conservan al alternar ese control.
-
-Los filtros de encabezado de las tablas de datos sirven para inspección local. No controlan el panel: sus métricas dependen exclusivamente de los controles identificados en Panel y Selecciones. Los subtotales locales se rotulan «Filas visibles» para diferenciarlos de los indicadores del panel.
+Los filtros de encabezado de las tablas de datos sirven para inspección local. No controlan el panel: sus métricas dependen exclusivamente de los desplegables identificados en Panel.
 
 ## Definiciones de datos y métricas
 
@@ -154,7 +151,7 @@ Separar adquisición, cálculo y formato. Cargar el generador bajo demanda. Medi
 | 1. Prueba técnica y contrato | Libro pequeño con datos ficticios, múltiples comités/fechas, controles, logo, Aptos Narrow, fórmula dinámica y mapa de cobertura; verificar Microsoft 365 y cerrar definiciones | Completada técnicamente. La evidencia y los límites están en `docs/reportes-excel-etapa-1.md`; la revisión de producto por el usuario queda antes de iniciar la etapa 2 |
 | 2. Datos y cálculos compartidos | Extraer filtros/agregados, incorporar personas sin turno y metas por fecha/comité/turno; conectar pantalla | Completada. Implementación, decisiones y evidencia en `docs/reportes-excel-etapa-2.md` |
 | 3. Reporte Excel profesional | Resumen y cinco pestañas completas con estilos, logo, autofiltros, totales e impresión | Completada. Implementación y evidencia en `docs/reportes-excel-etapa-3.md` |
-| 4. Bases y controles del panel | Modalidad interactiva, bases completas autorizadas, filtros originales y personalizados, selección múltiple y restauración | El estado inicial reproduce el reporte; modificar/limpiar/restaurar controles funciona sin macros; datos fuera del permiso nunca están presentes |
+| 4. Bases y controles del panel | Modalidad interactiva separada, bases completas autorizadas, filtros originales y editables, área asignada y detalle dinámico | Completada. Los desplegables simples actualizan las métricas y el detalle sin macros; evidencia en `docs/reportes-excel-etapa-4.md` |
 | 5. Métricas, detalle y visualizaciones | Todos los indicadores, cinco áreas analíticas, detalle dinámico, mapa y comparaciones; gráficos nativos según ruta validada en etapa 1 | Cada cambio de filtro actualiza cifras, detalle y gráficos; no quedan resultados desfasados, errores de fórmula o visualizaciones estáticas presentadas como interactivas |
 | 6. Integración y rendimiento | Flujo final de exportación, progreso real, errores/reintento, liberación de memoria y generación adecuada al volumen | Descarga fiable con volumen representativo en escritorio y móvil; exportar no mezcla estados ni bloquea innecesariamente la interfaz |
 | 7. Validación y cierre | Revisión visual de todas las hojas y apertura/recálculo en versiones objetivo, impresión y regresiones | Checklist completo, resultados reproducibles, limitaciones documentadas y ninguna entrega pendiente dentro del alcance |
@@ -171,7 +168,7 @@ No es necesario pedir una aprobación nueva entre etapas para trabajo autorizado
 - Simulación incluida/excluida; evitar fechas de simulación disponibles en un libro que no contiene sus datos.
 - Exportar desde cada una de las cinco pestañas produce el mismo conjunto de hojas; ordenar y paginar no pierden filas.
 - Usuario global frente a usuario restringido a comité. Inspeccionar todas las hojas, incluidos auxiliares y catálogos, para comprobar el alcance.
-- Cambiar controles del panel, volver a originales, elegir múltiples valores y seleccionar cero coincidencias. Comparar contra los mismos casos resueltos por el motor TypeScript.
+- Cambiar controles del panel, volver a los filtros originales y probar valores únicos e intervalos de fechas. Comparar contra los mismos casos resueltos por el motor TypeScript.
 - Verificar conteos enteros exactamente; minutos con la precisión operativa; tasas con tolerancia acorde al redondeo presentado.
 - Abrir el archivo guardado: sin reparación, enlaces externos inesperados, macros ni errores `#REF!`, `#DIV/0!`, `#VALUE!`, `#NAME?`, `#SPILL!` o equivalentes.
 - Lectura estructural del archivo para hojas, rangos, estilos, fuentes, gridlines, validaciones, filtros, imágenes y tipos de celda; no confundir esa inspección con una prueba de recálculo.
@@ -191,8 +188,8 @@ No es necesario pedir una aprobación nueva entre etapas para trabajo autorizado
 - [x] Etapa 0: revisión y plan completo.
 - [x] Etapa 1: prueba técnica y contrato definitivo. Revisión superada al autorizar el usuario la etapa 2.
 - [x] Etapa 2: datos y cálculos compartidos. Revisión funcional aprobada por el usuario.
-- [x] Etapa 3: reporte Excel profesional. Revisión completa del archivo generado pendiente antes de la etapa 4.
-- [ ] Etapa 4: bases y controles interactivos.
+- [x] Etapa 3: reporte Excel profesional. Revisión aprobada al continuar con la etapa 4.
+- [x] Etapa 4: bases y controles interactivos. Implementación y evidencia en `docs/reportes-excel-etapa-4.md`.
 - [ ] Etapa 5: métricas, detalle y visualizaciones.
 - [ ] Etapa 6: integración y rendimiento.
 - [ ] Etapa 7: validación y cierre.
