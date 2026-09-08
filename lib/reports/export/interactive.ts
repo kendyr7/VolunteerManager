@@ -390,7 +390,7 @@ function addPanelSheet(
   sheet.getCell('B21').value = '“Detalle del panel” se actualiza automáticamente al cambiar cualquiera de los desplegables.';
   styleFont(sheet.getCell('B21'), { color: REPORT_THEME.colors.muted });
   sheet.mergeCells('B23:I23');
-  sheet.getCell('B23').value = 'El reporte fijo de seis hojas se exporta como archivo separado.';
+  sheet.getCell('B23').value = 'El archivo contiene cinco hojas visibles; Catálogos y Cálculos permanecen ocultas como soporte.';
   styleFont(sheet.getCell('B23'), { color: REPORT_THEME.colors.muted });
   sheet.pageSetup.printArea = 'A1:J25';
 }

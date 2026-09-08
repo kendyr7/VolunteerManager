@@ -218,7 +218,6 @@ export default function ReportsPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState('');
-  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
 
   // Pagination State (30 items per page for instant 1ms DOM rendering)
   const [currentPage, setCurrentPage] = useState(1);
@@ -553,10 +552,9 @@ export default function ReportsPage() {
     );
   }
 
-  const handleExportExcel = async (mode: 'static' | 'interactive') => {
+  const handleExportExcel = async () => {
     if (!data || !reportView || isExporting) return;
 
-    setIsExportDialogOpen(false);
     setIsExporting(true);
     setExportError('');
     try {
@@ -580,13 +578,8 @@ export default function ReportsPage() {
         ageSegmentation: [...filteredAgeSegmentation],
         dailyCoverage: [...sortedDailyCoverage],
       };
-      if (mode === 'interactive') {
-        const { downloadInteractiveReportWorkbook } = await import('@/lib/reports/export/interactive');
-        await downloadInteractiveReportWorkbook(workbookInput);
-      } else {
-        const { downloadStaticReportWorkbook } = await import('@/lib/reports/export/workbook');
-        await downloadStaticReportWorkbook(workbookInput);
-      }
+      const { downloadInteractiveReportWorkbook } = await import('@/lib/reports/export/interactive');
+      await downloadInteractiveReportWorkbook(workbookInput);
     } catch (error) {
       console.error('Error exporting reports workbook:', error);
       setExportError('No se pudo generar el archivo Excel. Intenta nuevamente.');
@@ -875,7 +868,7 @@ export default function ReportsPage() {
               )}
             </Button>
             <Button
-              onClick={() => setIsExportDialogOpen(true)}
+              onClick={handleExportExcel}
               className="bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full shadow-lg shadow-blue-500/10 h-9 px-4 text-xs font-bold font-inter transition-all active:scale-[0.97] flex items-center gap-1.5"
               disabled={!data || !reportView || isExporting || loading}
               aria-busy={isExporting}
@@ -904,79 +897,6 @@ export default function ReportsPage() {
           </p>
         )}
       </div>
-
-      <AnimatePresence>
-        {isExportDialogOpen && (
-          <motion.div
-            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsExportDialogOpen(false)}
-          >
-            <motion.div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="export-excel-title"
-              className="w-full max-w-xl rounded-[28px] border border-border bg-dark2 p-5 shadow-2xl sm:p-6"
-              initial={{ opacity: 0, y: 16, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.98 }}
-              onClick={event => event.stopPropagation()}
-            >
-              <div className="mb-5 flex items-start justify-between gap-4">
-                <div>
-                  <h2 id="export-excel-title" className="text-xl font-black text-text">Exportar Excel</h2>
-                  <p className="mt-1 text-xs font-inter text-text-dim">Elige el tipo de archivo que necesitas.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsExportDialogOpen(false)}
-                  className="grid size-9 shrink-0 place-items-center rounded-full border border-border text-text-dim transition-colors hover:bg-dark3 hover:text-text"
-                  aria-label="Cerrar"
-                >
-                  <span className="material-symbols-outlined text-[18px]">close</span>
-                </button>
-              </div>
-
-              <div className="grid gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleExportExcel('static')}
-                  className="group rounded-2xl border border-[#4d7cfe]/40 bg-[#4d7cfe]/10 p-4 text-left transition-colors hover:bg-[#4d7cfe]/15"
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="material-symbols-outlined mt-0.5 text-[#4d7cfe]">description</span>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-inter text-sm font-bold text-text">Reporte filtrado</span>
-                        <span className="rounded-full bg-[#4d7cfe] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">Recomendado</span>
-                      </div>
-                      <p className="mt-1 text-xs leading-5 text-text-dim">Resumen y las cinco pestañas con todos los registros que cumplen los filtros actuales.</p>
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleExportExcel('interactive')}
-                  className="group rounded-2xl border border-border bg-dark3/60 p-4 text-left transition-colors hover:border-[#4d7cfe]/40 hover:bg-dark3"
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="material-symbols-outlined mt-0.5 text-emerald-400">dashboard</span>
-                    <div>
-                      <span className="font-inter text-sm font-bold text-text">Panel interactivo</span>
-                      <p className="mt-1 text-xs leading-5 text-text-dim">Incluye el panel, controles editables, detalle y los datos completos autorizados para cambiar filtros en Excel 365.</p>
-                    </div>
-                  </div>
-                </button>
-              </div>
-
-              <p className="mt-4 text-[11px] leading-5 text-text-dim">El archivo es una instantánea. No consulta el sistema ni incluye datos fuera de tus permisos.</p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="flex-1 px-4 sm:px-6 lg:px-8 w-full">
         {/* Primary KPIs - Edge to Edge Fine Line Grid matching Dashboard */}

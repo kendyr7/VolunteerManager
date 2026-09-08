@@ -4,7 +4,7 @@ Estado: etapas 0 a 3 completadas. La etapa 4 queda pendiente de revisión funcio
 
 ## Objetivo y alcance
 
-Generar archivos `.xlsx` profesionales desde Reportes, con todas las pestañas actuales, filtros fieles a la aplicación y un panel interactivo que permita explorar la información incluida en el archivo. Construir mediante entregas pequeñas, verificables y utilizables.
+Generar un archivo `.xlsx` profesional desde Reportes, con cinco hojas visibles, filtros fieles a la aplicación y un panel interactivo que permita explorar la información incluida en el archivo. Construir mediante entregas pequeñas, verificables y utilizables.
 
 Requisitos visuales: Aptos Narrow, encabezados con colores consistentes, logotipo existente, cuadrículas desactivadas en vista e impresión y ausencia de bordes innecesarios. Requisitos funcionales: exportar todas las filas, conservar los filtros aplicados, respetar permisos, recalcular resultados del panel y abrir sin reparación ni macros.
 
@@ -24,12 +24,9 @@ Versión objetivo confirmada por el usuario: **Excel Microsoft 365**. Validar el
 
 ## Comportamiento del producto
 
-Un botón «Exportar Excel» permitirá elegir:
+Un único botón «Exportar Excel» descarga el reporte interactivo con el panel, sus controles, detalle y las bases completas autorizadas necesarias para ampliar el análisis.
 
-1. **Reporte filtrado**: las cinco pestañas y un resumen, con todos los registros que cumplen los filtros actuales. Opción inicial predeterminada.
-2. **Reporte con panel interactivo**: el panel, sus controles, detalle y las bases completas autorizadas necesarias para ampliar el análisis. Las seis hojas del reporte filtrado se descargan únicamente con la primera opción para evitar duplicación. La interfaz indica «Incluye los datos completos autorizados para cambiar los filtros en Excel».
-
-En ambos casos se fija una instantánea al iniciar la exportación: filtros aplicados, ordenación, fecha de corte y datos correspondientes. Si el usuario modifica controles durante la generación, el archivo sigue representando esa instantánea. Deshabilitar la exportación mientras se carga una selección de simulación diferente para evitar mezclar filtros y datos.
+Se fija una instantánea al iniciar la exportación: filtros aplicados, ordenación, fecha de corte y datos correspondientes. Si el usuario modifica controles durante la generación, el archivo sigue representando esa instantánea. Deshabilitar la exportación mientras se carga una selección de simulación diferente para evitar mezclar filtros y datos.
 
 «Datos completos» significa todos los registros del evento que el usuario puede consultar. En el modo interactivo, las selecciones de comité, barrio, estaca, estado y fechas se convierten en valores iniciales editables, no en límites de la base exportada. La búsqueda de texto permanece como filtro del reporte fijo y no se replica en el panel. La autorización del servidor sigue siendo un límite absoluto.
 

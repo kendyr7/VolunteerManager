@@ -2,10 +2,9 @@
 
 ## Resultado
 
-La exportación ofrece dos archivos distintos:
+La pantalla de Reportes ofrece una sola descarga de Excel:
 
-- **Reporte filtrado**: conserva las seis hojas `Resumen`, `Historial`, `Horas por voluntario`, `Totales por comité`, `Reclutamiento y edades` y `Cobertura por día`.
-- **Panel interactivo**: contiene las hojas visibles `Panel interactivo`, `Detalle del panel`, `Datos voluntarios`, `Datos turnos` y `Requerimientos`, además de las auxiliares ocultas `Catálogos` y `Cálculos`.
+- **Reporte interactivo**: contiene las cinco hojas visibles `Panel interactivo`, `Detalle del panel`, `Datos voluntarios`, `Datos turnos` y `Requerimientos`, además de las auxiliares ocultas `Catálogos` y `Cálculos`.
 
 El panel incluye todos los datos que el usuario tenía autorización para consultar al generar el archivo. Los filtros originales de comité, barrio o rama, estaca, estado y fecha se conservan como opción inicial. La búsqueda de texto no forma parte del panel interactivo.
 
@@ -29,7 +28,7 @@ El logotipo del Resumen dejó de depender del tamaño de un rango de celdas. Tod
 
 - El estado inicial reproduce los filtros categóricos y de fecha aplicados al exportar.
 - Se probaron cuatro escenarios de recálculo: original, todos, un comité e intervalo de fechas.
-- El libro interactivo contiene siete hojas, cinco visibles y dos auxiliares ocultas, y no duplica las seis hojas del reporte fijo.
+- El libro interactivo contiene siete hojas, cinco visibles y dos auxiliares ocultas. Es la única modalidad disponible desde la interfaz.
 - Las bases contienen los turnos y voluntarios completos autorizados, incluso una persona sin turno en el caso de prueba.
 - Las hojas no muestran gridlines, usan Aptos Narrow y no contienen macros ni conexiones externas.
 - La inspección del paquete XLSX valida dropdowns, fórmulas `FILTER` y `COUNTIFS`, hojas auxiliares ocultas y ausencia de errores estructurales.
