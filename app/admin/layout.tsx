@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { name: "Global", href: "/admin/dashboard", icon: "dashboard" },
-  { name: "Reemplazos", href: "/admin/replacements", icon: "warning" },
+  { name: "Solicitudes", href: "/admin/replacements", icon: "published_with_changes" },
   { name: "Coordinadores", href: "/admin/coordinators", icon: "verified_user" },
   { name: "Ver Comités", href: "/dashboard", icon: "dashboard_customize" }, // Link to standard coordinator view
   { name: "Exportar", href: "/admin/export", icon: "download" },

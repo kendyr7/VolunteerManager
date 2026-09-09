@@ -117,7 +117,7 @@ ok(f.sends.length === 1 && f.tables.push_deliveries[0].status === 'sent', 'Pendi
 ok(f.sends[0].settings.TTL <= 3600 && f.sends[0].settings.topic.length === 32, 'Transport TTL and stable topic');
 ok(!f.sends[0].body.body.includes('volunteer'), 'No volunteer identifiers in visible text');
 ok(f.sends[0].body.title === 'Solicitud de cambio · Ana Pérez', 'Request identifies the volunteer');
-ok(f.sends[0].body.body.includes('Hospitalidad') && f.sends[0].body.body.includes('Actual:') && f.sends[0].body.body.includes('T1') && f.sends[0].body.body.includes('Solicitado:') && f.sends[0].body.body.includes('T2'), 'Request includes committee and both slots');
+ok(f.sends[0].body.body.includes('En revisión.') && f.sends[0].body.body.includes('Hospitalidad') && f.sends[0].body.body.includes('Original:') && f.sends[0].body.body.includes('T1') && f.sends[0].body.body.includes('Solicitado:') && f.sends[0].body.body.includes('T2'), 'Request includes review status, committee and both slots');
 ok(f.sends[0].body.body.includes('10') && f.sends[0].body.body.includes('11') && f.sends[0].body.body.includes('sep'), 'Request dates include the month');
 ok(f.sends[0].body.url === '/replacements?requestId=request', 'Push opens the specific request');
 ok(!JSON.stringify(f.sends[0].body).includes('PRIVATE_'), 'Phones and personal reasons are excluded');

@@ -788,8 +788,8 @@ export async function sendShiftChangeResultTemplate(options: {
   // Fallback to text message inside 24h window or if template pending approval
   if (!apiRes.success) {
     const textMsg = options.resultStatus === 'APROBADA'
-      ? `¡Hola ${options.volunteerName}! 🎉 Tu petición de cambio de turno (${options.shiftDetails}) ha sido APROBADA. ${options.reasonOrDetail}. ¡Gracias por tu disposición!`
-      : `Estimado(a) ${options.volunteerName}. Tu petición de cambio de turno (${options.shiftDetails}) ha sido RECHAZADA debido a ${options.reasonOrDetail}. Agradecemos tu comprensión. 🙏`;
+      ? `¡Hola ${options.volunteerName}! 🎉 Tu solicitud de cambio de turno (${options.shiftDetails}) ha sido APROBADA. ${options.reasonOrDetail}. ¡Gracias por tu disposición!`
+      : `Estimado(a) ${options.volunteerName}. Tu solicitud de cambio de turno (${options.shiftDetails}) ha sido RECHAZADA. Motivo: ${options.reasonOrDetail}. Agradecemos tu comprensión. 🙏`;
 
     return sendWhatsAppText({
       to: options.to,

@@ -31,6 +31,16 @@ export interface DashboardInsightAreaCriticalShift {
   configuredAreas: number;
 }
 
+export interface DashboardInsightAttendanceAttention {
+  status: 'late' | 'absent';
+  day: string;
+  shift: string;
+  count: number;
+  minutesSinceStart: number;
+  primaryCommittee: string;
+  affectedCommittees: number;
+}
+
 export interface DashboardInsightContext {
   effectiveCommitteeScope: string;
   canSeeGlobal: boolean;
@@ -39,4 +49,11 @@ export interface DashboardInsightContext {
   areaCriticalShifts: DashboardInsightAreaCriticalShift[];
   openAttendanceSessions: number;
   staleOpenAttendanceSessions: number;
+  attendanceAttention: DashboardInsightAttendanceAttention | null;
+}
+
+export function dashboardInsightsEqual(first: DashboardInsight | null, second: DashboardInsight | null) {
+  if (first === second) return true;
+  if (!first || !second || first.template !== second.template) return false;
+  return JSON.stringify(first.highlights) === JSON.stringify(second.highlights);
 }

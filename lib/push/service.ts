@@ -83,7 +83,7 @@ export async function resolveEvent(db: SupabaseClient, event: EventRow, now: Dat
       committeeId: volunteer.committee_id, dedupeKey: `request:${event.request_id}`,
       expiresAt: new Date(Date.parse(event.created_at) + MAX_EVENT_AGE).toISOString(),
       payload: { title: `Solicitud de cambio · ${name}`,
-        body: `${committeeName}. Actual: ${notificationSlot(request.current_day_key, request.current_shift_key)}. Solicitado: ${notificationSlot(request.requested_day_key, request.requested_shift_key)}.`,
+        body: `En revisión. ${committeeName}. Original: ${notificationSlot(request.current_day_key, request.current_shift_key)}. Solicitado: ${notificationSlot(request.requested_day_key, request.requested_shift_key)}.`,
         url: `/replacements?requestId=${event.request_id}`, tag: `request:${event.request_id}` },
     };
   }

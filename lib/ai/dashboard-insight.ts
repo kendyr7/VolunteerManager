@@ -139,7 +139,82 @@ function buildCriticalBlueprint(
   };
 }
 
+function elapsedLabel(minutes: number) {
+  if (minutes < 60) return `${minutes} min desde el inicio`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder === 0
+    ? `${hours} ${pluralize(hours, 'hora', 'horas')} desde el inicio`
+    : `${hours} h ${remainder} min desde el inicio`;
+}
+
+function buildAttendanceBlueprint(
+  context: DashboardInsightContext,
+  isGlobal: boolean
+): InsightBlueprint | null {
+  const attention = context.attendanceAttention;
+  if (!attention) return null;
+
+  const highlights: DashboardInsightHighlight[] = [
+    {
+      id: 'dia_turno',
+      label: compactShiftLabel(attention),
+      icon: 'schedule',
+      tone: 'info',
+    },
+    {
+      id: 'personas_sin_entrada',
+      label: `${attention.count} ${pluralize(attention.count, 'persona', 'personas')}`,
+      icon: attention.status === 'late' ? 'person_alert' : 'person_off',
+      tone: 'danger',
+    },
+  ];
+  if (isGlobal && attention.primaryCommittee) {
+    highlights.push(
+      {
+        id: 'alcance_asistencia',
+        label: `${attention.affectedCommittees} ${pluralize(attention.affectedCommittees, 'comité afectado', 'comités afectados')}`,
+        icon: 'hub',
+        tone: attention.affectedCommittees > 1 ? 'danger' : 'warning',
+      },
+      {
+        id: 'comite_prioritario',
+        label: attention.primaryCommittee,
+        icon: 'groups',
+        tone: 'warning',
+      }
+    );
+  }
+
+  if (attention.status === 'late') {
+    highlights.push({
+      id: 'tiempo_transcurrido',
+      label: elapsedLabel(attention.minutesSinceStart),
+      icon: 'timer',
+      tone: 'warning',
+    });
+    return {
+      template: isGlobal
+        ? 'En {{dia_turno}}, {{personas_sin_entrada}} de {{alcance_asistencia}} aún no registran entrada; revisa primero {{comite_prioritario}}. Ya transcurrió {{tiempo_transcurrido}}. Verifica si están tarde o si falta registrar algún ingreso.'
+        : 'En {{dia_turno}}, {{personas_sin_entrada}} aún no registran entrada. Ya transcurrió {{tiempo_transcurrido}}. Verifica si están tarde o si falta registrar algún ingreso.',
+      highlights,
+      focus: 'Señala la asistencia pendiente del turno en curso, el tiempo transcurrido y la acción de verificación inmediata.',
+    };
+  }
+
+  return {
+    template: isGlobal
+      ? 'En {{dia_turno}}, {{personas_sin_entrada}} de {{alcance_asistencia}} no registraron asistencia; revisa primero {{comite_prioritario}}. Confirma las ausencias y corrige únicamente los ingresos que hayan quedado sin registrar.'
+      : 'En {{dia_turno}}, {{personas_sin_entrada}} no registraron asistencia. Confirma las ausencias y corrige únicamente los ingresos que hayan quedado sin registrar.',
+    highlights,
+    focus: 'Informa cuántas personas no registraron asistencia en el turno terminado y pide confirmar las ausencias reales.',
+  };
+}
+
 function buildTechnologyBlueprint(context: DashboardInsightContext): InsightBlueprint {
+  const attendance = buildAttendanceBlueprint(context, context.canSeeGlobal);
+  if (attendance) return attendance;
+
   if (context.staleOpenAttendanceSessions > 0) {
     const highlights: DashboardInsightHighlight[] = [
       {
@@ -254,6 +329,12 @@ export function buildDashboardInsightBlueprint(
   if (authorization.role === 'Editor' && authorization.coordinatorType === 'technology') {
     return buildTechnologyBlueprint(context);
   }
+
+  const attendance = buildAttendanceBlueprint(
+    context,
+    authorization.role === 'Admin' || context.canSeeGlobal
+  );
+  if (attendance) return attendance;
 
   const areaCritical = context.areaCriticalShifts[0];
   if (areaCritical) return buildAreaCriticalBlueprint(authorization, areaCritical);

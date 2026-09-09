@@ -16,7 +16,12 @@ import { buildInstantDashboardInsight, generateDashboardInsight } from "@/lib/ai
 import type {
   DashboardInsight,
   DashboardInsightAreaCriticalShift,
+  DashboardInsightContext,
 } from "@/lib/dashboard-insight-types";
+import {
+  buildAttendanceAttention,
+  filterActionableCriticalShifts,
+} from '@/lib/dashboard-insight-operations';
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -223,6 +228,7 @@ export async function getDashboardOperationalDataAction(
       ...insightEventDays.map(day => day.key),
     ]));
     const queriedEventDayKeys = new Set(queriedEventDayKeyList);
+    const insightNow = new Date();
 
     // Return all operational source rows in one PostgREST response. The RPC is
     // service-role-only and removes the serial 1,000-row pagination requests
@@ -489,15 +495,13 @@ export async function getDashboardOperationalDataAction(
         });
       });
 
-      return criticalList
+      const prioritized = prioritizeUpcoming
+        ? filterActionableCriticalShifts(criticalList, insightNow)
+        : criticalList
         .sort((a, b) => {
-          if (prioritizeUpcoming) {
-            const aDay = Number(a.day.match(/\d+/)?.[0] || 0);
-            const bDay = Number(b.day.match(/\d+/)?.[0] || 0);
-            if (aDay !== bDay) return aDay - bDay;
-          }
           return b.missing - a.missing;
-        })
+        });
+      return prioritized
         .slice(0, 5)
         .map((item, index) => ({ ...item, id: index + 1 }));
     };
@@ -568,7 +572,7 @@ export async function getDashboardOperationalDataAction(
         groups.set(groupKey, group);
       });
 
-      return Array.from(groups.values())
+      const areaCriticalList = Array.from(groups.values())
         .filter(group => group.affected.length > 0)
         .map(group => {
           const prioritizedAreas = [...group.affected].sort((a, b) => b.missing - a.missing);
@@ -586,15 +590,11 @@ export async function getDashboardOperationalDataAction(
             affectedAreas: prioritizedAreas.length,
             configuredAreas: group.configuredAreas,
           };
-        })
-        .sort((a, b) => {
-          if (prioritizeUpcoming) {
-            const aDay = Number(a.day.match(/\d+/)?.[0] || 0);
-            const bDay = Number(b.day.match(/\d+/)?.[0] || 0);
-            if (aDay !== bDay) return aDay - bDay;
-          }
-          return b.totalMissing - a.totalMissing;
-        })
+        });
+      const prioritized = prioritizeUpcoming
+        ? filterActionableCriticalShifts(areaCriticalList, insightNow)
+        : areaCriticalList.sort((a, b) => b.totalMissing - a.totalMissing);
+      return prioritized
         .slice(0, 5);
     };
 
@@ -709,7 +709,14 @@ export async function getDashboardOperationalDataAction(
         return Boolean(sessionDate && sessionDate < todayInGuatemala);
       }).length;
 
-      const insightContext = {
+      const attendanceAttention = buildAttendanceAttention(
+        shiftsData || [],
+        checkedInMap,
+        volunteerCommitteeMap,
+        relevantCommitteesSet,
+        insightNow
+      );
+      const insightContext: DashboardInsightContext = {
         effectiveCommitteeScope: effectiveCommittee,
         canSeeGlobal,
         globalCoveragePercentage,
@@ -717,6 +724,7 @@ export async function getDashboardOperationalDataAction(
         areaCriticalShifts: insightAreaCriticalShifts,
         openAttendanceSessions: openSessions.length,
         staleOpenAttendanceSessions,
+        attendanceAttention,
       };
       const insightStartedAt = performance.now();
       insight = insightMode === 'instant'

@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { getShiftCapacityStatus } from "@/lib/shift-capacity";
 import { DashboardDistributionChart, type DistributionItem } from "@/components/DashboardDistributionChart";
 import { DashboardInsightPanel } from "@/components/DashboardInsightPanel";
-import type { DashboardInsight } from "@/lib/dashboard-insight-types";
+import { dashboardInsightsEqual, type DashboardInsight } from "@/lib/dashboard-insight-types";
 import { hasCapability, type AuthorizationSnapshot } from "@/lib/role-permissions";
 import { dashboardScopeMatches, getDashboardAuthorizationKey } from "@/lib/dashboard-scope";
 import {
@@ -142,6 +142,7 @@ export default function CoordinatorDashboard() {
   const pendingOperationalRef = useRef<{ scope: string; id: number } | null>(null);
   const insightRequestRef = useRef(0);
   const lastInsightScopeRef = useRef<string | null>(null);
+  const dashboardInsightRef = useRef<DashboardInsight | null>(null);
   const preparedSessionCheckedRef = useRef(false);
   const returnStateCheckedRef = useRef(false);
   const pendingReturnRef = useRef<DashboardReturnState | null>(null);
@@ -461,18 +462,25 @@ export default function CoordinatorDashboard() {
     };
   }, []);
 
-  const loadOperationalData = useCallback(async (targetCommittee?: string, forceInsight = false) => {
+  const loadOperationalData = useCallback(async (
+    targetCommittee?: string,
+    forceInsight = false,
+    refreshInsight = false
+  ) => {
     const effectiveTargetCommittee = targetCommittee ?? selectedHeatmapCommittee;
     const insightScopeKey = `${authorizationKey}:${permTick}:${effectiveTargetCommittee}:${includeSimulation}`;
-    if (!forceInsight && pendingOperationalRef.current?.scope === insightScopeKey
+    const shouldGenerateInsight = forceInsight
+      || refreshInsight
+      || lastInsightScopeRef.current !== insightScopeKey;
+    const requestKey = `${insightScopeKey}:${shouldGenerateInsight ? 'insight' : 'data'}`;
+    if (!forceInsight && pendingOperationalRef.current?.scope === requestKey
       && pendingOperationalRef.current.id === operationalRequestRef.current) return;
     const requestId = ++operationalRequestRef.current;
-    pendingOperationalRef.current = { scope: insightScopeKey, id: requestId };
+    pendingOperationalRef.current = { scope: requestKey, id: requestId };
     setOperationalError(null);
-    const shouldGenerateInsight = forceInsight || lastInsightScopeRef.current !== insightScopeKey;
     const insightRequestId = shouldGenerateInsight ? ++insightRequestRef.current : insightRequestRef.current;
 
-    if (shouldGenerateInsight) {
+    if (shouldGenerateInsight && (forceInsight || !dashboardInsightRef.current)) {
       setIsInsightLoading(true);
     }
 
@@ -489,6 +497,7 @@ export default function CoordinatorDashboard() {
         if (requestId === operationalRequestRef.current) {
           setOperationalData(null);
           setDashboardInsight(null);
+          dashboardInsightRef.current = null;
           lastInsightScopeRef.current = null;
           setOperationalError('Los permisos cambiaron. Recarga la página para actualizar los indicadores.');
         }
@@ -504,7 +513,13 @@ export default function CoordinatorDashboard() {
       }
       if (res?.data && shouldGenerateInsight && insightRequestId === insightRequestRef.current) {
         lastInsightScopeRef.current = insightScopeKey;
-        setDashboardInsight(res?.insight || null);
+        setDashboardInsight(current => {
+          const nextInsight = dashboardInsightsEqual(current, res?.insight || null)
+            ? current
+            : res?.insight || null;
+          dashboardInsightRef.current = nextInsight;
+          return nextInsight;
+        });
         if (res?.data) {
           writePreparedDashboardSession({
             includeSimulation,
@@ -550,6 +565,7 @@ export default function CoordinatorDashboard() {
           setOperationalScopeKey(insightScopeKey);
           setOperationalSelection({ committee: selectedHeatmapCommittee, includeSimulation, permissionTick: permTick });
           setDashboardInsight(prepared.insight);
+          dashboardInsightRef.current = prepared.insight;
           setIsInsightLoading(false);
         });
         return invalidateRequests;
@@ -564,14 +580,14 @@ export default function CoordinatorDashboard() {
   // from report permissions and a paginated browser fetch can be incomplete.
   useEffect(() => {
     if (dashboardAccess !== 'allowed' || loading) return;
-    const timer = window.setTimeout(() => void loadOperationalData(), 500);
+    const timer = window.setTimeout(() => void loadOperationalData(undefined, false, true), 500);
     return () => window.clearTimeout(timer);
   }, [dashboardAccess, loading, rawVolunteers, shiftsData, sessionsData, requirementsByCommittee, committeesList, loadOperationalData]);
 
   useEffect(() => {
     if (dashboardAccess !== 'allowed') return;
     const refresh = () => {
-      if (document.visibilityState === 'visible') void loadOperationalData();
+      if (document.visibilityState === 'visible') void loadOperationalData(undefined, false, true);
     };
     // Also refresh changes outside the row visibility of this coordinator.
     const timer = window.setInterval(refresh, 60_000);

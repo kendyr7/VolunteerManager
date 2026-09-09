@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server';
-import { sendWhatsAppText, sendShiftChangeResultTemplate } from '@/lib/whatsapp-api';
+import { sendShiftChangeResultTemplate } from '@/lib/whatsapp-api';
 import { formatE164 } from '@/lib/whatsapp';
 import { createActivityLog } from '@/app/actions/activity-actions';
 import { broadcastShiftSync } from '@/lib/services/shift-broadcast.service';
@@ -24,6 +24,22 @@ import {
 } from '@/lib/shift-coverage';
 import { createValidatedShiftChangeRequest } from '@/lib/services/shift-change-request.service';
 import { schedulePushDispatch } from '@/lib/push/service';
+import type { ShiftChangeNotificationStatus } from '@/lib/shift-change-presentation';
+
+async function notifyShiftChangeResult(
+  phone: string | null | undefined,
+  options: Omit<Parameters<typeof sendShiftChangeResultTemplate>[0], 'to'>,
+): Promise<ShiftChangeNotificationStatus> {
+  const to = formatE164(phone || '');
+  if (!to) return 'unavailable';
+  try {
+    const result = await sendShiftChangeResultTemplate({ ...options, to });
+    return result.success ? 'sent' : 'failed';
+  } catch (error) {
+    console.error('[SHIFT CHANGE] Resolution saved but WhatsApp notification failed:', error);
+    return 'failed';
+  }
+}
 
 function getAdminClient() {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -50,6 +66,7 @@ export async function fetchAllShiftChangeRequestsAction() {
         .from('shift_change_requests')
         .select('*, volunteers(id, first_name, last_name, phone, committee_id, committees(name))')
         .order('created_at', { ascending: false });
+      if (fallback.error) return { success: false, error: 'No se pudieron cargar las solicitudes. Intenta nuevamente.' };
       const requests = fallback.data || [];
       return {
         success: true,
@@ -72,7 +89,9 @@ export async function fetchAllShiftChangeRequestsAction() {
 }
 
 export async function fetchPendingShiftChangeRequestsAction() {
-  return fetchAllShiftChangeRequestsAction();
+  const result = await fetchAllShiftChangeRequestsAction();
+  if (!result.success) return result;
+  return { ...result, requests: (result.requests || []).filter((request: any) => request.status === 'pending') };
 }
 
 export async function fetchShiftChangeCoverageImpactAction(
@@ -316,14 +335,20 @@ export async function approveShiftChangeRequestAction(requestId: string) {
     }
 
     // 4. Update request status with reviewer UUID
-    await supabase
+    const { data: updatedRequest, error: updateError } = await supabase
       .from('shift_change_requests')
       .update({
         status: 'approved',
         reviewed_at: new Date().toISOString(),
         reviewed_by: reviewerId
       })
-      .eq('id', requestId);
+      .eq('id', requestId)
+      .select('id')
+      .maybeSingle();
+
+    if (updateError || !updatedRequest) {
+      return { success: false, error: 'No se pudo guardar la aprobación. Actualiza las solicitudes y revisa el turno del voluntario.' };
+    }
 
     schedulePushDispatch();
 
@@ -340,19 +365,14 @@ export async function approveShiftChangeRequestAction(requestId: string) {
 
     // 6. Send notification to volunteer via WhatsApp
     const volunteerName = (vol.first_name || 'Voluntario').split(' ')[0];
-    const formattedPhone = formatE164(vol.phone);
+    const notification = await notifyShiftChangeResult(vol.phone, {
+      volunteerName,
+      resultStatus: 'APROBADA',
+      shiftDetails: `${request.requested_shift_key} del ${request.requested_day_key}`,
+      reasonOrDetail: 'Tu nuevo turno está actualizado en el portal'
+    });
 
-    if (formattedPhone) {
-      await sendShiftChangeResultTemplate({
-        to: formattedPhone,
-        volunteerName,
-        resultStatus: 'APROBADA',
-        shiftDetails: `${request.requested_shift_key} del ${request.requested_day_key}`,
-        reasonOrDetail: 'tu nuevo turno ha sido actualizado en el sistema'
-      });
-    }
-
-    return { success: true };
+    return { success: true, notification };
   } catch (err: any) {
     console.error("Error in approveShiftChangeRequestAction:", err);
     return { success: false, error: err.message };
@@ -377,10 +397,14 @@ export async function rejectShiftChangeRequestAction(requestId: string, reason?:
     const reviewerName = reviewer.name;
     const reviewerRole = reviewer.role;
 
-    const rejectionDetail = reason || 'limitación de disponibilidad de cupos en el turno solicitado';
+    if (request.status !== 'pending') {
+      return { success: false, error: 'Esta solicitud ya fue procesada.' };
+    }
+    const rejectionDetail = reason?.trim();
+    if (!rejectionDetail) return { success: false, error: 'Indica el motivo del rechazo.' };
 
     // Update request status with reviewer UUID
-    await supabase
+    const { data: updatedRequest, error: updateError } = await supabase
       .from('shift_change_requests')
       .update({
         status: 'rejected',
@@ -388,7 +412,14 @@ export async function rejectShiftChangeRequestAction(requestId: string, reason?:
         reviewed_at: new Date().toISOString(),
         reviewed_by: reviewerId
       })
-      .eq('id', requestId);
+      .eq('id', requestId)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle();
+
+    if (updateError) return { success: false, error: 'No se pudo guardar el rechazo. Intenta nuevamente.' };
+    if (!updatedRequest) return { success: false, error: 'Esta solicitud ya fue procesada.' };
+    schedulePushDispatch();
 
     // Create activity log entry for system history
     const vol = request.volunteers;
@@ -403,22 +434,14 @@ export async function rejectShiftChangeRequestAction(requestId: string, reason?:
     });
 
     // Send notification to volunteer via WhatsApp
-    if (vol && vol.phone) {
-      const volunteerName = (vol.first_name || 'Voluntario').split(' ')[0];
-      const formattedPhone = formatE164(vol.phone);
+    const notification = await notifyShiftChangeResult(vol?.phone, {
+      volunteerName: (vol?.first_name || 'Voluntario').split(' ')[0],
+      resultStatus: 'RECHAZADA',
+      shiftDetails: `${request.requested_shift_key} del ${request.requested_day_key}`,
+      reasonOrDetail: rejectionDetail
+    });
 
-      if (formattedPhone) {
-        await sendShiftChangeResultTemplate({
-          to: formattedPhone,
-          volunteerName,
-          resultStatus: 'RECHAZADA',
-          shiftDetails: `${request.requested_shift_key} del ${request.requested_day_key}`,
-          reasonOrDetail: rejectionDetail
-        });
-      }
-    }
-
-    return { success: true };
+    return { success: true, notification };
   } catch (err: any) {
     console.error("Error in rejectShiftChangeRequestAction:", err);
     return { success: false, error: err.message };

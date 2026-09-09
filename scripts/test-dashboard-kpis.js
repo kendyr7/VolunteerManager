@@ -8,6 +8,7 @@ const jiti = require('jiti')(process.cwd(), { alias: { '@': process.cwd() } });
 const roles = jiti('./lib/role-permissions');
 const scope = jiti('./lib/dashboard-scope');
 const cache = jiti('./lib/dashboard-session-cache');
+const insightTypes = jiti('./lib/dashboard-insight-types');
 
 const admin = { ...roles.EMPTY_AUTHORIZATION_SNAPSHOT, authenticated: true,
   userId: 'admin', userType: 'profile', role: 'Admin' };
@@ -30,6 +31,8 @@ function data(profile = authorization, target = 'todos', coverage = 84) {
 const prepared = { version: 1, data: data(), includeSimulation: false, insight: null,
   preparedAt: new Date().toISOString() };
 assert(cache.preparedDashboardMatches(prepared, 'all', false, scope.getDashboardAuthorizationKey(technology)));
+assert(!cache.preparedDashboardMatches({ ...prepared, preparedAt: '2026-09-05T12:00:00.000Z' },
+  'todos', false, scope.getDashboardAuthorizationKey(technology), new Date('2026-09-09T12:00:00.000Z').getTime()));
 assert(!cache.preparedDashboardMatches(prepared, 'todos', false, scope.getDashboardAuthorizationKey(admin)));
 assert(!cache.preparedDashboardMatches(prepared, 'todos', true, scope.getDashboardAuthorizationKey(technology)));
 assert(!cache.preparedDashboardMatches(prepared, 'Committee A', false, scope.getDashboardAuthorizationKey(technology)));
@@ -114,6 +117,7 @@ const moduleMocks = {
   '@/lib/role-permissions': roles,
   '@/lib/dashboard-scope': scope,
   '@/lib/dashboard-session-cache': { ...cache, readPreparedDashboardSession: () => prepared, writePreparedDashboardSession() {} },
+  '@/lib/dashboard-insight-types': insightTypes,
   '@/app/actions/dashboard': { getDashboardOperationalDataAction: action },
   '@/lib/dates': jiti('./lib/dates'),
   '@/lib/shift-capacity': jiti('./lib/shift-capacity'),

@@ -4,6 +4,7 @@ import { dashboardScopeMatches } from '@/lib/dashboard-scope';
 
 export const DASHBOARD_SIMULATION_STORAGE_KEY = 'volunteer-manager.dashboard.include-simulation';
 const DASHBOARD_SESSION_CACHE_KEY = 'volunteer-manager.dashboard.prepared-v1';
+export const DASHBOARD_PREPARED_MAX_AGE_MS = 5 * 60 * 1000;
 
 export interface PreparedDashboardSession {
   version: 1;
@@ -68,8 +69,12 @@ export function preparedDashboardMatches(
   prepared: PreparedDashboardSession,
   targetCommittee: string,
   includeSimulation: boolean,
-  authorizationKey: string
+  authorizationKey: string,
+  now = Date.now()
 ) {
+  const preparedAt = Date.parse(prepared.preparedAt);
+  if (!Number.isFinite(preparedAt) || preparedAt > now + 60_000) return false;
+  if (now - preparedAt > DASHBOARD_PREPARED_MAX_AGE_MS) return false;
   if (prepared.includeSimulation !== includeSimulation) return false;
   if (prepared.data.authorizationKey !== authorizationKey) return false;
   return dashboardScopeMatches(prepared.data.effectiveCommitteeScope, targetCommittee);
