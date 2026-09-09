@@ -16,6 +16,7 @@ interface SmartSearchBarProps {
   resultsId?: string;
   className?: string;
   inputClassName?: string;
+  showSubmitButton?: boolean;
 }
 
 export function SmartSearchBar({
@@ -31,6 +32,7 @@ export function SmartSearchBar({
   resultsId,
   className,
   inputClassName,
+  showSubmitButton = false,
 }: SmartSearchBarProps) {
   const normalizedValue = value.trim();
 
@@ -78,38 +80,41 @@ export function SmartSearchBar({
         aria-autocomplete={results ? 'list' : undefined}
         autoComplete="off"
         className={cn(
-          'h-12 w-full rounded-full border border-black/10 bg-black/5 py-3.5 pl-12 pr-32 text-[13px] font-bold font-inter text-black outline-none transition-all placeholder:text-black/50 focus:ring-2 focus:ring-black/20 dark:border-white/10 dark:bg-[#fff6] dark:text-white dark:placeholder:text-white/70 dark:focus:ring-white/30',
+          'h-12 w-full rounded-full border border-black/10 bg-black/5 py-3.5 pl-12 text-[13px] font-bold font-inter text-black outline-none transition-all placeholder:text-black/50 focus:ring-2 focus:ring-black/20 dark:border-white/10 dark:bg-[#fff6] dark:text-white dark:placeholder:text-white/70 dark:focus:ring-white/30',
+          (value || showSubmitButton) ? 'pr-28' : 'pr-4',
           '[&::-webkit-search-cancel-button]:hidden',
           inputClassName
         )}
       />
-      <div className="absolute inset-y-0 right-1.5 z-10 flex items-center">
-        {value ? (
-          <button
-            type="button"
-            onMouseDown={event => event.preventDefault()}
-            onClick={() => {
-              onValueChange('');
-              onImmediateSearch?.('');
-              onClear?.();
-            }}
-            className="flex h-9 cursor-pointer items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/20 px-3.5 text-xs font-bold font-inter text-rose-500 transition-colors hover:bg-rose-500/30 dark:text-rose-400"
-            aria-label="Limpiar búsqueda"
-          >
-            <span className="material-symbols-outlined text-[16px]">close</span>
-            <span>Limpiar</span>
-          </button>
-        ) : (
-          <button
-            type="submit"
-            disabled
-            className="flex h-9 items-center gap-1 rounded-full bg-[#4d7cfe] px-4 text-xs font-bold font-inter text-white opacity-40"
-          >
-            <span className="material-symbols-outlined text-[16px]">search</span>
-            <span>Buscar</span>
-          </button>
-        )}
-      </div>
+      {(value || showSubmitButton) && (
+        <div className="absolute inset-y-0 right-1.5 z-10 flex items-center">
+          {value ? (
+            <button
+              type="button"
+              onMouseDown={event => event.preventDefault()}
+              onClick={() => {
+                onValueChange('');
+                onImmediateSearch?.('');
+                onClear?.();
+              }}
+              className="flex h-9 cursor-pointer items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/20 px-3.5 text-xs font-bold font-inter text-rose-500 transition-colors hover:bg-rose-500/30 dark:text-rose-400"
+              aria-label="Limpiar búsqueda"
+            >
+              <span className="material-symbols-outlined text-[16px]">close</span>
+              <span>Limpiar</span>
+            </button>
+          ) : showSubmitButton ? (
+            <button
+              type="submit"
+              disabled
+              className="flex h-9 items-center gap-1 rounded-full bg-[#4d7cfe] px-4 text-xs font-bold font-inter text-white opacity-40"
+            >
+              <span className="material-symbols-outlined text-[16px]">search</span>
+              <span>Buscar</span>
+            </button>
+          ) : null}
+        </div>
+      )}
       {showResults ? results : null}
     </form>
   );

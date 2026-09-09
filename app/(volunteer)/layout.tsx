@@ -12,6 +12,7 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MobileThemeMenu } from "@/components/mobile-theme-menu";
 import { useThemePreference } from "@/lib/use-theme-preference";
 import { useHydrated } from "@/lib/use-hydrated";
+import { JournalProvider } from '@/components/journal/JournalProvider';
 
 // Helper component for Material Symbols
 function Icon({ name, size = 20, className = "" }: { name: string, size?: number, className?: string }) {
@@ -42,6 +43,7 @@ export default function VolunteerLayout({
 
   const navItems = [
     { name: "Turnos", href: "/calendar", icon: "checklist" },
+    { name: "Mi diario", href: "/journal", icon: "book_2" },
     { name: "Solicitudes", href: "/requests", icon: "published_with_changes" },
     { name: "Mi Perfil", href: "/profile", icon: "person" }
   ];
@@ -62,7 +64,7 @@ export default function VolunteerLayout({
   }
 
   return (
-    <div className="h-screen bg-dark flex flex-col font-sans text-text overflow-hidden">
+    <div className="h-screen h-[100dvh] bg-dark flex flex-col font-sans text-text overflow-hidden">
       
       {/* Main Layout Area */}
       <div className="flex flex-1 min-h-0 overflow-hidden lg:pb-0">
@@ -155,9 +157,16 @@ export default function VolunteerLayout({
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto min-w-0 bg-dark relative pb-24 lg:pb-0" style={{ scrollbarGutter: 'stable' }}>
-          <div className="w-full h-full">
-            {children}
+        <main
+          className="flex-1 overflow-y-auto min-w-0 bg-dark relative pb-32 lg:pb-0"
+          style={{
+            scrollbarGutter: 'stable',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehaviorY: 'contain',
+          }}
+        >
+          <div className="w-full min-h-full flex flex-col">
+            <JournalProvider>{children}</JournalProvider>
           </div>
         </main>
       </div>
@@ -182,7 +191,7 @@ export default function VolunteerLayout({
             >
               {navItems.map((item) => {
                 const isActive = pathname === item.href;
-                const sharedStyle = { width: 'calc((100vw - 32px) / 5)' };
+                const sharedStyle = { width: `calc((100% - 8px) / ${navItems.length + 2})` };
                 return (
                   <Link
                     key={item.href}
@@ -205,7 +214,7 @@ export default function VolunteerLayout({
                 onClick={() => setIsMobileThemeOpen(open => !open)}
                 aria-expanded={isMobileThemeOpen}
                 aria-label="Cambiar apariencia"
-                style={{ width: 'calc((100vw - 32px) / 5)' }}
+                style={{ width: `calc((100% - 8px) / ${navItems.length + 2})` }}
                 className={cn(
                   "flex flex-col items-center justify-center py-2 rounded-full transition-all duration-200 shrink-0 active:scale-[0.95]",
                   isMobileThemeOpen
@@ -224,7 +233,7 @@ export default function VolunteerLayout({
               {/* Logout button */}
               <button
                 onClick={handleLogoutClick}
-                style={{ width: 'calc((100vw - 32px) / 5)' }}
+                style={{ width: `calc((100% - 8px) / ${navItems.length + 2})` }}
                 className="flex flex-col items-center justify-center py-2 rounded-full transition-all duration-200 shrink-0 text-red-400 hover:text-red-300 active:scale-[0.95]"
               >
                 <Icon name="logout" size={20} className="mb-1 text-red-400" />

@@ -45,7 +45,7 @@ export function proxy(request: NextRequest) {
   const session = verifySessionToken(sessionCookie)
 
   const isAuthRoute = pathname.startsWith('/login')
-  const isVolunteerRoute = pathname.startsWith('/calendar') || pathname.startsWith('/profile') || pathname.startsWith('/requests')
+  const isVolunteerRoute = pathname.startsWith('/calendar') || pathname.startsWith('/profile') || pathname.startsWith('/requests') || pathname.startsWith('/journal')
   const isCoordinatorRoute = 
     pathname.startsWith('/dashboard') || 
     pathname.startsWith('/volunteers') || 
@@ -82,7 +82,7 @@ export function proxy(request: NextRequest) {
   }
 
   // Si es Coordinador e intenta ingresar a rutas exclusivamente de Voluntarios (/calendar o /requests)
-  if (session && session.userType === 'profile' && (pathname.startsWith('/calendar') || pathname.startsWith('/requests'))) {
+  if (session && session.userType === 'profile' && (pathname.startsWith('/calendar') || pathname.startsWith('/requests') || pathname.startsWith('/journal'))) {
     return NextResponse.redirect(new URL('/volunteers', request.url))
   }
 
@@ -105,6 +105,7 @@ export const config = {
     '/api/:path*',
     '/login',
     '/calendar',
+    '/journal/:path*',
     '/profile',
     '/dashboard',
     '/volunteers',
