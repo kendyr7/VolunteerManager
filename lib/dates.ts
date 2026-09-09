@@ -315,3 +315,21 @@ export function parseDayKeyToDateStr(dayKey?: string | Date | null): string {
   }
   return '2026-09-11';
 }
+
+/**
+ * Returns the exact UTC Date representing the end of a shift in Guatemala local time (UTC-6).
+ */
+export function parseGuatemalaShiftEnd(dayKey: string, shiftKey: string): Date {
+  if (!isOperationalEventDay(dayKey)) return new Date(Number.NaN);
+
+  const isoDate = parseDayKeyToDateStr(dayKey);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return new Date(Number.NaN);
+
+  const official = getOfficialShiftTime(dayKey, shiftKey);
+  const endHour = official.endHour;
+
+  // Build the instant that corresponds to the Guatemala local end time (UTC-6).
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const utcMillis = Date.UTC(year, month - 1, day, Math.floor(endHour) + 6, Math.round((endHour % 1) * 60), 0);
+  return new Date(utcMillis);
+}

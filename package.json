@@ -19,6 +19,7 @@
     "test:settings-authorization": "node scripts/test_settings_authorization.js",
     "test:auth-rate-limit": "node --no-warnings --experimental-strip-types scripts/test-auth-rate-limit-policy.mts",
     "test:reports": "jiti scripts/test-reports-data.mts",
+    "test:reliability": "jiti scripts/test-volunteer-reliability.mts",
     "test:report-excel": "jiti scripts/test-report-excel-stage3.mts && jiti scripts/test-report-excel-stage4.mts"
   },
   "dependencies": {

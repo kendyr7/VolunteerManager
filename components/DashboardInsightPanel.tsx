@@ -103,7 +103,7 @@ function TypedSummary({
     <>
       <p
         aria-hidden="true"
-        className="max-w-[72ch] text-pretty text-[15px] font-semibold leading-7 text-text [overflow-wrap:anywhere] sm:text-base"
+        className="max-w-[72ch] text-pretty text-[15px] font-semibold leading-7 text-text [overflow-wrap:anywhere] sm:text-base lg:max-w-none"
       >
         {revealUnits.slice(0, visibleUnits).map((unit, index) => {
           if (unit.kind === 'text') return <span key={`text-${index}`}>{unit.value}</span>;
@@ -205,7 +205,7 @@ export function DashboardInsightPanel({
             transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <div className="min-h-[4.75rem] max-w-[72ch] pt-3">
+            <div className="min-h-[4.75rem] max-w-[72ch] pt-3 lg:max-w-none">
               {isLoading && !insight ? (
                 <div
                   className="flex items-center gap-2 text-sm font-semibold text-text-dim"

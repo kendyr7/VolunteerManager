@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllRowsStrict } from "@/lib/supabase-helpers";
 import { requireCapability } from "@/lib/authorization";
 import { hasCapability } from "@/lib/role-permissions";
-import { getActiveEventDays, getAvailableShiftKeys, getOfficialShiftTime, getOperationalEventDays, isSimulationEventDay, isOperationalEventDay } from "@/lib/dates";
+import { getActiveEventDays, getAvailableShiftKeys, getOfficialShiftTime, isSimulationEventDay, isOperationalEventDay, parseDayKeyToDateStr, parseGuatemalaShiftEnd } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { getGuatemalaHourFloat, calculateSessionMinutes, inferShiftsForSession } from "@/lib/session-utils";
@@ -58,65 +58,6 @@ interface ReportRequirementRow {
 function relationName(value: ReportShiftRow['committee_areas']): string | null {
   if (Array.isArray(value)) return value[0]?.name || null;
   return value?.name || null;
-}
-
-
-
-// Build a lookup map from day_key -> ISO date string using the canonical event days from dates.ts
-// e.g. "mié 16" -> "2026-09-16"
-function buildDayKeyMap(): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const date of getOperationalEventDays()) {
-    const key = format(date, "EEE d", { locale: es }).toLowerCase();
-    const iso = format(date, "yyyy-MM-dd");
-    map.set(key, iso);
-  }
-  return map;
-}
-
-// Cached on module load (server singleton) — no hardcoded dates
-const DAY_KEY_MAP = buildDayKeyMap();
-
-function parseDayKeyToDateStr(dayKey: string): string {
-  if (!dayKey) return '';
-  const raw = dayKey.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-
-  // Remove dots and accents for robust matching
-  const norm = raw.toLowerCase().replace(/\./g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const direct = DAY_KEY_MAP.get(raw.toLowerCase()) || DAY_KEY_MAP.get(norm);
-  if (direct) return direct;
-
-  for (const [k, v] of DAY_KEY_MAP.entries()) {
-    const kNorm = k.toLowerCase().replace(/\./g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    if (kNorm === norm) return v;
-  }
-
-  // Fallback for dates like "mié 5" or "jue 6" outside standard Sep map
-  const match = raw.match(/(\d{1,2})/);
-  if (match) {
-    const dayNum = parseInt(match[1]);
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = (now.getMonth() + 1).toString().padStart(2, '0');
-    return `${currentYear}-${currentMonth}-${dayNum.toString().padStart(2, '0')}`;
-  }
-
-  return raw;
-}
-
-
-function parseGuatemalaShiftEnd(dayKey: string, shiftKey: string): Date {
-  const isoDate = parseDayKeyToDateStr(dayKey);
-  if (!isoDate || isoDate === dayKey) return new Date(); // unknown date, treat as past
-
-  const official = getOfficialShiftTime(dayKey, shiftKey);
-  const endHour = official.endHour;
-
-  // Build the instant that corresponds to the Guatemala local end time.
-  const [year, month, day] = isoDate.split('-').map(Number);
-  const utcMillis = Date.UTC(year, month - 1, day, Math.floor(endHour) + 6, Math.round((endHour % 1) * 60), 0);
-  return new Date(utcMillis);
 }
 
 export async function getReportsData(options: { includeSimulation?: boolean } = {}): Promise<{ error?: string; data?: ReportsData }> {
@@ -188,7 +129,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
         && (includeSimulation || !isSimulationEventDay(shift.day_key));
     });
 
-    const normalizeDayKey = (value: string) => (value || '').toLowerCase().trim();
+    const normalizeDayKey = (value: string) => parseDayKeyToDateStr(value).toLowerCase().trim();
     const assignedShiftsByVolunteerDay = new Map<string, Set<string>>();
     reportShifts.forEach(shift => {
       const key = `${shift.volunteer_id}|${normalizeDayKey(shift.day_key)}`;

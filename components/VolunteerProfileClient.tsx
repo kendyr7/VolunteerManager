@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { startRegistration } from "@simplewebauthn/browser";
 import { Button } from "@/components/ui/button";
 import { Toast } from "@/components/ui/toast";
 
 import { Badge } from "@/components/ui/badge";
 import { getOfficialShiftTime } from "@/lib/dates";
+import { getVolunteerReliabilityMetrics } from "@/lib/services/volunteer-reliability.service";
 import type { VolunteerScheduleShift } from "@/lib/types/volunteer-schedule";
 
 interface VolunteerProfileClientProps {
@@ -97,7 +98,11 @@ export function VolunteerProfileClient({
     }
   };
 
-  const score = volunteer.reliability_score ?? 100;
+  const computedScore = useMemo(() => {
+    return getVolunteerReliabilityMetrics(volunteer.id, initialShifts, []).reliabilityScore;
+  }, [initialShifts, volunteer.id]);
+
+  const score = computedScore;
   const radius = 32;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (score / 100) * circumference;

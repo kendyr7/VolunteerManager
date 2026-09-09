@@ -222,6 +222,7 @@ export default function ShiftsPage() {
     sessionsData: contextSessionsData,
     activeSessionsByVolunteer,
     shiftCounts: contextShiftCounts,
+    reliabilityMap,
     loading,
     refresh,
   } = useCoordinatorData();
@@ -240,13 +241,13 @@ export default function ShiftsPage() {
         ward: v.neighborhood || '',
         phone: v.phone || '',
         shifts: contextShiftCounts[v.id] || 0,
-        reliability: v.reliability_score || 100,
+        reliability: typeof reliabilityMap[v.id] === 'number' ? reliabilityMap[v.id] : 100,
         committee: v.committees?.name || 'Sin comité',
         committee_id: v.committee_id,
         status: v.status,
         age: v.age,
       })),
-    [rawVolunteers, contextShiftCounts]
+    [rawVolunteers, contextShiftCounts, reliabilityMap]
   );
 
   // Quick lookup map for volunteers by ID

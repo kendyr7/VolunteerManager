@@ -1,0 +1,354 @@
+[
+  {
+    "nombre": "Diego Alejandro Silva Suarez",
+    "telefono": "+50558059500",
+    "subcomite": "Seguridad",
+    "creado": "2026-09-09T00:26:06.115729+00:00",
+    "estaca": "Universitaria",
+    "barrio": "Monte Fresco"
+  },
+  {
+    "nombre": "Alexander Miguel Rivas Selva",
+    "telefono": "+50577239064",
+    "subcomite": "Sin subcomité",
+    "creado": "2026-09-08T03:22:13.518025+00:00",
+    "estaca": "Bello Horizonte",
+    "barrio": "Waspán"
+  },
+  {
+    "nombre": "Aragon Junieth",
+    "telefono": "+50577087756",
+    "subcomite": "Sin subcomité",
+    "creado": "2026-09-07T04:02:00.838304+00:00",
+    "estaca": "Universitaria",
+    "barrio": "San Juan"
+  },
+  {
+    "nombre": "Herling Valeria Delgadillo",
+    "telefono": "+50585212763",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-29T05:50:16.328801+00:00",
+    "estaca": "La Estación",
+    "barrio": "Distrito Granada"
+  },
+  {
+    "nombre": "Juan Carlos Ortiz Mercado",
+    "telefono": "+50589587083",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-29T05:45:23.462+00:00",
+    "estaca": "Bello Horizonte",
+    "barrio": "Waspán"
+  },
+  {
+    "nombre": "Alberto Pilarte",
+    "telefono": "+50581225951",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-29T05:45:23.462+00:00",
+    "estaca": "Managua",
+    "barrio": "Bello Amanecer"
+  },
+  {
+    "nombre": "Juana Pilarte",
+    "telefono": "+50581225951",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-29T05:45:23.462+00:00",
+    "estaca": "Managua",
+    "barrio": "Bello Amanecer"
+  },
+  {
+    "nombre": "Rosalba Ampié de Ortiz",
+    "telefono": "+50589587083",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-29T05:45:23.462+00:00",
+    "estaca": "Bello Horizonte",
+    "barrio": "Waspán"
+  },
+  {
+    "nombre": "Abbylarixa Salinas",
+    "telefono": "+50588940007",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-29T05:45:23.462+00:00",
+    "estaca": "Bello Horizonte",
+    "barrio": "Ducualí"
+  },
+  {
+    "nombre": "Meyling Adelina Espinal Acevedo",
+    "telefono": "+50587461539",
+    "subcomite": "Facilidades Físicas",
+    "creado": "2026-08-27T03:25:01.20988+00:00",
+    "estaca": "Bello Horizonte",
+    "barrio": "Ciudad Jardín"
+  },
+  {
+    "nombre": "Hanna Elizabeth Velásquez Rivas",
+    "telefono": "+50578576927",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Managua",
+    "barrio": "Lezcano"
+  },
+  {
+    "nombre": "Camila Celeste Zapata Álvarez",
+    "telefono": "+50588121459",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Universitaria",
+    "barrio": "Altagracia"
+  },
+  {
+    "nombre": "Carlos Cruz",
+    "telefono": "+50583948888",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Managua",
+    "barrio": "Mateare"
+  },
+  {
+    "nombre": "Ericka Ochoa",
+    "telefono": "+50583202109",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Managua",
+    "barrio": "Bello Amanecer"
+  },
+  {
+    "nombre": "Francisca Gabriela Serrano",
+    "telefono": "+50558049832",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Villa Flor",
+    "barrio": "Villa Venezuela"
+  },
+  {
+    "nombre": "David Javier Calderón Ortiz",
+    "telefono": "+50587772400",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Bello Horizonte",
+    "barrio": "Máximo Jerez"
+  },
+  {
+    "nombre": "Ana Cristina Sánchez",
+    "telefono": "+50576351665",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Managua",
+    "barrio": "Lezcano"
+  },
+  {
+    "nombre": "Jimmy Alexander Laínez Silva",
+    "telefono": "+50581000531",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Managua",
+    "barrio": "Ciudad Sandino"
+  },
+  {
+    "nombre": "Irma Elizabeth Argüello Vega",
+    "telefono": "+50583229830",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Universitaria",
+    "barrio": "Altagracia"
+  },
+  {
+    "nombre": "Johana Toruño Chávez",
+    "telefono": "+50578922922",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Villa Flor",
+    "barrio": "Villa Flor"
+  },
+  {
+    "nombre": "Henry Jiménez",
+    "telefono": "+50583695512",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Managua",
+    "barrio": "Bello Amanecer"
+  },
+  {
+    "nombre": "Junior Benavidez",
+    "telefono": "+50582185693",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Managua",
+    "barrio": "Bello Amanecer"
+  },
+  {
+    "nombre": "Karla Teresa Estrada Vega",
+    "telefono": "+50581477992",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Jinotepe",
+    "barrio": "Jinotepe"
+  },
+  {
+    "nombre": "Randy Martín Sequeira Sánchez",
+    "telefono": "+50589867182",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Universitaria",
+    "barrio": "Monte Fresco"
+  },
+  {
+    "nombre": "Lester Alejandro López Rosales",
+    "telefono": "+50586955436",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Masatepe",
+    "barrio": "San Juan de Oriente"
+  },
+  {
+    "nombre": "Nanci Adriana López Contreras",
+    "telefono": "+50576357591",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Bello Horizonte",
+    "barrio": "Máximo Jerez"
+  },
+  {
+    "nombre": "Keyla Melissa Castellón Saavedra",
+    "telefono": "+50582918973",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Managua",
+    "barrio": "La Trinidad"
+  },
+  {
+    "nombre": "Paola Blandino",
+    "telefono": "+50588644888",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Universitaria",
+    "barrio": "Veracruz"
+  },
+  {
+    "nombre": "Kevin Enrique Espinoza Parrales",
+    "telefono": "+50588390593",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Jinotepe",
+    "barrio": "Diriamba"
+  },
+  {
+    "nombre": "Marjuerie Elizabeth Morales Ñurinda",
+    "telefono": "+50582620429",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Managua",
+    "barrio": "La Trinidad"
+  },
+  {
+    "nombre": "Lester José Calero González",
+    "telefono": "+50585033584",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Universitaria",
+    "barrio": "Monte Fresco"
+  },
+  {
+    "nombre": "Lucero Celeste Narváez",
+    "telefono": "+50586153478",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Villa Flor",
+    "barrio": "Villa Venezuela"
+  },
+  {
+    "nombre": "René Jiménez",
+    "telefono": "+50581898361",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Bello Horizonte",
+    "barrio": "Ducualí"
+  },
+  {
+    "nombre": "Scarleth Juniett Mejía Medina",
+    "telefono": "+50558153830",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Masatepe",
+    "barrio": "San Juan de Oriente"
+  },
+  {
+    "nombre": "Yefersson David Calero Gonzales",
+    "telefono": "+50586595414",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Universitaria",
+    "barrio": "Monte Fresco"
+  },
+  {
+    "nombre": "Sergio Alexander Morales",
+    "telefono": "+50586379658",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-25T20:22:56.682759+00:00",
+    "estaca": "Masatepe",
+    "barrio": "San Marcos"
+  },
+  {
+    "nombre": "(Traducción) Cristian Andrés Robles Chacón",
+    "telefono": "+50577234855",
+    "subcomite": "Guía",
+    "creado": "2026-08-17T17:42:46.865781+00:00",
+    "estaca": "Universitaria",
+    "barrio": "San Juan"
+  },
+  {
+    "nombre": "María José González Valverde",
+    "telefono": "+50557275555",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-06T16:31:23.482633+00:00",
+    "estaca": "Villa Flor",
+    "barrio": "René Polanco"
+  },
+  {
+    "nombre": "Jorge Luis Gutiérrez Campos",
+    "telefono": "+50576739821",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-04T18:04:25.777897+00:00",
+    "estaca": "Bello Horizonte",
+    "barrio": "Waspán"
+  },
+  {
+    "nombre": "Eva Regina Castillo Vásquez",
+    "telefono": "+50578528392",
+    "subcomite": "Seguridad",
+    "creado": "2026-08-02T22:31:18.134512+00:00",
+    "estaca": "Managua",
+    "barrio": "Linda Vista"
+  },
+  {
+    "nombre": "Donald de la Cruz Cano Diaz",
+    "telefono": "+50577449120",
+    "subcomite": "Guía",
+    "creado": "2026-07-31T22:36:36.518353+00:00",
+    "estaca": "Masatepe",
+    "barrio": "Monimbo"
+  },
+  {
+    "nombre": "Ramón de Jesús Matute Rodriguez",
+    "telefono": "+50557217822",
+    "subcomite": "Recepción",
+    "creado": "2026-07-31T22:36:31.651663+00:00",
+    "estaca": "Villa Flor",
+    "barrio": "Los Laureles"
+  },
+  {
+    "nombre": "Idania del Socorro Benavidez Lanuza",
+    "telefono": "+50585086237",
+    "subcomite": "Guía",
+    "creado": "2026-07-31T22:31:22.485568+00:00",
+    "estaca": "Estelí",
+    "barrio": "Estelí"
+  },
+  {
+    "nombre": "Dennis Santiago Rugama Espinoza",
+    "telefono": "+50582332259",
+    "subcomite": "Guía",
+    "creado": "2026-07-31T22:31:22.077049+00:00",
+    "estaca": "Estelí",
+    "barrio": "Estelí"
+  }
+]

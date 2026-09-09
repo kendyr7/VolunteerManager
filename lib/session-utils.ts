@@ -1,4 +1,4 @@
-import { getOfficialShiftTime, OfficialShiftTime } from '@/lib/dates';
+import { getOfficialShiftTime, parseDayKeyToDateStr, OfficialShiftTime } from './dates';
 
 export interface AttendanceSession {
   id: string;
@@ -176,8 +176,6 @@ export function getContinuousScheduledBlocks(
   if (!dayKey || !assignedShiftKeys || assignedShiftKeys.length === 0) {
     return [];
   }
-
-  const { parseDayKeyToDateStr } = require('@/lib/dates');
   const dateStr = parseDayKeyToDateStr(dayKey);
 
   const sortedShifts: OfficialShiftTime[] = assignedShiftKeys

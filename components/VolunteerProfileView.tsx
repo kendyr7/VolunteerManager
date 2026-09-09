@@ -43,6 +43,7 @@ import {
   formatUnifiedDuration
 } from "@/lib/shift-calculations";
 import { getVolunteerProfileMetrics } from "@/lib/services/volunteer-profile.service";
+import { getVolunteerReliabilityMetrics } from "@/lib/services/volunteer-reliability.service";
 import { realtimeDebugLogger } from "@/lib/services/realtime-debug-logger";
 import { AdminSessionCorrectionModal } from "./AdminSessionCorrectionModal";
 import { AdminCreateSessionModal } from "./AdminCreateSessionModal";
@@ -927,13 +928,23 @@ export function VolunteerProfileView({
 
   // KPIs
   const totalTurnos = Object.entries(shiftsByDay).reduce(
-    (acc, [dayKey, shifts]) => acc + (isSimulationEventDay(dayKey) ? 0 : shifts.length),
+    (acc, [, shifts]) => acc + shifts.length,
     0
   );
-  const diasCubiertos = Object.entries(shiftsByDay).filter(([dayKey, shifts]) =>
-    !isSimulationEventDay(dayKey) && shifts.length > 0
+  const diasCubiertos = Object.entries(shiftsByDay).filter(([, shifts]) =>
+    shifts.length > 0
   ).length;
-  const reliabilityScore = volunteer.reliability ?? 100;
+
+  const reliabilityMetrics = useMemo(() => {
+    return getVolunteerReliabilityMetrics(
+      volunteer.id,
+      dbShiftRecords,
+      volunteerSessions
+    );
+  }, [volunteer.id, dbShiftRecords, volunteerSessions]);
+
+  const reliabilityScore = reliabilityMetrics.reliabilityScore;
+
   const nameParts = (volunteer.name || `${volunteer.first_name || ''} ${volunteer.last_name || ''}`).trim().split(/\s+/).filter(Boolean);
 
   const profileMetrics = useMemo(() => {

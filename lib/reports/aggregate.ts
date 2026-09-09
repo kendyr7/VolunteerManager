@@ -17,6 +17,7 @@ import type {
   ReportView,
   VolunteerReportSummary,
 } from './types';
+import { calculateReliabilityScore } from '../services/volunteer-reliability.service';
 
 const AGE_RANGES = ['< 18', '18 - 25', '26 - 35', '36 - 50', '51+', 'Sin edad'] as const;
 
@@ -100,10 +101,12 @@ function buildVolunteerRanking(items: ReportView['items']): VolunteerReportSumma
   }
   return Array.from(byVolunteer.values())
     .map((volunteer) => {
-      const decidedShifts = volunteer.confirmed + volunteer.absent;
+      const total = volunteer.totalShifts;
+      const absent = volunteer.absent;
+      const reliability = calculateReliabilityScore(total, absent);
       return {
         ...volunteer,
-        reliability: decidedShifts > 0 ? percentage(volunteer.confirmed, decidedShifts) : 100,
+        reliability,
       };
     })
     .sort((left, right) => right.minutes - left.minutes || left.name.localeCompare(right.name, 'es', { sensitivity: 'base' }));

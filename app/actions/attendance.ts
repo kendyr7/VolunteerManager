@@ -8,7 +8,8 @@ import { revalidatePath } from "next/cache";
 import { broadcastShiftSync, broadcastSessionSync } from "@/lib/services/shift-broadcast.service";
 import { requireCapability, requireVolunteerCapability, requireVolunteerSelfOrCapability } from "@/lib/authorization";
 import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
-import { getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay } from "@/lib/dates";
+import { getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay, parseGuatemalaShiftEnd } from "@/lib/dates";
+import { getVolunteerReliabilityMetrics, computeBulkReliabilityMap } from "@/lib/services/volunteer-reliability.service";
 import { buildEventDayKeys } from '@/lib/coordinator-data';
 import { AttendanceSession, getGuatemalaHourFloat, getContinuousScheduledBlockForSession, requiresSessionExitResolution, inferShiftsForSession, validateSessionConstraints } from "@/lib/session-utils";
 import {
@@ -38,19 +39,6 @@ export async function getAttendanceSessionsAction(requestedDayKeys?: string[]): 
   return sessions;
 }
 
-// Parse day key to the instant representing the end of the shift in Guatemala.
-function parseShiftDateTime(dayKey: string, shiftKey: string): Date {
-  const dayNumPart = dayKey.split(' ')[1];
-  const dayNum = parseInt(dayNumPart) || 10; // Fallback to 10
-  
-  const official = getOfficialShiftTime(dayKey, shiftKey);
-  const endHour = official.endHour;
-
-  // Guatemala is six hours behind the zero-offset reference used by Date.UTC.
-  const utcMillis = Date.UTC(2026, 8, dayNum, Math.floor(endHour) + 6, Math.round((endHour % 1) * 60), 0);
-  return new Date(utcMillis);
-}
-
 // 1. Generate the volunteer's permanent pass token
 export async function generateEntryPassToken(volunteerId: string) {
   await requireVolunteerSelfOrCapability('scan_qr_attendance', volunteerId);
@@ -64,47 +52,83 @@ export async function generateEntryPassToken(volunteerId: string) {
   };
 }
 
-// 2. Recalculate Reliability Score
+// 2. Recalculate Reliability Score for a single volunteer
 export async function recalculateReliability(volunteerId: string) {
+  if (!volunteerId) {
+    return { success: false as const, error: 'volunteerId requerido.' };
+  }
+  await requireVolunteerSelfOrCapability('reschedule_volunteer', volunteerId);
   const supabase = getAdminClient();
 
-  // Fetch all shifts for the volunteer
-  const { data: shifts, error } = await supabase
-    .from('shifts')
-    .select('*')
-    .eq('volunteer_id', volunteerId);
+  try {
+    const [shiftsRes, sessionsRes] = await Promise.all([
+      supabase
+        .from('shifts')
+        .select('id, volunteer_id, day_key, shift_key, checked_in, checked_out, checked_in_at, checked_out_at')
+        .eq('volunteer_id', volunteerId)
+        .throwOnError(),
+      supabase
+        .from('attendance_sessions')
+        .select('id, volunteer_id, day_key, started_at, ended_at, status')
+        .eq('volunteer_id', volunteerId)
+        .throwOnError(),
+    ]);
 
-  if (error || !shifts || shifts.length === 0) {
-    return;
-  }
+    const metrics = getVolunteerReliabilityMetrics(
+      volunteerId,
+      shiftsRes.data || [],
+      sessionsRes.data || []
+    );
 
-  const now = new Date();
-  let numerator = 0;   // Checked in shifts
-  let denominator = 0; // Completed shifts (passed or checked in)
-
-  for (const s of shifts) {
-    if (isSimulationEventDay(s.day_key)) continue;
-    const shiftEndTime = parseShiftDateTime(s.day_key, s.shift_key);
-
-    if (s.checked_in) {
-      numerator++;
-      denominator++;
-    } else if (now > shiftEndTime) {
-      // Shift passed, and was not checked in (absent)
-      // Note: we can skip replaced shifts if there was status.
-      // In this database, shifts table has no status column, only shifts.
-      // So if it exists in shifts and time passed without checkin, they missed it.
-      denominator++;
-    }
-  }
-
-  if (denominator > 0) {
-    const score = Math.round((numerator / denominator) * 100);
-    await supabase
+    const { error } = await supabase
       .from('volunteers')
-      .update({ reliability_score: score })
+      .update({ reliability_score: metrics.reliabilityScore })
       .eq('id', volunteerId);
+    if (error) throw error;
+
+    return { success: true as const, metrics };
+  } catch (err) {
+    console.error('[RELIABILITY] No se pudo recalcular la confiabilidad:', err);
+    return { success: false as const, error: 'No se pudo recalcular la confiabilidad.' };
   }
+}
+
+// 3. Recalculate and synchronize reliability for all volunteers
+export async function recalculateAllVolunteersReliabilityAction() {
+  await requireCapability('view_all_volunteers');
+  const supabase = getAdminClient();
+
+  const [vols, shifts, sessions] = await Promise.all([
+    fetchAllRowsStrict<{ id: string }>(supabase, 'volunteers', 'id'),
+    fetchAllRowsStrict(supabase, 'shifts', 'id, volunteer_id, day_key, shift_key, checked_in, checked_out, checked_in_at, checked_out_at'),
+    fetchAllRowsStrict(supabase, 'attendance_sessions', 'id, volunteer_id, day_key, started_at, ended_at, status'),
+  ]);
+
+  const map = computeBulkReliabilityMap(vols, shifts, sessions);
+  if (vols.length === 0) {
+    return { success: true as const, count: 0, reliabilityMap: map };
+  }
+
+  const updateResults = await Promise.all(vols.map(volunteer => (
+    supabase
+      .from('volunteers')
+      .update({ reliability_score: map[volunteer.id] })
+      .eq('id', volunteer.id)
+  )));
+  const failedUpdates = updateResults.filter(result => result.error);
+  if (failedUpdates.length > 0) {
+    console.error(
+      '[RELIABILITY_BULK] No se pudieron guardar todos los puntajes:',
+      failedUpdates.map(result => result.error)
+    );
+    return {
+      success: false as const,
+      count: vols.length - failedUpdates.length,
+      error: `No se pudieron guardar ${failedUpdates.length} puntajes de confiabilidad.`,
+    };
+  }
+
+  return { success: true as const, count: vols.length, reliabilityMap: map };
 }
 
 // ----------------------------------------------------------------------

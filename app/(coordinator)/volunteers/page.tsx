@@ -187,7 +187,7 @@ export default function VolunteersPage() {
           ward,
           phone,
           shifts: shiftCounts[v.id] || 0,
-          reliability: v.reliability_score || 100,
+          reliability: typeof reliabilityMap[v.id] === 'number' ? reliabilityMap[v.id] : 100,
           committee,
           committee_id: v.committee_id,
           status: v.status || 'active',
@@ -195,7 +195,7 @@ export default function VolunteersPage() {
           normalizedSearchText,
         };
       }),
-    [rawVolunteers, shiftCounts, committeesMap]
+    [rawVolunteers, shiftCounts, committeesMap, reliabilityMap]
   );
 
   const [showArchived, setShowArchived] = useState(false);

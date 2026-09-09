@@ -1,5 +1,6 @@
-import { getOperationalEventDays, formatDateShort, isSimulationEventDay } from "@/lib/dates";
+import { getOperationalEventDays, formatDateShort, isSimulationEventDay, isOperationalEventDay } from "@/lib/dates";
 import { inferShiftsForSession } from '@/lib/session-utils';
+import { computeBulkReliabilityMap } from "@/lib/services/volunteer-reliability.service";
 
 export interface CoordinatorVolunteerData {
   id: string;
@@ -111,16 +112,11 @@ export function buildEventDayKeys(): string[] {
 }
 
 export function computeReliabilityMap(
-  volunteers: CoordinatorVolunteerData[]
-): Record<string, number | '-'> {
-  const reliabilityMap: Record<string, number | '-'> = {};
-
-  volunteers.forEach(vol => {
-    const score = vol.reliability_score ?? vol.reliability ?? 100;
-    reliabilityMap[vol.id] = score;
-  });
-
-  return reliabilityMap;
+  volunteers: CoordinatorVolunteerData[],
+  shiftsData: CoordinatorShiftData[],
+  sessionsData: CoordinatorSessionData[]
+): Record<string, number> {
+  return computeBulkReliabilityMap(volunteers, shiftsData, sessionsData);
 }
 
 export function processShiftsData(
@@ -205,7 +201,7 @@ export function processShiftsData(
     if (!s.volunteer_id) continue;
 
     // Basic stats
-    if (!isSimulationEventDay(s.day_key)) {
+    if (isOperationalEventDay(s.day_key)) {
       shiftCounts[s.volunteer_id] = (shiftCounts[s.volunteer_id] || 0) + 1;
     }
 

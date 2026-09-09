@@ -107,6 +107,7 @@ export default function CoordinatorDashboard() {
     globalShifts,
     sessionsData,
     requirementsByCommittee,
+    reliabilityMap,
     loading,
   } = useCoordinatorData();
   const [dashboardAccess, setDashboardAccess] = useState<'checking' | 'allowed' | 'denied'>('checking');
@@ -189,10 +190,10 @@ export default function CoordinatorDashboard() {
         id: v.id,
         name: `${v.first_name || ''} ${v.last_name || ''}`.trim(),
         committee: v.committees?.name || 'Sin comité',
-        reliability: v.reliability_score ?? 100,
+        reliability: reliabilityMap[v.id] ?? 100,
         status: v.status || 'active',
       })),
-    [rawVolunteers]
+    [rawVolunteers, reliabilityMap]
   );
 
   const availableHeatmapCommittees = useMemo(() => {

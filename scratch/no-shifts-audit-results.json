@@ -1,0 +1,995 @@
+{
+  "total": 104,
+  "statusCount": {
+    "archived": 60,
+    "active": 44
+  },
+  "commBreakdown": {
+    "Facilidades Físicas": {
+      "total": 2,
+      "active": 1,
+      "archived": 1,
+      "other": 0
+    },
+    "Guía": {
+      "total": 27,
+      "active": 4,
+      "archived": 23,
+      "other": 0
+    },
+    "Historia": {
+      "total": 6,
+      "active": 0,
+      "archived": 6,
+      "other": 0
+    },
+    "Parqueo y Transporte": {
+      "total": 5,
+      "active": 0,
+      "archived": 5,
+      "other": 0
+    },
+    "Recepción": {
+      "total": 6,
+      "active": 1,
+      "archived": 5,
+      "other": 0
+    },
+    "Seguridad": {
+      "total": 47,
+      "active": 36,
+      "archived": 11,
+      "other": 0
+    },
+    "Sin subcomité asignado": {
+      "total": 7,
+      "active": 2,
+      "archived": 5,
+      "other": 0
+    },
+    "Tecnología": {
+      "total": 4,
+      "active": 0,
+      "archived": 4,
+      "other": 0
+    }
+  },
+  "volunteers": [
+    {
+      "id": "1ccff353-3064-491d-b3ad-f8e5935be259",
+      "nombre": "Cristhian Antonio Ruiz Fuentes",
+      "telefono": "+50588955020",
+      "subcomite": "Facilidades Físicas",
+      "estado": "archived",
+      "estaca": "Masaya",
+      "barrio": "Nindirí"
+    },
+    {
+      "id": "f09442aa-517f-4333-aee3-1666534caf18",
+      "nombre": "Meyling Adelina Espinal Acevedo",
+      "telefono": "+50587461539",
+      "subcomite": "Facilidades Físicas",
+      "estado": "active",
+      "estaca": "Bello Horizonte",
+      "barrio": "Ciudad Jardín"
+    },
+    {
+      "id": "b67f361f-2f1e-4a6a-b6f2-05381223af26",
+      "nombre": "(Traducción) Cristian Andrés Robles Chacón",
+      "telefono": "+50577234855",
+      "subcomite": "Guía",
+      "estado": "active",
+      "estaca": "Universitaria",
+      "barrio": "San Juan"
+    },
+    {
+      "id": "f213e8e5-ebe9-4e02-b130-efa6328d6199",
+      "nombre": "Adriana Campos",
+      "telefono": "+50588476129",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Jinotepe",
+      "barrio": "El Rosario"
+    },
+    {
+      "id": "499bcd59-4862-4bbb-bde9-786edbd1e825",
+      "nombre": "Ana Lucia Solorzano Navarro",
+      "telefono": "+50558715876",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Universitaria",
+      "barrio": "Altagracia"
+    },
+    {
+      "id": "325014c0-363f-4bb4-8d80-4b0c7b3475b9",
+      "nombre": "Bengi Alexander Hernanez Roy",
+      "telefono": "+50581984536",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Masaya",
+      "barrio": "Las Flores"
+    },
+    {
+      "id": "ce6815ce-c4f9-4d58-8c39-14e22d6b38d9",
+      "nombre": "Carlos Brucks",
+      "telefono": "+50587439236",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Puerto Cabezas",
+      "barrio": "Lamlaya"
+    },
+    {
+      "id": "630db181-feff-4267-8321-cbd134a7a019",
+      "nombre": "Christel Nicole Lugo Sotelo",
+      "telefono": "+50583815819",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Granada",
+      "barrio": "Pancasán"
+    },
+    {
+      "id": "f0f22d6a-74a6-43e9-8a96-fce5623620b2",
+      "nombre": "Christiam David Henriquez Orozco",
+      "telefono": "+50586800734",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Chinandega Oeste",
+      "barrio": "El Naranjo"
+    },
+    {
+      "id": "f0818ca5-4de2-44e8-9997-b5454a51a9da",
+      "nombre": "David Campos",
+      "telefono": "+50583383332",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Jinotepe",
+      "barrio": "El Rosario"
+    },
+    {
+      "id": "0b7b486c-3c64-4e5e-aff6-4377613c6306",
+      "nombre": "Dennis Santiago Rugama Espinoza",
+      "telefono": "+50582332259",
+      "subcomite": "Guía",
+      "estado": "active",
+      "estaca": "Estelí",
+      "barrio": "Estelí"
+    },
+    {
+      "id": "6c89f99d-d52d-413f-a938-6bc215b8a2b2",
+      "nombre": "Dominga López Rocha",
+      "telefono": "+50582573015",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Villa Flor",
+      "barrio": "Villa Flor"
+    },
+    {
+      "id": "ea061897-9b99-4686-9798-e86a8939110b",
+      "nombre": "Donald de la Cruz Cano Diaz",
+      "telefono": "+50577449120",
+      "subcomite": "Guía",
+      "estado": "active",
+      "estaca": "Masatepe",
+      "barrio": "Monimbo"
+    },
+    {
+      "id": "6990a992-7a74-41b9-8842-d28ddaa80190",
+      "nombre": "Glady Raquel Miranda Real",
+      "telefono": "+50558775838",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Chinandega Oeste",
+      "barrio": "Acome"
+    },
+    {
+      "id": "a4277f8b-688e-4994-a44f-420f55430f1d",
+      "nombre": "Gonzalo Manuel Estrada Hernández",
+      "telefono": "+50586908147",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Universitaria",
+      "barrio": "Altagracia"
+    },
+    {
+      "id": "72e5af94-7c1e-4f75-90eb-a31901990178",
+      "nombre": "Gregoria del Carmen Sierra",
+      "telefono": "+50586880079",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Universitaria",
+      "barrio": "Altagracia"
+    },
+    {
+      "id": "eb664447-ccc1-4f3c-a343-4a86e5907319",
+      "nombre": "Hugo Mauricio España Blanco",
+      "telefono": "+50588897979",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Universitaria",
+      "barrio": "Loma Linda"
+    },
+    {
+      "id": "cfa48f2a-4280-4b98-a22e-ece6b1acdddb",
+      "nombre": "Idania del Socorro Benavidez Lanuza",
+      "telefono": "+50585086237",
+      "subcomite": "Guía",
+      "estado": "active",
+      "estaca": "Estelí",
+      "barrio": "Estelí"
+    },
+    {
+      "id": "89efbf29-d2d0-4b1a-b5a8-4a41615d008f",
+      "nombre": "Josué Andrés Centeno Zapata",
+      "telefono": "+50587000847",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Chinandega Oeste",
+      "barrio": "Acome"
+    },
+    {
+      "id": "7c1fcc6f-d2ab-44f4-986f-c77cd58bb802",
+      "nombre": "Karola del Carmen Loáisiga",
+      "telefono": "+50589739555",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Puerto Cabezas",
+      "barrio": "Puerto Cabezas"
+    },
+    {
+      "id": "e0dec310-6186-4b4a-b5b2-6cf4acec51ce",
+      "nombre": "Lesther Eliazar Matamoros Martinez",
+      "telefono": "+50586708773",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Chinandega Oeste",
+      "barrio": "El Viejo"
+    },
+    {
+      "id": "9f7188df-5714-46ce-ab69-5d2df4f73154",
+      "nombre": "Liahm Alonso Garcia Avellan",
+      "telefono": "+50588642800",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Managua",
+      "barrio": "Bello Amanecer"
+    },
+    {
+      "id": "32c1c149-92fa-4666-af14-42f676380de5",
+      "nombre": "Marlon Ricardo López rivera",
+      "telefono": "+50584314484",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Juigalpa",
+      "barrio": "Juigalpa"
+    },
+    {
+      "id": "69100500-fb1d-4a6d-8d7b-8c825db662dd",
+      "nombre": "Martha Isabel Calvo Ureña",
+      "telefono": "+50584114835",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Jinotepe",
+      "barrio": "Jinotepe"
+    },
+    {
+      "id": "2582e8ce-77db-48ee-b5f4-d7bfc2c57de9",
+      "nombre": "Marvin Antonio Baltodano López (hijo)",
+      "telefono": "+50587659180",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Masatepe",
+      "barrio": "Masatepe"
+    },
+    {
+      "id": "41114ce0-e4a9-4526-a7a4-923895e27d9a",
+      "nombre": "Rebeca Irene Díaz de Carballo",
+      "telefono": "+50583850493",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Universitaria",
+      "barrio": "Loma Linda"
+    },
+    {
+      "id": "d824f199-a81b-437c-80ae-ff4ff4d98695",
+      "nombre": "Sandy Elizabeth Espinoza Ruiz",
+      "telefono": "+50582384685",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Villa Flor",
+      "barrio": "René Polanco"
+    },
+    {
+      "id": "77bf93b0-dc1e-4524-a9b4-5b94a5aa8d97",
+      "nombre": "Yerlin Yolina Monte",
+      "telefono": "+50585151807",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Puerto Cabezas",
+      "barrio": "Puerto Cabezas"
+    },
+    {
+      "id": "43723446-5bf3-495c-a952-8136275fd217",
+      "nombre": "Yuri Mabel Garcia Medina",
+      "telefono": "+50575054426",
+      "subcomite": "Guía",
+      "estado": "archived",
+      "estaca": "Chinandega Oeste",
+      "barrio": "El Viejo"
+    },
+    {
+      "id": "8a02d3fb-c967-4632-9c0a-1cc8c5d4405c",
+      "nombre": "Eduardo Serrano",
+      "telefono": "+50584814435",
+      "subcomite": "Historia",
+      "estado": "archived",
+      "estaca": "Por definir",
+      "barrio": "Por definir"
+    },
+    {
+      "id": "f6fe3650-b478-4258-ab97-839f09c598c1",
+      "nombre": "Ingrid Carreon",
+      "telefono": "+50557675491",
+      "subcomite": "Historia",
+      "estado": "archived",
+      "estaca": "Por definir",
+      "barrio": "Por definir"
+    },
+    {
+      "id": "ba2fead4-13ec-4249-9f82-0c0cbe2519b9",
+      "nombre": "Lais Cuarezma",
+      "telefono": "+50585357764",
+      "subcomite": "Historia",
+      "estado": "archived",
+      "estaca": "Por definir",
+      "barrio": "Por definir"
+    },
+    {
+      "id": "08b222cb-cd93-4c66-b735-d5d2409bba68",
+      "nombre": "Rachel Aracelly López Robles",
+      "telefono": "+50587016372",
+      "subcomite": "Historia",
+      "estado": "archived",
+      "estaca": "Masaya",
+      "barrio": "Las Flores"
+    },
+    {
+      "id": "51d55a77-3513-4f39-80f3-cd552c86d7b3",
+      "nombre": "Test User",
+      "telefono": "+50512345654",
+      "subcomite": "Historia",
+      "estado": "archived",
+      "estaca": "Managua",
+      "barrio": "Managua"
+    },
+    {
+      "id": "0df72d5f-0532-44a6-a58a-182cc82e94f1",
+      "nombre": "TestRealtime NuevoVoluntario",
+      "telefono": "+50597181390",
+      "subcomite": "Historia",
+      "estado": "archived",
+      "estaca": "Managua",
+      "barrio": "Central"
+    },
+    {
+      "id": "caf1f8fd-d185-463f-ab13-95da6e56636f",
+      "nombre": "Betsy",
+      "telefono": "+50577716167",
+      "subcomite": "Parqueo y Transporte",
+      "estado": "archived",
+      "estaca": "Jinotepe",
+      "barrio": "El Rosario"
+    },
+    {
+      "id": "5591ddb3-4dbf-4fb4-8a93-2a26086c22f6",
+      "nombre": "Carolina Mercedes Tellez Vallecio",
+      "telefono": "+50577382761",
+      "subcomite": "Parqueo y Transporte",
+      "estado": "archived",
+      "estaca": "Managua",
+      "barrio": "Ciudad Sandino"
+    },
+    {
+      "id": "6cad4400-082d-4950-b7d5-cd82e7267e29",
+      "nombre": "Gema Esmeralda Carballo Dávila",
+      "telefono": "+50558824964",
+      "subcomite": "Parqueo y Transporte",
+      "estado": "archived",
+      "estaca": "Masatepe",
+      "barrio": "San Marcos"
+    },
+    {
+      "id": "f898bebc-8df3-4779-9150-89c5eabe94f3",
+      "nombre": "Nely Auxiliadora Rivas López",
+      "telefono": "+50577439898",
+      "subcomite": "Parqueo y Transporte",
+      "estado": "archived",
+      "estaca": "Granada",
+      "barrio": "La Estación"
+    },
+    {
+      "id": "38ffa3ba-f036-4e38-8710-c764430c6a06",
+      "nombre": "Sariah Catalina Garcia Cruz",
+      "telefono": "+50582752409",
+      "subcomite": "Parqueo y Transporte",
+      "estado": "archived",
+      "estaca": "Villa Flor",
+      "barrio": "14 de Septiembre"
+    },
+    {
+      "id": "ec87ced9-016f-491f-96d7-0b3616846083",
+      "nombre": "Diana Rashell Matute Berrios",
+      "telefono": "+50582565525",
+      "subcomite": "Recepción",
+      "estado": "archived",
+      "estaca": "Villa Flor",
+      "barrio": "Los Laureles"
+    },
+    {
+      "id": "5f4f8499-04f4-4cf4-869f-b19578f32054",
+      "nombre": "Hanssel Valentin Navarro Murillo",
+      "telefono": "+50584772335",
+      "subcomite": "Recepción",
+      "estado": "archived",
+      "estaca": "Managua",
+      "barrio": "Linda Vista"
+    },
+    {
+      "id": "acccdfd1-2fda-4f35-a8f3-a3e17669cecb",
+      "nombre": "José Lorenzo Mercado Hernández",
+      "telefono": "+50581401034",
+      "subcomite": "Recepción",
+      "estado": "archived",
+      "estaca": "Villa Flor",
+      "barrio": "Los Laureles"
+    },
+    {
+      "id": "d3a714a1-0425-4a59-92ec-bbb82ab1cc25",
+      "nombre": "Kaysi Carolina Matute Berrios",
+      "telefono": "+50582612764",
+      "subcomite": "Recepción",
+      "estado": "archived",
+      "estaca": "Villa Flor",
+      "barrio": "Los Laureles"
+    },
+    {
+      "id": "4418938b-438c-4324-a129-b6604af653ac",
+      "nombre": "Ramón de Jesús Matute Rodriguez",
+      "telefono": "+50557217822",
+      "subcomite": "Recepción",
+      "estado": "active",
+      "estaca": "Villa Flor",
+      "barrio": "Los Laureles"
+    },
+    {
+      "id": "9d3a7942-365f-4355-a926-4e05249136e3",
+      "nombre": "Wilfredo Castellon",
+      "telefono": "+50584628526",
+      "subcomite": "Recepción",
+      "estado": "archived",
+      "estaca": "Bello Horizonte",
+      "barrio": "Maximo Jerez"
+    },
+    {
+      "id": "d80a1764-7c08-49d7-abbe-9350562e5597",
+      "nombre": "Abbylarixa Salinas",
+      "telefono": "+50588940007",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Bello Horizonte",
+      "barrio": "Ducualí"
+    },
+    {
+      "id": "b6a91ab9-95e4-42b1-97f3-c7194aecb6cd",
+      "nombre": "Alberto Pilarte",
+      "telefono": "+50581225951",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "Bello Amanecer"
+    },
+    {
+      "id": "69c29a83-e5e8-466f-aff8-08ade2d3549d",
+      "nombre": "Alejandro José Silva Vargas",
+      "telefono": "+50583279246",
+      "subcomite": "Seguridad",
+      "estado": "archived",
+      "estaca": "Bello Horizonte",
+      "barrio": "Ducualí"
+    },
+    {
+      "id": "86635ec4-1b03-46e3-8d94-4ab2f7b54ba5",
+      "nombre": "Ana Cristina Sánchez",
+      "telefono": "+50576351665",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "Lezcano"
+    },
+    {
+      "id": "570df02b-60b1-4acd-8f4d-8315039755fa",
+      "nombre": "Camila Celeste Zapata Álvarez",
+      "telefono": "+50588121459",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Universitaria",
+      "barrio": "Altagracia"
+    },
+    {
+      "id": "c44cd6a3-df43-431d-9c5c-7b773c54a359",
+      "nombre": "Cándida de la Concepción Pérez Vargas",
+      "telefono": "+50558259878",
+      "subcomite": "Seguridad",
+      "estado": "archived",
+      "estaca": "Managua",
+      "barrio": "La Trinidad"
+    },
+    {
+      "id": "a05d6cb7-ca2f-445b-8166-cd58935ea222",
+      "nombre": "Carlos Cruz",
+      "telefono": "+50583948888",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "Mateare"
+    },
+    {
+      "id": "ed02a044-5bb6-4351-ae62-148e00d1cc30",
+      "nombre": "Carolina Gonzalez",
+      "telefono": "+50587713398",
+      "subcomite": "Seguridad",
+      "estado": "archived",
+      "estaca": "Villa Flor",
+      "barrio": "René Polanco"
+    },
+    {
+      "id": "3558ca55-d035-4eb6-a9d1-1353e10f84f6",
+      "nombre": "Celestino Cuaresma Mendez",
+      "telefono": "+50585857058",
+      "subcomite": "Seguridad",
+      "estado": "archived",
+      "estaca": "Managua",
+      "barrio": "Trinidad"
+    },
+    {
+      "id": "7bf1775c-7448-4a2a-b93f-43decb3806ac",
+      "nombre": "David Javier Calderón Ortiz",
+      "telefono": "+50587772400",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Bello Horizonte",
+      "barrio": "Máximo Jerez"
+    },
+    {
+      "id": "aa63c92b-130c-4455-a4a6-cebbe84d8dcc",
+      "nombre": "Diego Alejandro Silva Suarez",
+      "telefono": "+50558059500",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Universitaria",
+      "barrio": "Monte Fresco"
+    },
+    {
+      "id": "105ee4b4-7ead-4c86-8448-4c9006327d8f",
+      "nombre": "Drevel Jha Canel Aristhomene Forbes",
+      "telefono": "+50588546327",
+      "subcomite": "Seguridad",
+      "estado": "archived",
+      "estaca": "Bello Horizonte",
+      "barrio": "Ducualí"
+    },
+    {
+      "id": "099c797e-b236-4352-bcc0-78b59da6fa08",
+      "nombre": "Ericka Ochoa",
+      "telefono": "+50583202109",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "Bello Amanecer"
+    },
+    {
+      "id": "12b90dc2-96ab-44ad-aa80-8f6f7c854ad6",
+      "nombre": "Eva Regina Castillo Vásquez",
+      "telefono": "+50578528392",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "Linda Vista"
+    },
+    {
+      "id": "6818e29a-4ab1-42bb-b0fe-90cabdcd9cb9",
+      "nombre": "Francisca Gabriela Serrano",
+      "telefono": "+50558049832",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Villa Flor",
+      "barrio": "Villa Venezuela"
+    },
+    {
+      "id": "8d7f4503-5a89-4eb4-acbc-04931315a48b",
+      "nombre": "Hanna Elizabeth Velásquez Rivas",
+      "telefono": "+50578576927",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "Lezcano"
+    },
+    {
+      "id": "eef99d36-94b1-487c-87e9-2110c045f6b5",
+      "nombre": "Henry Jiménez",
+      "telefono": "+50583695512",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "Bello Amanecer"
+    },
+    {
+      "id": "3e45c974-50d6-4204-bacd-7ee7ab0565c4",
+      "nombre": "Herling Valeria Delgadillo",
+      "telefono": "+50585212763",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "La Estación",
+      "barrio": "Distrito Granada"
+    },
+    {
+      "id": "fafe085d-b53b-444d-b46b-b5e791ab916c",
+      "nombre": "Ian Guzmán",
+      "telefono": "+50587961377",
+      "subcomite": "Seguridad",
+      "estado": "archived",
+      "estaca": "Managua",
+      "barrio": "Bello Amanecer"
+    },
+    {
+      "id": "29d793f1-a282-4b94-be10-be6f6cc0210b",
+      "nombre": "Irma Elizabeth Argüello Vega",
+      "telefono": "+50583229830",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Universitaria",
+      "barrio": "Altagracia"
+    },
+    {
+      "id": "13af64ba-56c5-4872-8d15-ac361ee2d128",
+      "nombre": "Jimmy Alexander Laínez Silva",
+      "telefono": "+50581000531",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "Ciudad Sandino"
+    },
+    {
+      "id": "03a46aaf-861d-4e11-b3cb-c2bcf999812a",
+      "nombre": "Johana Toruño Chávez",
+      "telefono": "+50578922922",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Villa Flor",
+      "barrio": "Villa Flor"
+    },
+    {
+      "id": "3c382e9c-b90e-4bc9-a4fd-4774483df306",
+      "nombre": "Jorge Luis Gutiérrez Campos",
+      "telefono": "+50576739821",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Bello Horizonte",
+      "barrio": "Waspán"
+    },
+    {
+      "id": "286e4dcf-481d-4003-939c-70f2a8943124",
+      "nombre": "Juan Carlos Ortiz Mercado",
+      "telefono": "+50589587083",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Bello Horizonte",
+      "barrio": "Waspán"
+    },
+    {
+      "id": "664b8e4e-f58e-403b-aeb5-0a7e5bd208f2",
+      "nombre": "Juan Pérez",
+      "telefono": "+50588881111",
+      "subcomite": "Seguridad",
+      "estado": "archived",
+      "estaca": "Managua Sur",
+      "barrio": "Las Colinas"
+    },
+    {
+      "id": "079d1347-418f-46c8-8df6-19adbab7260f",
+      "nombre": "Juana Pilarte",
+      "telefono": "+50581225951",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "Bello Amanecer"
+    },
+    {
+      "id": "7e313cd5-00dc-49ab-93a1-54b7527dd59d",
+      "nombre": "Junior Benavidez",
+      "telefono": "+50582185693",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "Bello Amanecer"
+    },
+    {
+      "id": "d71dc244-32a0-414a-bf43-70671bdb24ae",
+      "nombre": "Karla Teresa Estrada Vega",
+      "telefono": "+50581477992",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Jinotepe",
+      "barrio": "Jinotepe"
+    },
+    {
+      "id": "4acaaedb-5ac6-4e7f-8a4b-70151edc1594",
+      "nombre": "Kevin Enrique Espinoza Parrales",
+      "telefono": "+50588390593",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Jinotepe",
+      "barrio": "Diriamba"
+    },
+    {
+      "id": "3ac47869-a659-4ea6-bd0b-b07b62f1c95f",
+      "nombre": "Keyla Melissa Castellón Saavedra",
+      "telefono": "+50582918973",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "La Trinidad"
+    },
+    {
+      "id": "c8cd8e86-093a-4d1b-90bd-3a1991f423c0",
+      "nombre": "Lester Alejandro López Rosales",
+      "telefono": "+50586955436",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Masatepe",
+      "barrio": "San Juan de Oriente"
+    },
+    {
+      "id": "f01c41a5-8d3a-401e-bddb-f83d362d8266",
+      "nombre": "Lester José Calero González",
+      "telefono": "+50585033584",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Universitaria",
+      "barrio": "Monte Fresco"
+    },
+    {
+      "id": "f42d2860-a5b7-409c-9ae8-d9921ff53447",
+      "nombre": "Lucero Celeste Narváez",
+      "telefono": "+50586153478",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Villa Flor",
+      "barrio": "Villa Venezuela"
+    },
+    {
+      "id": "cadd37d0-1dd7-4db4-93e0-7cba57530ad3",
+      "nombre": "María José González Valverde",
+      "telefono": "+50557275555",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Villa Flor",
+      "barrio": "René Polanco"
+    },
+    {
+      "id": "61a519b2-611b-4f8f-b56b-f0eb3a6c3526",
+      "nombre": "Marjuerie Elizabeth Morales Ñurinda",
+      "telefono": "+50582620429",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Managua",
+      "barrio": "La Trinidad"
+    },
+    {
+      "id": "31fc9b9e-f840-4d63-b488-9944376bedc7",
+      "nombre": "Mauricio Celestino Cuarezma Méndez",
+      "telefono": "+50585857058",
+      "subcomite": "Seguridad",
+      "estado": "archived",
+      "estaca": "Managua",
+      "barrio": "La Trinidad"
+    },
+    {
+      "id": "37d10ce9-2e9b-4c78-8c54-f494168a0af3",
+      "nombre": "Nanci Adriana López Contreras",
+      "telefono": "+50576357591",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Bello Horizonte",
+      "barrio": "Máximo Jerez"
+    },
+    {
+      "id": "fa7d421c-a509-4bf1-b8cc-113a29492fcd",
+      "nombre": "Paola Blandino",
+      "telefono": "+50588644888",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Universitaria",
+      "barrio": "Veracruz"
+    },
+    {
+      "id": "a85fba9c-e2ee-4f1c-ade9-8fd6ae9fcaaa",
+      "nombre": "Paola Martinez Cruz",
+      "telefono": "+50581646206",
+      "subcomite": "Seguridad",
+      "estado": "archived",
+      "estaca": "Universitaria",
+      "barrio": "San Judas"
+    },
+    {
+      "id": "8be1761d-3ad8-4d18-8cf9-13490bd83985",
+      "nombre": "Randy Martín Sequeira Sánchez",
+      "telefono": "+50589867182",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Universitaria",
+      "barrio": "Monte Fresco"
+    },
+    {
+      "id": "ecf63712-1e2a-4e39-b684-9c0bf2517edd",
+      "nombre": "René Jiménez",
+      "telefono": "+50581898361",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Bello Horizonte",
+      "barrio": "Ducualí"
+    },
+    {
+      "id": "3f9c5b27-53d9-413c-b57b-7f9a5aa53bc3",
+      "nombre": "Roberto García Cruz",
+      "telefono": "+50586499496",
+      "subcomite": "Seguridad",
+      "estado": "archived",
+      "estaca": "Bello Horizonte",
+      "barrio": "Waspán"
+    },
+    {
+      "id": "85417de0-074f-4fcf-b3c6-3dc451cc623b",
+      "nombre": "Rosalba Ampié de Ortiz",
+      "telefono": "+50589587083",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Bello Horizonte",
+      "barrio": "Waspán"
+    },
+    {
+      "id": "dcd9e729-24ed-47b7-b361-326548c3d5c8",
+      "nombre": "Scarleth Juniett Mejía Medina",
+      "telefono": "+50558153830",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Masatepe",
+      "barrio": "San Juan de Oriente"
+    },
+    {
+      "id": "b5764b78-33cb-48a4-bc08-7f15e1fe42a8",
+      "nombre": "Sergio Alexander Morales",
+      "telefono": "+50586379658",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Masatepe",
+      "barrio": "San Marcos"
+    },
+    {
+      "id": "ce7149a5-896b-4556-9f61-5081093b01a2",
+      "nombre": "Yamileth Diaz",
+      "telefono": "+50581548563",
+      "subcomite": "Seguridad",
+      "estado": "archived",
+      "estaca": "Universitaria",
+      "barrio": "San Juan"
+    },
+    {
+      "id": "389d79ae-1f25-47f7-ae8a-f4bb7493261c",
+      "nombre": "Yefersson David Calero Gonzales",
+      "telefono": "+50586595414",
+      "subcomite": "Seguridad",
+      "estado": "active",
+      "estaca": "Universitaria",
+      "barrio": "Monte Fresco"
+    },
+    {
+      "id": "8ca37ced-96a1-4a26-9118-96f93381eb4c",
+      "nombre": "Alexander Miguel Rivas Selva",
+      "telefono": "+50577239064",
+      "subcomite": "Sin subcomité asignado",
+      "estado": "active",
+      "estaca": "Bello Horizonte",
+      "barrio": "Waspán"
+    },
+    {
+      "id": "c6266d5d-a702-4a8f-86df-9c8b53c46545",
+      "nombre": "Aragon Junieth",
+      "telefono": "+50577087756",
+      "subcomite": "Sin subcomité asignado",
+      "estado": "active",
+      "estaca": "Universitaria",
+      "barrio": "San Juan"
+    },
+    {
+      "id": "1c8b4222-f71a-46cb-8dda-5e5a3750fcc7",
+      "nombre": "Bengi Hernández",
+      "telefono": "+50585518664",
+      "subcomite": "Sin subcomité asignado",
+      "estado": "archived",
+      "estaca": "Masaya",
+      "barrio": "Las Flores"
+    },
+    {
+      "id": "1aba6bb5-1e39-4e69-af63-e4fa87f23463",
+      "nombre": "Ernesto Heribran Jarquín Morales",
+      "telefono": "+50582795970",
+      "subcomite": "Sin subcomité asignado",
+      "estado": "archived",
+      "estaca": "Granada",
+      "barrio": "La Estación"
+    },
+    {
+      "id": "0979be59-0e86-4fdc-bbc9-ea234b6257f3",
+      "nombre": "Jorge Luis Gutiérrez Campos",
+      "telefono": "+50576739821",
+      "subcomite": "Sin subcomité asignado",
+      "estado": "archived",
+      "estaca": "Managua Norte",
+      "barrio": "Waspán"
+    },
+    {
+      "id": "f8661a3d-d696-4600-9c69-d80082d32bae",
+      "nombre": "Lisbeth Dayanara Campos Chamorro",
+      "telefono": "+50586267329",
+      "subcomite": "Sin subcomité asignado",
+      "estado": "archived",
+      "estaca": "Masaya",
+      "barrio": "Las Flores"
+    },
+    {
+      "id": "138d2152-ca2c-4056-acdc-382c8825e674",
+      "nombre": "Rolando Heberto Suárez López",
+      "telefono": "+50558441193",
+      "subcomite": "Sin subcomité asignado",
+      "estado": "archived",
+      "estaca": "Bello Horizonte",
+      "barrio": "Maximo Jerez"
+    },
+    {
+      "id": "387c4a70-3257-42eb-9bf7-1a2caeab1d7c",
+      "nombre": "Danny Lay De Marín",
+      "telefono": "+50557062212",
+      "subcomite": "Tecnología",
+      "estado": "archived",
+      "estaca": "Bello Amanecer",
+      "barrio": "Máximo Jérez"
+    },
+    {
+      "id": "2abfbc5d-dd44-4b3a-aff0-750f10f11c8a",
+      "nombre": "Jailenne Iridiam Herrera Barreda",
+      "telefono": "+50582284378",
+      "subcomite": "Tecnología",
+      "estado": "archived",
+      "estaca": "Estelí",
+      "barrio": "El Rosario"
+    },
+    {
+      "id": "58531275-cd83-43fd-8a25-c659a637c70e",
+      "nombre": "Juanita Fulanita",
+      "telefono": "+50512345678",
+      "subcomite": "Tecnología",
+      "estado": "archived",
+      "estaca": "Bello Horizente",
+      "barrio": "Waspán"
+    },
+    {
+      "id": "20535b55-79fd-4bed-9bee-8463f3b0632a",
+      "nombre": "Voluntario Prueba Tecnología 2026",
+      "telefono": "+50588880001",
+      "subcomite": "Tecnología",
+      "estado": "archived",
+      "estaca": "de Pruebas",
+      "barrio": "Laboratorio"
+    }
+  ]
+}

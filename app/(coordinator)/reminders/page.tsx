@@ -174,6 +174,7 @@ export default function RemindersPage() {
     checkedInMap: contextCheckedInMap,
     checkedOutMap: contextCheckedOutMap,
     shiftCounts: contextShiftCounts,
+    reliabilityMap,
     shiftsData,
     loading,
     refresh,
@@ -191,12 +192,12 @@ export default function RemindersPage() {
           ward: v.neighborhood || '',
           phone: v.phone || '',
           shifts: contextShiftCounts[v.id] || 0,
-          reliability: v.reliability_score || 100,
+          reliability: typeof reliabilityMap[v.id] === 'number' ? reliabilityMap[v.id] : 100,
           committee: v.committees?.name || 'Sin comité',
           committee_id: v.committee_id,
           age: v.age,
         })),
-    [rawVolunteers, contextShiftCounts]
+    [rawVolunteers, contextShiftCounts, reliabilityMap]
   );
 
   const globalShifts = contextGlobalShifts;

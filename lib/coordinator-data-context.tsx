@@ -69,7 +69,7 @@ interface CoordinatorDataContextValue {
   sessionOpenShiftKeys: Record<string, boolean>;
   sessionCompletedShiftKeys: Record<string, boolean>;
   shiftCounts: Record<string, number>;
-  reliabilityMap: Record<string, number | '-'>;
+  reliabilityMap: Record<string, number>;
   loading: boolean;
   isRefreshing: boolean;
   refresh: (force?: boolean) => Promise<void>;
@@ -161,8 +161,8 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   );
   
   const reliabilityMap = useMemo(
-    () => computeReliabilityMap(rawVolunteers),
-    [rawVolunteers]
+    () => computeReliabilityMap(rawVolunteers, shiftsData, sessionsData),
+    [rawVolunteers, shiftsData, sessionsData]
   );
 
   const fetchData = useCallback(
