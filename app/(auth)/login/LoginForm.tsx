@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { loginWithPin, type AuthState } from "@/app/actions/auth";
 import { getDashboardOperationalDataAction } from "@/app/actions/dashboard";
 import { getLoginProfiles } from "@/app/actions/login-profiles";
@@ -66,7 +66,41 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [pinLock, setPinLock] = useState<{ phone: string; until: number; network: boolean } | null>(null);
+  const [retrySeconds, setRetrySeconds] = useState(0);
+  const pinLocked = !!pinLock && retrySeconds > 0 && (pinLock.network || pinLock.phone === phone);
+  const countdown = `${Math.floor(retrySeconds / 60).toString().padStart(2, '0')}:${(retrySeconds % 60).toString().padStart(2, '0')}`;
+  const displayedError = pinLocked
+    ? `Demasiados intentos de PIN. Podrás volver a intentar en ${countdown}.`
+    : error;
   const [isRedirecting, setIsRedirecting] = useState(false);
+
+  useEffect(() => {
+    if (!pinLock) return;
+    const updateCountdown = () => {
+      // Recalculate from the deadline so background tabs do not extend the wait.
+      const remaining = Math.max(0, Math.ceil((pinLock.until - Date.now()) / 1000));
+      setRetrySeconds(remaining);
+      if (remaining === 0) setPinLock(null);
+    };
+    const timer = window.setInterval(updateCountdown, 1000);
+    document.addEventListener('visibilitychange', updateCountdown);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', updateCountdown);
+    };
+  }, [pinLock]);
+
+  const handlePinError = useCallback((result: AuthState) => {
+    if (result.retryAfterSeconds && result.retryAfterSeconds > 0) {
+      const seconds = Math.ceil(result.retryAfterSeconds);
+      setPinLock({ phone, until: Date.now() + seconds * 1000, network: result.rateLimitScope === 'network' });
+      setRetrySeconds(seconds);
+      setError(null);
+    } else {
+      setError(result.error || 'No pudimos verificar tu PIN.');
+    }
+  }, [phone]);
 
   // New PIN States
   const [needsNewPin, setNeedsNewPin] = useState(false);
@@ -236,7 +270,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
   };
 
   const submitPin = async (pinValue: string, profile = selectedProfile) => {
-    if (authAttemptRef.current || isRedirecting) return;
+    if (authAttemptRef.current || isRedirecting || pinLocked) return;
     setError(null);
     setPinRejected(false);
     setPinAccepted(false);
@@ -270,7 +304,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
         setRequireProfileSelection(true);
         setIsSubmittingPin(false);
       } else if (result.error) {
-        setError(result.error);
+        handlePinError(result);
         setPinRejected(true);
         setPin("");
         setIsSubmittingPin(false);
@@ -422,9 +456,10 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
             name={selectedProfile?.name || loginDisplayName(candidateProfiles, savedUserMode ? savedName : "") || (!candidateProfiles.length && savedUserMode ? savedName : "")}
             rememberMe={rememberMe}
             busy={isSubmittingPin || isBiometricLoading || isRedirecting || isLookingUpProfile}
+            pinLocked={pinLocked}
             lookingUpProfile={isLookingUpProfile}
             biometricLoading={isBiometricLoading}
-            error={error}
+            error={displayedError}
             pinRejected={pinRejected}
             pinAccepted={pinAccepted}
             onContinuePhone={lookupMobileProfiles}
@@ -507,6 +542,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
                           key={p.id}
                           type="button"
                           onClick={async () => {
+                            if (pinLocked || authAttemptRef.current) return;
                             const choice = { id: p.id, name: `${p.firstName} ${p.lastName}`.trim(), type: p.userType };
                             setSelectedProfile(choice);
                             setError(null);
@@ -522,7 +558,7 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
 
                                 const result = await loginWithPin({}, formData);
                                 if (result.error) {
-                                  setError(result.error);
+                                  handlePinError(result);
                                   setPin("");
                                   setIsSubmittingPin(false);
                                 } else if (result.force_pin_change) {
@@ -626,10 +662,10 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
                       </div>
                     </button>
 
-                    {error && (
+                    {displayedError && (
                       <div className="w-full p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2 text-left">
                         <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
-                        <p className="text-sm font-inter font-bold text-red">{error}</p>
+                        <p className="text-sm font-inter font-bold text-red">{displayedError}</p>
                       </div>
                     )}
 
@@ -663,14 +699,14 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
                             value={pin}
                             onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                             className="w-full h-12 bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-sm pl-11 pr-3 text-slate-900 dark:text-white text-lg font-inter font-bold focus:bg-white focus:dark:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm"
-                            disabled={isSubmittingPin || isRedirecting}
+                            disabled={isSubmittingPin || isRedirecting || pinLocked}
                           />
                         </div>
 
                         <button 
                           type="submit" 
                           className="flex-1 h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center group shrink-0 text-center"
-                          disabled={isSubmittingPin || isRedirecting}
+                          disabled={isSubmittingPin || isRedirecting || pinLocked}
                           onClick={() => {
                             localStorage.setItem("preferred_auth_method", "pin");
                           }}
@@ -695,10 +731,10 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
                       </div>
                     </div>
 
-                    {error && (
+                    {displayedError && (
                       <div className="p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
                         <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
-                        <p className="text-sm font-inter font-bold text-red">{error}</p>
+                        <p className="text-sm font-inter font-bold text-red">{displayedError}</p>
                       </div>
                     )}
 
@@ -772,10 +808,10 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
                       </div>
                     </button>
 
-                    {error && (
+                    {displayedError && (
                       <div className="w-full p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2 text-left">
                         <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
-                        <p className="text-sm font-inter font-bold text-red">{error}</p>
+                        <p className="text-sm font-inter font-bold text-red">{displayedError}</p>
                       </div>
                     )}
 
@@ -809,14 +845,14 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
                             value={pin}
                             onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                             className="w-full h-12 bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-sm pl-11 pr-3 text-slate-900 dark:text-white text-lg font-inter font-bold focus:bg-white focus:dark:bg-white/10 focus:border-[#4d7cfe] focus:ring-4 focus:ring-[#4d7cfe]/20 outline-none transition-all leading-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm"
-                            disabled={isSubmittingPin || isRedirecting}
+                            disabled={isSubmittingPin || isRedirecting || pinLocked}
                           />
                         </div>
 
                         <button 
                           type="submit" 
                           className="flex-1 h-12 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-sm font-bold shadow-lg shadow-[#4d7cfe]/20 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center group shrink-0 text-center"
-                          disabled={isSubmittingPin || isRedirecting}
+                          disabled={isSubmittingPin || isRedirecting || pinLocked}
                           onClick={() => {
                             localStorage.setItem("preferred_auth_method", "pin");
                           }}
@@ -830,10 +866,10 @@ export function LoginForm({ mobile = false }: { mobile?: boolean }) {
                       </div>
                     </div>
 
-                    {error && (
+                    {displayedError && (
                       <div className="p-4 bg-red-50 border border-red-100 rounded-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
                         <div className="w-2 h-2 rounded-full bg-red animate-pulse" />
-                        <p className="text-sm font-inter font-bold text-red">{error}</p>
+                        <p className="text-sm font-inter font-bold text-red">{displayedError}</p>
                       </div>
                     )}
 

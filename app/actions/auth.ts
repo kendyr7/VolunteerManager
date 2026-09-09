@@ -17,6 +17,8 @@ import { createAuthTiming, type AuthOutcome } from '@/lib/auth-timing'
 
 export type AuthState = {
   error?: string;
+  retryAfterSeconds?: number;
+  rateLimitScope?: 'phone' | 'network';
   success?: boolean;
   redirectTo?: string;
   role?: string;
@@ -107,6 +109,8 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
         logAuthRateLimitBlock('login-phone', phoneLimit);
         return {
           error: `Ya utilizaste ${AUTH_RATE_LIMITS.pinFailuresPerPhone} intentos de PIN. Inténtalo de nuevo en ${rateLimitMinutes(phoneLimit.retryAfterSeconds)} minutos.`,
+          retryAfterSeconds: phoneLimit.retryAfterSeconds,
+          rateLimitScope: 'phone',
         };
       }
       if (!networkVolumeLimit.allowed) {
@@ -114,6 +118,8 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
         logAuthRateLimitBlock('login-volume-ip', networkVolumeLimit);
         return {
           error: `Esta conexión tiene un volumen inusual de accesos. Inténtalo de nuevo en ${rateLimitMinutes(networkVolumeLimit.retryAfterSeconds)} minutos.`,
+          retryAfterSeconds: networkVolumeLimit.retryAfterSeconds,
+          rateLimitScope: 'network',
         };
       }
     } catch {
@@ -180,6 +186,8 @@ export async function loginWithPin(prevState: AuthState, formData: FormData): Pr
           logAuthRateLimitBlock('login-ip', networkFailureLimit);
           return {
             error: `Se alcanzó temporalmente el límite de PIN incorrectos desde esta conexión. Inténtalo de nuevo en ${rateLimitMinutes(networkFailureLimit.retryAfterSeconds)} minutos.`,
+            retryAfterSeconds: networkFailureLimit.retryAfterSeconds,
+            rateLimitScope: 'network',
           };
         }
       } catch {

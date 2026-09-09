@@ -4,7 +4,7 @@ export const AUTH_RATE_LIMIT_WINDOW_SECONDS = 15 * 60;
 // IP. Keep that traffic separate from the much smaller abuse budgets below.
 export const AUTH_RATE_LIMITS = {
   sharedNetworkVolume: 1_500,
-  pinFailuresPerPhone: 4,
+  pinFailuresPerPhone: 6,
   pinFailuresPerNetwork: 40,
   profileLookupsPerPhone: 10,
   unknownPhoneLookupsPerNetwork: 30,

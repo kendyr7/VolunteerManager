@@ -108,6 +108,7 @@ function load(path) {
     window: windowMock, document: documentMock, navigator: { userAgent: "iPhone", maxTouchPoints: 1 },
     localStorage, Date: class extends Date { static now() { return now; } },
     console, FormData, URLSearchParams, setTimeout: scheduleTimeout, clearTimeout: cancelTimeout,
+    fetch: async () => ({ json: async () => ({ hasPasskey: false }) }),
   });
   return exports;
 }
@@ -196,6 +197,45 @@ let available = [staff, volunteer], loginResult = {}, submitted = [];
 mocks["@/app/actions/login-profiles"] = { getLoginProfiles: async () => ({ profiles: available }) };
 mocks["@/app/actions/auth"] = { loginWithPin: async (_, data) => { submitted.push(Object.fromEntries(data)); return loginResult; } };
 const { LoginForm } = load("app/(auth)/login/LoginForm.tsx");
+for (const mobile of [true, false]) {
+  rememberLoginPhone("00000000", true);
+  const lockedView = mount(LoginForm, { mobile }); lockedView.render();
+  const renderLocked = () => lockedView.render();
+  const props = () => find(renderLocked(), node => node.type === "MobilePinLogin")?.props;
+  const submit = () => mobile ? props().onSubmitPin("0000") :
+    find(renderLocked(), node => node.key === "login").props.onSubmit({ preventDefault() {} });
+  if (!mobile) find(renderLocked(), node => node.props?.id === "pin").props.onChange({ target: { value: "0000" } });
+  loginResult = { error: "Bloqueado", retryAfterSeconds: 900, rateLimitScope: "phone" };
+  await submit(); await settle();
+  const message = () => mobile ? props().error :
+    find(renderLocked(), node => node.type === "p" && typeof node.props?.children === "string" && node.props.children.includes("Podrás volver"))?.props.children;
+  check(message()?.includes("15:00"), "Lockout starts in the existing error area on mobile and desktop");
+  const before = submitted.length;
+  await submit(); await settle();
+  check(submitted.length === before, "PIN submissions are blocked while the countdown is active");
+  advanceTimeouts(5000); tick(1000);
+  check(message()?.includes("14:55"), "Countdown ticks and stays visible past the error auto-dismiss timeout");
+  if (mobile) {
+    props().onPinChange("1");
+    check(message()?.includes("14:55"), "Editing cannot dismiss the lockout message");
+    props().onPhoneChange("11111111");
+    check(!props().pinLocked, "A phone lock does not prevent using another account");
+    props().onPhoneChange("00000000");
+    check(props().pinLocked, "Returning to a blocked phone preserves the countdown");
+  } else {
+    check(find(renderLocked(), node => node.props?.id === "pin").props.disabled, "Desktop PIN input is disabled during lockout");
+  }
+  now += 894000; emit("visibilitychange");
+  check(message()?.includes("00:01"), "Returning from background uses elapsed time, not missed timer ticks");
+  now += 1000; tick(1000); renderLocked();
+  check(!message(), "Expired countdown clears the error area");
+  loginResult = { error: "PIN incorrecto" };
+  if (!mobile) find(renderLocked(), node => node.props?.id === "pin").props.onChange({ target: { value: "0000" } });
+  await submit(); await settle();
+  check(submitted.length === before + 1, "PIN submission is enabled again when the countdown expires");
+  lockedView.cleanup();
+}
+loginResult = {};
 for (const value of ["50500000000", "+505 0000 0000", "00505 0000 0000", "50501234"]) {
   storage.set("remember_me", "true"); storage.set("volunteer_phone", value); storage.set("volunteer_name", "Ana Prueba");
   const restored = mount(LoginForm, { mobile: true }); restored.render();

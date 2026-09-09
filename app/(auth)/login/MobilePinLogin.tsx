@@ -20,6 +20,7 @@ type Props = {
   name: string;
   rememberMe: boolean;
   busy: boolean;
+  pinLocked?: boolean;
   biometricLoading: boolean;
   lookingUpProfile: boolean;
   pinRejected: boolean;
@@ -39,7 +40,7 @@ type Props = {
 };
 
 export function MobilePinLogin({
-  phone, pin, name, rememberMe, busy, biometricLoading, error, profiles,
+  phone, pin, name, rememberMe, busy, pinLocked = false, biometricLoading, error, profiles,
   onPhoneChange, onPinChange, onRememberChange, onChangeAccount,
   onSubmitPin, onBiometricLogin, onSelectProfile,
   lookingUpProfile, pinRejected, pinAccepted, canChangeProfile, onContinuePhone, onChangeProfile,
@@ -58,16 +59,16 @@ export function MobilePinLogin({
   }, [phone, onContinuePhone]);
 
   const changePin = useCallback((value: string) => {
-    if (busy) return;
+    if (busy || pinLocked) return;
     const nextPin = value.replace(/\D/g, "").slice(0, 4);
     setSymbolRevisions(revisions => revisions.map((revision, index) =>
       nextPin[index] && nextPin[index] !== pin[index] ? revision + 1 : revision));
     onPinChange(nextPin);
     if (nextPin.length === 4 && nextPin !== pin) onSubmitPin(nextPin);
-  }, [busy, pin, onPinChange, onSubmitPin]);
+  }, [busy, pinLocked, pin, onPinChange, onSubmitPin]);
 
   useEffect(() => {
-    if (step !== "pin" || busy || profiles.length) return;
+    if (step !== "pin" || busy || pinLocked || profiles.length) return;
 
     const canUseKeyboard = (target: EventTarget | null) => {
       const input = inputRef.current;
@@ -107,7 +108,7 @@ export function MobilePinLogin({
       document.removeEventListener("keydown", handleKey);
       document.removeEventListener("paste", handlePaste);
     };
-  }, [step, busy, profiles.length, pin, changePin]);
+  }, [step, busy, pinLocked, profiles.length, pin, changePin]);
 
   function changeAccount() {
     onChangeAccount();
@@ -152,7 +153,7 @@ export function MobilePinLogin({
   return (
     <form className={styles.pinForm} aria-busy={busy} onSubmit={(event) => {
       event.preventDefault();
-      if (!busy && pin.length === 4 && !profiles.length) onSubmitPin(pin);
+      if (!busy && !pinLocked && pin.length === 4 && !profiles.length) onSubmitPin(pin);
     }}>
       <div className={styles.account}>
         <div className={styles.identity}>
@@ -175,7 +176,7 @@ export function MobilePinLogin({
           </div>
           <div className={styles.profiles}>
             {profiles.map((profile) => (
-              <button type="button" key={`${profile.userType}-${profile.id}`} disabled={busy}
+              <button type="button" key={`${profile.userType}-${profile.id}`} disabled={busy || pinLocked}
                 onClick={() => onSelectProfile(profile)}>
                 <span><strong>{profile.firstName} {profile.lastName}</strong>
                   <small>{profile.committee || (profile.userType === "profile" ? "Coordinador" : "Voluntario")}</small>
@@ -198,13 +199,13 @@ export function MobilePinLogin({
             <div className={styles.pinControl} data-invalid={pinRejected} data-valid={pinAccepted}>
               <label htmlFor="mobile-pin" className="sr-only">PIN de acceso de 4 dígitos</label>
               <input ref={inputRef} id="mobile-pin" type="password" inputMode="none"
-                autoComplete="current-password" maxLength={4} value={pin} disabled={busy}
+                autoComplete="current-password" maxLength={4} value={pin} disabled={busy || pinLocked}
                 aria-describedby="mobile-pin-status" aria-invalid={pinRejected}
                 onChange={(event) => changePin(event.target.value)} />
               <div className={styles.pinSlots} aria-hidden="true">
                 {[Square, Asterisk, Triangle, Circle].map((Symbol, index) => (
                   <span key={index} className={styles.pinSlot} data-filled={pinAccepted || pin.length > index}
-                    data-current={!busy && index === Math.min(pin.length, 3)}>
+                    data-current={!busy && !pinLocked && index === Math.min(pin.length, 3)}>
                     <Symbol key={symbolRevisions[index]} className={styles.pinSymbol} data-shape={index} strokeWidth={index === 1 ? 4 : 2.5} />
                   </span>
                 ))}
@@ -218,7 +219,7 @@ export function MobilePinLogin({
 
           <div className={styles.keypad} role="group" aria-label="Teclado numérico del PIN">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
-              <button type="button" key={digit} disabled={busy || pin.length === 4}
+              <button type="button" key={digit} disabled={busy || pinLocked || pin.length === 4}
                 onClick={() => changePin(pin + digit)}>{digit}</button>
             ))}
             <button type="button" className={styles.biometricKey} disabled={busy}
@@ -227,8 +228,8 @@ export function MobilePinLogin({
               <span className="material-symbols-outlined" aria-hidden="true">fingerprint</span>
               <span className={styles.keyLabel}>Huella</span>
             </button>
-            <button type="button" disabled={busy || pin.length === 4} onClick={() => changePin(pin + "0")}>0</button>
-            <button type="button" className={styles.deleteKey} disabled={busy || !pin}
+            <button type="button" disabled={busy || pinLocked || pin.length === 4} onClick={() => changePin(pin + "0")}>0</button>
+            <button type="button" className={styles.deleteKey} disabled={busy || pinLocked || !pin}
               aria-label="Borrar último dígito" onClick={() => {
                 onPinChange(pin.slice(0, -1));
                 inputRef.current?.focus({ preventScroll: true });

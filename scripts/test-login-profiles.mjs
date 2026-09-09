@@ -50,6 +50,7 @@ const mocks = {
   "@/lib/auth-rate-limit": {
     getServerActionClientIp: async () => "test-ip", getClientIp: () => "test-ip",
     rateLimitMinutes: seconds => Math.ceil(seconds / 60), clearAuthRateLimit: async () => {},
+    logAuthRateLimitBlock: () => {},
     consumeAuthRateLimit: async options => {
       limits.push(options);
       if (stallSecurity) { await waitForAbort(options.signal); throw Error("security timed out"); }
@@ -82,6 +83,7 @@ function load(path, globals = {}) {
 }
 let count = 0;
 function check(value, message) { assert.ok(value, message); count++; }
+mocks["@/lib/auth-rate-limit-policy"] = load("lib/auth-rate-limit-policy.ts");
 const { getLoginProfiles } = load("app/actions/login-profiles.ts");
 mocks["@/lib/auth-timing"] = load("lib/auth-timing.ts");
 for (const phone of ["", "123", "000000000", "abcdefgh", null]) {
@@ -92,7 +94,7 @@ let result = await getLoginProfiles("00000000");
 check(result.profiles.length === 3, "Return all active people even when PINs differ");
 check(!JSON.stringify(result).includes('"pin"') && !JSON.stringify(result).includes('"phone"'), "Never return credentials or unnecessary phone data");
 check(queries.every(query => !query.find(call => call[0] === "select")[1].includes("pin")), "Never query PINs for name lookup");
-check(limits.some(item => item.scope === "login-lookup-ip") && limits.some(item => item.scope === "login-lookup-phone"), "Limit account enumeration by IP and phone");
+check(limits.some(item => item.scope === "login-lookup-volume-ip") && limits.some(item => item.scope === "login-lookup-phone"), "Limit account enumeration by IP and phone");
 blocked = true;
 const before = queries.length;
 check((await getLoginProfiles("00000000")).error && queries.length === before, "Blocked lookup must not read profiles");
@@ -110,9 +112,9 @@ async function login(phone, id, pin = "1234", type = "volunteer") {
 }
 check((await login("00000000", "one")).force_pin_change, "Selected account accepts its own phone and PIN");
 const pinAttemptLimit = limits.find(item => item.scope === "login-phone")?.limit;
-const ipAttemptLimit = limits.find(item => item.scope === "login-ip")?.limit;
-check(pinAttemptLimit === 4, "Allow four complete PIN attempts before applying the phone wait period");
-check(ipAttemptLimit >= 40, "Shared connections do not prematurely exhaust a person's four PIN attempts");
+const ipAttemptLimit = limits.find(item => item.scope === "login-volume-ip")?.limit;
+check(pinAttemptLimit === 6, "Allow six complete PIN attempts before applying the phone wait period");
+check(ipAttemptLimit >= 40, "Shared connections do not prematurely exhaust a person's six PIN attempts");
 check((await login("11111111", "one")).error, "A selected ID cannot bypass phone ownership");
 check((await login("00000000", "two")).error, "A relative's PIN cannot authenticate the selected person");
 check((await login("00000000", "archived")).error, "Archived volunteers cannot authenticate by selected ID");
@@ -123,7 +125,9 @@ let limitStart = limits.length;
 check((await login("00000000", null, "abcd")).error && queries.length === queryStart && limits.length === limitStart, "Invalid PIN format does not consume remote requests");
 check((await login("00000000", "one", "1234", "invalid")).error && queries.length === queryStart, "Invalid selected type cannot choose a different account class");
 blocked = true;
-check((await login("00000000", null, "5678")).error && queries.length === queryStart, "Rate limiting remains a gate before any credential query");
+const blockedLogin = await login("00000000", null, "5678");
+check(blockedLogin.error && queries.length === queryStart, "Rate limiting remains a gate before any credential query");
+check(blockedLogin.retryAfterSeconds === 120 && blockedLogin.rateLimitScope === "phone", "The login response supplies the server's remaining seconds for the countdown");
 blocked = false; failSecurity = true;
 check((await login("00000000", null, "5678")).error && queries.length === queryStart, "Unavailable rate limiter fails closed without credential reads");
 failSecurity = false; failTable = "profiles"; cookieValues.clear();
