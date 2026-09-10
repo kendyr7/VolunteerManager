@@ -18,6 +18,7 @@
   padding: 20px 24px 60px;
   color: var(--journal-text);
   box-sizing: border-box;
+  overflow-x: clip;
 }
 
 :global(.dark) .journal {
@@ -2355,7 +2356,8 @@
   flex-direction: column;
   gap: 12px;
   width: 256px;
-  max-width: calc(100vw - 32px);
+  max-width: min(256px, calc(100vw - 32px));
+  box-sizing: border-box;
   transform-origin: bottom left;
   animation: popoverFloatIn 230ms cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity, filter;
@@ -2505,6 +2507,8 @@
   flex-direction: column;
   gap: 4px;
   min-width: 220px;
+  max-width: min(240px, calc(100vw - 32px));
+  box-sizing: border-box;
   max-height: 280px;
   overflow-y: auto;
   transform-origin: bottom left;
@@ -2802,6 +2806,13 @@
   position: relative;
 }
 
+.noteCardActions .palettePopover,
+.noteCardActions .shiftPopover {
+  left: auto;
+  right: 0;
+  transform-origin: bottom right;
+}
+
 .noteTitleArea {
   display: flex;
   align-items: center;
@@ -2910,6 +2921,74 @@
 @media (max-width: 767px) {
   .journal {
     padding: 14px 10px 140px;
+    overflow-x: clip;
+  }
+
+  .palettePopover {
+    max-width: min(256px, calc(100vw - 24px));
+    box-sizing: border-box;
+  }
+
+  .shiftPopover {
+    max-width: min(240px, calc(100vw - 24px));
+    box-sizing: border-box;
+  }
+
+  .floatingToolbar {
+    padding: 8px 10px;
+    gap: 5px;
+    max-width: calc(100vw - 16px);
+    width: auto;
+    border-radius: 14px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+  }
+
+  .toolbarTypeRow {
+    gap: 3px;
+    padding-bottom: 4px;
+  }
+
+  .typeBtn {
+    padding: 2px 7px;
+    font-size: 11px;
+  }
+
+  .toolbarTopRow {
+    gap: 6px;
+  }
+
+  .modeToggleGroup {
+    padding: 1px;
+    gap: 1px;
+  }
+
+  .modeToggleBtn {
+    width: 28px;
+    height: 26px;
+  }
+
+  .colorSwatches {
+    gap: 4px;
+  }
+
+  .colorCircle {
+    width: 20px;
+    height: 20px;
+  }
+
+  .toolbarActionsRow {
+    gap: 2px;
+    padding-top: 4px;
+  }
+
+  .actionItem {
+    padding: 3px 6px;
+    gap: 1px;
+    min-width: 44px;
+  }
+
+  .actionLabel {
+    font-size: 9.5px;
   }
 
   .creatorContainer {

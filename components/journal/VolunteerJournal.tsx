@@ -295,6 +295,9 @@ export function VolunteerJournal({
   const savedSelectionRange = useRef<Range | null>(null);
   const creatorNoteId = useRef<string | null>(null);
   const editDirty = useRef(false);
+  const isInteractingWithToolbarRef = useRef(false);
+  const selectedNoteCardIdRef = useRef<string | null>(null);
+  const lastSelectionTimeRef = useRef(0);
 
   const buildCreatorNote = useCallback((): KeepNote | null => {
     const rawText = creatorEditorRef.current
@@ -368,39 +371,64 @@ export function VolunteerJournal({
   // Selection change handler for floating toolbar
   useEffect(() => {
     const handleSelectionChange = () => {
+      if (isInteractingWithToolbarRef.current) return;
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
         setFloatingToolbar(null);
+        selectedNoteCardIdRef.current = null;
         return;
       }
       const range = selection.getRangeAt(0);
       const text = selection.toString().trim();
       if (!text) {
         setFloatingToolbar(null);
+        selectedNoteCardIdRef.current = null;
         return;
       }
 
-      // Ensure selection is inside one of our active editors
+      // Ensure selection is inside one of our active editors or an expanded note card body
       const inCreator = creatorEditorRef.current?.contains(range.commonAncestorContainer);
       const inModal = modalEditorRef.current?.contains(range.commonAncestorContainer);
-      if (!inCreator && !inModal) {
+
+      const container = range.commonAncestorContainer instanceof Element
+        ? range.commonAncestorContainer
+        : range.commonAncestorContainer.parentElement;
+      const cardBody = container?.closest(`.${styles.noteCardBody}`) as HTMLElement | null;
+      const cardNoteId = cardBody?.getAttribute('data-note-id') || null;
+
+      if (!inCreator && !inModal && !cardNoteId) {
         setFloatingToolbar(null);
+        selectedNoteCardIdRef.current = null;
         return;
       }
 
+      lastSelectionTimeRef.current = Date.now();
       savedSelectionRange.current = range.cloneRange();
+      selectedNoteCardIdRef.current = cardNoteId;
+
       const rect = range.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) {
         setFloatingToolbar(null);
         return;
       }
 
-      const toolbarWidth = Math.min(420, window.innerWidth - 24);
-      let x = rect.left + rect.width / 2;
-      x = Math.max(toolbarWidth / 2 + 12, Math.min(window.innerWidth - toolbarWidth / 2 - 12, x));
+      const isNarrow = window.innerWidth < 768;
+      const toolbarWidth = isNarrow ? Math.min(310, window.innerWidth - 20) : Math.min(420, window.innerWidth - 24);
+      const toolbarHeight = isNarrow ? 120 : 145;
 
-      const placeBelow = rect.top < 180;
-      const y = placeBelow ? rect.bottom + 12 : rect.top - 12;
+      let x = rect.left + rect.width / 2;
+      x = Math.max(toolbarWidth / 2 + 10, Math.min(window.innerWidth - toolbarWidth / 2 - 10, x));
+
+      let placeBelow = rect.top < (toolbarHeight + 20);
+      let y = placeBelow ? rect.bottom + 12 : rect.top - 12;
+
+      if (placeBelow && (y + toolbarHeight > window.innerHeight - 10)) {
+        y = Math.max(toolbarHeight + 10, rect.top - 12);
+        placeBelow = false;
+      } else if (!placeBelow && y < toolbarHeight + 10) {
+        y = toolbarHeight + 10;
+      }
+
       setFloatingToolbar({ x, y, placeBelow });
     };
 
@@ -650,49 +678,86 @@ export function VolunteerJournal({
   };
 
   const applyHighlight = (color: string, mode: 'fill' | 'underline') => {
-    if (editingNote) editDirty.current = true;
     restoreActiveSelection();
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
-    const range = selection.getRangeAt(0);
-    const fragment = range.extractContents();
-    const span = document.createElement('span');
+    let selection = window.getSelection();
+    let range: Range | null = selection && !selection.isCollapsed && selection.rangeCount > 0
+      ? selection.getRangeAt(0)
+      : savedSelectionRange.current;
 
-    if (mode === 'fill') {
-      span.setAttribute('data-highlight', 'fill');
-      span.style.backgroundColor = color;
-      span.style.color = '#1e293b';
-      span.style.borderRadius = '3px';
-      span.style.padding = '1px 3px';
-    } else {
-      span.setAttribute('data-highlight', 'underline');
-      span.style.textDecoration = 'underline';
-      span.style.textDecorationColor = color;
-      span.style.textDecorationThickness = '2.5px';
-      span.style.textUnderlineOffset = '3px';
-    }
-    span.appendChild(fragment);
-    range.insertNode(span);
-    selection.removeAllRanges();
-    const activeEditor = editingNote ? modalEditorRef.current : creatorEditorRef.current;
-    if (activeEditor) {
-      if (editingNote) setEditHtml(cleanHtml(activeEditor.innerHTML));
-      else setCreatorHtml(cleanHtml(activeEditor.innerHTML));
+    if (!range || range.collapsed) return;
+
+    const inCreator = creatorEditorRef.current?.contains(range.commonAncestorContainer);
+    const inModal = modalEditorRef.current?.contains(range.commonAncestorContainer);
+
+    const container = range.commonAncestorContainer instanceof Element
+      ? range.commonAncestorContainer
+      : range.commonAncestorContainer.parentElement;
+    const cardBody = container?.closest(`.${styles.noteCardBody}`) as HTMLElement | null;
+    const cardNoteId = cardBody?.getAttribute('data-note-id') || selectedNoteCardIdRef.current;
+
+    if (!inCreator && !inModal && (!cardBody || !cardNoteId)) return;
+
+    if (editingNote) editDirty.current = true;
+
+    try {
+      const fragment = range.extractContents();
+      const span = document.createElement('span');
+
+      if (mode === 'fill') {
+        span.setAttribute('data-highlight', 'fill');
+        span.style.backgroundColor = color;
+        span.style.color = '#1e293b';
+        span.style.borderRadius = '3px';
+        span.style.padding = '1px 3px';
+      } else {
+        span.setAttribute('data-highlight', 'underline');
+        span.style.textDecoration = 'underline';
+        span.style.textDecorationColor = color;
+        span.style.textDecorationThickness = '2.5px';
+        span.style.textUnderlineOffset = '3px';
+      }
+      span.appendChild(fragment);
+      range.insertNode(span);
+      selection?.removeAllRanges();
+
+      const activeEditor = editingNote ? modalEditorRef.current : creatorEditorRef.current;
+      if (activeEditor) {
+        if (editingNote) setEditHtml(cleanHtml(activeEditor.innerHTML));
+        else setCreatorHtml(cleanHtml(activeEditor.innerHTML));
+      } else if (cardBody && cardNoteId) {
+        const updatedHtml = cleanHtml(cardBody.innerHTML);
+        const updatedText = cardBody.innerText.replace(/\u200B/g, '');
+        update(current => ({
+          ...current,
+          notes: current.notes.map(n => n.id === cardNoteId ? {
+            ...n,
+            html: updatedHtml,
+            text: updatedText,
+            updatedAt: new Date().toISOString()
+          } : n)
+        }));
+        void flush();
+      }
+    } catch (err) {
+      console.error('Error applying highlight:', err);
     }
   };
 
   const removeFormat = () => {
-    if (editingNote) editDirty.current = true;
     restoreActiveSelection();
-    document.execCommand('removeFormat', false);
+    let selection = window.getSelection();
+    let range: Range | null = selection && !selection.isCollapsed && selection.rangeCount > 0
+      ? selection.getRangeAt(0)
+      : savedSelectionRange.current;
+
     const activeEditor = editingNote ? modalEditorRef.current : creatorEditorRef.current;
     if (activeEditor) {
-      const sel = window.getSelection();
-      if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
-        const range = sel.getRangeAt(0);
+      if (editingNote) editDirty.current = true;
+      document.execCommand('removeFormat', false);
+      if (range) {
         const spans = activeEditor.querySelectorAll('span[data-highlight]');
         spans.forEach(span => {
-          if (range.intersectsNode(span)) {
+          if (range && range.intersectsNode(span)) {
             const parent = span.parentNode;
             while (span.firstChild) parent?.insertBefore(span.firstChild, span);
             parent?.removeChild(span);
@@ -701,6 +766,34 @@ export function VolunteerJournal({
       }
       if (editingNote) setEditHtml(cleanHtml(activeEditor.innerHTML));
       else setCreatorHtml(cleanHtml(activeEditor.innerHTML));
+    } else if (range) {
+      const container = range.commonAncestorContainer instanceof Element
+        ? range.commonAncestorContainer
+        : range.commonAncestorContainer.parentElement;
+      const cardBody = container?.closest(`.${styles.noteCardBody}`) as HTMLElement | null;
+      const cardNoteId = cardBody?.getAttribute('data-note-id') || selectedNoteCardIdRef.current;
+      if (cardBody && cardNoteId) {
+        const spans = cardBody.querySelectorAll('span[data-highlight]');
+        spans.forEach(span => {
+          if (range && range.intersectsNode(span)) {
+            const parent = span.parentNode;
+            while (span.firstChild) parent?.insertBefore(span.firstChild, span);
+            parent?.removeChild(span);
+          }
+        });
+        const updatedHtml = cleanHtml(cardBody.innerHTML);
+        const updatedText = cardBody.innerText.replace(/\u200B/g, '');
+        update(current => ({
+          ...current,
+          notes: current.notes.map(n => n.id === cardNoteId ? {
+            ...n,
+            html: updatedHtml,
+            text: updatedText,
+            updatedAt: new Date().toISOString()
+          } : n)
+        }));
+        void flush();
+      }
     }
     setFloatingToolbar(null);
   };
@@ -1427,12 +1520,27 @@ export function VolunteerJournal({
             left: `${floatingToolbar.x}px`,
           }}
           onMouseDown={e => e.preventDefault()}
+          onPointerDown={e => {
+            e.preventDefault();
+            isInteractingWithToolbarRef.current = true;
+          }}
+          onPointerUp={() => {
+            setTimeout(() => {
+              isInteractingWithToolbarRef.current = false;
+            }, 250);
+          }}
+          onTouchEnd={() => {
+            setTimeout(() => {
+              isInteractingWithToolbarRef.current = false;
+            }, 250);
+          }}
         >
           {/* Row 0: Block Typography */}
           <div className={styles.toolbarTypeRow}>
             <button
               type="button"
               className={styles.typeBtn}
+              onPointerDown={e => e.preventDefault()}
               onClick={() => applyHeading('p')}
               title="Texto normal"
             >
@@ -1441,6 +1549,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.typeBtn}
+              onPointerDown={e => e.preventDefault()}
               onClick={() => applyHeading('h1')}
               title="Título grande"
             >
@@ -1449,6 +1558,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.typeBtn}
+              onPointerDown={e => e.preventDefault()}
               onClick={() => applyHeading('h2')}
               title="Título mediano"
             >
@@ -1457,6 +1567,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.typeBtn}
+              onPointerDown={e => e.preventDefault()}
               onClick={() => applyHeading('h3')}
               title="Subtítulo"
             >
@@ -1470,6 +1581,7 @@ export function VolunteerJournal({
               <button
                 type="button"
                 className={`${styles.modeToggleBtn} ${highlightMode === 'fill' ? styles.modeToggleBtnActive : ''}`}
+                onPointerDown={e => e.preventDefault()}
                 onClick={() => setHighlightMode('fill')}
                 title="Resaltado con fondo"
               >
@@ -1480,6 +1592,7 @@ export function VolunteerJournal({
               <button
                 type="button"
                 className={`${styles.modeToggleBtn} ${highlightMode === 'underline' ? styles.modeToggleBtnActive : ''}`}
+                onPointerDown={e => e.preventDefault()}
                 onClick={() => setHighlightMode('underline')}
                 title="Subrayado de color"
               >
@@ -1500,6 +1613,7 @@ export function VolunteerJournal({
                   className={styles.colorCircle}
                   style={{ background: h.color }}
                   title={`Resaltar ${h.name}`}
+                  onPointerDown={e => e.preventDefault()}
                   onClick={() => applyHighlight(h.color, highlightMode)}
                 />
               ))}
@@ -1511,6 +1625,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.actionItem}
+              onPointerDown={e => e.preventDefault()}
               onClick={() => execFormat('bold')}
               title="Negrita"
             >
@@ -1520,6 +1635,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.actionItem}
+              onPointerDown={e => e.preventDefault()}
               onClick={() => execFormat('italic')}
               title="Cursiva"
             >
@@ -1529,6 +1645,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.actionItem}
+              onPointerDown={e => e.preventDefault()}
               onClick={() => {
                 const sel = window.getSelection();
                 const text = sel ? sel.toString().trim() : '';
@@ -1542,6 +1659,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.actionItem}
+              onPointerDown={e => e.preventDefault()}
               onClick={() => {
                 const sel = window.getSelection();
                 if (sel && sel.toString()) {
@@ -1557,6 +1675,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.actionItem}
+              onPointerDown={e => e.preventDefault()}
               onClick={removeFormat}
               title="Quitar formato"
             >
@@ -1797,6 +1916,7 @@ function NoteCard({
       {/* Body preview with interactive checklist clicks */}
       {note.html && (
         <div
+          data-note-id={note.id}
           className={styles.noteCardBody}
           dangerouslySetInnerHTML={{ __html: note.html }}
           onClick={e => {
@@ -1812,7 +1932,10 @@ function NoteCard({
                 }
               }
             } else if (isMobile && isExpanded) {
-              onOpen();
+              const sel = window.getSelection();
+              if (sel && sel.toString().trim().length > 0) {
+                return;
+              }
             }
           }}
         />
