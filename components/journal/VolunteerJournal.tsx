@@ -679,8 +679,8 @@ export function VolunteerJournal({
 
   const applyHighlight = (color: string, mode: 'fill' | 'underline') => {
     restoreActiveSelection();
-    let selection = window.getSelection();
-    let range: Range | null = selection && !selection.isCollapsed && selection.rangeCount > 0
+    const selection = window.getSelection();
+    const range: Range | null = selection && !selection.isCollapsed && selection.rangeCount > 0
       ? selection.getRangeAt(0)
       : savedSelectionRange.current;
 
@@ -745,8 +745,8 @@ export function VolunteerJournal({
 
   const removeFormat = () => {
     restoreActiveSelection();
-    let selection = window.getSelection();
-    let range: Range | null = selection && !selection.isCollapsed && selection.rangeCount > 0
+    const selection = window.getSelection();
+    const range: Range | null = selection && !selection.isCollapsed && selection.rangeCount > 0
       ? selection.getRangeAt(0)
       : savedSelectionRange.current;
 
@@ -1931,9 +1931,18 @@ function NoteCard({
                   onToggleCheckbox(index, e);
                 }
               }
-            } else if (isMobile && isExpanded) {
+            } else if (isMobile) {
               const sel = window.getSelection();
-              if (sel && sel.toString().trim().length > 0) {
+              const body = e.currentTarget as HTMLElement;
+              const selectionIsInBody = Boolean(
+                sel &&
+                sel.toString().trim().length > 0 &&
+                sel.anchorNode &&
+                body.contains(sel.anchorNode)
+              );
+              if (selectionIsInBody) {
+                // Keep a long-press selection from triggering the card action.
+                e.stopPropagation();
                 return;
               }
             }

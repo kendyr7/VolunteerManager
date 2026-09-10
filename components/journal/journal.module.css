@@ -1114,6 +1114,9 @@
   outline: none !important;
   box-shadow: none !important;
   border: none !important;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .editable:focus,
@@ -2176,6 +2179,9 @@
   word-break: break-word;
   white-space: pre-wrap;
   padding: 4px 0 10px;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .creatorBody:empty::before {
@@ -2355,9 +2361,10 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: 256px;
-  max-width: min(256px, calc(100vw - 32px));
+  width: min(256px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
   box-sizing: border-box;
+  overflow-x: hidden;
   transform-origin: bottom left;
   animation: popoverFloatIn 230ms cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity, filter;
@@ -2379,9 +2386,10 @@
 
 .paletteColorsGrid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   justify-items: center;
+  min-width: 0;
 }
 
 .colorSwatchBtn {
@@ -2441,9 +2449,10 @@
 
 .palettePatternsGrid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   justify-items: center;
+  min-width: 0;
 }
 
 .patternSwatchBtn {
@@ -2728,6 +2737,9 @@
   overflow: hidden;
   position: relative;
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .noteCardBody :global(input[type="checkbox"]) {
@@ -2925,8 +2937,12 @@
   }
 
   .palettePopover {
-    max-width: min(256px, calc(100vw - 24px));
+    width: min(256px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    left: auto;
+    right: 0;
     box-sizing: border-box;
+    overflow-x: hidden;
   }
 
   .shiftPopover {
@@ -3099,7 +3115,10 @@
     opacity: 0.76;
     margin-top: 2px;
     max-height: 38px;
-    pointer-events: none;
+    pointer-events: auto;
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-touch-callout: default;
     word-break: break-word;
   }
 
