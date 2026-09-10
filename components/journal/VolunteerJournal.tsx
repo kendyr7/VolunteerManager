@@ -395,6 +395,7 @@ export function VolunteerJournal({
   const isInteractingWithToolbarRef = useRef(false);
   const selectedNoteCardIdRef = useRef<string | null>(null);
   const lastSelectionTimeRef = useRef(0);
+  const isSelectingRef = useRef(false);
 
   const buildCreatorNote = useCallback((): KeepNote | null => {
     const rawText = creatorEditorRef.current
@@ -465,9 +466,9 @@ export function VolunteerJournal({
 
 
 
-  // Selection change handler for floating toolbar
+  // Selection change handler for floating toolbar (only updates on release or complete selection)
   useEffect(() => {
-    const handleSelectionChange = () => {
+    const updateToolbar = () => {
       if (isInteractingWithToolbarRef.current) return;
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
@@ -483,17 +484,11 @@ export function VolunteerJournal({
         return;
       }
 
-      // Ensure selection is inside one of our active editors or an expanded note card body
-      const inCreator = creatorEditorRef.current?.contains(range.commonAncestorContainer);
-      const inModal = modalEditorRef.current?.contains(range.commonAncestorContainer);
+      // Ensure selection is inside one of our active editable rich-text inputs (creator or modal editor)
+      const inCreator = Boolean(creatorEditorRef.current?.contains(range.commonAncestorContainer));
+      const inModal = Boolean(modalEditorRef.current?.contains(range.commonAncestorContainer));
 
-      const container = range.commonAncestorContainer instanceof Element
-        ? range.commonAncestorContainer
-        : range.commonAncestorContainer.parentElement;
-      const cardBody = container?.closest(`.${styles.noteCardBody}`) as HTMLElement | null;
-      const cardNoteId = cardBody?.getAttribute('data-note-id') || null;
-
-      if (!inCreator && !inModal && !cardNoteId) {
+      if (!inCreator && !inModal) {
         setFloatingToolbar(null);
         selectedNoteCardIdRef.current = null;
         return;
@@ -501,7 +496,7 @@ export function VolunteerJournal({
 
       lastSelectionTimeRef.current = Date.now();
       savedSelectionRange.current = range.cloneRange();
-      selectedNoteCardIdRef.current = cardNoteId;
+      selectedNoteCardIdRef.current = inModal && editingNote ? editingNote.id : null;
 
       const rect = range.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) {
@@ -529,13 +524,54 @@ export function VolunteerJournal({
       setFloatingToolbar({ x, y, placeBelow });
     };
 
-    document.addEventListener('selectionchange', handleSelectionChange);
-    window.addEventListener('resize', handleSelectionChange);
-    return () => {
-      document.removeEventListener('selectionchange', handleSelectionChange);
-      window.removeEventListener('resize', handleSelectionChange);
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest(`.${styles.floatingToolbar}`)) {
+        isInteractingWithToolbarRef.current = true;
+        return;
+      }
+      isSelectingRef.current = true;
     };
-  }, []);
+
+    const handlePointerUp = (e: PointerEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest(`.${styles.floatingToolbar}`)) return;
+      isSelectingRef.current = false;
+      // Allow the browser to finalize range selection before placing toolbar
+      setTimeout(updateToolbar, 30);
+    };
+
+    const handleSelectionChange = () => {
+      if (isInteractingWithToolbarRef.current) return;
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+        setFloatingToolbar(null);
+        selectedNoteCardIdRef.current = null;
+        return;
+      }
+      // If user is actively dragging pointer/mouse/finger, do NOT show or move the toolbar yet
+      if (isSelectingRef.current) {
+        try {
+          savedSelectionRange.current = selection.getRangeAt(0).cloneRange();
+        } catch {}
+        return;
+      }
+      // Triggered by keyboard navigation (Shift + Arrows) or double click
+      updateToolbar();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('pointerup', handlePointerUp, true);
+    document.addEventListener('selectionchange', handleSelectionChange);
+    window.addEventListener('resize', updateToolbar);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('selectionchange', handleSelectionChange);
+      window.removeEventListener('resize', updateToolbar);
+    };
+  }, [editingNote]);
 
   // Save creator note
   const handleSaveCreator = useCallback(() => {
@@ -568,6 +604,13 @@ export function VolunteerJournal({
     setIsCreatorExpanded(false);
     showToast('Nota guardada');
   }, [buildCreatorNote, flush, update]);
+
+  // Initialize modal editor innerHTML on note open
+  useEffect(() => {
+    if (editingNote && modalEditorRef.current) {
+      modalEditorRef.current.innerHTML = editingNote.html || '';
+    }
+  }, [editingNote?.id]);
 
   // Open note edit modal
   const handleOpenEditModal = (note: KeepNote) => {
@@ -1057,7 +1100,6 @@ export function VolunteerJournal({
                 maxLength={200}
                 value={creatorTitle}
                 onChange={e => setCreatorTitle(e.target.value)}
-                autoFocus
               />
               <button
                 type="button"
@@ -1430,7 +1472,6 @@ export function VolunteerJournal({
                 aria-multiline="true"
                 data-placeholder="Escribe una nota..."
                 className={styles.creatorBody}
-                dangerouslySetInnerHTML={{ __html: editingNote.html }}
                 onInput={() => {
                   if (modalEditorRef.current) {
                     editDirty.current = true;
@@ -1592,6 +1633,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.typeBtn}
+              onMouseDown={e => e.preventDefault()}
               onPointerDown={e => e.preventDefault()}
               onClick={() => applyHeading('p')}
               title="Texto normal"
@@ -1601,6 +1643,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.typeBtn}
+              onMouseDown={e => e.preventDefault()}
               onPointerDown={e => e.preventDefault()}
               onClick={() => applyHeading('h1')}
               title="Título grande"
@@ -1610,6 +1653,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.typeBtn}
+              onMouseDown={e => e.preventDefault()}
               onPointerDown={e => e.preventDefault()}
               onClick={() => applyHeading('h2')}
               title="Título mediano"
@@ -1619,6 +1663,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.typeBtn}
+              onMouseDown={e => e.preventDefault()}
               onPointerDown={e => e.preventDefault()}
               onClick={() => applyHeading('h3')}
               title="Subtítulo"
@@ -1633,6 +1678,7 @@ export function VolunteerJournal({
               <button
                 type="button"
                 className={`${styles.modeToggleBtn} ${highlightMode === 'fill' ? styles.modeToggleBtnActive : ''}`}
+                onMouseDown={e => e.preventDefault()}
                 onPointerDown={e => e.preventDefault()}
                 onClick={() => setHighlightMode('fill')}
                 title="Resaltado con fondo"
@@ -1644,6 +1690,7 @@ export function VolunteerJournal({
               <button
                 type="button"
                 className={`${styles.modeToggleBtn} ${highlightMode === 'underline' ? styles.modeToggleBtnActive : ''}`}
+                onMouseDown={e => e.preventDefault()}
                 onPointerDown={e => e.preventDefault()}
                 onClick={() => setHighlightMode('underline')}
                 title="Subrayado de color"
@@ -1665,6 +1712,7 @@ export function VolunteerJournal({
                   className={styles.colorCircle}
                   style={{ background: h.color }}
                   title={`Resaltar ${h.name}`}
+                  onMouseDown={e => e.preventDefault()}
                   onPointerDown={e => e.preventDefault()}
                   onClick={() => applyHighlight(h.color, highlightMode)}
                 />
@@ -1677,6 +1725,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.actionItem}
+              onMouseDown={e => e.preventDefault()}
               onPointerDown={e => e.preventDefault()}
               onClick={() => execFormat('bold')}
               title="Negrita"
@@ -1687,6 +1736,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.actionItem}
+              onMouseDown={e => e.preventDefault()}
               onPointerDown={e => e.preventDefault()}
               onClick={() => execFormat('italic')}
               title="Cursiva"
@@ -1697,6 +1747,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.actionItem}
+              onMouseDown={e => e.preventDefault()}
               onPointerDown={e => e.preventDefault()}
               onClick={() => {
                 const sel = window.getSelection();
@@ -1711,6 +1762,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.actionItem}
+              onMouseDown={e => e.preventDefault()}
               onPointerDown={e => e.preventDefault()}
               onClick={() => {
                 const sel = window.getSelection();
@@ -1727,6 +1779,7 @@ export function VolunteerJournal({
             <button
               type="button"
               className={styles.actionItem}
+              onMouseDown={e => e.preventDefault()}
               onPointerDown={e => e.preventDefault()}
               onClick={removeFormat}
               title="Quitar formato"
@@ -1859,6 +1912,7 @@ function NoteCard({
   const isPaletteOpen = cardPaletteNoteId === note.id;
   const isShiftOpen = cardShiftNoteId === note.id;
   const cardRef = useRef<HTMLDivElement>(null);
+  const pointerDownRef = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 });
   const [isVisible, setIsVisible] = useState(
     () => typeof IntersectionObserver === 'undefined'
   );
@@ -1885,7 +1939,30 @@ function NoteCard({
       ref={cardRef}
       className={`${styles.noteCard} ${styles[`theme_${note.color || 'default'}`]} ${styles[`pattern_${note.pattern || 'none'}`]} ${isExpanded ? styles.noteCardExpanded : styles.noteCardCollapsed} ${isVisible ? styles.noteCardVisible : ''}`}
       style={isMobile ? { zIndex: isExpanded ? 100 : stackIndex + 1 } : undefined}
+      data-note-id={note.id}
+      onPointerDown={e => {
+        if (e.button === 0) {
+          pointerDownRef.current = { time: Date.now(), x: e.clientX, y: e.clientY };
+        }
+      }}
       onClick={e => {
+        const target = e.target as HTMLElement;
+        if (target.closest('button') || target.tagName === 'INPUT') return;
+
+        // If text is selected anywhere, do not trigger card expand or modal open
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return;
+
+        // If this was a long-press (press and hold) or drag gesture, do not trigger click
+        const duration = Date.now() - pointerDownRef.current.time;
+        const dist = Math.hypot(
+          e.clientX - pointerDownRef.current.x,
+          e.clientY - pointerDownRef.current.y
+        );
+        if (pointerDownRef.current.time > 0 && (duration > 260 || dist > 10)) {
+          return;
+        }
+
         if (isMobile) {
           if (!isExpanded) {
             onToggleExpand?.();
@@ -1894,7 +1971,8 @@ function NoteCard({
           onOpen();
         }
       }}
-      role="button"
+      role="article"
+      aria-label={`Nota: ${note.title || 'Sin título'}`}
       tabIndex={0}
       onKeyDown={e => {
         if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
@@ -1921,6 +1999,16 @@ function NoteCard({
       <div
         className={styles.noteCardHeader}
         onClick={e => {
+          const sel = window.getSelection();
+          if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) {
+            e.stopPropagation();
+            return;
+          }
+          const duration = Date.now() - pointerDownRef.current.time;
+          if (pointerDownRef.current.time > 0 && duration > 260) {
+            e.stopPropagation();
+            return;
+          }
           if (isMobile && isExpanded) {
             e.stopPropagation();
             onToggleExpand?.();
@@ -1983,17 +2071,14 @@ function NoteCard({
                   onToggleCheckbox(index, e);
                 }
               }
-            } else if (isMobile) {
+            } else {
               const sel = window.getSelection();
-              const body = e.currentTarget as HTMLElement;
-              const selectionIsInBody = Boolean(
-                sel &&
-                sel.toString().trim().length > 0 &&
-                sel.anchorNode &&
-                body.contains(sel.anchorNode)
-              );
-              if (selectionIsInBody) {
-                // Keep a long-press selection from triggering the card action.
+              if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) {
+                e.stopPropagation();
+                return;
+              }
+              const duration = Date.now() - pointerDownRef.current.time;
+              if (pointerDownRef.current.time > 0 && duration > 260) {
                 e.stopPropagation();
                 return;
               }
