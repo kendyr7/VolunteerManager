@@ -170,6 +170,103 @@ function toggleCheckboxInHtml(html: string, index: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Note Palette Picker (In-Place Floating Popover with Auto Viewport Clamping)
+// ---------------------------------------------------------------------------
+interface NotePalettePickerProps {
+  isOpen: boolean;
+  currentColor: NoteColor;
+  currentPattern: NotePattern;
+  onSelectColor: (color: NoteColor) => void;
+  onSelectPattern: (pattern: NotePattern) => void;
+}
+
+function NotePalettePicker({
+  isOpen,
+  currentColor,
+  currentPattern,
+  onSelectColor,
+  onSelectPattern,
+}: NotePalettePickerProps) {
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const el = popoverRef.current;
+    if (!el) return;
+
+    const adjustPosition = () => {
+      el.style.transform = '';
+      el.style.top = '';
+      el.style.bottom = '';
+
+      const rect = el.getBoundingClientRect();
+      const margin = 8;
+      let shiftX = 0;
+
+      // Prevent overflowing right edge of screen
+      if (rect.right > window.innerWidth - margin) {
+        shiftX = (window.innerWidth - margin) - rect.right;
+      }
+      // Prevent overflowing left edge of screen
+      if (rect.left + shiftX < margin) {
+        shiftX = margin - rect.left;
+      }
+
+      if (shiftX !== 0) {
+        el.style.transform = `translateX(${shiftX}px)`;
+      }
+
+      // If opening upwards causes top overflow, open downwards instead
+      if (rect.top < margin) {
+        el.style.bottom = 'auto';
+        el.style.top = 'calc(100% + 8px)';
+      }
+    };
+
+    adjustPosition();
+    window.addEventListener('resize', adjustPosition);
+    return () => window.removeEventListener('resize', adjustPosition);
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div ref={popoverRef} className={styles.palettePopover}>
+      <div className={styles.paletteSectionTitle}>Color de fondo</div>
+      <div className={styles.paletteColorsGrid}>
+        {NOTE_COLORS.map(c => (
+          <button
+            key={c.id}
+            type="button"
+            title={c.label}
+            className={`${styles.colorSwatchBtn} ${currentColor === c.id ? styles.colorSwatchBtnActive : ''}`}
+            style={{ '--swatch-light': c.lightBg, '--swatch-dark': c.darkBg, background: c.lightBg } as React.CSSProperties}
+            onClick={() => onSelectColor(c.id)}
+          >
+            {currentColor === c.id && <Icon name="check" />}
+          </button>
+        ))}
+      </div>
+
+      <div className={styles.paletteSectionTitle}>Diseño de fondo</div>
+      <div className={styles.palettePatternsGrid}>
+        {NOTE_PATTERNS.map(p => (
+          <button
+            key={p.id}
+            type="button"
+            title={p.label}
+            className={`${styles.patternSwatchBtn} ${currentPattern === p.id ? styles.patternSwatchBtnActive : ''}`}
+            onClick={() => onSelectPattern(p.id)}
+          >
+            <Icon name={p.icon} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main VolunteerJournal Component (Google Keep Notes Experience)
 // ---------------------------------------------------------------------------
 export function VolunteerJournal({
@@ -525,7 +622,10 @@ export function VolunteerJournal({
     const handleClickOutside = (e: MouseEvent) => {
       if (noteToDelete) return;
       const target = e.target as HTMLElement;
-      if (!target.closest(`.${styles.palettePopover}`) && !target.closest(`.${styles.shiftPopover}`)) {
+      if (
+        !target.closest(`.${styles.palettePopover}`) &&
+        !target.closest(`.${styles.shiftPopover}`)
+      ) {
         setCreatorPaletteOpen(false);
         setCreatorShiftOpen(false);
         setEditPaletteOpen(false);
@@ -1064,40 +1164,13 @@ export function VolunteerJournal({
                     <Icon name="palette" />
                   </button>
 
-                  {creatorPaletteOpen && (
-                    <div className={styles.palettePopover}>
-                      <div className={styles.paletteSectionTitle}>Color de fondo</div>
-                      <div className={styles.paletteColorsGrid}>
-                        {NOTE_COLORS.map(c => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            title={c.label}
-                            className={`${styles.colorSwatchBtn} ${creatorColor === c.id ? styles.colorSwatchBtnActive : ''}`}
-                            style={{ '--swatch-light': c.lightBg, '--swatch-dark': c.darkBg, background: c.lightBg } as React.CSSProperties}
-                            onClick={() => setCreatorColor(c.id)}
-                          >
-                            {creatorColor === c.id && <Icon name="check" />}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className={styles.paletteSectionTitle}>Diseño de fondo</div>
-                      <div className={styles.palettePatternsGrid}>
-                        {NOTE_PATTERNS.map(p => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            title={p.label}
-                            className={`${styles.patternSwatchBtn} ${creatorPattern === p.id ? styles.patternSwatchBtnActive : ''}`}
-                            onClick={() => setCreatorPattern(p.id)}
-                          >
-                            <Icon name={p.icon} />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <NotePalettePicker
+                    isOpen={creatorPaletteOpen}
+                    currentColor={creatorColor}
+                    currentPattern={creatorPattern}
+                    onSelectColor={setCreatorColor}
+                    onSelectPattern={setCreatorPattern}
+                  />
                 </div>
 
                 {/* Block Tools */}
@@ -1439,40 +1512,19 @@ export function VolunteerJournal({
                     <Icon name="palette" />
                   </button>
 
-                  {editPaletteOpen && (
-                    <div className={styles.palettePopover}>
-                      <div className={styles.paletteSectionTitle}>Color de fondo</div>
-                      <div className={styles.paletteColorsGrid}>
-                        {NOTE_COLORS.map(c => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            title={c.label}
-                            className={`${styles.colorSwatchBtn} ${editColor === c.id ? styles.colorSwatchBtnActive : ''}`}
-                            style={{ '--swatch-light': c.lightBg, '--swatch-dark': c.darkBg, background: c.lightBg } as React.CSSProperties}
-                            onClick={() => { editDirty.current = true; setEditColor(c.id); }}
-                          >
-                            {editColor === c.id && <Icon name="check" />}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className={styles.paletteSectionTitle}>Diseño de fondo</div>
-                      <div className={styles.palettePatternsGrid}>
-                        {NOTE_PATTERNS.map(p => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            title={p.label}
-                            className={`${styles.patternSwatchBtn} ${editPattern === p.id ? styles.patternSwatchBtnActive : ''}`}
-                            onClick={() => { editDirty.current = true; setEditPattern(p.id); }}
-                          >
-                            <Icon name={p.icon} />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <NotePalettePicker
+                    isOpen={editPaletteOpen}
+                    currentColor={editColor}
+                    currentPattern={editPattern}
+                    onSelectColor={c => {
+                      editDirty.current = true;
+                      setEditColor(c);
+                    }}
+                    onSelectPattern={p => {
+                      editDirty.current = true;
+                      setEditPattern(p);
+                    }}
+                  />
                 </div>
 
                 {/* Block Tools in Modal */}
@@ -1982,39 +2034,13 @@ function NoteCard({
             >
               <Icon name="palette" />
             </button>
-            {isPaletteOpen && (
-              <div className={styles.palettePopover}>
-                <div className={styles.paletteSectionTitle}>Color</div>
-                <div className={styles.paletteColorsGrid}>
-                  {NOTE_COLORS.map(c => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      title={c.label}
-                      className={`${styles.colorSwatchBtn} ${note.color === c.id ? styles.colorSwatchBtnActive : ''}`}
-                      style={{ '--swatch-light': c.lightBg, '--swatch-dark': c.darkBg, background: c.lightBg } as React.CSSProperties}
-                      onClick={() => onSetColor(c.id)}
-                    >
-                      {note.color === c.id && <Icon name="check" />}
-                    </button>
-                  ))}
-                </div>
-                <div className={styles.paletteSectionTitle}>Diseño</div>
-                <div className={styles.palettePatternsGrid}>
-                  {NOTE_PATTERNS.map(p => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      title={p.label}
-                      className={`${styles.patternSwatchBtn} ${note.pattern === p.id ? styles.patternSwatchBtnActive : ''}`}
-                      onClick={() => onSetColor(note.color || 'default', p.id)}
-                    >
-                      <Icon name={p.icon} />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <NotePalettePicker
+              isOpen={isPaletteOpen}
+              currentColor={note.color || 'default'}
+              currentPattern={note.pattern || 'none'}
+              onSelectColor={c => onSetColor(c, note.pattern)}
+              onSelectPattern={p => onSetColor(note.color || 'default', p)}
+            />
           </div>
 
           {/* Quick Shift Link */}
