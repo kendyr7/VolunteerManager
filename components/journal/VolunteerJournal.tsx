@@ -385,6 +385,8 @@ export function VolunteerJournal({
     placeBelow: boolean;
   } | null>(null);
   const [highlightMode, setHighlightMode] = useState<'fill' | 'underline'>('fill');
+  const [isCopied, setIsCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const creatorEditorRef = useRef<HTMLDivElement>(null);
   const modalEditorRef = useRef<HTMLDivElement>(null);
@@ -989,7 +991,12 @@ export function VolunteerJournal({
   return (
     <div className={styles.journal}>
       {/* Toast Notification */}
-      {toastMessage && <div className={styles.toolbarToast} role="status">{toastMessage}</div>}
+      {toastMessage && (
+        <div className={styles.toolbarToast} role="status">
+          <Icon name="check_circle" className="text-emerald-400 text-[18px]" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
       {noteToDelete && <DeleteNoteDialog title={noteToDelete.title} onCancel={() => setNoteToDelete(null)} onConfirm={confirmDeleteNote} />}
       <JournalTourModal
         key={isTourOpen ? 'tour-open' : 'tour-closed'}
@@ -1761,20 +1768,23 @@ export function VolunteerJournal({
             </button>
             <button
               type="button"
-              className={styles.actionItem}
+              className={`${styles.actionItem} ${isCopied ? styles.actionItemCopied : ''}`}
               onMouseDown={e => e.preventDefault()}
               onPointerDown={e => e.preventDefault()}
               onClick={() => {
                 const sel = window.getSelection();
                 if (sel && sel.toString()) {
                   navigator.clipboard.writeText(sel.toString());
-                  showToast('Copiado al portapapeles');
+                  setIsCopied(true);
+                  if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+                  copyTimerRef.current = setTimeout(() => setIsCopied(false), 2000);
+                  showToast('Texto copiado al portapapeles');
                 }
               }}
-              title="Copiar texto"
+              title={isCopied ? '¡Texto copiado!' : 'Copiar texto'}
             >
-              <Icon name="content_copy" />
-              <span className={styles.actionLabel}>Copiar</span>
+              <Icon name={isCopied ? 'check' : 'content_copy'} className={isCopied ? styles.copiedIcon : ''} />
+              <span className={styles.actionLabel}>{isCopied ? '¡Copiado!' : 'Copiar'}</span>
             </button>
             <button
               type="button"
