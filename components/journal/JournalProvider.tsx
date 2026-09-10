@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
-export type NoteColor = 'default' | 'coral' | 'amber' | 'emerald' | 'teal' | 'sky' | 'lavender' | 'rose' | 'slate';
+export type NoteColor = 'default' | 'coral' | 'amber' | 'yellow' | 'emerald' | 'teal' | 'sky' | 'lavender' | 'rose' | 'slate';
 export type NotePattern = 'none' | 'grid' | 'dots' | 'lines' | 'gradient';
 
 export type KeepNote = {

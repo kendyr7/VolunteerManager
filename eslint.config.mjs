@@ -1,6 +1,9 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import react from "eslint-plugin-react";
+import reactHooks from "eslint-plugin-react-hooks";
+import tseslint from "@typescript-eslint/eslint-plugin";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -21,6 +24,11 @@ const eslintConfig = defineConfig([
     "public/sw.js",
   ]),
   {
+    plugins: {
+      "@typescript-eslint": tseslint,
+      react,
+      "react-hooks": reactHooks,
+    },
     // Keep legacy debt visible while allowing lint to block new runtime errors.
     // These warnings can be paid down incrementally without changing behavior.
     rules: {

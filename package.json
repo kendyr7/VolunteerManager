@@ -65,6 +65,9 @@
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "@typescript-eslint/eslint-plugin": "^8.61.0",
     "jiti": "^2.7.0",
     "tailwindcss": "^4",
     "typescript": "^5"

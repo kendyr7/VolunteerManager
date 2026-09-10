@@ -10,6 +10,7 @@ import {
 } from './JournalProvider';
 import styles from './journal.module.css';
 import { DeleteNoteDialog } from './DeleteNoteDialog';
+import { JournalTourModal } from './JournalTourModal';
 
 // ---------------------------------------------------------------------------
 // Constants & Palettes
@@ -18,6 +19,7 @@ export const NOTE_COLORS: { id: NoteColor; label: string; lightBg: string; darkB
   { id: 'default', label: 'Por defecto', lightBg: '#ffffff', darkBg: '#1e1e1e' },
   { id: 'coral', label: 'Coral', lightBg: '#fae3d9', darkBg: '#382320' },
   { id: 'amber', label: 'Arena', lightBg: '#fbf0d9', darkBg: '#392f1b' },
+  { id: 'yellow', label: 'Amarillo', lightBg: '#fef9c3', darkBg: '#383012' },
   { id: 'emerald', label: 'Menta', lightBg: '#ddf5e4', darkBg: '#1a3523' },
   { id: 'teal', label: 'Turquesa', lightBg: '#d6f5f6', darkBg: '#173439' },
   { id: 'sky', label: 'Cielo', lightBg: '#dceafe', darkBg: '#1c2e49' },
@@ -210,6 +212,7 @@ export function VolunteerJournal({
   const [noteToDelete, setNoteToDelete] = useState<KeepNote | null>(null);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [isTourOpen, setIsTourOpen] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -217,6 +220,27 @@ export function VolunteerJournal({
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
+  }, []);
+
+  // Show release notes / guided tour only once
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem('vm_journal_tour_seen_v1');
+      if (!seen) {
+        setIsTourOpen(true);
+      }
+    } catch {
+      // Ignore storage errors in restricted contexts
+    }
+  }, []);
+
+  const handleCloseTour = useCallback(() => {
+    setIsTourOpen(false);
+    try {
+      localStorage.setItem('vm_journal_tour_seen_v1', 'true');
+    } catch {
+      // Ignore storage errors
+    }
   }, []);
 
   // Top Creator State
@@ -497,6 +521,15 @@ export function VolunteerJournal({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (noteToDelete) return;
       if (e.key === 'Escape') {
+        if (creatorPaletteOpen || editPaletteOpen || cardPaletteNoteId || creatorShiftOpen || editShiftOpen || cardShiftNoteId) {
+          setCreatorPaletteOpen(false);
+          setEditPaletteOpen(false);
+          setCardPaletteNoteId(null);
+          setCreatorShiftOpen(false);
+          setEditShiftOpen(false);
+          setCardShiftNoteId(null);
+          return;
+        }
         if (linkModalData?.isOpen) {
           setLinkModalData(null);
         } else if (editingNote) {
@@ -722,12 +755,28 @@ export function VolunteerJournal({
       {/* Toast Notification */}
       {toastMessage && <div className={styles.toolbarToast} role="status">{toastMessage}</div>}
       {noteToDelete && <DeleteNoteDialog title={noteToDelete.title} onCancel={() => setNoteToDelete(null)} onConfirm={confirmDeleteNote} />}
+      <JournalTourModal
+        key={isTourOpen ? 'tour-open' : 'tour-closed'}
+        isOpen={isTourOpen}
+        onClose={handleCloseTour}
+      />
 
       {/* Page Header */}
       <div className="flex items-center justify-between border-b border-border pb-3 mb-4 sm:mb-6">
-        <h1 className="text-2xl sm:text-3xl font-black text-text tracking-tight">
-          Mi Diario
-        </h1>
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-2xl sm:text-3xl font-black text-text tracking-tight">
+            Mi Diario
+          </h1>
+          <button
+            type="button"
+            onClick={() => setIsTourOpen(true)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-extrabold text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 transition-all shadow-sm"
+            title="Conoce las novedades de Mi Diario para las Puertas Abiertas"
+          >
+            <Icon name="auto_awesome" className="text-[14px]" />
+            <span className="hidden sm:inline">Novedades</span>
+          </button>
+        </div>
         {status !== 'ready' && (
           <div className={styles.persistenceStatus} role="status" aria-live="polite">
             {status === 'loading' && (
@@ -932,7 +981,7 @@ export function VolunteerJournal({
                             type="button"
                             title={c.label}
                             className={`${styles.colorSwatchBtn} ${creatorColor === c.id ? styles.colorSwatchBtnActive : ''}`}
-                            style={{ background: c.lightBg }}
+                            style={{ '--swatch-light': c.lightBg, '--swatch-dark': c.darkBg, background: c.lightBg } as React.CSSProperties}
                             onClick={() => setCreatorColor(c.id)}
                           >
                             {creatorColor === c.id && <Icon name="check" />}
@@ -1307,7 +1356,7 @@ export function VolunteerJournal({
                             type="button"
                             title={c.label}
                             className={`${styles.colorSwatchBtn} ${editColor === c.id ? styles.colorSwatchBtnActive : ''}`}
-                            style={{ background: c.lightBg }}
+                            style={{ '--swatch-light': c.lightBg, '--swatch-dark': c.darkBg, background: c.lightBg } as React.CSSProperties}
                             onClick={() => { editDirty.current = true; setEditColor(c.id); }}
                           >
                             {editColor === c.id && <Icon name="check" />}
@@ -1639,15 +1688,19 @@ function NoteCard({
   const isPaletteOpen = cardPaletteNoteId === note.id;
   const isShiftOpen = cardShiftNoteId === note.id;
   const cardRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(
+    () => typeof IntersectionObserver === 'undefined'
+  );
 
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
+    if (typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
           setIsVisible(true);
+          observer.unobserve(entry.target);
         }
       },
       { threshold: 0.08, rootMargin: '0px 0px -20px 0px' }
@@ -1807,7 +1860,7 @@ function NoteCard({
                       type="button"
                       title={c.label}
                       className={`${styles.colorSwatchBtn} ${note.color === c.id ? styles.colorSwatchBtnActive : ''}`}
-                      style={{ background: c.lightBg }}
+                      style={{ '--swatch-light': c.lightBg, '--swatch-dark': c.darkBg, background: c.lightBg } as React.CSSProperties}
                       onClick={() => onSetColor(c.id)}
                     >
                       {note.color === c.id && <Icon name="check" />}

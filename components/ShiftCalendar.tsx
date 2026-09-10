@@ -9,6 +9,7 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { getVolunteerScheduleAction } from "@/app/actions/volunteer-schedule-actions";
 import type { VolunteerScheduleShift } from "@/lib/types/volunteer-schedule";
 import type { ShiftAreaDetails } from "@/lib/shift-area";
+import { JournalReleaseNote } from "@/components/journal/JournalReleaseNote";
 
 export type VolunteerInfo = VolunteerProfileData;
 
@@ -209,6 +210,8 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [], 
           Guardando cambios...
         </div>
       )}
+
+      <JournalReleaseNote />
 
       <VolunteerProfileView
         volunteer={volunteerData}

@@ -1,4 +1,5 @@
 import type { Viewport } from "next";
+import { AppInstallPrompt } from "@/components/AppInstallPrompt";
 import { LoginPageClient } from "./LoginPageClient";
 
 export const viewport: Viewport = {
@@ -15,5 +16,10 @@ export const metadata = {
 };
 
 export default function LoginPage() {
-  return <LoginPageClient />;
+  return (
+    <>
+      <LoginPageClient />
+      <AppInstallPrompt />
+    </>
+  );
 }

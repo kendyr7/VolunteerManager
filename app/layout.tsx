@@ -71,7 +71,6 @@ import { AutoLogout } from "@/components/AutoLogout";
 import { LoginActivityTracker } from "@/components/LoginActivityTracker";
 import { TokenProvider } from "@/components/TokenProvider";
 import { UnofficialSiteBanner } from "@/components/UnofficialSiteBanner";
-import { AppInstallPrompt } from "@/components/AppInstallPrompt";
 import { BrowserThemeColor } from "@/components/BrowserThemeColor";
 import { cookies } from "next/headers";
 
@@ -104,7 +103,6 @@ export default async function RootLayout({
         <AutoLogout />
         <LoginActivityTracker />
         <UnofficialSiteBanner initialAcknowledged={hasAcknowledgedUnofficialSite} />
-        <AppInstallPrompt />
         {children}
         <Script
           id="material-symbols-font-ready"
