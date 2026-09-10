@@ -1354,7 +1354,7 @@ export default function ShiftsPage() {
                                 const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                 const attendanceSession = findAttendanceSessionForShift(key, t, contextSessionsData, rawShiftsData, vol.id);
                                 const attendanceStartedAt = attendanceSession?.started_at || shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
-                                const attendanceEndedAt = attendanceSession?.ended_at || shiftRecord?.checked_out_at;
+                                const attendanceEndedAt = attendanceSession?.shift_completed_at || shiftRecord?.checked_out_at;
                                 const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
                                 const checkOutTimeStr = formatGuatemalaTime(attendanceEndedAt);
                                 const elapsed = getElapsedInfoBetween(attendanceStartedAt, attendanceEndedAt);
@@ -1635,7 +1635,7 @@ export default function ShiftsPage() {
                                   const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                   const attendanceSession = findAttendanceSessionForShift(key, t, contextSessionsData, rawShiftsData, vol.id);
                                   const attendanceStartedAt = attendanceSession?.started_at || shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
-                                  const attendanceEndedAt = attendanceSession?.ended_at || shiftRecord?.checked_out_at;
+                                  const attendanceEndedAt = attendanceSession?.shift_completed_at || shiftRecord?.checked_out_at;
                                   const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
                                   const checkOutTimeStr = formatGuatemalaTime(attendanceEndedAt);
                                   const elapsed = getElapsedInfoBetween(attendanceStartedAt, attendanceEndedAt);

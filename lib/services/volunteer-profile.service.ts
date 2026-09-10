@@ -1,5 +1,5 @@
 import { getUnifiedShiftTimes, getUnifiedShiftWorkedMinutes, formatUnifiedDuration } from '@/lib/shift-calculations';
-import { inferShiftsForSession, calculateSessionMinutes } from '@/lib/session-utils';
+import { inferShiftsForSession, calculateSessionMinutes, getSessionShiftCompletedAt } from '@/lib/session-utils';
 import { isSimulationEventDay, isOperationalEventDay } from '@/lib/dates';
 
 export interface VolunteerShiftItem {
@@ -128,14 +128,14 @@ export function getVolunteerProfileMetrics(
     const relatedShifts = inferShiftsForSession(dayKey, startedAt, endedAt, assignedShiftKeys.length > 0 ? assignedShiftKeys : ['T1', 'T2', 'T3', 'T4']);
     const relatedKeys = relatedShifts.map(s => s.shiftKey);
 
-    if (status === 'completed') {
-      relatedKeys.forEach(k => {
+    relatedKeys.forEach(k => {
+      if (status === 'completed' || getSessionShiftCompletedAt(dayKey, k, startedAt, endedAt, assignedShiftKeys)) {
         if (!coveredShiftKeySet.has(`${dayKey}-${k}`)) {
           coveredShiftKeySet.add(`${dayKey}-${k}`);
           if (countsTowardOfficialMetrics) completedShiftsCount++;
         }
-      });
-    }
+      }
+    });
 
     const sessItem: VolunteerSessionItem = {
       id: sess.id || `${dayKey}-${startedAt}`,

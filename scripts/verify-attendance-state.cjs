@@ -6,6 +6,7 @@ const jiti = createJiti(__filename, { alias: { '@': path.resolve(__dirname, '..'
 const { inferShiftsForSession, calculateSessionMinutes, getContinuousScheduledBlocks } = jiti('../lib/session-utils.ts');
 const { processShiftsData, getShiftAttendanceState } = jiti('../lib/coordinator-data.ts');
 const { getVolunteerProfileMetrics } = jiti('../lib/services/volunteer-profile.service.ts');
+const { findAttendanceSessionForShift, getUnifiedShiftTimes } = jiti('../lib/shift-calculations.ts');
 const RealDate = Date;
 const day = 'jue 10';
 const id = 'synthetic-volunteer';
@@ -44,11 +45,80 @@ check('Al comenzar T2 ambos quedan vinculados a la misma sesion', () => {
   for (let i = 0; i < 2; i++) assert.equal(state(data, i).isCheckedIn, true);
   assert.equal(Object.keys(data.activeSessionsByVolunteer).length, 1);
 });
+check('Al terminar T1 se completa y T2 sigue abierto, sin registrar salida fisica', () => {
+  for (const time of ['12:00', '14:59', '15:01']) {
+    const data = derive(shifts, [session], at(time));
+    assert.deepEqual(state(data, 0), { isCheckedIn: false, isCheckedOut: true });
+    assert.deepEqual(state(data, 1), { isCheckedIn: true, isCheckedOut: false });
+    assert.equal(data.sessionCompletedShiftKeys[`${id}-${day}-T1`], true);
+    assert.equal(data.sessionOpenShiftKeys[`${id}-${day}-T1`], undefined);
+    assert.equal(data.activeSessionsByVolunteer[id], session);
+    assert.equal(session.ended_at, null);
+  }
+});
+check('Con T1 T2 T3, T1 termina a las 12 y T2 a las 15', () => {
+  const records = [...shifts, { ...shifts[0], id: 'synthetic-T3', shift_key: 'T3' }];
+  const before = derive(records, [session], at('11:59'));
+  assert.equal(state(before, 0, records).isCheckedIn, true);
+  assert.equal(state(before, 2, records).isCheckedIn, false);
+  const overlap = derive(records, [session], at('14:30'));
+  assert.equal(state(overlap, 0, records).isCheckedOut, true);
+  assert.equal(state(overlap, 1, records).isCheckedIn, true);
+  assert.equal(state(overlap, 2, records).isCheckedIn, true);
+  const after = derive(records, [session], at('15:00'));
+  assert.equal(state(after, 1, records).isCheckedOut, true);
+  assert.equal(state(after, 2, records).isCheckedIn, true);
+});
+check('T2 T3 cierran T2 al terminar su horario; no antes', () => {
+  const records = ['T2', 'T3'].map(key => ({ ...shifts[0], id: key, shift_key: key }));
+  const lateSession = { ...session, started_at: at('11:05') };
+  assert.equal(state(derive(records, [lateSession], at('14:59')), 0, records).isCheckedIn, true);
+  assert.equal(state(derive(records, [lateSession], at('15:00')), 0, records).isCheckedOut, true);
+});
+check('No se completa ni activa otro bloque separado sin salida y nueva entrada', () => {
+  const records = ['T1', 'T3'].map(key => ({ ...shifts[0], id: key, shift_key: key }));
+  const data = derive(records, [session], at('15:00'));
+  assert.deepEqual(state(data, 0, records), { isCheckedIn: true, isCheckedOut: false });
+  assert.deepEqual(state(data, 1, records), { isCheckedIn: false, isCheckedOut: false });
+});
+check('Una sesion antigua no vuelve a abrir turnos completados al cambiar de dia', () => {
+  const data = derive(shifts, [session], '2026-09-11T08:00:00-06:00');
+  assert.equal(state(data, 0).isCheckedOut, true);
+  assert.equal(state(data, 1).isCheckedIn, true);
+});
+check('Horarios y perfil reflejan el cierre de T1 conservando la sesion abierta', () => {
+  global.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [at('14:30')])); }
+    static now() { return new RealDate(at('14:30')).getTime(); }
+  };
+  try {
+    const match = findAttendanceSessionForShift(day, 'T1', [session], shifts, id);
+    assert.equal(match.shift_completed_at, new RealDate(at('12:00')).toISOString());
+    assert.equal(match.status, 'open');
+    assert.equal(match.ended_at, null);
+    assert.match(getUnifiedShiftTimes(day, 'T1', shifts, [], [session], id).endTime, /12:00/);
+    assert.equal(getUnifiedShiftTimes(day, 'T2', shifts, [], [session], id).endTime, 'En curso');
+    const metrics = getVolunteerProfileMetrics(id, shifts, [], [session]);
+    assert.equal(metrics.completedShiftsCount, 1);
+    assert.equal(metrics.totalWorkedMinutes, 0);
+    assert.equal(metrics.isCheckedInNow, true);
+  } finally { global.Date = RealDate; }
+});
 const completed = { ...session, status: 'completed', ended_at: at('15:00') };
 check('Salida QR completa ambos y retira la sesion activa', () => {
   const data = derive(shifts, [completed], at('15:00'));
   for (let i = 0; i < 2; i++) assert.deepEqual(state(data, i), { isCheckedIn: false, isCheckedOut: true });
   assert.equal(Object.keys(data.activeSessionsByVolunteer).length, 0);
+});
+check('Salida real anticipada prevalece y el cierre de T1 se conserva al salir de T2', () => {
+  const early = { ...completed, ended_at: at('11:30') };
+  assert.equal(findAttendanceSessionForShift(day, 'T1', [early], shifts, id).shift_completed_at, early.ended_at);
+  assert.equal(findAttendanceSessionForShift(day, 'T1', [completed], shifts, id).shift_completed_at, new RealDate(at('12:00')).toISOString());
+  assert.equal(findAttendanceSessionForShift(day, 'T2', [completed], shifts, id).shift_completed_at, completed.ended_at);
+});
+check('Sin entrada, pasar la hora de finalizacion no completa ningun turno', () => {
+  const data = derive(shifts, [], at('16:00'));
+  for (let i = 0; i < shifts.length; i++) assert.deepEqual(state(data, i), { isCheckedIn: false, isCheckedOut: false });
 });
 check('Perfil cuenta 420 minutos sin duplicar la hora solapada', () => {
   assert.equal(calculateSessionMinutes(session.started_at, completed.ended_at).totalWorkedMinutes, 420);

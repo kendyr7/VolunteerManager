@@ -11,7 +11,7 @@ import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
 import { getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay, parseGuatemalaShiftEnd } from "@/lib/dates";
 import { getVolunteerReliabilityMetrics, computeBulkReliabilityMap } from "@/lib/services/volunteer-reliability.service";
 import { buildEventDayKeys } from '@/lib/coordinator-data';
-import { AttendanceSession, getGuatemalaHourFloat, getContinuousScheduledBlockForSession, requiresSessionExitResolution, inferShiftsForSession, validateSessionConstraints } from "@/lib/session-utils";
+import { AttendanceSession, getGuatemalaHourFloat, getContinuousScheduledBlockForSession, requiresSessionExitResolution, inferShiftsForSession, validateSessionConstraints, getSessionShiftCompletedAt } from "@/lib/session-utils";
 import {
   saveAttendanceSession,
   getOpenSessionForVolunteer,
@@ -1168,7 +1168,10 @@ export async function getHistoricalAttendanceLogs(limit = 150, dayKey?: string) 
         shiftKey: s.shift_key,
         timestamp: session?.started_at || s.checked_in_at || new Date().toISOString(),
         type: 'success' as const,
-        isCompleted: session ? session.status === 'completed' : Boolean(s.checked_out || s.checked_out_at)
+        isCompleted: session ? Boolean(getSessionShiftCompletedAt(
+          s.day_key, s.shift_key, session.started_at, session.ended_at,
+          assignments.filter(shift => shift.volunteer_id === session.volunteer_id && shift.day_key === session.day_key).map(shift => shift.shift_key),
+        )) : Boolean(s.checked_out || s.checked_out_at)
       };
     };
     const entries = new Map<string, ReturnType<typeof formatEntry>>();

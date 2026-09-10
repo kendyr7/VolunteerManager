@@ -80,7 +80,7 @@ export class VolunteerScheduleService {
         shifts,
         volunteerId,
       );
-      const sessionCompleted = attendanceSession?.status === 'completed' && Boolean(attendanceSession.ended_at);
+      const sessionCompleted = Boolean(attendanceSession?.shift_completed_at);
 
       return {
         id: shift.id,
@@ -90,7 +90,7 @@ export class VolunteerScheduleService {
         checked_in: attendanceSession ? true : shift.checked_in,
         checked_in_at: attendanceSession?.started_at || shift.checked_in_at,
         checked_out: attendanceSession ? sessionCompleted : shift.checked_out,
-        checked_out_at: attendanceSession?.ended_at || shift.checked_out_at,
+        checked_out_at: attendanceSession ? attendanceSession.shift_completed_at || null : shift.checked_out_at,
         area_id: shift.area_id,
         area_name: relationName(shift.committee_areas),
         area_description: relationDescription(shift.committee_areas),

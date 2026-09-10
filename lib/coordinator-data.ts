@@ -1,5 +1,5 @@
 import { getOperationalEventDays, formatDateShort, isSimulationEventDay, isOperationalEventDay } from "@/lib/dates";
-import { inferShiftsForSession } from '@/lib/session-utils';
+import { inferShiftsForSession, getSessionShiftCompletedAt } from '@/lib/session-utils';
 import { computeBulkReliabilityMap } from "@/lib/services/volunteer-reliability.service";
 
 export interface CoordinatorVolunteerData {
@@ -122,7 +122,8 @@ export function computeReliabilityMap(
 export function processShiftsData(
   shiftsData: CoordinatorShiftData[],
   volunteers: CoordinatorVolunteerData[] = [],
-  sessionsData: CoordinatorSessionData[] = []
+  sessionsData: CoordinatorSessionData[] = [],
+  now: Date = new Date(),
 ) {
   const dayKeys = buildEventDayKeys();
   const emptyShifts = () =>
@@ -174,14 +175,19 @@ export function processShiftsData(
     const assignedForVolAndDay = assignedShiftKeysByVolunteerDay.get(`${vId}|${dayKey}`) || [];
 
     const targetShiftKeys = assignedForVolAndDay.length > 0 ? assignedForVolAndDay : ['T1', 'T2', 'T3', 'T4'];
-    const relatedShifts = inferShiftsForSession(dayKey, startedAt, endedAt, targetShiftKeys);
+    const relatedShifts = inferShiftsForSession(dayKey, startedAt, endedAt, targetShiftKeys, now);
 
     if (status === 'open') {
       activeSessionsByVolunteer[vId] = sess;
       relatedShifts.forEach((rs) => {
         const k = `${vId}-${dayKey}-${rs.shiftKey}`;
-        sessionOpenShiftKeys[k] = true;
         checkedInMap[k] = true;
+        if (getSessionShiftCompletedAt(dayKey, rs.shiftKey, startedAt, endedAt, targetShiftKeys, now)) {
+          sessionCompletedShiftKeys[k] = true;
+          checkedOutMap[k] = true;
+        } else {
+          sessionOpenShiftKeys[k] = true;
+        }
       });
     } else if (status === 'completed') {
       if (!completedSessionsByVolunteer[vId]) completedSessionsByVolunteer[vId] = [];

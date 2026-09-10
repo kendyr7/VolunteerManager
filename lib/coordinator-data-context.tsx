@@ -155,9 +155,22 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
       });
     }));
 
+  const [attendanceNow, setAttendanceNow] = useState(() => new Date());
+  useEffect(() => {
+    const updateClock = () => {
+      if (document.visibilityState === 'visible') setAttendanceNow(new Date());
+    };
+    const timer = window.setInterval(updateClock, SESSION_SYNC_INTERVAL_MS);
+    document.addEventListener('visibilitychange', updateClock);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', updateClock);
+    };
+  }, []);
+
   const derived = useMemo(
-    () => processShiftsData(shiftsData, rawVolunteers, sessionsData),
-    [shiftsData, rawVolunteers, sessionsData]
+    () => processShiftsData(shiftsData, rawVolunteers, sessionsData, attendanceNow),
+    [shiftsData, rawVolunteers, sessionsData, attendanceNow]
   );
   
   const reliabilityMap = useMemo(

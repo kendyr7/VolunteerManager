@@ -1,5 +1,5 @@
 import { getOfficialShiftTime } from "@/lib/dates";
-import { inferShiftsForSession } from "@/lib/session-utils";
+import { inferShiftsForSession, getSessionShiftCompletedAt } from "@/lib/session-utils";
 
 export interface ShiftTimeResult {
   startTime: string;
@@ -25,6 +25,7 @@ interface AttendanceSessionTimeRecord {
   status?: string;
   updated_at?: string;
   created_at?: string;
+  shift_completed_at?: string | null;
 }
 
 function formatGuatemalaTime(value?: string | null): string | null {
@@ -57,7 +58,7 @@ export function findAttendanceSessionForShift(
     .map((record) => record?.shift_key || record?.shiftKey)
     .filter(Boolean);
 
-  return sessionsData
+  const session = sessionsData
     .filter((session) => {
       const sessionDay = String(session?.day_key || session?.dayKey || '').toLowerCase().trim();
       const sessionVolunteerId = session?.volunteer_id || session?.volunteerId;
@@ -78,6 +79,15 @@ export function findAttendanceSessionForShift(
       const rightTime = new Date(right.updated_at || right.started_at || right.startedAt || right.created_at || 0).getTime();
       return rightTime - leftTime;
     })[0] || null;
+  if (!session) return null;
+  return {
+    ...session,
+    shift_completed_at: getSessionShiftCompletedAt(
+      dayKey, shiftKey, session.started_at || session.startedAt || '',
+      session.ended_at ?? session.endedAt,
+      assignedShiftKeys.length > 0 ? assignedShiftKeys : [shiftKey],
+    ),
+  };
 }
 
 export function getAttendanceSessionTimes(
@@ -91,7 +101,7 @@ export function getAttendanceSessionTimes(
   if (!session) return null;
 
   const startTime = formatGuatemalaTime(session.started_at || session.startedAt);
-  const endTime = formatGuatemalaTime(session.ended_at ?? session.endedAt ?? null);
+  const endTime = formatGuatemalaTime(session.shift_completed_at);
   if (!startTime) return null;
   return { startTime, endTime: endTime || 'En curso' };
 }

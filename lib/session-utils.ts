@@ -78,7 +78,9 @@ export function inferShiftsForSession(
   } else {
     // For OPEN sessions: evaluate up to CURRENT Guatemala time, constrained by the continuous block
     const blockEndHour = block ? getOfficialShiftTime(dayKey, block.endShiftKey).endHour : 24;
-    const currentNowHour = getGuatemalaHourFloat(now);
+    const dateStr = parseDayKeyToDateStr(dayKey);
+    const dayStartMs = new Date(`${dateStr}T00:00:00-06:00`).getTime();
+    const currentNowHour = (new Date(now).getTime() - dayStartMs) / 3600000;
     // A session broadcast immediately after check-in can have the same whole-second
     // value as `now`. Give an open session a minimal interval so the shift that
     // contains its start instant is active on the very first render.
@@ -111,6 +113,30 @@ export function inferShiftsForSession(
   }
 
   return matched;
+}
+
+/**
+ * Completion of an attended shift within a continuous session. Intermediate
+ * shifts finish at their scheduled end; the final shift still needs checkout.
+ * Call only for shifts covered by inferShiftsForSession.
+ */
+export function getSessionShiftCompletedAt(
+  dayKey: string,
+  shiftKey: string,
+  startedAt: string | Date,
+  endedAt: string | null | undefined,
+  assignedShiftKeys: string[],
+  now: string | Date = new Date(),
+): string | null {
+  const block = getContinuousScheduledBlockForSession(dayKey, startedAt, assignedShiftKeys);
+  const shift = block?.matchedShifts.find(item => item.shiftKey === shiftKey);
+  if (block && shift && shift.endHour < getOfficialShiftTime(dayKey, block.endShiftKey).endHour) {
+    const midnight = new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime();
+    const shiftEndMs = midnight + shift.endHour * 3600000;
+    const effectiveEndMs = new Date(endedAt || now).getTime();
+    if (effectiveEndMs >= shiftEndMs) return new Date(shiftEndMs).toISOString();
+  }
+  return endedAt || null;
 }
 
 /**
