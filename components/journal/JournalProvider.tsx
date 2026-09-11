@@ -37,7 +37,7 @@ export type JournalState = {
 
 const emptyState: JournalState = { notes: [], drafts: {}, entries: {} };
 type JournalStatus = 'idle' | 'loading' | 'ready' | 'saving' | 'error';
-type JournalContextValue = {
+export type JournalContextValue = {
   journals: Record<string, JournalState>;
   update: (userId: string, change: (state: JournalState) => JournalState) => void;
   load: (userId: string) => Promise<void>;
@@ -45,6 +45,10 @@ type JournalContextValue = {
   status: (userId: string) => JournalStatus;
   retry: (userId: string) => Promise<void>;
   clear: (userId?: string) => void;
+  hasPendingChanges: (userId?: string) => boolean;
+  registerDraftHandler: (userId: string, handler: (() => Promise<void>) | null) => void;
+  setHasUnsavedDraft: (userId: string, dirty: boolean) => void;
+  saveAndFlush: (userId?: string) => Promise<boolean>;
 };
 const JournalContext = createContext<JournalContextValue | null>(null);
 
@@ -90,6 +94,8 @@ export function JournalProvider({ children }: { children: ReactNode }) {
   const loading = useRef(new Set<string>());
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const saveQueues = useRef(new Map<string, Promise<void>>());
+  const dirtyDraftsRef = useRef(new Set<string>());
+  const draftHandlersRef = useRef(new Map<string, () => Promise<void>>());
 
   useEffect(() => { journalsRef.current = journals; }, [journals]);
 
@@ -212,15 +218,83 @@ export function JournalProvider({ children }: { children: ReactNode }) {
       timers.current.forEach(timer => clearTimeout(timer));
       timers.current.clear();
       saveQueues.current.clear();
+      dirtyDraftsRef.current.clear();
+      draftHandlersRef.current.clear();
       journalsRef.current = {};
       setJournals({});
       setStatuses({});
     }
   }, []);
 
+  const setHasUnsavedDraft = useCallback((userId: string, dirty: boolean) => {
+    if (dirty) {
+      dirtyDraftsRef.current.add(userId);
+    } else {
+      dirtyDraftsRef.current.delete(userId);
+    }
+  }, []);
+
+  const registerDraftHandler = useCallback((userId: string, handler: (() => Promise<void>) | null) => {
+    if (handler) {
+      draftHandlersRef.current.set(userId, handler);
+    } else {
+      draftHandlersRef.current.delete(userId);
+    }
+  }, []);
+
+  const hasPendingChanges = useCallback((userId?: string) => {
+    if (userId) {
+      const isDirty = dirtyDraftsRef.current.has(userId);
+      const hasTimer = timers.current.has(userId);
+      const isSaving = statuses[userId] === 'saving';
+      return isDirty || hasTimer || isSaving;
+    }
+    const hasAnyDirty = dirtyDraftsRef.current.size > 0;
+    const hasAnyTimer = timers.current.size > 0;
+    const hasAnySaving = Object.values(statuses).some(s => s === 'saving');
+    return hasAnyDirty || hasAnyTimer || hasAnySaving;
+  }, [statuses]);
+
+  const saveAndFlush = useCallback(async (userId?: string): Promise<boolean> => {
+    const targetUsers = userId
+      ? [userId]
+      : Array.from(new Set([
+          ...dirtyDraftsRef.current,
+          ...timers.current.keys(),
+          ...Object.keys(journalsRef.current),
+        ]));
+
+    try {
+      for (const uid of targetUsers) {
+        const handler = draftHandlersRef.current.get(uid);
+        if (handler) {
+          await handler();
+        }
+        await flush(uid);
+        dirtyDraftsRef.current.delete(uid);
+      }
+      return true;
+    } catch (e) {
+      console.error('Error in saveAndFlush:', e);
+      return false;
+    }
+  }, [flush]);
+
   useEffect(() => () => timers.current.forEach(timer => clearTimeout(timer)), []);
 
-  const value: JournalContextValue = { journals, update, load, flush, retry, clear, status: userId => statuses[userId] || 'idle' };
+  const value: JournalContextValue = {
+    journals,
+    update,
+    load,
+    flush,
+    retry,
+    clear,
+    status: userId => statuses[userId] || 'idle',
+    hasPendingChanges,
+    registerDraftHandler,
+    setHasUnsavedDraft,
+    saveAndFlush,
+  };
   return <JournalContext.Provider value={value}>{children}</JournalContext.Provider>;
 }
 
@@ -235,5 +309,17 @@ export function useJournal(userId: string) {
     status: context.status(userId),
     retry: () => context.retry(userId),
     clear: () => context.clear(userId),
+    hasPendingChanges: () => context.hasPendingChanges(userId),
+    registerDraftHandler: (handler: (() => Promise<void>) | null) => context.registerDraftHandler(userId, handler),
+    setHasUnsavedDraft: (dirty: boolean) => context.setHasUnsavedDraft(userId, dirty),
+    saveAndFlush: () => context.saveAndFlush(userId),
+  };
+}
+
+export function useJournalGuard() {
+  const context = useContext(JournalContext);
+  return {
+    hasPendingChanges: (userId?: string) => (context ? context.hasPendingChanges(userId) : false),
+    saveAndFlush: async (userId?: string) => (context ? context.saveAndFlush(userId) : true),
   };
 }

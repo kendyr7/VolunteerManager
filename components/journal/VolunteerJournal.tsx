@@ -276,7 +276,7 @@ export function VolunteerJournal({
   volunteerId: string;
   days: string[];
 }) {
-  const { state, update, flush, status, retry } = useJournal(volunteerId);
+  const { state, update, flush, status, retry, setHasUnsavedDraft, registerDraftHandler, hasPendingChanges } = useJournal(volunteerId);
 
 
 
@@ -443,6 +443,58 @@ export function VolunteerJournal({
   }, [editingNote, editTitle, editHtml, editText, editShift, editColor, editPattern, editIsPinned, update]);
 
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+
+  // Synchronize dirty draft status with JournalProvider
+  useEffect(() => {
+    const isCreatorDirty = isCreatorExpanded && Boolean(creatorTitle.trim() || creatorText.trim() || creatorHtml.trim());
+    const isModalDirty = Boolean(editingNote && editDirty.current);
+    setHasUnsavedDraft(isCreatorDirty || isModalDirty);
+  }, [isCreatorExpanded, creatorTitle, creatorText, creatorHtml, editingNote, setHasUnsavedDraft]);
+
+  // Register emergency draft flusher for exit/logout scenarios
+  useEffect(() => {
+    const handler = async () => {
+      if (isCreatorExpanded && (creatorTitle.trim() || creatorText.trim() || creatorHtml.trim())) {
+        const note = buildCreatorNote();
+        if (note) {
+          creatorNoteId.current = note.id;
+          update(current => ({
+            ...current,
+            notes: current.notes.some(item => item.id === note.id)
+              ? current.notes.map(item => item.id === note.id ? { ...item, ...note, createdAt: item.createdAt } : item)
+              : [note, ...current.notes],
+          }));
+        }
+      } else if (editingNote && editDirty.current) {
+        const editor = modalEditorRef.current;
+        const html = cleanHtml(editor?.innerHTML ?? editHtml);
+        const text = editor?.innerText.replace(/\u200B/g, '').trim() ?? editText.trim();
+        update(current => ({
+          ...current,
+          notes: current.notes.map(note => note.id === editingNote.id
+            ? { ...note, title: editTitle.trim(), html, text, shiftDay: editShift, color: editColor, pattern: editPattern, isPinned: editIsPinned, updatedAt: new Date().toISOString() }
+            : note),
+        }));
+        editDirty.current = false;
+      }
+    };
+    registerDraftHandler(handler);
+    return () => registerDraftHandler(null);
+  }, [isCreatorExpanded, buildCreatorNote, creatorTitle, creatorText, creatorHtml, editingNote, editTitle, editText, editHtml, editShift, editColor, editPattern, editIsPinned, registerDraftHandler, update]);
+
+  // Browser beforeunload prompt if closing or reloading with unsaved content
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const isCreatorDirty = isCreatorExpanded && Boolean(creatorTitle.trim() || creatorText.trim() || creatorHtml.trim());
+      const isModalDirty = Boolean(editingNote && editDirty.current);
+      if (isCreatorDirty || isModalDirty || hasPendingChanges()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isCreatorExpanded, creatorTitle, creatorText, creatorHtml, editingNote, hasPendingChanges]);
 
 
 

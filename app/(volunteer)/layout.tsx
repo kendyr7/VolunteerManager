@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/actions/auth";
 import { preserveBrowserPushOnLogout } from '@/lib/push/browser';
@@ -13,7 +14,7 @@ import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MobileThemeMenu } from "@/components/mobile-theme-menu";
 import { useThemePreference } from "@/lib/use-theme-preference";
 import { useHydrated } from "@/lib/use-hydrated";
-import { JournalProvider } from '@/components/journal/JournalProvider';
+import { JournalProvider, useJournalGuard } from '@/components/journal/JournalProvider';
 
 // Helper component for Material Symbols
 function Icon({ name, size = 20, className = "" }: { name: string, size?: number, className?: string }) {
@@ -32,11 +33,26 @@ export default function VolunteerLayout({
 }: {
   children: React.ReactNode;
 }) {
+  return (
+    <JournalProvider>
+      <VolunteerLayoutContent>{children}</VolunteerLayoutContent>
+    </JournalProvider>
+  );
+}
+
+function VolunteerLayoutContent({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobileThemeOpen, setIsMobileThemeOpen] = useState(false);
+  const [isDiscardModalOpen, setIsDiscardModalOpen] = useState(false);
+  const [isSavingAndExiting, setIsSavingAndExiting] = useState(false);
   const mounted = useHydrated();
   const { preference, resolvedTheme, setPreference, toggleTheme } = useThemePreference();
+  const { hasPendingChanges, saveAndFlush } = useJournalGuard();
 
   useEffect(() => {
     setIsMobileThemeOpen(false);
@@ -49,12 +65,50 @@ export default function VolunteerLayout({
     { name: "Mi Perfil", href: "/profile", icon: "person" }
   ];
 
-  const handleLogoutClick = async () => {
+  const executeLogout = async () => {
     clearPreparedDashboardSession();
     clearBrowserClient();
     const { pushRevoked } = await logout();
     await preserveBrowserPushOnLogout(pushRevoked);
     window.location.href = "/login";
+  };
+
+  const handleLogoutClick = async () => {
+    // Si el voluntario está en el diario y tiene cambios o notas sin terminar de guardar
+    if (pathname.startsWith('/journal') && hasPendingChanges()) {
+      setIsDiscardModalOpen(true);
+      return;
+    }
+    await executeLogout();
+  };
+
+  const handleConfirmSaveAndExit = async () => {
+    if (isSavingAndExiting) return;
+    setIsSavingAndExiting(true);
+    try {
+      await saveAndFlush();
+      await executeLogout();
+    } catch (err) {
+      console.error('Error al guardar antes de salir:', err);
+      setIsSavingAndExiting(false);
+    }
+  };
+
+  const handleConfirmDiscardAndExit = async () => {
+    setIsDiscardModalOpen(false);
+    await executeLogout();
+  };
+
+  const handleCancelExit = () => {
+    if (isSavingAndExiting) return;
+    setIsDiscardModalOpen(false);
+  };
+
+  const handleNavClick = async (href: string) => {
+    // Si navega internamente fuera del diario con cambios pendientes, asegurar guardado
+    if (pathname.startsWith('/journal') && href !== '/journal' && hasPendingChanges()) {
+      void saveAndFlush();
+    }
   };
 
   if (!mounted) {
@@ -111,6 +165,7 @@ export default function VolunteerLayout({
                     key={item.name}
                     href={item.href}
                     prefetch={false}
+                    onClick={() => void handleNavClick(item.href)}
                     title={!sidebarOpen ? item.name : undefined}
                     className={cn(
                       "group flex items-center h-[42px] rounded-md transition-all duration-200 relative",
@@ -168,7 +223,7 @@ export default function VolunteerLayout({
           }}
         >
           <div className="w-full min-h-full flex flex-col">
-            <JournalProvider>{children}</JournalProvider>
+            {children}
           </div>
         </main>
       </div>
@@ -199,6 +254,7 @@ export default function VolunteerLayout({
                     key={item.href}
                     href={item.href}
                     prefetch={false}
+                    onClick={() => void handleNavClick(item.href)}
                     style={sharedStyle}
                     className={cn(
                       "flex flex-col items-center justify-center py-2 rounded-full transition-all duration-200 shrink-0 active:scale-[0.95]",
@@ -245,6 +301,89 @@ export default function VolunteerLayout({
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal for Unsaved / Pending Journal Changes */}
+      <AnimatePresence>
+        {isDiscardModalOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleCancelExit}
+              className="absolute inset-0 bg-slate-900/60 dark:bg-black/75 backdrop-blur-sm"
+            />
+
+            {/* Modal Dialog */}
+            <motion.div
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="unsaved-journal-title"
+              aria-describedby="unsaved-journal-desc"
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              transition={{ duration: 0.2 }}
+              className="relative bg-white dark:bg-[#161a23] rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-white/10 p-6 md:p-8 text-center z-10"
+            >
+              {/* Icon badge */}
+              <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-5 bg-amber-500/15 text-amber-500 dark:bg-amber-400/20 dark:text-amber-400">
+                <Icon name="edit_note" size={32} />
+              </div>
+
+              {/* Title & Description */}
+              <h3 id="unsaved-journal-title" className="text-xl font-inter font-bold text-slate-900 dark:text-text mb-2">
+                ¿Guardar nota antes de salir?
+              </h3>
+              <p id="unsaved-journal-desc" className="text-sm text-slate-500 dark:text-text-dim leading-relaxed font-inter mb-6">
+                Tienes una nota o cambios en tu diario que aún no han terminado de guardarse automáticamente. Si sales ahora sin guardar, se perderán tus cambios recientes.
+              </p>
+
+              {/* Action Buttons */}
+              <div className="space-y-2.5">
+                <button
+                  type="button"
+                  disabled={isSavingAndExiting}
+                  onClick={handleConfirmSaveAndExit}
+                  className="w-full py-3.5 px-4 rounded-xl font-inter font-bold text-sm bg-[#4d7cfe] hover:bg-[#3d6cee] text-white shadow-md shadow-[#4d7cfe]/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-75 disabled:cursor-wait"
+                >
+                  {isSavingAndExiting ? (
+                    <>
+                      <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                      <span>Guardando nota y saliendo…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="save" size={18} />
+                      <span>Guardar y salir</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSavingAndExiting}
+                  onClick={handleConfirmDiscardAndExit}
+                  className="w-full py-2.5 px-4 rounded-xl font-inter font-semibold text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50"
+                >
+                  <Icon name="delete_outline" size={18} />
+                  <span>Descartar cambios y salir</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSavingAndExiting}
+                  onClick={handleCancelExit}
+                  className="w-full py-2 px-4 rounded-xl font-inter font-medium text-xs text-slate-400 dark:text-text-dim hover:text-slate-700 dark:hover:text-text transition-colors disabled:opacity-50"
+                >
+                  Seguir escribiendo
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
