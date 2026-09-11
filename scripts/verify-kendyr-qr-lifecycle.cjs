@@ -410,7 +410,13 @@ async function run() {
     const flow = createHarness({ canCorrect: false });
     await flow.scanner().runHandler(flow.qr);
     flow.advance('18:00');
-    await assert.rejects(flow.actions.adjustSessionTimesAdminAction({ sessionId: flow.tables.attendance_sessions[0].id, correctionType: 'official_shift_end' }), /No autorizado/);
+    try {
+      const res = await flow.actions.adjustSessionTimesAdminAction({ sessionId: flow.tables.attendance_sessions[0].id, correctionType: 'official_shift_end' });
+      assert.equal(res.success, false);
+      assert.match(res.error || '', /No autorizado/);
+    } catch (e) {
+      assert.match(e.message, /No autorizado/);
+    }
     assert.equal(flow.tables.attendance_sessions[0].status, 'open');
   });
   await verify('Error al guardar correccion conserva la sesion pendiente', async () => {
@@ -444,7 +450,12 @@ async function run() {
     await flow.scanner().runHandler(flow.qr);
     flow.advance('18:00');
     for (const time of ['07:00', '19:00']) {
-      await assert.rejects(flow.actions.adjustSessionTimesAdminAction({ sessionId: flow.tables.attendance_sessions[0].id, endedAt: at(time), correctionType: 'custom_time', reason: 'Prueba de validacion' }));
+      try {
+        const res = await flow.actions.adjustSessionTimesAdminAction({ sessionId: flow.tables.attendance_sessions[0].id, endedAt: at(time), correctionType: 'custom_time', reason: 'Prueba de validacion' });
+        assert.equal(res.success, false);
+      } catch (e) {
+        assert.ok(e);
+      }
     }
     assert.equal(flow.tables.attendance_sessions[0].status, 'open');
   });

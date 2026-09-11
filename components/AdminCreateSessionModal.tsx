@@ -160,7 +160,7 @@ export function AdminCreateSessionModal({
         onSuccess?.();
         onClose();
       } else {
-        setErrorMsg('No se pudo guardar la sesión de asistencia.');
+        setErrorMsg(response.error || 'No se pudo guardar la sesión de asistencia.');
       }
     } catch (error: unknown) {
       setErrorMsg(error instanceof Error ? error.message : 'Error al procesar la sesión.');

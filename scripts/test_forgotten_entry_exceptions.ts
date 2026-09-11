@@ -68,15 +68,18 @@ async function runForgottenEntryTests() {
 
   let authFailed = false;
   try {
-    await adjustSessionTimesAdminAction({
+    const res = await adjustSessionTimesAdminAction({
       sessionId: lateScanSess.id,
       startedAt: '2026-09-11T17:00:00.000Z',
       endedAt: '2026-09-11T21:03:00.000Z',
       correctionType: 'forgotten_entry_late_scan',
       reason: 'Corrección de entrada olvidada sobre escaneo tardío de salida'
     });
+    if (res && !res.success && (res.error?.includes('No autenticado') || res.error?.includes('Solo Administradores') || res.error?.includes('No autorizado') || res.error?.includes('permiso') || res.error?.includes('cookies'))) {
+      authFailed = true;
+    }
   } catch (e: any) {
-    authFailed = e.message.includes('No autenticado') || e.message.includes('Solo Administradores');
+    authFailed = e.message.includes('No autenticado') || e.message.includes('Solo Administradores') || e.message.includes('No autorizado') || e.message.includes('cookies');
   }
 
   console.log('\nCaso C & H (Escaneo Tardío & Protección de Permisos Admin):');

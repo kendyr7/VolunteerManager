@@ -17,6 +17,7 @@ import {
   getOpenSessionForVolunteer,
   fetchAllAttendanceSessionsFromDb,
   completeOpenAttendanceSessionInDb,
+  checkSessionOverlapInDb,
 } from "@/lib/services/session-store";
 import { createEntryPassPayload, validateEntryPassQrValue } from "@/lib/entry-pass";
 import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
@@ -399,134 +400,142 @@ export async function adjustSessionTimesAdminAction({
   reason?: string;
   correctionType?: 'official_shift_end' | 'custom_time' | 'manual_adjustment' | 'forgotten_entry_late_scan';
 }) {
-  await requireCapability('correct_attendance_times');
-  let finalReason = (rawReason || '').trim();
-  if (correctionType === 'official_shift_end') {
-    finalReason = "Salida olvidada - se utilizó el fin oficial del bloque programado";
-  } else if (correctionType === 'forgotten_entry_late_scan') {
-    finalReason = finalReason || "Corrección de entrada olvidada sobre escaneo tardío de salida";
-  } else {
-    if (!finalReason || finalReason.length < 5) {
-      throw new Error("Se requiere especificar un motivo de al menos 5 caracteres para realizar la corrección.");
+  try {
+    await requireCapability('correct_attendance_times');
+    let finalReason = (rawReason || '').trim();
+    if (correctionType === 'official_shift_end') {
+      finalReason = "Salida olvidada - se utilizó el fin oficial del bloque programado";
+    } else if (correctionType === 'forgotten_entry_late_scan') {
+      finalReason = finalReason || "Corrección de entrada olvidada sobre escaneo tardío de salida";
+    } else {
+      if (!finalReason || finalReason.length < 5) {
+        return { success: false, error: "Se requiere especificar un motivo de al menos 5 caracteres para realizar la corrección." };
+      }
     }
-  }
 
-  const all = await fetchAllAttendanceSessionsFromDb();
-  const targetSession = all.find(s => s.id === sessionId);
+    const all = await fetchAllAttendanceSessionsFromDb();
+    const targetSession = all.find(s => s.id === sessionId);
 
-  if (!targetSession) {
-    return { success: false, error: "Sesión de asistencia no encontrada." };
-  }
+    if (!targetSession) {
+      return { success: false, error: "Sesión de asistencia no encontrada." };
+    }
 
-  // Concurrency & Idempotency Protection (Caso I)
-  if (targetSession.status === 'completed' && targetSession.ended_at && correctionType !== 'forgotten_entry_late_scan') {
-    return {
-      success: true,
-      alreadyClosed: true,
-      session: targetSession,
-      message: "La sesión ya fue finalizada por otro usuario o escáner QR."
-    };
-  }
-
-  const previousStartedAt = targetSession.started_at;
-  const previousEndedAt = targetSession.ended_at;
-
-  const newStartedAt = correctionType === 'official_shift_end' ? targetSession.started_at : startedAt || targetSession.started_at;
-  let newEndedAt = endedAt !== undefined ? endedAt : targetSession.ended_at;
-  if (correctionType === 'official_shift_end') {
-    const assignedShiftKeys = await getSessionAssignedShiftKeys(targetSession);
-    const block = getContinuousScheduledBlockForSession(targetSession.day_key, targetSession.started_at, assignedShiftKeys);
-    if (!block) return { success: false, error: 'No se pudo determinar el bloque original. Registra la hora de salida con un motivo.' };
-    newEndedAt = block.suggestedEndTimeIso;
-  }
-  const newStatus = newEndedAt ? 'completed' : 'open';
-
-  // Chronology & constraint validation (ended_at >= started_at)
-  const constraintCheck = validateSessionConstraints(newStartedAt, newEndedAt, newStatus);
-  if (!constraintCheck.valid) {
-    throw new Error(constraintCheck.error || "Ajuste de horario inválido.");
-  }
-
-  // Check no future timestamps
-  const nowMs = Date.now();
-  if (new Date(newStartedAt).getTime() > nowMs) {
-    throw new Error("No se puede registrar una hora de entrada en el futuro.");
-  }
-  if (newEndedAt && new Date(newEndedAt).getTime() > nowMs) {
-    throw new Error("No se puede registrar una hora de salida en el futuro.");
-  }
-
-  let saved: AttendanceSession;
-
-  if (targetSession.status === 'open' && newEndedAt) {
-    const atomicRes = await completeOpenAttendanceSessionInDb(sessionId, newEndedAt, false);
-    if (!atomicRes.success) return { success: false, error: atomicRes.error || 'No se pudo guardar la corrección de salida.' };
-    if (atomicRes.alreadyClosed) {
+    // Concurrency & Idempotency Protection (Caso I)
+    if (targetSession.status === 'completed' && targetSession.ended_at && correctionType !== 'forgotten_entry_late_scan') {
       return {
         success: true,
         alreadyClosed: true,
-        session: atomicRes.session || targetSession,
-        message: atomicRes.error || "La sesión ya fue finalizada por otro usuario."
+        session: targetSession,
+        message: "La sesión ya fue finalizada por otro usuario o escáner QR."
       };
     }
-    saved = { ...atomicRes.session!, started_at: newStartedAt };
-    if (newStartedAt !== targetSession.started_at) await saveAttendanceSession(saved);
-  } else {
-    const updatedRecord: AttendanceSession = {
-      ...targetSession,
-      started_at: newStartedAt,
-      ended_at: newEndedAt,
-      status: newStatus,
-      auto_closed: false,
-      updated_at: new Date().toISOString()
-    };
-    saved = await saveAttendanceSession(updatedRecord);
-  }
 
-  await broadcastSessionSync({
-    eventType: 'UPDATE',
-    table: 'attendance_sessions',
-    record: saved,
-  });
+    const previousStartedAt = targetSession.started_at;
+    const previousEndedAt = targetSession.ended_at;
 
-  const { getCurrentUserSession } = await import('@/lib/auth-helpers');
-  const currentActor = await getCurrentUserSession();
-  const adminName = currentActor.userName || 'Administrador';
-  const adminId = currentActor.userId || 'admin-server-session';
+    const newStartedAt = correctionType === 'official_shift_end' ? targetSession.started_at : startedAt || targetSession.started_at;
+    let newEndedAt = endedAt !== undefined ? endedAt : targetSession.ended_at;
+    if (correctionType === 'official_shift_end') {
+      const assignedShiftKeys = await getSessionAssignedShiftKeys(targetSession);
+      const block = getContinuousScheduledBlockForSession(targetSession.day_key, targetSession.started_at, assignedShiftKeys);
+      if (!block) return { success: false, error: 'No se pudo determinar el bloque original. Registra la hora de salida con un motivo.' };
+      newEndedAt = block.suggestedEndTimeIso;
+    }
+    const newStatus = newEndedAt ? 'completed' : 'open';
 
-  // Log in activity_logs
-  try {
-    const supabase = getAdminClient();
-    await supabase.from('activity_logs').insert({
-      user_name: adminName,
-      user_role: currentActor.userRole,
-      action_type: correctionType === 'forgotten_entry_late_scan' ? 'Corrección Entrada Olvidada' : 'Corrección Salida Olvidada',
-      description: `Corrigió horario de sesión de asistencia (${correctionType})`,
-      details: JSON.stringify({
-        sessionId: saved.id,
-        volunteerId: saved.volunteer_id,
-        previousStartedAt,
-        newStartedAt: saved.started_at,
-        previousEndedAt,
-        newEndedAt: saved.ended_at,
-        originalLateScanAt: correctionType === 'forgotten_entry_late_scan' ? previousStartedAt : undefined,
-        reason: finalReason,
-        correctionType,
-        adminId,
-        adminName
-      }),
-      target_id: saved.volunteer_id
+    // Chronology & constraint validation (ended_at >= started_at)
+    const constraintCheck = validateSessionConstraints(newStartedAt, newEndedAt, newStatus);
+    if (!constraintCheck.valid) {
+      return { success: false, error: constraintCheck.error || "Ajuste de horario inválido." };
+    }
+
+    // Check no future timestamps
+    const nowMs = Date.now();
+    if (new Date(newStartedAt).getTime() > nowMs) {
+      return { success: false, error: "No se puede registrar una hora de entrada en el futuro." };
+    }
+    if (newEndedAt && new Date(newEndedAt).getTime() > nowMs) {
+      return { success: false, error: "No se puede registrar una hora de salida en el futuro." };
+    }
+
+    let saved: AttendanceSession;
+
+    if (targetSession.status === 'open' && newEndedAt) {
+      const atomicRes = await completeOpenAttendanceSessionInDb(sessionId, newEndedAt, false);
+      if (!atomicRes.success) return { success: false, error: atomicRes.error || 'No se pudo guardar la corrección de salida.' };
+      if (atomicRes.alreadyClosed) {
+        return {
+          success: true,
+          alreadyClosed: true,
+          session: atomicRes.session || targetSession,
+          message: atomicRes.error || "La sesión ya fue finalizada por otro usuario."
+        };
+      }
+      saved = { ...atomicRes.session!, started_at: newStartedAt };
+      if (newStartedAt !== targetSession.started_at) await saveAttendanceSession(saved);
+    } else {
+      const updatedRecord: AttendanceSession = {
+        ...targetSession,
+        started_at: newStartedAt,
+        ended_at: newEndedAt,
+        status: newStatus,
+        auto_closed: false,
+        updated_at: new Date().toISOString()
+      };
+      saved = await saveAttendanceSession(updatedRecord);
+    }
+
+    await broadcastSessionSync({
+      eventType: 'UPDATE',
+      table: 'attendance_sessions',
+      record: saved,
     });
-  } catch (e) {}
 
-  for (const route of ['/shifts', '/volunteers', '/check-in', '/dashboard']) {
-    revalidatePath(route);
+    const { getCurrentUserSession } = await import('@/lib/auth-helpers');
+    const currentActor = await getCurrentUserSession();
+    const adminName = currentActor.userName || 'Administrador';
+    const adminId = currentActor.userId || 'admin-server-session';
+
+    // Log in activity_logs
+    try {
+      const supabase = getAdminClient();
+      await supabase.from('activity_logs').insert({
+        user_name: adminName,
+        user_role: currentActor.userRole,
+        action_type: correctionType === 'forgotten_entry_late_scan' ? 'Corrección Entrada Olvidada' : 'Corrección Salida Olvidada',
+        description: `Corrigió horario de sesión de asistencia (${correctionType})`,
+        details: JSON.stringify({
+          sessionId: saved.id,
+          volunteerId: saved.volunteer_id,
+          previousStartedAt,
+          newStartedAt: saved.started_at,
+          previousEndedAt,
+          newEndedAt: saved.ended_at,
+          originalLateScanAt: correctionType === 'forgotten_entry_late_scan' ? previousStartedAt : undefined,
+          reason: finalReason,
+          correctionType,
+          adminId,
+          adminName
+        }),
+        target_id: saved.volunteer_id
+      });
+    } catch (e) {}
+
+    for (const route of ['/shifts', '/volunteers', '/check-in', '/dashboard']) {
+      revalidatePath(route);
+    }
+
+    return {
+      success: true,
+      session: saved
+    };
+  } catch (error: any) {
+    console.error('Error in adjustSessionTimesAdminAction:', error);
+    return {
+      success: false,
+      error: error?.message || 'No autorizado o error al procesar el ajuste de sesión.'
+    };
   }
-
-  return {
-    success: true,
-    session: saved
-  };
 }
 
 /**
@@ -541,97 +550,108 @@ export async function createAttendanceSessionAdminAction(input: {
   correctionType: 'official_shift_start' | 'custom_start_time' | 'manual_session_creation';
   reason?: string;
 }) {
-  const authorizedActor = await requireCapability('register_missing_attendance');
-  const { volunteerId, dayKey, startedAt, endedAt, correctionType, reason: rawReason } = input;
-
-  let finalReason = (rawReason || '').trim();
-  if (correctionType === 'official_shift_start') {
-    finalReason = "Entrada olvidada - se utilizó el inicio oficial del turno/bloque programado";
-  } else {
-    if (!finalReason || finalReason.length < 5) {
-      throw new Error("Se requiere especificar un motivo de al menos 5 caracteres para realizar la corrección.");
-    }
-  }
-
-  const nowMs = Date.now();
-  const startMs = new Date(startedAt).getTime();
-  if (isNaN(startMs) || startMs > nowMs) {
-    throw new Error("La hora de entrada no puede ser en el futuro.");
-  }
-
-  const newStatus = endedAt ? 'completed' : 'open';
-
-  if (endedAt) {
-    const endMs = new Date(endedAt).getTime();
-    if (isNaN(endMs) || endMs > nowMs) {
-      throw new Error("La hora de salida no puede ser en el futuro.");
-    }
-    if (endMs < startMs) {
-      throw new Error("La hora de salida no puede ser anterior a la hora de entrada.");
-    }
-  }
-
-  if (newStatus === 'open') {
-    const existingOpen = await getOpenSessionForVolunteer(volunteerId);
-    if (existingOpen) {
-      throw new Error("El voluntario ya posee una sesión activa en turno (OPEN).");
-    }
-  }
-
-  const { checkSessionOverlapInDb } = require('@/lib/services/session-store');
-  const overlapCheck = await checkSessionOverlapInDb(volunteerId, startedAt, endedAt);
-  if (overlapCheck.hasOverlap) {
-    throw new Error(`El intervalo solicitado se solapa con una sesión existente de este voluntario.`);
-  }
-
-  const nowIso = new Date().toISOString();
-  const newRecord: AttendanceSession = {
-    id: crypto.randomUUID(),
-    volunteer_id: volunteerId,
-    day_key: dayKey,
-    started_at: startedAt,
-    ended_at: endedAt || null,
-    status: newStatus,
-    auto_closed: false,
-    created_at: nowIso,
-    updated_at: nowIso,
-  };
-
-  const saved = await saveAttendanceSession(newRecord);
-
-  await broadcastSessionSync({
-    eventType: 'INSERT',
-    table: 'attendance_sessions',
-    record: saved,
-  });
-
-  const adminName = authorizedActor.name;
-  const adminId = authorizedActor.userId || 'admin-server-session';
-
   try {
-    const supabase = getAdminClient();
-    await supabase.from('activity_logs').insert({
-      user_name: adminName,
-      user_role: roleDisplayName(authorizedActor),
-      action_type: 'Corrección Entrada Olvidada',
-      description: `Registró entrada olvidada de sesión para el día ${dayKey}`,
-      details: JSON.stringify({
-        sessionId: saved.id,
-        volunteerId,
-        dayKey,
-        startedAt,
-        endedAt: saved.ended_at,
-        status: saved.status,
-        correctionType,
-        reason: finalReason,
-        adminId,
-        adminName
-      }),
-      target_id: volunteerId
-    });
-  } catch {}
+    const authorizedActor = await requireCapability('register_missing_attendance');
+    const { volunteerId, dayKey, startedAt, endedAt, correctionType, reason: rawReason } = input;
 
-  return { success: true, session: saved };
+    let finalReason = (rawReason || '').trim();
+    if (correctionType === 'official_shift_start') {
+      finalReason = "Entrada olvidada - se utilizó el inicio oficial del turno/bloque programado";
+    } else {
+      if (!finalReason || finalReason.length < 5) {
+        return { success: false, error: "Se requiere especificar un motivo de al menos 5 caracteres para realizar la corrección." };
+      }
+    }
+
+    const nowMs = Date.now();
+    const startMs = new Date(startedAt).getTime();
+    if (isNaN(startMs) || startMs > nowMs) {
+      return { success: false, error: "La hora de entrada no puede ser en el futuro." };
+    }
+
+    const newStatus = endedAt ? 'completed' : 'open';
+
+    if (endedAt) {
+      const endMs = new Date(endedAt).getTime();
+      if (isNaN(endMs) || endMs > nowMs) {
+        return { success: false, error: "La hora de salida no puede ser en el futuro." };
+      }
+      if (endMs < startMs) {
+        return { success: false, error: "La hora de salida no puede ser anterior a la hora de entrada." };
+      }
+    }
+
+    if (newStatus === 'open') {
+      const existingOpen = await getOpenSessionForVolunteer(volunteerId);
+      if (existingOpen) {
+        return { success: false, error: "El voluntario ya posee una sesión activa en turno (OPEN)." };
+      }
+    }
+
+    const overlapCheck = await checkSessionOverlapInDb(volunteerId, startedAt, endedAt);
+    if (overlapCheck.hasOverlap) {
+      return { success: false, error: "El intervalo solicitado se solapa con una sesión existente de este voluntario." };
+    }
+
+    const nowIso = new Date().toISOString();
+    const newRecord: AttendanceSession = {
+      id: crypto.randomUUID(),
+      volunteer_id: volunteerId,
+      day_key: dayKey,
+      started_at: startedAt,
+      ended_at: endedAt || null,
+      status: newStatus,
+      auto_closed: false,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
+    const saved = await saveAttendanceSession(newRecord);
+
+    await broadcastSessionSync({
+      eventType: 'INSERT',
+      table: 'attendance_sessions',
+      record: saved,
+    });
+
+    const adminName = authorizedActor.name;
+    const adminId = authorizedActor.userId || 'admin-server-session';
+
+    try {
+      const supabase = getAdminClient();
+      await supabase.from('activity_logs').insert({
+        user_name: adminName,
+        user_role: roleDisplayName(authorizedActor),
+        action_type: 'Corrección Entrada Olvidada',
+        description: `Registró entrada olvidada de sesión para el día ${dayKey}`,
+        details: JSON.stringify({
+          sessionId: saved.id,
+          volunteerId,
+          dayKey,
+          startedAt,
+          endedAt: saved.ended_at,
+          status: saved.status,
+          correctionType,
+          reason: finalReason,
+          adminId,
+          adminName
+        }),
+        target_id: volunteerId
+      });
+    } catch {}
+
+    for (const route of ['/shifts', '/volunteers', '/check-in', '/dashboard']) {
+      revalidatePath(route);
+    }
+
+    return { success: true, session: saved };
+  } catch (error: any) {
+    console.error('Error in createAttendanceSessionAdminAction:', error);
+    return {
+      success: false,
+      error: error?.message || 'No autorizado o error al registrar la sesión de asistencia.'
+    };
+  }
 }
 
 // 5. Process Check-in via QR Scan or manual selection

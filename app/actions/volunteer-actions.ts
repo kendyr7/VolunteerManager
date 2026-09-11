@@ -154,12 +154,20 @@ export async function resolvePendingImportExceptionAction(
     return { success: false, error: 'La solicitud pendiente es requerida.' };
   }
 
-  const session = await requireCapability('manage_platform_users');
-  const actor = {
-    name: session.name,
-    role: roleDisplayName(session),
-  };
-  return VolunteerMutationService.resolvePendingImportException(request, actor, session.userId);
+  try {
+    const session = await requireCapability('manage_platform_users');
+    const actor = {
+      name: session.name,
+      role: roleDisplayName(session),
+    };
+    return await VolunteerMutationService.resolvePendingImportException(request, actor, session.userId);
+  } catch (error: any) {
+    console.error('Error in resolvePendingImportExceptionAction:', error);
+    return {
+      success: false,
+      error: error?.message || 'No autorizado o error al resolver la excepción de importación.',
+    };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
