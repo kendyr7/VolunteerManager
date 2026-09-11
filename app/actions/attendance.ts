@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 import { broadcastShiftSync, broadcastSessionSync } from "@/lib/services/shift-broadcast.service";
 import { requireCapability, requireVolunteerCapability, requireVolunteerSelfOrCapability } from "@/lib/authorization";
 import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
-import { EARLY_CHECK_IN_MINUTES, getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay, parseGuatemalaShiftEnd } from "@/lib/dates";
+import { EARLY_CHECK_IN_MINUTES, getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay, parseGuatemalaShiftEnd, parseDayKeyToDateStr } from "@/lib/dates";
 import { getVolunteerReliabilityMetrics, computeBulkReliabilityMap } from "@/lib/services/volunteer-reliability.service";
 import { buildEventDayKeys } from '@/lib/coordinator-data';
 import { AttendanceSession, getGuatemalaHourFloat, getContinuousScheduledBlockForSession, requiresSessionExitResolution, inferShiftsForSession, validateSessionConstraints, getSessionShiftCompletedAt } from "@/lib/session-utils";
@@ -795,7 +795,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
 
   // Load the assignments before opening a session. This keeps the QR flow from
   // creating invisible sessions on dates or hours that do not exist in Turnos.
-  const { data: shifts, error: shiftsError } = await supabase
+  const { data: rawShifts, error: shiftsError } = await supabase
     .from('shifts')
     .select('*')
     .eq('volunteer_id', volunteerId);
@@ -804,44 +804,130 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
     return { error: "No se pudieron consultar los turnos asignados del voluntario." };
   }
 
-  const formattedShifts = (shifts || []).map((s: any) => {
-    const official = getOfficialShiftTime(s.day_key, s.shift_key);
+  const allVolunteerShifts = rawShifts || [];
+  const currentIsoDate = parseDayKeyToDateStr(currentDayKey);
+  const currentHour = getGuatemalaHourFloat(new Date());
+  const isOperationalDay = operationalDayKeys.has(currentDayKey);
 
-    return {
-      id: s.id,
-      dayKey: s.day_key,
-      shiftKey: s.shift_key,
-      timeLabel: official.shortTimeLabel,
-      checkedIn: s.checked_in,
-      checkedInAt: s.checked_in_at,
-      checkedOut: s.checked_out,
-      checkedOutAt: s.checked_out_at,
-    };
+  // Filter shifts belonging to today
+  const todayShifts = allVolunteerShifts.filter((shift: any) => {
+    const dayKey = (shift.day_key || '').toLowerCase().trim();
+    return dayKey === currentDayKey || parseDayKeyToDateStr(shift.day_key) === currentIsoDate;
   });
 
-  const currentHour = getGuatemalaHourFloat(new Date());
-  // Treat the 30 minutes before the official start as part of the live QR
-  // check-in window so the assigned shift is recognized without manual selection.
-  const activeAssignments = (shifts || []).filter((shift: any) => {
-    if ((shift.day_key || '').toLowerCase().trim() !== currentDayKey) return false;
+  // Active assignments within the current live check-in window (up to 30 mins before start until end)
+  const activeAssignments = todayShifts.filter((shift: any) => {
     if (!isShiftAvailableForDay(shift.day_key, shift.shift_key)) return false;
     const official = getOfficialShiftTime(shift.day_key, shift.shift_key);
     const earliestCheckInHour = official.startHour - (EARLY_CHECK_IN_MINUTES / 60);
     return currentHour >= earliestCheckInHour && currentHour < official.endHour;
   });
 
-  if (!operationalDayKeys.has(currentDayKey) || activeAssignments.length === 0) {
-    if (formattedShifts.length === 0) {
+  // If outside operational days or outside the 30-min window before an active shift, handle manual selection or informative error
+  if (!isOperationalDay || activeAssignments.length === 0) {
+    // If today is an operational event day, only show today's eligible shifts (never past days nor ended un-checked-in shifts)
+    if (isOperationalDay) {
+      const eligibleTodayShifts = todayShifts.filter((shift: any) => {
+        if (!isShiftAvailableForDay(shift.day_key, shift.shift_key)) return false;
+        const official = getOfficialShiftTime(shift.day_key, shift.shift_key);
+        // Exclude shifts that already ended in the past unless they are already checked in
+        return Boolean(shift.checked_in) || official.endHour > currentHour;
+      });
+
+      if (eligibleTodayShifts.length === 0) {
+        // Volunteer has no pending or eligible shifts for today
+        const futureShifts = allVolunteerShifts
+          .filter((s: any) => parseDayKeyToDateStr(s.day_key) > currentIsoDate)
+          .sort((a: any, b: any) => parseDayKeyToDateStr(a.day_key).localeCompare(parseDayKeyToDateStr(b.day_key)));
+
+        if (futureShifts.length > 0) {
+          const nextShift = futureShifts[0];
+          return {
+            error: `${volunteerName} no tiene turnos programados para hoy (${currentDayKey}). Su próximo turno asignado es el ${nextShift.day_key} (${nextShift.shift_key}).`
+          };
+        }
+
+        const endedTodayShifts = todayShifts.filter((s: any) => !s.checked_in);
+        if (endedTodayShifts.length > 0) {
+          return {
+            error: `${volunteerName} no tiene turnos pendientes para hoy (${currentDayKey}). El turno programado ya finalizó (requiere corrección de asistencia).`
+          };
+        }
+
+        if (allVolunteerShifts.length > 0) {
+          return {
+            error: `${volunteerName} no tiene turnos asignados para hoy (${currentDayKey}). Los turnos de fechas anteriores ya pasaron y requieren corrección de asistencia.`
+          };
+        }
+
+        return {
+          error: `${volunteerName} no tiene turnos asignados para registrar asistencia.`
+        };
+      }
+
+      const formattedTodayShifts = eligibleTodayShifts.map((s: any) => {
+        const official = getOfficialShiftTime(s.day_key, s.shift_key);
+        return {
+          id: s.id,
+          dayKey: s.day_key,
+          shiftKey: s.shift_key,
+          timeLabel: official.shortTimeLabel,
+          checkedIn: s.checked_in,
+          checkedInAt: s.checked_in_at,
+          checkedOut: s.checked_out,
+          checkedOutAt: s.checked_out_at,
+        };
+      });
+
+      return {
+        requiresManualSelection: true,
+        outsideOperationalDay: false,
+        volunteerId,
+        volunteer: volunteerName,
+        committee: volunteer.committees?.name || "Sin comité",
+        shifts: formattedTodayShifts,
+      };
+    }
+
+    // Outside operational calendar (e.g. testing days outside event): only show non-past shifts
+    const nonPastShifts = allVolunteerShifts.filter((s: any) => {
+      const shiftDateStr = parseDayKeyToDateStr(s.day_key);
+      if (shiftDateStr < currentIsoDate) return false;
+      if (shiftDateStr === currentIsoDate) {
+        const official = getOfficialShiftTime(s.day_key, s.shift_key);
+        return Boolean(s.checked_in) || official.endHour > currentHour;
+      }
+      return true;
+    });
+
+    if (nonPastShifts.length === 0) {
+      if (allVolunteerShifts.length > 0) {
+        return { error: `${volunteerName} no tiene turnos disponibles para registrar asistencia. Los turnos asignados corresponden a fechas pasadas.` };
+      }
       return { error: `${volunteerName} no tiene turnos asignados para registrar asistencia.` };
     }
 
+    const formattedNonPastShifts = nonPastShifts.map((s: any) => {
+      const official = getOfficialShiftTime(s.day_key, s.shift_key);
+      return {
+        id: s.id,
+        dayKey: s.day_key,
+        shiftKey: s.shift_key,
+        timeLabel: official.shortTimeLabel,
+        checkedIn: s.checked_in,
+        checkedInAt: s.checked_in_at,
+        checkedOut: s.checked_out,
+        checkedOutAt: s.checked_out_at,
+      };
+    });
+
     return {
       requiresManualSelection: true,
-      outsideOperationalDay: !operationalDayKeys.has(currentDayKey),
+      outsideOperationalDay: true,
       volunteerId,
       volunteer: volunteerName,
       committee: volunteer.committees?.name || "Sin comité",
-      shifts: formattedShifts,
+      shifts: formattedNonPastShifts,
     };
   }
 
@@ -859,12 +945,27 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
     };
   }
 
+  const fallbackShifts = todayShifts.map((s: any) => {
+    const official = getOfficialShiftTime(s.day_key, s.shift_key);
+    return {
+      id: s.id,
+      dayKey: s.day_key,
+      shiftKey: s.shift_key,
+      timeLabel: official.shortTimeLabel,
+      checkedIn: s.checked_in,
+      checkedInAt: s.checked_in_at,
+      checkedOut: s.checked_out,
+      checkedOutAt: s.checked_out_at,
+    };
+  });
+
   return {
     requiresManualSelection: true,
+    outsideOperationalDay: !isOperationalDay,
     volunteerId,
-    volunteer: `${volunteer.first_name} ${volunteer.last_name}`,
+    volunteer: volunteerName,
     committee: volunteer.committees?.name || "Sin comité",
-    shifts: formattedShifts
+    shifts: fallbackShifts,
   };
 }
 

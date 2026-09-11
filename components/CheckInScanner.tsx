@@ -7,7 +7,7 @@ import { canQrCheckin } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn, normalizeSearch } from "@/lib/utils";
-import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, getOfficialShiftTime } from "@/lib/dates";
+import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, getOfficialShiftTime, parseDayKeyToDateStr } from "@/lib/dates";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
@@ -402,12 +402,18 @@ export function CheckInScanner({
   const groupedShifts = useMemo(() => {
     if (!scanResult?.shifts) return {};
 
+    const guatemalaDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala' }).format(new Date());
+
     const dayOrder = new Map(
       EVENT_DAYS.map((day, index) => [normalizeSearch(day.key), index])
     );
     const groups: Record<string, any[]> = {};
 
     [...scanResult.shifts]
+      .filter((shift: any) => {
+        const shiftDateStr = parseDayKeyToDateStr(shift.dayKey);
+        return shiftDateStr >= guatemalaDateStr;
+      })
       .sort((a: any, b: any) => {
         const dayDifference = (dayOrder.get(normalizeSearch(a.dayKey)) ?? Number.MAX_SAFE_INTEGER)
           - (dayOrder.get(normalizeSearch(b.dayKey)) ?? Number.MAX_SAFE_INTEGER);
@@ -1264,7 +1270,7 @@ export function CheckInScanner({
                           {scanResult.committee}
                         </span>
                         <span className="text-xs font-inter font-bold text-text-dim">
-                          {scanResult.shifts?.length || 0} turnos asignados
+                          {Object.values(groupedShifts).reduce((acc, s) => acc + s.length, 0)} {Object.values(groupedShifts).reduce((acc, s) => acc + s.length, 0) === 1 ? 'turno disponible' : 'turnos disponibles'}
                         </span>
                       </div>
                       <h2 className="text-2xl sm:text-3xl font-black text-text tracking-tight">
@@ -1369,13 +1375,19 @@ export function CheckInScanner({
                                     )}
                                   </div>
                                 ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleManualCheckIn(s.id)}
-                                    className="h-9 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer shadow-md shadow-blue-500/20 shrink-0"
-                                  >
-                                    <span>Marcar Asistencia</span>
-                                  </button>
+                                  parseDayKeyToDateStr(s.dayKey) === new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala' }).format(new Date()) ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleManualCheckIn(s.id)}
+                                      className="h-9 px-4 bg-[#4d7cfe] hover:bg-[#3b66e0] text-white rounded-full text-xs font-bold font-inter transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer shadow-md shadow-blue-500/20 shrink-0"
+                                    >
+                                      <span>Marcar Asistencia</span>
+                                    </button>
+                                  ) : (
+                                    <span className="h-9 px-3 rounded-full text-xs font-inter font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center shrink-0">
+                                      Turno futuro
+                                    </span>
+                                  )
                                 )}
 
                                 {/* Reasignar Turno Button */}

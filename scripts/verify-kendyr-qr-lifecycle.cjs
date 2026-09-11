@@ -680,6 +680,45 @@ async function run() {
     await flow.actions.checkOutVolunteer(shiftIds[0]);
     assert.equal(flow.snapshot()[0].isCheckedOut, true);
   });
+  await verify('Escanear QR en vie 11 excluye turnos pasados de sab 5 y jue 10', async () => {
+    const flow = createHarness();
+    flow.tables.shifts = [
+      { ...seedShifts[0], id: 'shift-sab-5', day_key: 'sáb 5', shift_key: 'T1' },
+      { ...seedShifts[0], id: 'shift-jue-10', day_key: 'jue 10', shift_key: 'T1' },
+      { ...seedShifts[0], id: 'shift-vie-11', day_key: 'vie 11', shift_key: 'T2' },
+    ];
+    flow.advanceTo('2026-09-11T09:00:00-06:00');
+    const scanned = await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor');
+    assert.equal(scanned.requiresManualSelection, true);
+    assert.ok(Array.isArray(scanned.shifts));
+    assert.equal(scanned.shifts.length, 1);
+    assert.equal(scanned.shifts[0].dayKey, 'vie 11');
+    assert.equal(scanned.shifts[0].shiftKey, 'T2');
+  });
+  await verify('Escanear QR en vie 11 con solo turnos pasados informa que requiere correccion y no muestra seleccion', async () => {
+    const flow = createHarness();
+    flow.tables.shifts = [
+      { ...seedShifts[0], id: 'shift-sab-5', day_key: 'sáb 5', shift_key: 'T1' },
+      { ...seedShifts[0], id: 'shift-jue-10', day_key: 'jue 10', shift_key: 'T1' },
+    ];
+    flow.advanceTo('2026-09-11T10:00:00-06:00');
+    const scanned = await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor');
+    assert.ok(scanned.error);
+    assert.equal(scanned.requiresManualSelection, undefined);
+    assert.ok(scanned.error.includes('fechas anteriores ya pasaron'));
+  });
+  await verify('Escanear QR en vie 11 con proximo turno manana sab 12 informa proximo turno', async () => {
+    const flow = createHarness();
+    flow.tables.shifts = [
+      { ...seedShifts[0], id: 'shift-jue-10', day_key: 'jue 10', shift_key: 'T1' },
+      { ...seedShifts[0], id: 'shift-sab-12', day_key: 'sáb 12', shift_key: 'T1' },
+    ];
+    flow.advanceTo('2026-09-11T10:00:00-06:00');
+    const scanned = await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor');
+    assert.ok(scanned.error);
+    assert.equal(scanned.requiresManualSelection, undefined);
+    assert.ok(scanned.error.includes('sáb 12'));
+  });
   const passes = results.filter(r => r.passed).length;
   console.log(`RESULTADO: ${passes}/${results.length} aprobadas; ${results.length - passes} fallos reproducidos. Persistencia y autenticacion simuladas; datos de produccion intactos.`);
   process.exitCode = passes === results.length ? 0 : 1;
