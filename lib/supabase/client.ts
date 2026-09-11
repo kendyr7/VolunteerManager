@@ -18,6 +18,11 @@ export function setGlobalToken(token: string | null) {
   }
 }
 
+export function clearBrowserClient() {
+  globalToken = null;
+  browserClient = null;
+}
+
 export function createClient() {
   // Client Components can call this helper during every render. Reuse one
   // browser client so effects keep stable dependencies and Realtime does not
@@ -33,15 +38,23 @@ export function createClient() {
       accessToken: async () => globalToken,
       global: {
         fetch: async (url, options = {}) => {
+          const headers = new Headers(options.headers);
           if (globalToken) {
-            const headers = new Headers(options.headers);
             headers.set('Authorization', `Bearer ${globalToken}`);
-            options.headers = headers;
           }
+          // Prevent browser HTTP heuristic caching of Supabase REST API responses
+          headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+          headers.set('Pragma', 'no-cache');
+
+          const fetchOptions: RequestInit = {
+            ...options,
+            headers,
+            cache: 'no-store',
+          };
           let lastError: unknown;
           for (let attempt = 0; attempt < 3; attempt += 1) {
             try {
-              const res = await fetch(url, options);
+              const res = await fetch(url, fetchOptions);
               if (!res.ok) {
                 const text = await res.text();
                 // Don't trigger console.error overlay for 404 missing table schema errors (PGRST205)

@@ -44,6 +44,7 @@ type JournalContextValue = {
   flush: (userId: string) => Promise<void>;
   status: (userId: string) => JournalStatus;
   retry: (userId: string) => Promise<void>;
+  clear: (userId?: string) => void;
 };
 const JournalContext = createContext<JournalContextValue | null>(null);
 
@@ -138,40 +139,39 @@ export function JournalProvider({ children }: { children: ReactNode }) {
   }, [enqueueSave]);
 
   const load = useCallback(async (userId: string) => {
-    if (!userId || loaded.current.has(userId) || loading.current.has(userId)) return;
+    if (!userId || loading.current.has(userId)) return;
     loading.current.add(userId);
     setStatuses(current => ({ ...current, [userId]: 'loading' }));
-    const db = createClient();
-    const result = await db.from('volunteer_journal_notes')
-      .select('id, volunteer_id, title, content_html, content_text, content_version, shift_date, color, pattern, is_pinned, tags, revision, created_at, updated_at')
-      .eq('volunteer_id', userId)
-      .order('is_pinned', { ascending: false })
-      .order('updated_at', { ascending: false })
-      .then(value => value, () => null);
-    if (!result) {
-      loading.current.delete(userId);
+    try {
+      const db = createClient();
+      const result = await db.from('volunteer_journal_notes')
+        .select('id, volunteer_id, title, content_html, content_text, content_version, shift_date, color, pattern, is_pinned, tags, revision, created_at, updated_at')
+        .eq('volunteer_id', userId)
+        .order('is_pinned', { ascending: false })
+        .order('updated_at', { ascending: false });
+
+      if (result.error) {
+        setStatuses(current => ({ ...current, [userId]: 'error' }));
+        return;
+      }
+
+      loaded.current.add(userId);
+      const loadedNotes = (result.data || []).map(rowToNote);
+
+      // The remote database is the authoritative source of truth.
+      // If the database has 0 notes (they were deleted), the local state reflects 0 notes.
+      // Never revive deleted notes by merging with stale in-memory state.
+      const current = journalsRef.current[userId] ?? emptyState;
+      const next = { ...current, notes: loadedNotes };
+      journalsRef.current = { ...journalsRef.current, [userId]: next };
+      setJournals(journalsRef.current);
+      setStatuses(currentStatuses => ({ ...currentStatuses, [userId]: 'ready' }));
+    } catch {
       setStatuses(current => ({ ...current, [userId]: 'error' }));
-      return;
-    }
-    if (result.error) {
+    } finally {
       loading.current.delete(userId);
-      setStatuses(current => ({ ...current, [userId]: 'error' }));
-      return;
     }
-    loading.current.delete(userId);
-    loaded.current.add(userId);
-    const loadedNotes = (result.data || []).map(rowToNote);
-    const current = journalsRef.current[userId] ?? emptyState;
-    // Preserve anything typed while the initial request was in flight. Those
-    // local notes are queued for persistence after the remote list is merged.
-    const remoteIds = new Set(loadedNotes.map(note => note.id));
-    const localOnly = current.notes.filter(note => !remoteIds.has(note.id));
-    const next = { ...current, notes: [...localOnly, ...loadedNotes] };
-    journalsRef.current = { ...journalsRef.current, [userId]: next };
-    setJournals(journalsRef.current);
-    setStatuses(currentStatuses => ({ ...currentStatuses, [userId]: 'ready' }));
-    if (localOnly.length) persist(userId, next.notes);
-  }, [persist]);
+  }, []);
 
   const update = useCallback((userId: string, change: (state: JournalState) => JournalState) => {
     const previous = journalsRef.current[userId] ?? emptyState;
@@ -187,9 +187,40 @@ export function JournalProvider({ children }: { children: ReactNode }) {
     await load(userId);
   }, [load]);
 
+  const clear = useCallback((userId?: string) => {
+    if (userId) {
+      loaded.current.delete(userId);
+      loading.current.delete(userId);
+      const timer = timers.current.get(userId);
+      if (timer) clearTimeout(timer);
+      timers.current.delete(userId);
+      saveQueues.current.delete(userId);
+      setJournals(prev => {
+        const next = { ...prev };
+        delete next[userId];
+        journalsRef.current = next;
+        return next;
+      });
+      setStatuses(prev => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+    } else {
+      loaded.current.clear();
+      loading.current.clear();
+      timers.current.forEach(timer => clearTimeout(timer));
+      timers.current.clear();
+      saveQueues.current.clear();
+      journalsRef.current = {};
+      setJournals({});
+      setStatuses({});
+    }
+  }, []);
+
   useEffect(() => () => timers.current.forEach(timer => clearTimeout(timer)), []);
 
-  const value: JournalContextValue = { journals, update, load, flush, retry, status: userId => statuses[userId] || 'idle' };
+  const value: JournalContextValue = { journals, update, load, flush, retry, clear, status: userId => statuses[userId] || 'idle' };
   return <JournalContext.Provider value={value}>{children}</JournalContext.Provider>;
 }
 
@@ -203,5 +234,6 @@ export function useJournal(userId: string) {
     flush: () => context.flush(userId),
     status: context.status(userId),
     retry: () => context.retry(userId),
+    clear: () => context.clear(userId),
   };
 }

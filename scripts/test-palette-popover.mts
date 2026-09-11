@@ -37,7 +37,11 @@ assert.ok(cssContent.includes(':global(.dark) .theme_yellow'), 'CSS must define 
 assert.ok(cssContent.includes('@keyframes popoverFloatIn'), 'CSS must define @keyframes popoverFloatIn');
 assert.ok(cssContent.includes('transform-origin: bottom left'), 'CSS must have transform-origin: bottom left for popovers');
 assert.ok(cssContent.includes('cubic-bezier(0.16, 1, 0.3, 1)'), 'CSS must use strong fluid cubic-bezier curve');
-assert.ok(cssContent.includes('grid-template-columns: repeat(5, 1fr)'), 'CSS grid must be 5 columns');
+assert.ok(
+  cssContent.includes('grid-template-columns: repeat(5, 1fr)') ||
+  cssContent.includes('grid-template-columns: repeat(5, minmax(0, 1fr))'),
+  'CSS grid must be 5 columns'
+);
 
 for (const c of NOTE_COLORS) {
   assert.ok(cssContent.includes(`.theme_${c.id}`), `CSS must define .theme_${c.id}`);

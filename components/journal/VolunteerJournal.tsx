@@ -278,29 +278,7 @@ export function VolunteerJournal({
 }) {
   const { state, update, flush, status, retry } = useJournal(volunteerId);
 
-  // Automatic one-time migration of previous shift entries into keep notes
-  useEffect(() => {
-    if ((!state.notes || state.notes.length === 0) && state.entries && Object.keys(state.entries).length > 0) {
-      const migrated: KeepNote[] = Object.entries(state.entries)
-        .filter(([, e]) => e && (e.text?.trim() || e.title?.trim()))
-        .map(([day, e]) => ({
-          id: newNoteId(),
-          title: e.title?.trim() || `Turno ${formatChipDate(day)}`,
-          html: e.html || '',
-          text: e.text || '',
-          shiftDay: day,
-          color: 'default',
-          pattern: 'none',
-          isPinned: false,
-          tags: e.tags || [],
-          createdAt: new Date(`${day}T12:00:00`).toISOString(),
-          updatedAt: new Date().toISOString(),
-        }));
-      if (migrated.length > 0) {
-        update(current => ({ ...current, notes: migrated, entries: {}, drafts: {} }));
-      }
-    }
-  }, [state.entries, state.notes, update]);
+
 
   // Search & Filter state
   const [search, setSearch] = useState('');
@@ -735,14 +713,15 @@ export function VolunteerJournal({
   const confirmDeleteNote = () => {
     if (!noteToDelete) return;
     const noteId = noteToDelete.id;
+    editDirty.current = false;
+    if (editingNote?.id === noteId) {
+      setEditingNote(null);
+    }
     update(current => ({
       ...current,
       notes: (current.notes || []).filter(n => n.id !== noteId),
     }));
     void flush();
-    if (editingNote?.id === noteId) {
-      setEditingNote(null);
-    }
     setNoteToDelete(null);
     showToast('Nota eliminada');
   };

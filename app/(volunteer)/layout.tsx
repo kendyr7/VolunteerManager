@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { logout } from "@/app/actions/auth";
 import { preserveBrowserPushOnLogout } from '@/lib/push/browser';
 import { clearPreparedDashboardSession } from '@/lib/dashboard-session-cache';
+import { clearBrowserClient } from '@/lib/supabase/client';
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { MobileThemeMenu } from "@/components/mobile-theme-menu";
 import { useThemePreference } from "@/lib/use-theme-preference";
@@ -50,6 +51,7 @@ export default function VolunteerLayout({
 
   const handleLogoutClick = async () => {
     clearPreparedDashboardSession();
+    clearBrowserClient();
     const { pushRevoked } = await logout();
     await preserveBrowserPushOnLogout(pushRevoked);
     window.location.href = "/login";

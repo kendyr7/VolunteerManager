@@ -5,6 +5,9 @@ import { VolunteerScheduleService } from '@/lib/services/volunteer-schedule.serv
 import { VolunteerJournal } from '@/components/journal/VolunteerJournal';
 import { getJournalDays } from '@/lib/journal-days';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export const metadata = {
   title: 'Mi diario | Volunteer Manager',
   description: 'Tus recuerdos y sentimientos de cada día de servicio',
