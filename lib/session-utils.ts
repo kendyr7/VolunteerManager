@@ -54,6 +54,18 @@ export function getGuatemalaHourFloat(dateInput: Date | string): number {
 }
 
 /**
+ * Minimum percentage of an assigned shift's duration required for it to be considered completed.
+ * Default: 0.5 (50% of the shift duration, e.g. 2.5h for T1, 2.0h for T2/T3/T4).
+ */
+export const MIN_ASSIGNED_SHIFT_COMPLETION_RATIO = 0.5;
+
+/**
+ * Minimum worked minutes required to earn an additional (unassigned) shift.
+ * A volunteer must work at least 2.0 hours (120 minutes) within the additional shift's window.
+ */
+export const MIN_ADDITIONAL_SHIFT_MINUTES = 120;
+
+/**
  * Mathematical Temporal Intersection Engine between session and assigned shifts
  * max(sessionStartHour, shiftStartHour) < min(sessionEndHour, shiftEndHour)
  */
@@ -107,8 +119,27 @@ export function inferShiftsForSession(
     // An explicitly confirmed early arrival is already attendance in the first
     // shift of its block, even before the scheduled start (or if it leaves early).
     const earlyArrival = block?.startShiftKey === shiftKey && sessionStartHour < shiftStartHour;
-    if (overlapStart < overlapEnd || earlyArrival) {
-      matched.push(official);
+
+    if (sessionEnd) {
+      // Completed session:
+      // An explicitly confirmed early arrival is recognized as attendance in the first shift of its block.
+      // For all other shifts, require completion threshold (at least 50% of shift duration, min 60 min).
+      if (earlyArrival) {
+        matched.push(official);
+      } else {
+        const effectiveDurationHours = Math.max(0, overlapEnd - overlapStart);
+        const effectiveDurationMinutes = effectiveDurationHours * 60;
+        const minRequiredMinutes = Math.max(60, official.durationMinutes * MIN_ASSIGNED_SHIFT_COMPLETION_RATIO);
+
+        if (effectiveDurationMinutes >= minRequiredMinutes) {
+          matched.push(official);
+        }
+      }
+    } else {
+      // Open session: match immediately upon any presence or confirmed early arrival
+      if (overlapStart < overlapEnd || earlyArrival) {
+        matched.push(official);
+      }
     }
   }
 
@@ -121,6 +152,7 @@ export function inferShiftsForSession(
  *
  * Scheduled rows remain unchanged: this is attendance recognition, not a new
  * planning assignment. Open sessions never earn additional shifts.
+ * Requires at least MIN_ADDITIONAL_SHIFT_MINUTES (120 min) within the additional shift.
  */
 export function inferAdditionalCompletedShifts(
   dayKey: string,
@@ -150,12 +182,15 @@ export function inferAdditionalCompletedShifts(
   let sessionEndHour = getGuatemalaHourFloat(sessionEnd);
   if (sessionEndHour < sessionStartHour) sessionEndHour += 24;
 
+  const minAdditionalHours = MIN_ADDITIONAL_SHIFT_MINUTES / 60; // 2.0 hours
+
   return availableShifts.filter(shift => {
     if (assignedSet.has(shift.shiftKey)) return false;
     if (shift.endHour <= originalBlockEnd) return false;
     const overlapStart = Math.max(originalBlockEnd, sessionStartHour, shift.startHour);
     const overlapEnd = Math.min(sessionEndHour, shift.endHour);
-    return overlapStart < overlapEnd;
+    const overlapHours = Math.max(0, overlapEnd - overlapStart);
+    return overlapHours >= minAdditionalHours;
   });
 }
 

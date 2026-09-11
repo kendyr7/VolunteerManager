@@ -1519,9 +1519,9 @@ export function VolunteerProfileView({
                       let labelColor = "text-text-dim/40";
 
                       if (outCheck && isAdditional) {
-                        statusStyle = "bg-[#4d7cfe]/15 border-[#4d7cfe]/35 text-[#4d7cfe] shadow-sm";
-                        iconContent = <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">add_task</span>;
-                        labelColor = "text-[#4d7cfe] font-bold";
+                        statusStyle = "bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm";
+                        iconContent = <span className="material-symbols-outlined text-[15px] text-slate-500">add_task</span>;
+                        labelColor = "text-slate-500 font-bold";
                       } else if (outCheck) {
                         statusStyle = "bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm";
                         iconContent = <span className="material-symbols-outlined text-[15px] text-slate-500">check</span>;
@@ -1623,7 +1623,7 @@ export function VolunteerProfileView({
                           {(isAdditional || (isAdmin && mode === 'coordinator')) && (
                             <div className="h-4 mt-1 flex items-center justify-center shrink-0">
                               {isAdditional ? (
-                                <span className="text-[8px] font-black uppercase tracking-wide text-[#4d7cfe]">Adicional</span>
+                                <span className="text-[8px] font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">Adicional</span>
                               ) : outCheck ? (
                                 <button
                                   type="button"
@@ -1661,7 +1661,7 @@ export function VolunteerProfileView({
                             {session.relatedShiftKeys.length > 0 ? session.relatedShiftKeys.join(' + ') : 'Asistencia'}
                           </span>
                           {session.additionalShiftKeys.length > 0 && (
-                            <span className="rounded-full border border-[#4d7cfe]/30 bg-[#4d7cfe]/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-[#4d7cfe]">
+                            <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               Adicional: {session.additionalShiftKeys.join(', ')}
                             </span>
                           )}

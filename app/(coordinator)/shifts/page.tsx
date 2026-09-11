@@ -1378,7 +1378,7 @@ export default function ShiftsPage() {
                                   >
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
                                       {isAdditional ? (
-                                        <span className="shrink-0 rounded-full border border-[#4d7cfe]/30 bg-[#4d7cfe]/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-[#4d7cfe]">
+                                        <span className="shrink-0 rounded-full border border-slate-500/30 bg-slate-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-slate-400 dark:text-slate-400">
                                           Adicional
                                         </span>
                                       ) : (
@@ -1668,7 +1668,7 @@ export default function ShiftsPage() {
                                     >
                                       <div className="flex items-center gap-2 min-w-0 flex-1">
                                         {isAdditional ? (
-                                          <span className="shrink-0 rounded-full border border-[#4d7cfe]/30 bg-[#4d7cfe]/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-[#4d7cfe]">
+                                          <span className="shrink-0 rounded-full border border-slate-500/30 bg-slate-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-slate-400 dark:text-slate-400">
                                             Adicional
                                           </span>
                                         ) : (

@@ -1,0 +1,1178 @@
+{
+  "anomaliesShortMultiShift": [],
+  "veryShortSessions": [
+    {
+      "sessionId": "9d8c41cb-8791-45fc-8d4c-7b455ad41136",
+      "volunteerId": "5ca4a68d-c81d-4549-abcb-2a44df35745d",
+      "name": "Dora Maria Carcache Suazo",
+      "phone": "+50558240084",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "05:57 p. m.",
+      "endGt": "05:57 p. m.",
+      "durMins": 0.2,
+      "status": "completed",
+      "assignedShifts": [
+        "T3"
+      ],
+      "inferredCompletedShifts": [
+        "T3"
+      ],
+      "multiShiftCount": 1
+    },
+    {
+      "sessionId": "b8a27a24-d306-49c2-aa5e-96fbf4df19c7",
+      "volunteerId": "6e83adbf-786b-4644-b348-b3cdc6289e90",
+      "name": "Dagoberto Santos Navarrete Mairena",
+      "phone": "+50586463344",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "05:57 p. m.",
+      "endGt": "05:57 p. m.",
+      "durMins": 0.3,
+      "status": "completed",
+      "assignedShifts": [
+        "T3"
+      ],
+      "inferredCompletedShifts": [
+        "T3"
+      ],
+      "multiShiftCount": 1
+    },
+    {
+      "sessionId": "fa92248a-1261-4b78-b737-04f78ee8a6a4",
+      "volunteerId": "744c6274-39d2-4c90-966d-54f41a58ee99",
+      "name": "Aura Gricelda Somarriba",
+      "phone": "+50588024109",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "05:53 p. m.",
+      "endGt": "05:53 p. m.",
+      "durMins": 0.4,
+      "status": "completed",
+      "assignedShifts": [
+        "T3"
+      ],
+      "inferredCompletedShifts": [
+        "T3"
+      ],
+      "multiShiftCount": 1
+    },
+    {
+      "sessionId": "46cf378d-3905-4c8c-b3d2-aee486057273",
+      "volunteerId": "4e1d8d70-b9c8-466c-974a-2e743b60df36",
+      "name": "Steve Alberto Perez Rocha",
+      "phone": "+50582065014",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:00 a. m.",
+      "endGt": "07:10 a. m.",
+      "durMins": 10.1,
+      "status": "completed",
+      "assignedShifts": [
+        "T3",
+        "T4",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T1"
+      ],
+      "multiShiftCount": 1
+    }
+  ],
+  "multipleShiftsMarked": [
+    {
+      "sessionId": "9eb58018-d8ea-438a-9bff-03e458c7f5dd",
+      "volunteerId": "ad110571-56e1-42d0-91fd-28fb831440d8",
+      "name": "Yahoska Zulay Ortiz Castillo",
+      "phone": "+50582525033",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "05:09 p. m.",
+      "endGt": "08:21 p. m.",
+      "durMins": 192.4,
+      "status": "completed",
+      "assignedShifts": [
+        "T4",
+        "T3"
+      ],
+      "inferredCompletedShifts": [
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "4d8fd4c0-651a-4931-ad97-c80e73e81ae3",
+      "volunteerId": "6dda2b70-6811-48de-911f-33740085eca8",
+      "name": "Bismarck Alberto Vega Guillén",
+      "phone": "+50587851983",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "02:56 p. m.",
+      "endGt": "08:38 p. m.",
+      "durMins": 342,
+      "status": "completed",
+      "assignedShifts": [
+        "T4",
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "inferredCompletedShifts": [
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 3
+    },
+    {
+      "sessionId": "51a9cc83-abb7-40be-ab79-08a9224dec4b",
+      "volunteerId": "4e1d8d70-b9c8-466c-974a-2e743b60df36",
+      "name": "Steve Alberto Perez Rocha",
+      "phone": "+50582065014",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "02:51 p. m.",
+      "endGt": "08:01 p. m.",
+      "durMins": 309.8,
+      "status": "completed",
+      "assignedShifts": [
+        "T3",
+        "T4",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "a1b1ec60-a3e2-48b7-af82-4c70b7a70952",
+      "volunteerId": "344d29c2-4b78-44fc-9713-cd3c57ce56d6",
+      "name": "(Traducción) Andrea Santamaria Robles Chacon",
+      "phone": "+50583270189",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "02:09 p. m.",
+      "endGt": "08:20 p. m.",
+      "durMins": 371.1,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T3",
+        "T4"
+      ],
+      "inferredCompletedShifts": [
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "d179c005-78f6-4e18-b22c-a8273a43f928",
+      "volunteerId": "f14c13ed-0898-4fb9-b24a-2ab906aa96a7",
+      "name": "Luz María Rayo Navarrete",
+      "phone": "+50588728192",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "02:09 p. m.",
+      "endGt": "08:54 p. m.",
+      "durMins": 405.5,
+      "status": "completed",
+      "assignedShifts": [
+        "T3",
+        "T4"
+      ],
+      "inferredCompletedShifts": [
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "e3b2ad21-709d-42d0-bf95-6e392dad2cf5",
+      "volunteerId": "6e381538-e1f7-4201-8d44-0a169164b789",
+      "name": "Yarley Jared Sánchez Núñez",
+      "phone": "+50577269112",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "02:02 p. m.",
+      "endGt": "08:43 p. m.",
+      "durMins": 401.1,
+      "status": "completed",
+      "assignedShifts": [
+        "T3",
+        "T4"
+      ],
+      "inferredCompletedShifts": [
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "4643da76-1149-4f48-a7a7-c6a40e2a95e4",
+      "volunteerId": "6b9d4bc4-b917-4887-abe4-73385e06d23c",
+      "name": "Mauricio Celestino Cuarezma Mendez",
+      "phone": "+50585857058",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "01:42 p. m.",
+      "endGt": "08:03 p. m.",
+      "durMins": 381.2,
+      "status": "completed",
+      "assignedShifts": [
+        "T3",
+        "T4",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "01920434-8539-49cb-97f2-d698b8645663",
+      "volunteerId": "89635067-7585-4e11-852d-7d8e09461c88",
+      "name": "Heyzel Noelia Escobar de Ferrufino",
+      "phone": "+50584546697",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "01:29 p. m.",
+      "endGt": "06:01 p. m.",
+      "durMins": 271.9,
+      "status": "completed",
+      "assignedShifts": [
+        "T4",
+        "T3"
+      ],
+      "inferredCompletedShifts": [
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "986c7dae-39bc-4a8a-86d6-980b5bfb0e17",
+      "volunteerId": "2bf4d649-9192-4813-bebb-fd9cd6efa4e2",
+      "name": "Ada Lucía Valverde Mejía",
+      "phone": "+50584494105",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "12:31 p. m.",
+      "endGt": "08:55 p. m.",
+      "durMins": 503.9,
+      "status": "completed",
+      "assignedShifts": [
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "inferredCompletedShifts": [
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 3
+    },
+    {
+      "sessionId": "49816226-b787-4085-9329-06ec0e0d913e",
+      "volunteerId": "0ca862e2-c950-42e0-b48d-efc54402a514",
+      "name": "Alma Yanira Calero Velázquez",
+      "phone": "+50585823940",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:30 a. m.",
+      "endGt": "11:51 a. m.",
+      "durMins": 321.6,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "760f3e55-85b4-4067-bd04-a97b42ef725d",
+      "volunteerId": "21fef061-6381-42e3-abc0-910b033a9f80",
+      "name": "María Mercedes Córdoba Galeano",
+      "phone": "+50582647688",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "11:17 a. m.",
+      "endGt": "05:48 p. m.",
+      "durMins": 391.1,
+      "status": "completed",
+      "assignedShifts": [
+        "T3",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T2",
+        "T3"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "8e320226-0d65-438b-a1b7-4f8718b12064",
+      "volunteerId": "5c6ddba4-9dd3-4e6c-9512-888e4eb01dde",
+      "name": "(Traducción) Aleer Liriel Vicente Salinas",
+      "phone": "+50587703265",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "11:16 a. m.",
+      "endGt": "03:22 p. m.",
+      "durMins": 246.2,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "b48a9f37-ae70-4d5d-bb98-d240a8c18a11",
+      "volunteerId": "d6c6c440-48e6-4011-961b-665460ffd427",
+      "name": "Maria Amalia Paizano Castillo",
+      "phone": "+50585300906",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "11:07 a. m.",
+      "endGt": "08:00 p. m.",
+      "durMins": 532.5,
+      "status": "completed",
+      "assignedShifts": [
+        "T3",
+        "T4"
+      ],
+      "inferredCompletedShifts": [
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "03f0315e-65e6-43d0-be22-26d3f0c2a3eb",
+      "volunteerId": "e5be3304-c23b-4bfe-ab91-16203d2df320",
+      "name": "Melida Alejandra Somarriba Mejia",
+      "phone": "+50576442550",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "11:01 a. m.",
+      "endGt": "05:59 p. m.",
+      "durMins": 417.6,
+      "status": "completed",
+      "assignedShifts": [
+        "T2",
+        "T3"
+      ],
+      "inferredCompletedShifts": [
+        "T2",
+        "T3"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "95f033b3-5774-4454-b723-09cda28c4f25",
+      "volunteerId": "a6737ad4-0369-410e-8d5a-2949250dde60",
+      "name": "Ana Lucia Solorzano Navarro",
+      "phone": "+50581912155",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "10:58 a. m.",
+      "endGt": "03:00 p. m.",
+      "durMins": 241.8,
+      "status": "completed",
+      "assignedShifts": [
+        "T2",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "5d1656aa-672c-40fa-aea2-9ad41bc2a1e4",
+      "volunteerId": "e8b0fb1e-f672-4f80-a595-891ca39e68e8",
+      "name": "Martha Fabiola Hernandez Narvaez",
+      "phone": "+50589539139",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "10:42 a. m.",
+      "endGt": "05:55 p. m.",
+      "durMins": 433.1,
+      "status": "completed",
+      "assignedShifts": [
+        "T3",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T2",
+        "T3"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "9aec0ebd-0d78-4f5e-9a63-29fd003907d0",
+      "volunteerId": "059c7544-90df-4f28-878e-d33e6e4a17ad",
+      "name": "Heyssel Vanessa López Rocha",
+      "phone": "+50577382477",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "08:38 a. m.",
+      "endGt": "03:24 p. m.",
+      "durMins": 405.8,
+      "status": "completed",
+      "assignedShifts": [
+        "T2",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "793f9121-aae1-47a4-8ec0-116974710c29",
+      "volunteerId": "f6bc2b40-eefd-4ef3-8c25-ddbd68d6911f",
+      "name": "Maria Esther Lopez Rodriguez",
+      "phone": "+50578197642",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "08:10 a. m.",
+      "endGt": "07:51 p. m.",
+      "durMins": 700.8,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "7d119a09-fd0b-4296-a48d-0e29b93427cc",
+      "volunteerId": "d9a0d950-9cee-48ad-88b2-90ad92d99841",
+      "name": "Angelina Lineth López Rodríguez",
+      "phone": "+50584954447",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "08:10 a. m.",
+      "endGt": "06:05 p. m.",
+      "durMins": 594.8,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "c5b834c6-48fe-450e-9ffa-1417bd65406c",
+      "volunteerId": "b54ec6c7-3781-4e53-a4f0-31868a8c2f8e",
+      "name": "Ashley Marizza Morales Álvarez",
+      "phone": "+50583660213",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:57 a. m.",
+      "endGt": "12:11 p. m.",
+      "durMins": 254.3,
+      "status": "completed",
+      "assignedShifts": [],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "1b8dd0f1-40e0-415e-9cb9-c983f8332cd5",
+      "volunteerId": "facdf99c-5c8e-423e-b40c-f887431a79bf",
+      "name": "Yamil Aguirre",
+      "phone": "+50588284887",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:53 a. m.",
+      "endGt": "05:56 p. m.",
+      "durMins": 603,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T3",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "multiShiftCount": 3
+    },
+    {
+      "sessionId": "631e83be-461d-4cd9-b0d1-c7a4e47aea21",
+      "volunteerId": "40ee7ecc-76db-4523-89d0-803fccd8a6e4",
+      "name": "Maria Isabel Morales de Rojas",
+      "phone": "+50583732945",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:34 a. m.",
+      "endGt": "03:42 p. m.",
+      "durMins": 487.8,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "362a071f-2381-4815-8dd6-5a3e8d5dc02e",
+      "volunteerId": "bda67612-1d47-4f6c-8f8d-cff6cf713078",
+      "name": "Kenet Masiel Ruiz Malianos",
+      "phone": "+50582247568",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:33 a. m.",
+      "endGt": "07:05 p. m.",
+      "durMins": 692.1,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "178efb85-be20-43c6-8ce5-c6eb83b6ba22",
+      "volunteerId": "c3238eab-3b69-43c5-8083-ffa5a702c424",
+      "name": "(Traducción) Chelsy Daleska Morales Hernandez",
+      "phone": "+50578343508",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:32 a. m.",
+      "endGt": "04:14 p. m.",
+      "durMins": 521.7,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "2d69282d-47e5-435c-b2f4-0e679a5aabc6",
+      "volunteerId": "5c6ddba4-9dd3-4e6c-9512-888e4eb01dde",
+      "name": "(Traducción) Aleer Liriel Vicente Salinas",
+      "phone": "+50587703265",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:32 a. m.",
+      "endGt": "11:16 a. m.",
+      "durMins": 223.9,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "276b6ba0-708d-4083-a7dd-3192bee3f0cf",
+      "volunteerId": "8dacb6ee-ebdf-4e8f-9181-76e9ef2d10b8",
+      "name": "David Ezequiel Calero",
+      "phone": "+50558034886",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:30 a. m.",
+      "endGt": "04:23 p. m.",
+      "durMins": 533.2,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "9d40eac6-845e-41ff-85eb-d406c072d48b",
+      "volunteerId": "ad876fa7-280d-45c5-93dc-fad482a75125",
+      "name": "Maria Eugenia Calero",
+      "phone": "+50585251995",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:29 a. m.",
+      "endGt": "03:06 p. m.",
+      "durMins": 456.2,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "465772b1-58a3-41a4-97e0-a21dfeabb494",
+      "volunteerId": "5de42e85-f2c5-4be8-b7a9-a4a263acafe8",
+      "name": "María Belén Lacayo Aranda",
+      "phone": "+50586118814",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:21 a. m.",
+      "endGt": "01:17 p. m.",
+      "durMins": 355.7,
+      "status": "completed",
+      "assignedShifts": [
+        "T2",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "2c2bce5f-b7ab-49c3-9a4f-4afe535a66e6",
+      "volunteerId": "9ab45e27-3b5e-438a-8ed3-bf92dede45b3",
+      "name": "Eddy Salvador Salinas Perez",
+      "phone": "+50581334170",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:20 a. m.",
+      "endGt": "07:41 p. m.",
+      "durMins": 740.1,
+      "status": "completed",
+      "assignedShifts": [
+        "T2",
+        "T3",
+        "T4",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 4
+    },
+    {
+      "sessionId": "4730180c-377d-42a1-9fcd-3110a68b66da",
+      "volunteerId": "1596e16b-d6f5-491b-827a-a55188e95f07",
+      "name": "Cristel Marvelyn Bojorge López",
+      "phone": "+50582496547",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:19 a. m.",
+      "endGt": "02:54 p. m.",
+      "durMins": 454.9,
+      "status": "completed",
+      "assignedShifts": [
+        "T2",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "af90304c-1025-46f4-bdd7-6b8989863122",
+      "volunteerId": "d5e4f607-3045-48e9-830a-b7de980a969a",
+      "name": "Marina Isabel Ruiz Martinez",
+      "phone": "+50577372670",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:16 a. m.",
+      "endGt": "06:03 p. m.",
+      "durMins": 646.3,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "3a255634-8351-45d9-8f16-dec6d0874607",
+      "volunteerId": "c2c9d329-95a4-4fb9-8fdc-20dba60b0081",
+      "name": "Maria Isela Pantin Clarence",
+      "phone": "+50589355874",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:11 a. m.",
+      "endGt": "03:17 p. m.",
+      "durMins": 485.5,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "4f19e90e-3c16-4999-a128-212c3357bde3",
+      "volunteerId": "dbc839ee-f1e4-4824-9d1c-5758ea2ef94b",
+      "name": "Yerlin Yolina Monte",
+      "phone": "+50585151807",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:10 a. m.",
+      "endGt": "03:15 p. m.",
+      "durMins": 484.6,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "5b00866e-7a21-4c1c-85ea-d673e0d247de",
+      "volunteerId": "b712bd4e-4372-4ebb-8c36-de426a14c066",
+      "name": "Teresa Espinoza Alemán de Cuadra",
+      "phone": "+50584329261",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:07 a. m.",
+      "endGt": "12:00 p. m.",
+      "durMins": 293.7,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "ccfabe7b-e69f-475a-8f42-cc189826cef7",
+      "volunteerId": "93941ff3-2e10-4b8a-b39f-afc4571952c7",
+      "name": "Danny Enrique Cuadra Contrera",
+      "phone": "+50558212312",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "07:07 a. m.",
+      "endGt": "12:00 p. m.",
+      "durMins": 293.8,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "c1b21064-6098-4e4c-9a12-b1729d25d6e3",
+      "volunteerId": "6dda2b70-6811-48de-911f-33740085eca8",
+      "name": "Bismarck Alberto Vega Guillén",
+      "phone": "+50587851983",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:58 a. m.",
+      "endGt": "02:55 p. m.",
+      "durMins": 477.4,
+      "status": "completed",
+      "assignedShifts": [
+        "T4",
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "multiShiftCount": 3
+    },
+    {
+      "sessionId": "c4c10724-7cd5-46a5-a6ec-d4f794179c1e",
+      "volunteerId": "18ebd206-8a9a-4735-8225-9015880697ca",
+      "name": "Steven Alberto Almendarez",
+      "phone": "+50557071784",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:56 a. m.",
+      "endGt": "03:11 p. m.",
+      "durMins": 494.9,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2",
+        "T4"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "6c102b4d-7531-472b-b134-387e35c171c8",
+      "volunteerId": "ac49641b-74a3-4184-8e6f-09f276c87252",
+      "name": "Alvaro Misael Marenco Guerrero",
+      "phone": "+50586119122",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:51 a. m.",
+      "endGt": "02:55 p. m.",
+      "durMins": 483.9,
+      "status": "completed",
+      "assignedShifts": [
+        "T4",
+        "T2",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "85508f88-1faa-4889-bb2c-c6989cccd0aa",
+      "volunteerId": "843b8263-bc56-4341-9462-be643fb383d2",
+      "name": "Marvin Aurelio Castillo Leiva",
+      "phone": "+50586729132",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:51 a. m.",
+      "endGt": "12:26 p. m.",
+      "durMins": 334.9,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "05cd578f-c1b5-48ba-a75c-f501ce29088e",
+      "volunteerId": "21e1fffb-0420-4e7d-b456-1c35bedb6748",
+      "name": "Litzy Zitlialy Miranda Bejarano",
+      "phone": "+50586710540",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:42 a. m.",
+      "endGt": "03:06 p. m.",
+      "durMins": 504.3,
+      "status": "completed",
+      "assignedShifts": [
+        "T2",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "f906aaaf-c1ac-487d-beff-4699b7afb8c9",
+      "volunteerId": "2220db95-6503-4e8c-bacc-9a90304c26ed",
+      "name": "Cristina del Carmen Maltéz Gutiérrez",
+      "phone": "+50577771532",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:41 a. m.",
+      "endGt": "03:00 p. m.",
+      "durMins": 498.3,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "95569086-8e07-49c6-9ea7-5e08d812cd0d",
+      "volunteerId": "fecd129b-1ae3-4b70-9a58-864b4d9c532f",
+      "name": "Nelson Ariel Larios Rios",
+      "phone": "+50578623607",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:41 a. m.",
+      "endGt": "03:14 p. m.",
+      "durMins": 512.2,
+      "status": "completed",
+      "assignedShifts": [
+        "T2",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "73b1ce5d-ddea-45f0-9c80-d1e28c3daefd",
+      "volunteerId": "632f76dd-f9a5-405a-84d4-c6ff0b85b87c",
+      "name": "Alexa Jordania Espinoza Barahona",
+      "phone": "+50576736094",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:41 a. m.",
+      "endGt": "04:13 p. m.",
+      "durMins": 572.4,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "6b4250ed-e1c2-4843-a948-17455a38e797",
+      "volunteerId": "3f551707-78c3-429d-876c-8054d3cdde7c",
+      "name": "Edgar Joel Alvarado Tapia",
+      "phone": "+50557142019",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:40 a. m.",
+      "endGt": "03:05 p. m.",
+      "durMins": 504.8,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "fe54171d-e943-40dd-a197-6d128aa33bae",
+      "volunteerId": "bc108c8c-496b-479a-9f3a-173c86f146e0",
+      "name": "Luder Moisés Gonzalez Santana",
+      "phone": "+50584958566",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:38 a. m.",
+      "endGt": "07:51 p. m.",
+      "durMins": 792.8,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "multiShiftCount": 3
+    },
+    {
+      "sessionId": "36ead199-cb60-47ec-9fd6-3a0ebe45132a",
+      "volunteerId": "a72c3536-5372-4dc6-ac05-7eba70d3294f",
+      "name": "Maria Modesta Roa",
+      "phone": "+50584022055",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:37 a. m.",
+      "endGt": "03:20 p. m.",
+      "durMins": 523.3,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "d193ce64-f1f7-4bee-8b1c-cc8338e38d04",
+      "volunteerId": "215534ad-e186-4adf-8bec-d621a0940c8d",
+      "name": "Alfredo Jose Ponce Saballos",
+      "phone": "+50577380438",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:37 a. m.",
+      "endGt": "03:16 p. m.",
+      "durMins": 519.5,
+      "status": "completed",
+      "assignedShifts": [
+        "T2",
+        "T1"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "a3371300-14e6-4c2d-9b00-4577c3571bfa",
+      "volunteerId": "731746a6-9a42-4ca9-9be8-30d6cc7489dc",
+      "name": "Kendyr Gabriel Quintanilla Estrada",
+      "phone": "+50578912506",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:35 a. m.",
+      "endGt": "08:53 p. m.",
+      "durMins": 858.3,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "multiShiftCount": 4
+    },
+    {
+      "sessionId": "0073b211-0e10-43a8-9d49-f7bd2e660591",
+      "volunteerId": "b85fff28-b083-404e-8c53-4c531461bfde",
+      "name": "Dulce María Sandigo campos",
+      "phone": "+50585829996",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:35 a. m.",
+      "endGt": "12:35 p. m.",
+      "durMins": 360.2,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "587e3766-921f-4ec9-a1a9-22d8950b10eb",
+      "volunteerId": "0d272605-8bee-4f11-a582-3301256b4347",
+      "name": "María Teresa Gaitán",
+      "phone": "+50588366182",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:33 a. m.",
+      "endGt": "11:49 a. m.",
+      "durMins": 315.9,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    },
+    {
+      "sessionId": "13ae6227-11d3-4261-828c-1876b9c630bd",
+      "volunteerId": "fffcebda-bc00-45d1-b681-4d5c74e8f353",
+      "name": "Lizverania Calero Guevara",
+      "phone": "+50582840600",
+      "dayKey": "jue 10",
+      "dateGt": "10/9/2026",
+      "startGt": "06:29 a. m.",
+      "endGt": "02:55 p. m.",
+      "durMins": 505.2,
+      "status": "completed",
+      "assignedShifts": [
+        "T1",
+        "T2"
+      ],
+      "inferredCompletedShifts": [
+        "T1",
+        "T2"
+      ],
+      "multiShiftCount": 2
+    }
+  ]
+}

@@ -133,14 +133,22 @@ check('Una sesion abierta no acredita turnos adicionales', () => {
   assert.equal(data.sessionAdditionalCompletedShiftKeys[`${id}-${day}-T2`], undefined);
   assert.deepEqual(state(data, 0, onlyT1), { isCheckedIn: true, isCheckedOut: false });
 });
-check('Al cerrar despues de T1 se acreditan T2 T3 y T4 como adicionales', () => {
+check('Al cerrar despues de T1 se acreditan adicionales solo si cumplen minimo de 2 horas', () => {
   const onlyT1 = [shifts[0]];
-  const extended = { ...completed, started_at: at('06:51'), ended_at: at('17:14') };
+  // 17:14 solo tiene 14 min en T4 (17:00-17:14), por lo que acredita T2 y T3, pero NO T4
+  const extended1714 = { ...completed, started_at: at('06:51'), ended_at: at('17:14') };
   assert.deepEqual(
-    inferAdditionalCompletedShifts(day, extended.started_at, extended.ended_at, ['T1']).map(shift => shift.shiftKey),
+    inferAdditionalCompletedShifts(day, extended1714.started_at, extended1714.ended_at, ['T1']).map(shift => shift.shiftKey),
+    ['T2', 'T3'],
+  );
+
+  // Al extender hasta las 19:00 (2 horas dentro de T4), se acreditan T2, T3 y T4
+  const extended1900 = { ...completed, started_at: at('06:51'), ended_at: at('19:00') };
+  assert.deepEqual(
+    inferAdditionalCompletedShifts(day, extended1900.started_at, extended1900.ended_at, ['T1']).map(shift => shift.shiftKey),
     ['T2', 'T3', 'T4'],
   );
-  const data = derive(onlyT1, [extended], at('17:14'));
+  const data = derive(onlyT1, [extended1900], at('19:00'));
   assert.deepEqual(data.globalShifts[id][day], ['T1']);
   for (const shiftKey of ['T2', 'T3', 'T4']) {
     const key = `${id}-${day}-${shiftKey}`;
@@ -148,13 +156,13 @@ check('Al cerrar despues de T1 se acreditan T2 T3 y T4 como adicionales', () => 
     assert.equal(data.checkedOutMap[key], true);
     assert.ok(data.additionalCompletedByDayShift[day][shiftKey].includes(id));
   }
-  const extraT2 = findAttendanceSessionForShift(day, 'T2', [extended], onlyT1, id);
+  const extraT2 = findAttendanceSessionForShift(day, 'T2', [extended1900], onlyT1, id);
   assert.equal(extraT2.is_additional_shift, true);
   assert.equal(extraT2.shift_completed_at, new RealDate(at('15:00')).toISOString());
 });
 check('El perfil suma los adicionales sin alterar el cumplimiento programado', () => {
   const onlyT1 = [shifts[0]];
-  const extended = { ...completed, started_at: at('06:51'), ended_at: at('17:14') };
+  const extended = { ...completed, started_at: at('06:51'), ended_at: at('19:00') };
   const metrics = getVolunteerProfileMetrics(id, onlyT1, [], [extended]);
   assert.equal(metrics.scheduledShiftsCount, 1);
   assert.equal(metrics.scheduledCompletedShiftsCount, 1);
@@ -163,7 +171,28 @@ check('El perfil suma los adicionales sin alterar el cumplimiento programado', (
   assert.equal(metrics.attendancePercentage, 100);
   assert.deepEqual(metrics.sessionsList[0].relatedShiftKeys, ['T1', 'T2', 'T3', 'T4']);
   assert.deepEqual(metrics.sessionsList[0].additionalShiftKeys, ['T2', 'T3', 'T4']);
-  assert.equal(metrics.totalWorkedMinutes, 623);
+  assert.equal(metrics.totalWorkedMinutes, 729);
+});
+check('Extension de 1 hora no acredita turno adicional pero conserva horas trabajadas', () => {
+  const onlyT1 = [shifts[0]];
+  // Salió a las 13:00 (1 hora después de las 12:00)
+  const ext1h = { ...completed, started_at: at('07:00'), ended_at: at('13:00') };
+  assert.deepEqual(inferAdditionalCompletedShifts(day, ext1h.started_at, ext1h.ended_at, ['T1']), []);
+  const metrics = getVolunteerProfileMetrics(id, onlyT1, [], [ext1h]);
+  assert.equal(metrics.scheduledCompletedShiftsCount, 1);
+  assert.equal(metrics.additionalCompletedShiftsCount, 0);
+  assert.equal(metrics.totalWorkedMinutes, 360); // 6 horas completas
+});
+check('Turno programado T1+T2 con salida a las 11:51 solo completa T1 y no T2', () => {
+  const t1t2 = [shifts[0], shifts[1]];
+  const session1151 = { ...completed, started_at: at('06:30'), ended_at: at('11:51') };
+  const matched = inferShiftsForSession(day, session1151.started_at, session1151.ended_at, ['T1', 'T2']);
+  assert.deepEqual(matched.map(s => s.shiftKey), ['T1']);
+});
+check('Escaneo accidental de segundos no completa el turno', () => {
+  const accidental = { ...completed, started_at: at('17:57'), ended_at: at('17:57:15') };
+  const matched = inferShiftsForSession(day, accidental.started_at, accidental.ended_at, ['T3']);
+  assert.deepEqual(matched, []);
 });
 check('Un turno separado no se marca durante el primer bloque', () => {
   assert.deepEqual(inferShiftsForSession(day, at('08:00'), at('12:00'), ['T1', 'T4']).map(s => s.shiftKey), ['T1']);
