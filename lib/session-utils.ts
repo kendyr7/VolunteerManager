@@ -1,4 +1,4 @@
-import { getOfficialShiftTime, parseDayKeyToDateStr, OfficialShiftTime } from './dates';
+import { getOfficialShiftTime, getOfficialShiftTimesList, parseDayKeyToDateStr, OfficialShiftTime } from './dates';
 
 export interface AttendanceSession {
   id: string;
@@ -113,6 +113,50 @@ export function inferShiftsForSession(
   }
 
   return matched;
+}
+
+/**
+ * Returns unassigned official shifts earned after a completed attendance session
+ * continued beyond the volunteer's original scheduled block.
+ *
+ * Scheduled rows remain unchanged: this is attendance recognition, not a new
+ * planning assignment. Open sessions never earn additional shifts.
+ */
+export function inferAdditionalCompletedShifts(
+  dayKey: string,
+  sessionStart: Date | string,
+  sessionEnd: Date | string | null | undefined,
+  assignedShiftKeys: string[] = [],
+): OfficialShiftTime[] {
+  if (!sessionStart || !sessionEnd) return [];
+
+  const availableShifts = getOfficialShiftTimesList(dayKey);
+  const assignedSet = new Set(assignedShiftKeys);
+
+  if (assignedShiftKeys.length === 0) {
+    return inferShiftsForSession(
+      dayKey,
+      sessionStart,
+      sessionEnd,
+      availableShifts.map(shift => shift.shiftKey),
+    );
+  }
+
+  const originalBlock = getContinuousScheduledBlockForSession(dayKey, sessionStart, assignedShiftKeys);
+  if (!originalBlock) return [];
+
+  const originalBlockEnd = getOfficialShiftTime(dayKey, originalBlock.endShiftKey).endHour;
+  const sessionStartHour = getGuatemalaHourFloat(sessionStart);
+  let sessionEndHour = getGuatemalaHourFloat(sessionEnd);
+  if (sessionEndHour < sessionStartHour) sessionEndHour += 24;
+
+  return availableShifts.filter(shift => {
+    if (assignedSet.has(shift.shiftKey)) return false;
+    if (shift.endHour <= originalBlockEnd) return false;
+    const overlapStart = Math.max(originalBlockEnd, sessionStartHour, shift.startHour);
+    const overlapEnd = Math.min(sessionEndHour, shift.endHour);
+    return overlapStart < overlapEnd;
+  });
 }
 
 /**

@@ -39,6 +39,7 @@ function roster(mode, now = at('10:00'), day = 'sáb 5', hasOpen = true) {
   return evaluate('app/(coordinator)/shifts/page.tsx', 'getAssignedVolunteers', {
     useCallback: fn => fn,
     contextIndexedAssignments: { [day]: { T1: { A: volunteers.map(v => v.id) } } },
+    contextAdditionalCompletedByDayShift: {},
     shiftDataIndex: { volunteerIdsByShift: new Map() },
     normalizeSearch: value => value.toLowerCase(),
     volunteerMap: new Map(volunteers.map(v => [v.id, v])),

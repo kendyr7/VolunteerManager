@@ -1,5 +1,5 @@
 import { getOperationalEventDays, formatDateShort, isSimulationEventDay, isOperationalEventDay } from "@/lib/dates";
-import { inferShiftsForSession, getSessionShiftCompletedAt } from '@/lib/session-utils';
+import { inferAdditionalCompletedShifts, inferShiftsForSession, getSessionShiftCompletedAt } from '@/lib/session-utils';
 import { computeBulkReliabilityMap } from "@/lib/services/volunteer-reliability.service";
 
 export interface CoordinatorVolunteerData {
@@ -148,6 +148,8 @@ export function processShiftsData(
   const completedSessionsByVolunteer: Record<string, CoordinatorSessionData[]> = {};
   const sessionOpenShiftKeys: Record<string, boolean> = {};
   const sessionCompletedShiftKeys: Record<string, boolean> = {};
+  const sessionAdditionalCompletedShiftKeys: Record<string, boolean> = {};
+  const additionalCompletedByDayShift: Record<string, Record<string, string[]>> = {};
 
   const assignedShiftKeysByVolunteerDay = new Map<string, string[]>();
   for (const shift of shiftsData) {
@@ -198,6 +200,19 @@ export function processShiftsData(
         sessionCompletedShiftKeys[k] = true;
         checkedInMap[k] = true;
         checkedOutMap[k] = true;
+      });
+
+      inferAdditionalCompletedShifts(dayKey, startedAt, endedAt, assignedForVolAndDay).forEach((rs) => {
+        const k = `${vId}-${dayKey}-${rs.shiftKey}`;
+        sessionCompletedShiftKeys[k] = true;
+        sessionAdditionalCompletedShiftKeys[k] = true;
+        checkedInMap[k] = true;
+        checkedOutMap[k] = true;
+        if (!additionalCompletedByDayShift[dayKey]) additionalCompletedByDayShift[dayKey] = {};
+        if (!additionalCompletedByDayShift[dayKey][rs.shiftKey]) additionalCompletedByDayShift[dayKey][rs.shiftKey] = [];
+        if (!additionalCompletedByDayShift[dayKey][rs.shiftKey].includes(vId)) {
+          additionalCompletedByDayShift[dayKey][rs.shiftKey].push(vId);
+        }
       });
     }
   });
@@ -254,6 +269,8 @@ export function processShiftsData(
     completedSessionsByVolunteer,
     sessionOpenShiftKeys,
     sessionCompletedShiftKeys,
+    sessionAdditionalCompletedShiftKeys,
+    additionalCompletedByDayShift,
   };
 }
 

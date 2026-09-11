@@ -442,6 +442,9 @@ export function VolunteerProfileView({
   }, [volunteer.id, externalShiftsByDay, EVENT_DAYS]);
 
   const isShiftCheckedOut = useCallback((dayKey: string, shiftKey: string): boolean => {
+    const sessionKey = `${volunteer.id}-${dayKey}-${shiftKey}`;
+    if (sessionAttendance.checkedOutMap[sessionKey]) return true;
+
     const dbRec = dbShiftRecords.find(r => r.day_key === dayKey && r.shift_key === shiftKey);
     if (dbRec) {
       const sessionState = getShiftAttendanceState({
@@ -491,6 +494,10 @@ export function VolunteerProfileView({
       !!(map as Record<string, boolean>)[`${dayKey}-${shiftKey}`]
     );
   }, [dbShiftRecords, auditLogs, externalCheckedOutMap, localCheckedOutMap, volunteer.id, sessionAttendance.checkedOutMap]);
+
+  const isAdditionalCompletedShift = useCallback((dayKey: string, shiftKey: string): boolean => (
+    Boolean(sessionAttendance.sessionAdditionalCompletedShiftKeys[`${volunteer.id}-${dayKey}-${shiftKey}`])
+  ), [sessionAttendance.sessionAdditionalCompletedShiftKeys, volunteer.id]);
 
   const isShiftCheckedIn = useCallback((dayKey: string, shiftKey: string): boolean => {
     if (isShiftCheckedOut(dayKey, shiftKey)) return false;
@@ -927,7 +934,7 @@ export function VolunteerProfileView({
   };
 
   // KPIs
-  const totalTurnos = Object.entries(shiftsByDay).reduce(
+  const scheduledTurnos = Object.entries(shiftsByDay).reduce(
     (acc, [, shifts]) => acc + shifts.length,
     0
   );
@@ -958,6 +965,8 @@ export function VolunteerProfileView({
       { includeSimulation: true },
     );
   }, [volunteer.id, dbShiftRecords, auditLogs, volunteerSessions]);
+
+  const totalTurnos = scheduledTurnos + profileMetrics.additionalCompletedShiftsCount;
 
   const kpiHoursDisplay = useMemo(() => {
     return {
@@ -998,6 +1007,7 @@ export function VolunteerProfileView({
           isActive: active,
           isCheckedIn: inCheck,
           isCheckedOut: outCheck,
+          isAdditional: isAdditionalCompletedShift(dayKey, t),
         };
       });
 
@@ -1021,6 +1031,7 @@ export function VolunteerProfileView({
     profileMetrics.sessionsList,
     isShiftCheckedIn,
     isShiftCheckedOut,
+    isAdditionalCompletedShift,
   ]);
 
   return (
@@ -1499,6 +1510,7 @@ export function VolunteerProfileView({
                       const active = assignedList.includes(t);
                       const inCheck = isShiftCheckedIn(dayKey, t);
                       const outCheck = isShiftCheckedOut(dayKey, t);
+                      const isAdditional = isAdditionalCompletedShift(dayKey, t);
 
                       const canClick = isEditingShifts || localEditingShifts;
 
@@ -1506,7 +1518,11 @@ export function VolunteerProfileView({
                       let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-text-dim/40">-</span>;
                       let labelColor = "text-text-dim/40";
 
-                      if (outCheck) {
+                      if (outCheck && isAdditional) {
+                        statusStyle = "bg-[#4d7cfe]/15 border-[#4d7cfe]/35 text-[#4d7cfe] shadow-sm";
+                        iconContent = <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">add_task</span>;
+                        labelColor = "text-[#4d7cfe] font-bold";
+                      } else if (outCheck) {
                         statusStyle = "bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm";
                         iconContent = <span className="material-symbols-outlined text-[15px] text-slate-500">check</span>;
                         labelColor = "text-slate-500 font-bold";
@@ -1521,7 +1537,9 @@ export function VolunteerProfileView({
                       }
 
                       const times = getShiftTimesFormatted(dayKey, t);
-                      const baseTitleText = outCheck
+                      const baseTitleText = isAdditional
+                        ? `Turno ${t} adicional completado | Entrada: ${times.startTime} · Salida: ${times.endTime}`
+                        : outCheck
                         ? `Turno ${t} Completado | Entrada: ${times.startTime} · Salida: ${times.endTime}`
                         : inCheck
                         ? `Turno ${t} en servicio (Check-in activo)`
@@ -1602,9 +1620,11 @@ export function VolunteerProfileView({
                           )}
 
                           {/* Acciones de Reversión Exclusivas para Admin (Espacio de altura fija para evitar desalineación) */}
-                          {isAdmin && mode === 'coordinator' && (
+                          {(isAdditional || (isAdmin && mode === 'coordinator')) && (
                             <div className="h-4 mt-1 flex items-center justify-center shrink-0">
-                              {outCheck ? (
+                              {isAdditional ? (
+                                <span className="text-[8px] font-black uppercase tracking-wide text-[#4d7cfe]">Adicional</span>
+                              ) : outCheck ? (
                                 <button
                                   type="button"
                                   disabled={isProcessingAudit}
@@ -1640,6 +1660,11 @@ export function VolunteerProfileView({
                           <span className={session.status === 'open' ? 'text-emerald-500' : 'text-slate-500'}>
                             {session.relatedShiftKeys.length > 0 ? session.relatedShiftKeys.join(' + ') : 'Asistencia'}
                           </span>
+                          {session.additionalShiftKeys.length > 0 && (
+                            <span className="rounded-full border border-[#4d7cfe]/30 bg-[#4d7cfe]/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-[#4d7cfe]">
+                              Adicional: {session.additionalShiftKeys.join(', ')}
+                            </span>
+                          )}
                           <span>Entrada: {formatSessionClock(session.startedAt)}</span>
                           <span aria-hidden="true">·</span>
                           <span>Salida: {formatSessionClock(session.endedAt)}</span>

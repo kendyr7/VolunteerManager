@@ -1,5 +1,5 @@
 import { getOfficialShiftTime } from "@/lib/dates";
-import { inferShiftsForSession, getSessionShiftCompletedAt } from "@/lib/session-utils";
+import { inferAdditionalCompletedShifts, inferShiftsForSession, getSessionShiftCompletedAt } from "@/lib/session-utils";
 
 export interface ShiftTimeResult {
   startTime: string;
@@ -26,6 +26,7 @@ interface AttendanceSessionTimeRecord {
   updated_at?: string;
   created_at?: string;
   shift_completed_at?: string | null;
+  is_additional_shift?: boolean;
 }
 
 function formatGuatemalaTime(value?: string | null): string | null {
@@ -67,12 +68,20 @@ export function findAttendanceSessionForShift(
       const startedAt = session?.started_at || session?.startedAt || '';
       const endedAt = session?.ended_at ?? session?.endedAt ?? null;
       if (!startedAt) return false;
-      return inferShiftsForSession(
+      const assignedKeys = assignedShiftKeys.length > 0 ? assignedShiftKeys : [shiftKey];
+      const isAssignedMatch = inferShiftsForSession(
         dayKey,
         startedAt,
         endedAt,
-        assignedShiftKeys.length > 0 ? assignedShiftKeys : [shiftKey],
+        assignedKeys,
       ).some((related) => related.shiftKey === shiftKey);
+      const isAdditionalMatch = Boolean(endedAt) && inferAdditionalCompletedShifts(
+        dayKey,
+        startedAt,
+        endedAt,
+        assignedShiftKeys,
+      ).some((related) => related.shiftKey === shiftKey);
+      return isAssignedMatch || isAdditionalMatch;
     })
     .sort((left, right) => {
       const leftTime = new Date(left.updated_at || left.started_at || left.startedAt || left.created_at || 0).getTime();
@@ -80,12 +89,20 @@ export function findAttendanceSessionForShift(
       return rightTime - leftTime;
     })[0] || null;
   if (!session) return null;
+  const startedAt = session.started_at || session.startedAt || '';
+  const endedAt = session.ended_at ?? session.endedAt;
+  const additionalShifts = inferAdditionalCompletedShifts(dayKey, startedAt, endedAt, assignedShiftKeys);
+  const isAdditionalShift = additionalShifts.some(shift => shift.shiftKey === shiftKey);
+  const completionKeys = isAdditionalShift
+    ? Array.from(new Set([...assignedShiftKeys, ...additionalShifts.map(shift => shift.shiftKey)]))
+    : (assignedShiftKeys.length > 0 ? assignedShiftKeys : [shiftKey]);
   return {
     ...session,
+    is_additional_shift: isAdditionalShift,
     shift_completed_at: getSessionShiftCompletedAt(
-      dayKey, shiftKey, session.started_at || session.startedAt || '',
-      session.ended_at ?? session.endedAt,
-      assignedShiftKeys.length > 0 ? assignedShiftKeys : [shiftKey],
+      dayKey, shiftKey, startedAt,
+      endedAt,
+      completionKeys,
     ),
   };
 }

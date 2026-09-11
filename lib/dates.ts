@@ -7,6 +7,7 @@ export const SIMULATION_EVENT_DATE = new Date(2026, 8, 5);
 export const SIMULATION_EVENT_DATE_ISO = '2026-09-05';
 export const SIMULATION_EVENT_DAY_KEY = 'sáb 5';
 export const SIMULATION_EVENT_SHIFT_KEY = 'T1';
+export const EARLY_CHECK_IN_MINUTES = 30;
 
 export type EventDayKind = 'official' | 'simulation';
 export type ShiftKey = 'T1' | 'T2' | 'T3' | 'T4';

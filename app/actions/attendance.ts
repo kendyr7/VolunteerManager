@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 import { broadcastShiftSync, broadcastSessionSync } from "@/lib/services/shift-broadcast.service";
 import { requireCapability, requireVolunteerCapability, requireVolunteerSelfOrCapability } from "@/lib/authorization";
 import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
-import { getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay, parseGuatemalaShiftEnd } from "@/lib/dates";
+import { EARLY_CHECK_IN_MINUTES, getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay, parseGuatemalaShiftEnd } from "@/lib/dates";
 import { getVolunteerReliabilityMetrics, computeBulkReliabilityMap } from "@/lib/services/volunteer-reliability.service";
 import { buildEventDayKeys } from '@/lib/coordinator-data';
 import { AttendanceSession, getGuatemalaHourFloat, getContinuousScheduledBlockForSession, requiresSessionExitResolution, inferShiftsForSession, validateSessionConstraints, getSessionShiftCompletedAt } from "@/lib/session-utils";
@@ -820,11 +820,14 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
   });
 
   const currentHour = getGuatemalaHourFloat(new Date());
+  // Treat the 30 minutes before the official start as part of the live QR
+  // check-in window so the assigned shift is recognized without manual selection.
   const activeAssignments = (shifts || []).filter((shift: any) => {
     if ((shift.day_key || '').toLowerCase().trim() !== currentDayKey) return false;
     if (!isShiftAvailableForDay(shift.day_key, shift.shift_key)) return false;
     const official = getOfficialShiftTime(shift.day_key, shift.shift_key);
-    return currentHour >= official.startHour && currentHour < official.endHour;
+    const earliestCheckInHour = official.startHour - (EARLY_CHECK_IN_MINUTES / 60);
+    return currentHour >= earliestCheckInHour && currentHour < official.endHour;
   });
 
   if (!operationalDayKeys.has(currentDayKey) || activeAssignments.length === 0) {

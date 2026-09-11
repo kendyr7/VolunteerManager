@@ -158,6 +158,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll
       mobileDrawerDayGroup: null, history: [], dbHistory: [], state: 'idle', errorMsg: '',
       autoResetTimeoutRef: { current: null }, playWarningBeep: () => {}, playSuccessBeep: () => {},
       triggerVibration: () => {}, startScanning: () => {}, setSessionCount: () => {},
+      SCAN_CONFIRMATION_DURATION_MS: 4000,
       refresh: async () => snapshot(), ...initial,
       fetchDbHistory: async () => actions.getHistoricalAttendanceLogs(),
       checkoutError: '',
@@ -507,13 +508,13 @@ async function run() {
     await flow.actions.closeAttendanceSessionAction({ sessionId: flow.tables.attendance_sessions[0].id });
     return flow;
   }
-  await verify('Reabrir turno continuo reabre su sesion y permite cerrarla otra vez', async () => {
+  await verify('Reabrir turno continuo conserva los turnos vencidos cerrados y permite cerrar otra vez', async () => {
     const flow = await closedFlow();
     const start = flow.tables.attendance_sessions[0].started_at;
     Object.assign(flow.tables.shifts[1], { checked_in: true, checked_out: true, checked_out_at: at('15:00') });
     const result = await flow.auditActions.reopenCompletedShiftAction(reopenInput);
     assert.equal(result.success, true);
-    assert.deepEqual(flow.snapshot().map(row => row.isCheckedIn), [true, true]);
+    assert.deepEqual(flow.snapshot().map(row => row.isCheckedIn), [false, true]);
     assert.equal(flow.tables.attendance_sessions.length, 1);
     await flow.auditActions.reopenCompletedShiftAction(reopenInput);
     assert.equal(flow.tables.attendance_sessions[0].started_at, start);
@@ -563,9 +564,9 @@ async function run() {
     assert.equal(JSON.stringify(flow.tables.shifts[1]), other);
     assert.equal(flow.tables.attendance_sessions.length, 0);
   });
-  await verify('QR anticipado pide seleccion; seleccion manual abre sesion y activa perfil e historial inmediatamente', async () => {
+  await verify('Fuera de los 30 minutos anticipados pide seleccion manual', async () => {
     const flow = createHarness();
-    flow.advance('06:55');
+    flow.advance('06:29');
     const scanned = await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor');
     assert.equal(scanned.requiresManualSelection, true);
     assert.equal(flow.tables.attendance_sessions.length, 0);
@@ -573,12 +574,25 @@ async function run() {
     await ui.runHandler(shiftIds[0]);
     assert.equal(ui.state, 'success');
     assert.equal(flow.tables.attendance_sessions.length, 1);
-    assert.equal(flow.tables.attendance_sessions[0].started_at, new Date(at('06:55')).toISOString());
+    assert.equal(flow.tables.attendance_sessions[0].started_at, new Date(at('06:29')).toISOString());
     assert.ok(ui.history[0].sessionId);
     assert.deepEqual(flow.snapshot().map(s => s.isCheckedIn), [true, false]);
     assert.equal(flow.profile().inside('jue 10', 'T1'), true);
     assert.equal((await flow.actions.getHistoricalAttendanceLogs(150, 'jue 10')).length, 1);
     assert.ok(flow.events.some(e => e.table === 'attendance_sessions'));
+  });
+  await verify('QR reconoce automaticamente T1 desde 30 minutos antes', async () => {
+    for (const time of ['06:30', '06:40']) {
+      const flow = createHarness();
+      flow.advance(time);
+      const scanned = await flow.actions.checkInVolunteer(flow.qr, 'internal-test-actor');
+      assert.equal(scanned.success, true, time);
+      assert.equal(scanned.action, 'opened', time);
+      assert.equal(scanned.requiresManualSelection, undefined, time);
+      assert.equal(flow.tables.attendance_sessions.length, 1, time);
+      assert.equal(flow.tables.attendance_sessions[0].started_at, new Date(at(time)).toISOString(), time);
+      assert.deepEqual(flow.snapshot().map(s => s.isCheckedIn), [true, false], time);
+    }
   });
   await verify('Entrada anticipada permite cerrar por QR el bloque continuo sin duplicar sesiones', async () => {
     const flow = createHarness(); flow.advance('06:55');

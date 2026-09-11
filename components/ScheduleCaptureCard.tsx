@@ -16,6 +16,7 @@ export interface DayScheduleItem {
     isActive: boolean;
     isCheckedIn: boolean;
     isCheckedOut: boolean;
+    isAdditional: boolean;
     timeFormatted?: { startTime: string; endTime: string };
   }[];
   assignedAreas: { shiftKey: string; area: ShiftAreaDetails }[];
@@ -25,6 +26,7 @@ export interface DayScheduleItem {
     startedAt?: string | null;
     endedAt?: string | null;
     relatedShiftKeys: string[];
+    additionalShiftKeys: string[];
   }[];
 }
 
@@ -144,7 +146,11 @@ export const ScheduleCaptureCard = forwardRef<HTMLDivElement, ScheduleCaptureCar
                       let labelColor = 'text-text-dim/40';
                       let icon = <span className="text-[13px] font-bold text-text-dim/40">-</span>;
 
-                      if (s.isCheckedOut) {
+                      if (s.isCheckedOut && s.isAdditional) {
+                        statusStyle = 'bg-[#4d7cfe]/15 border-[#4d7cfe]/35 text-[#4d7cfe] shadow-sm';
+                        labelColor = 'text-[#4d7cfe] font-bold';
+                        icon = <span className="text-sm font-black leading-none text-[#4d7cfe]">+</span>;
+                      } else if (s.isCheckedOut) {
                         statusStyle = 'bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm';
                         labelColor = 'text-slate-500 font-bold';
                         icon = <Check className="w-3.5 h-3.5 text-slate-500" strokeWidth={3} />;
@@ -187,6 +193,11 @@ export const ScheduleCaptureCard = forwardRef<HTMLDivElement, ScheduleCaptureCar
                         <span className={session.status === 'open' ? 'text-emerald-500 font-bold' : 'text-slate-500 font-bold'}>
                           {session.relatedShiftKeys.length > 0 ? session.relatedShiftKeys.join(' + ') : 'Asistencia'}
                         </span>
+                        {session.additionalShiftKeys.length > 0 && (
+                          <span className="rounded-full border border-[#4d7cfe]/30 bg-[#4d7cfe]/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-[#4d7cfe]">
+                            Adicional: {session.additionalShiftKeys.join(', ')}
+                          </span>
+                        )}
                         <span>Entrada: {formatSessionClock(session.startedAt)}</span>
                         <span aria-hidden="true">·</span>
                         <span>Salida: {formatSessionClock(session.endedAt)}</span>
@@ -228,6 +239,10 @@ export const ScheduleCaptureCard = forwardRef<HTMLDivElement, ScheduleCaptureCar
                 <Check className="w-2.5 h-2.5 text-emerald-500" strokeWidth={3} />
               </span>
               <span className="text-text font-medium text-xs">Asistió (Check-in)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded bg-[#4d7cfe]/15 border border-[#4d7cfe]/35 flex items-center justify-center text-[11px] font-black text-[#4d7cfe]">+</span>
+              <span className="text-text font-medium text-xs">Adicional</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-4 h-4 rounded bg-slate-500/15 border border-slate-500/30 flex items-center justify-center">

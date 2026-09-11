@@ -1,5 +1,5 @@
 import { getUnifiedShiftTimes, getUnifiedShiftWorkedMinutes, formatUnifiedDuration } from '@/lib/shift-calculations';
-import { inferShiftsForSession, calculateSessionMinutes, getSessionShiftCompletedAt } from '@/lib/session-utils';
+import { inferAdditionalCompletedShifts, inferShiftsForSession, calculateSessionMinutes, getSessionShiftCompletedAt } from '@/lib/session-utils';
 import { isSimulationEventDay, isOperationalEventDay } from '@/lib/dates';
 
 export interface VolunteerShiftItem {
@@ -11,6 +11,7 @@ export interface VolunteerShiftItem {
   checkedInAt?: string | null;
   checkedOutAt?: string | null;
   workedMinutes: number;
+  isAdditional: boolean;
 }
 
 export interface VolunteerSessionItem {
@@ -23,6 +24,7 @@ export interface VolunteerSessionItem {
   workedMinutes: number;
   provisionalMinutes: number;
   relatedShiftKeys: string[];
+  additionalShiftKeys: string[];
 }
 
 export interface VolunteerProfileMetrics {
@@ -33,6 +35,8 @@ export interface VolunteerProfileMetrics {
   kpiLabel: 'MIN.' | 'HORAS';
   
   completedShiftsCount: number;
+  scheduledCompletedShiftsCount: number;
+  additionalCompletedShiftsCount: number;
   scheduledShiftsCount: number;
   attendancePercentage: number;
   
@@ -66,6 +70,8 @@ export function getVolunteerProfileMetrics(
       kpiValue: '0',
       kpiLabel: 'HORAS',
       completedShiftsCount: 0,
+      scheduledCompletedShiftsCount: 0,
+      additionalCompletedShiftsCount: 0,
       scheduledShiftsCount: 0,
       attendancePercentage: 100,
       shiftsList: [],
@@ -91,9 +97,13 @@ export function getVolunteerProfileMetrics(
   });
 
   let totalWorkedMinutes = 0;
-  let completedShiftsCount = 0;
+  let scheduledCompletedShiftsCount = 0;
+  let additionalCompletedShiftsCount = 0;
   const sessionsList: VolunteerSessionItem[] = [];
   const coveredShiftKeySet = new Set<string>();
+  const scheduledCompletedKeySet = new Set<string>();
+  const additionalCompletedKeySet = new Set<string>();
+  const additionalShiftDetails = new Map<string, { dayKey: string; shiftKey: string; startedAt: string; endedAt: string | null }>();
   const daysWithSessionsSet = new Set<string>();
 
   let isCheckedInNow = false;
@@ -125,15 +135,34 @@ export function getVolunteerProfileMetrics(
       .filter((s: any) => (s.day_key || s.dayKey || '').toLowerCase().trim() === dayKey.toLowerCase().trim())
       .map((s: any) => s.shift_key || s.shiftKey);
 
-    const relatedShifts = inferShiftsForSession(dayKey, startedAt, endedAt, assignedShiftKeys.length > 0 ? assignedShiftKeys : ['T1', 'T2', 'T3', 'T4']);
-    const relatedKeys = relatedShifts.map(s => s.shiftKey);
+    const relatedShifts = assignedShiftKeys.length > 0
+      ? inferShiftsForSession(dayKey, startedAt, endedAt, assignedShiftKeys)
+      : [];
+    const additionalShifts = status === 'completed'
+      ? inferAdditionalCompletedShifts(dayKey, startedAt, endedAt, assignedShiftKeys)
+      : [];
+    const assignedRelatedKeys = relatedShifts.map(s => s.shiftKey);
+    const additionalKeys = additionalShifts.map(s => s.shiftKey);
+    const relatedKeys = Array.from(new Set([...assignedRelatedKeys, ...additionalKeys]));
 
-    relatedKeys.forEach(k => {
+    assignedRelatedKeys.forEach(k => {
       if (status === 'completed' || getSessionShiftCompletedAt(dayKey, k, startedAt, endedAt, assignedShiftKeys)) {
-        if (!coveredShiftKeySet.has(`${dayKey}-${k}`)) {
-          coveredShiftKeySet.add(`${dayKey}-${k}`);
-          if (countsTowardOfficialMetrics) completedShiftsCount++;
+        const key = `${dayKey}-${k}`;
+        coveredShiftKeySet.add(key);
+        if (countsTowardOfficialMetrics && !scheduledCompletedKeySet.has(key)) {
+          scheduledCompletedKeySet.add(key);
+          scheduledCompletedShiftsCount++;
         }
+      }
+    });
+
+    additionalKeys.forEach(k => {
+      const key = `${dayKey}-${k}`;
+      coveredShiftKeySet.add(key);
+      additionalShiftDetails.set(key, { dayKey, shiftKey: k, startedAt, endedAt });
+      if (countsTowardOfficialMetrics && !additionalCompletedKeySet.has(key)) {
+        additionalCompletedKeySet.add(key);
+        additionalCompletedShiftsCount++;
       }
     });
 
@@ -146,7 +175,8 @@ export function getVolunteerProfileMetrics(
       autoClosed,
       workedMinutes: calc.totalWorkedMinutes,
       provisionalMinutes: calc.provisionalMinutes,
-      relatedShiftKeys: relatedKeys
+      relatedShiftKeys: relatedKeys,
+      additionalShiftKeys: additionalKeys,
     };
 
     sessionsList.push(sessItem);
@@ -185,7 +215,7 @@ export function getVolunteerProfileMetrics(
     if (countsTowardOfficialMetrics && !hasSessionForThisDay && isCheckedOut && !countedKeys.has(key)) {
       countedKeys.add(key);
       totalWorkedMinutes += workedMinutes;
-      completedShiftsCount++;
+      scheduledCompletedShiftsCount++;
     }
 
     if (!hasSessionForThisDay && isCheckedIn && !isCheckedOut) {
@@ -201,6 +231,22 @@ export function getVolunteerProfileMetrics(
       checkedInAt: rec.checked_in_at || null,
       checkedOutAt: rec.checked_out_at || null,
       workedMinutes,
+      isAdditional: false,
+    });
+  });
+
+  additionalShiftDetails.forEach((detail, key) => {
+    if (shiftsList.some(shift => `${shift.dayKey}-${shift.shiftKey}` === key)) return;
+    shiftsList.push({
+      id: `additional-${volunteerId}-${key}`,
+      dayKey: detail.dayKey,
+      shiftKey: detail.shiftKey,
+      isCheckedIn: false,
+      isCheckedOut: true,
+      checkedInAt: detail.startedAt,
+      checkedOutAt: detail.endedAt,
+      workedMinutes: 0,
+      isAdditional: true,
     });
   });
 
@@ -221,8 +267,9 @@ export function getVolunteerProfileMetrics(
     return isOperationalEventDay(dKey) && (includeSimulation || !isSimulationEventDay(dKey));
   }).length;
   const attendancePercentage = scheduledShiftsCount > 0
-    ? Math.round((completedShiftsCount / scheduledShiftsCount) * 100)
+    ? Math.round((scheduledCompletedShiftsCount / scheduledShiftsCount) * 100)
     : 100;
+  const completedShiftsCount = scheduledCompletedShiftsCount + additionalCompletedShiftsCount;
 
   const activeShift = shiftsList.find(s => s.isCheckedIn && !s.isCheckedOut) || null;
   const nextShift = shiftsList.find(s => !s.isCheckedIn && !s.isCheckedOut) || null;
@@ -234,6 +281,8 @@ export function getVolunteerProfileMetrics(
     kpiValue,
     kpiLabel,
     completedShiftsCount,
+    scheduledCompletedShiftsCount,
+    additionalCompletedShiftsCount,
     scheduledShiftsCount,
     attendancePercentage,
     shiftsList,

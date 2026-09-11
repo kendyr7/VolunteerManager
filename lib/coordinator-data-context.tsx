@@ -68,6 +68,8 @@ interface CoordinatorDataContextValue {
   activeSessionsByVolunteer: Record<string, CoordinatorSessionData>;
   sessionOpenShiftKeys: Record<string, boolean>;
   sessionCompletedShiftKeys: Record<string, boolean>;
+  sessionAdditionalCompletedShiftKeys: Record<string, boolean>;
+  additionalCompletedByDayShift: Record<string, Record<string, string[]>>;
   shiftCounts: Record<string, number>;
   reliabilityMap: Record<string, number>;
   loading: boolean;
@@ -608,6 +610,8 @@ broadcast: session_sync
       activeSessionsByVolunteer: derived.activeSessionsByVolunteer,
       sessionOpenShiftKeys: derived.sessionOpenShiftKeys,
       sessionCompletedShiftKeys: derived.sessionCompletedShiftKeys,
+      sessionAdditionalCompletedShiftKeys: derived.sessionAdditionalCompletedShiftKeys,
+      additionalCompletedByDayShift: derived.additionalCompletedByDayShift,
       shiftCounts: derived.shiftCounts,
       reliabilityMap,
       loading,

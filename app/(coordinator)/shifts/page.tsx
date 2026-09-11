@@ -217,6 +217,7 @@ export default function ShiftsPage() {
     shiftsData: contextShiftsData,
     globalShifts: contextGlobalShifts,
     indexedAssignments: contextIndexedAssignments,
+    additionalCompletedByDayShift: contextAdditionalCompletedByDayShift,
     checkedInMap: contextCheckedInMap,
     checkedOutMap: contextCheckedOutMap,
     sessionsData: contextSessionsData,
@@ -609,8 +610,11 @@ export default function ShiftsPage() {
     const assignedIdsFromProps = Object.values(dayAssignments).flat();
 
     const dbShiftVols = shiftDataIndex.volunteerIdsByShift.get(`${normalizeSearch(dateKey)}|${shiftId}`) || [];
+    const additionalCompletedVols = viewMode === 'completed'
+      ? (contextAdditionalCompletedByDayShift[dateKey]?.[shiftId] || [])
+      : [];
 
-    const allCandidateIds = Array.from(new Set([...assignedIdsFromProps, ...dbShiftVols]));
+    const allCandidateIds = Array.from(new Set([...assignedIdsFromProps, ...dbShiftVols, ...additionalCompletedVols]));
     const result: VolunteerType[] = [];
     const priorities = new Map<string, number>();
     const liveRoster = isLiveShiftRoster(dateKey, shiftId, attendanceShiftKeys.has(`${dateKey}|${shiftId}`), rosterNow);
@@ -646,7 +650,7 @@ export default function ShiftsPage() {
 
     return result.sort((a, b) => (viewMode !== 'completed' ? (priorities.get(a.id)! - priorities.get(b.id)!) : 0)
       || a.committee.localeCompare(b.committee) || a.name.localeCompare(b.name));
-  }, [contextIndexedAssignments, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet, attendanceShiftKeys, rosterNow]);
+  }, [contextIndexedAssignments, contextAdditionalCompletedByDayShift, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet, attendanceShiftKeys, rosterNow]);
 
   const totalRosterCount = useMemo(() => EVENT_DAYS.reduce((total, day) => (
     total + getAvailableShiftKeys(day.key).reduce((dayTotal, shiftKey) => (
@@ -1353,6 +1357,7 @@ export default function ShiftsPage() {
                                 const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                 const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                 const attendanceSession = findAttendanceSessionForShift(key, t, contextSessionsData, rawShiftsData, vol.id);
+                                const isAdditional = Boolean(attendanceSession?.is_additional_shift);
                                 const attendanceStartedAt = attendanceSession?.started_at || shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
                                 const attendanceEndedAt = attendanceSession?.shift_completed_at || shiftRecord?.checked_out_at;
                                 const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
@@ -1372,12 +1377,18 @@ export default function ShiftsPage() {
                                     onClick={(e) => { e.stopPropagation(); handleEditClick(vol); }}
                                   >
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      <div
-                                        className={cn('w-2 h-2 rounded-full shrink-0', reminderDot.className)}
-                                        role="img"
-                                        title={reminderDot.label}
-                                        aria-label={reminderDot.label}
-                                      />
+                                      {isAdditional ? (
+                                        <span className="shrink-0 rounded-full border border-[#4d7cfe]/30 bg-[#4d7cfe]/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-[#4d7cfe]">
+                                          Adicional
+                                        </span>
+                                      ) : (
+                                        <div
+                                          className={cn('w-2 h-2 rounded-full shrink-0', reminderDot.className)}
+                                          role="img"
+                                          title={reminderDot.label}
+                                          aria-label={reminderDot.label}
+                                        />
+                                      )}
                                       <div className="flex flex-col min-w-0">
                                         <span className={`font-inter font-bold text-[12px] truncate group-hover:text-[#4d7cfe] transition-colors ${
                                           isCheckedOut ? 'text-gray-400 dark:text-gray-400 font-bold' : isCheckedIn ? 'text-emerald-400 font-extrabold' : 'text-text'
@@ -1387,7 +1398,7 @@ export default function ShiftsPage() {
                                         {isCheckedOut ? (
                                            <div className="flex flex-col gap-0.5 min-w-0">
                                              <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOverNextDay || elapsed?.isOver8Hours ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-500'}`}>
-                                               Completado {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
+                                               {isAdditional ? 'Turno adicional completado' : 'Completado'} {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
                                              </span>
                                              {elapsed?.isOverNextDay && (
                                                <button
@@ -1634,6 +1645,7 @@ export default function ShiftsPage() {
                                   const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                   const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                   const attendanceSession = findAttendanceSessionForShift(key, t, contextSessionsData, rawShiftsData, vol.id);
+                                  const isAdditional = Boolean(attendanceSession?.is_additional_shift);
                                   const attendanceStartedAt = attendanceSession?.started_at || shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
                                   const attendanceEndedAt = attendanceSession?.shift_completed_at || shiftRecord?.checked_out_at;
                                   const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
@@ -1655,12 +1667,18 @@ export default function ShiftsPage() {
                                       onClick={(e) => { e.stopPropagation(); toggleDay(key); handleEditClick(vol); }}
                                     >
                                       <div className="flex items-center gap-2 min-w-0 flex-1">
-                                        <div
-                                          className={cn('w-2 h-2 rounded-full shrink-0', reminderDot.className)}
-                                          role="img"
-                                          title={reminderDot.label}
-                                          aria-label={reminderDot.label}
-                                        />
+                                        {isAdditional ? (
+                                          <span className="shrink-0 rounded-full border border-[#4d7cfe]/30 bg-[#4d7cfe]/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-[#4d7cfe]">
+                                            Adicional
+                                          </span>
+                                        ) : (
+                                          <div
+                                            className={cn('w-2 h-2 rounded-full shrink-0', reminderDot.className)}
+                                            role="img"
+                                            title={reminderDot.label}
+                                            aria-label={reminderDot.label}
+                                          />
+                                        )}
                                         <div className="flex flex-col min-w-0">
                                           <span className={`font-inter font-bold text-[12px] truncate ${
                                             isCheckedOut ? 'text-gray-400 font-bold' : isCheckedIn ? 'text-emerald-300 font-extrabold' : 'text-white'
@@ -1670,7 +1688,7 @@ export default function ShiftsPage() {
                                           {isCheckedOut ? (
                                              <div className="flex flex-col gap-0.5 min-w-0">
                                                <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOverNextDay || elapsed?.isOver8Hours ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-400'}`}>
-                                                 Completado {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
+                                                 {isAdditional ? 'Turno adicional completado' : 'Completado'} {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
                                                </span>
                                                {elapsed?.isOverNextDay && (
                                                  <button

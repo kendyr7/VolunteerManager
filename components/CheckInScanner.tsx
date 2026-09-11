@@ -1297,7 +1297,7 @@ export function CheckInScanner({
                     <span>
                       {scanResult.outsideOperationalDay
                         ? 'Hoy no es una jornada operativa del cronograma. Para una prueba controlada, selecciona manualmente el turno que deseas marcar:'
-                        : 'No hay un turno activo en este horario exacto. Selecciona manualmente qué turno deseas marcar para este voluntario:'}
+                        : 'No hay un turno activo ni uno que comience dentro de los próximos 30 minutos. Selecciona manualmente qué turno deseas marcar para este voluntario:'}
                     </span>
                   </div>
 
