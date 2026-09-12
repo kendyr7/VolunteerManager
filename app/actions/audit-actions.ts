@@ -5,6 +5,8 @@ import { createActivityLog } from "./activity-actions";
 import { broadcastShiftSync, broadcastSessionSync } from "@/lib/services/shift-broadcast.service";
 import { requireCapability } from '@/lib/authorization';
 import { AttendanceSession, inferShiftsForSession } from '@/lib/session-utils';
+import { calculateShiftUpdatesAfterSessionRemoval, CorrectedShift } from '@/lib/session-correction';
+import { getVolunteerReliabilityMetrics } from '@/lib/services/volunteer-reliability.service';
 import { revalidatePath } from 'next/cache';
 
 /**
@@ -44,53 +46,68 @@ export async function undoVolunteerCheckInAction({
     actorName = authorization.name;
     actorRole = authorization.role;
     const supabase = await getAdminSupabase();
-
-    // 1. Obtener nombre del voluntario
-    const { data: vol } = await supabase
-      .from('volunteers')
-      .select('first_name, last_name')
-      .eq('id', volunteerId)
-      .single();
-
-    const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : 'Voluntario';
-
-    // 2. Limpiar marcas de entrada en la tabla shifts
-    const { data: updatedShift, error } = await supabase
-      .from('shifts')
-      .update({
-        checked_in: false,
-        checked_in_at: null
-      })
-      .eq('volunteer_id', volunteerId)
-      .eq('day_key', dayKey)
-      .eq('shift_key', shiftKey)
-      .select('*')
-      .maybeSingle();
-
-    if (error) {
-      return { success: false, error: error.message };
+    const [volResult, shiftsResult, sessionsResult] = await Promise.all([
+      supabase.from('volunteers').select('first_name, last_name').eq('id', volunteerId).maybeSingle(),
+      supabase.from('shifts').select('id, volunteer_id, day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at')
+        .eq('volunteer_id', volunteerId),
+      supabase.from('attendance_sessions').select('*').eq('volunteer_id', volunteerId),
+    ]);
+    if (volResult.error || shiftsResult.error || sessionsResult.error) {
+      return { success: false, error: 'No se pudo verificar la asistencia actual. Actualiza y vuelve a intentar.' };
+    }
+    if (!volResult.data) return { success: false, error: 'No se encontró el voluntario.' };
+    const volName = `${volResult.data.first_name || ''} ${volResult.data.last_name || ''}`.trim();
+    const shifts = (shiftsResult.data || []) as Array<CorrectedShift & { volunteer_id: string }>;
+    const dayShifts = shifts.filter(shift => shift.day_key === dayKey);
+    const targetShift = dayShifts.find(shift => shift.shift_key === shiftKey);
+    if (!targetShift) return { success: false, error: 'No se encontró el turno indicado.' };
+    const sessions = (sessionsResult.data || []) as AttendanceSession[];
+    const assignedKeys = dayShifts.map(shift => shift.shift_key);
+    const relatedOpenSessions = sessions.filter(session => session.day_key === dayKey && session.status === 'open'
+      && inferShiftsForSession(dayKey, session.started_at, null, assignedKeys).some(shift => shift.shiftKey === shiftKey));
+    if (relatedOpenSessions.length > 1) return { success: false, error: 'Hay varias sesiones abiertas asociadas a este turno. Actualiza y revisa la asistencia.' };
+    const openSession = relatedOpenSessions[0] || null;
+    if (!openSession && (!targetShift.checked_in && !targetShift.checked_in_at || targetShift.checked_out || targetShift.checked_out_at)) {
+      return { success: false, error: 'El turno ya no tiene una entrada abierta. Actualiza el historial.' };
     }
 
-    if (updatedShift) {
-      broadcastShiftSync({
-        eventType: 'UPDATE',
-        table: 'shifts',
-        record: updatedShift,
-      });
+    const shiftUpdates = openSession
+      ? calculateShiftUpdatesAfterSessionRemoval(openSession, sessions.filter(session => session.id !== openSession.id), dayShifts)
+      : [{ id: targetShift.id, checked_in: false, checked_in_at: null, checked_out: false, checked_out_at: null }];
+    if (!shiftUpdates.some(shift => shift.id === targetShift.id)) {
+      return { success: false, error: 'La sesión abierta ya no corresponde a ese turno. Actualiza el historial.' };
     }
-
-    // 3. Registrar auditoría inmutable
-    const timeStr = formatGuatemalaTime();
-    await createActivityLog({
-      userName: actorName,
-      userRole: actorRole,
-      actionType: 'Deshacer',
-      description: `Revirtió la entrada (Check-in) de ${volName}`,
-      details: `Turno ${shiftKey} (${dayKey}) revertido a estado Programado a las ${timeStr} (hora de Guatemala).`,
-      targetId: volunteerId
+    const patches = new Map(shiftUpdates.map(shift => [shift.id, shift]));
+    const updatedShifts = shifts.map(shift => ({ ...shift, ...(patches.get(shift.id) || {}) }));
+    const updatedSessions = sessions.filter(session => session.id !== openSession?.id);
+    const score = getVolunteerReliabilityMetrics(volunteerId, updatedShifts, updatedSessions).reliabilityScore;
+    const { data, error } = await supabase.rpc('undo_open_attendance_checkin', {
+      p_volunteer_id: volunteerId,
+      p_day_key: dayKey,
+      p_shift_key: shiftKey,
+      p_session_id: openSession?.id || null,
+      p_expected_started_at: openSession?.started_at || null,
+      p_actor_id: authorization.userId || '',
+      p_actor_name: actorName,
+      p_actor_role: actorRole,
+      p_shift_updates: shiftUpdates,
+      p_reliability_score: score,
     });
-
-    return { success: true, message: `Check-in de ${volName} revertido correctamente.` };
+    if (error) return { success: false, error: error.message };
+    const removedSession = data?.removedSession as AttendanceSession | null;
+    if (removedSession) await broadcastSessionSync({ eventType: 'DELETE', table: 'attendance_sessions', record: removedSession });
+    for (const update of shiftUpdates) {
+      const original = shifts.find(shift => shift.id === update.id);
+      if (original) broadcastShiftSync({ eventType: 'UPDATE', table: 'shifts', record: { ...original, ...update } });
+    }
+    for (const route of ['/shifts', '/volunteers', '/check-in', '/dashboard']) revalidatePath(route);
+    return {
+      success: true,
+      message: `Entrada de ${volName} revertida correctamente.`,
+      affectedShiftKeys: dayShifts.filter(shift => patches.has(shift.id)).map(shift => shift.shift_key),
+      removedSessionId: removedSession?.id || null,
+      shiftUpdates,
+    };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Error inesperado al deshacer check-in' };
   }

@@ -56,3 +56,31 @@ export function calculateAffectedShiftUpdates(
     };
   });
 }
+
+/** Rebuild only the assigned shifts touched by a cancelled open session. */
+export function calculateShiftUpdatesAfterSessionRemoval(
+  removed: AttendanceSession,
+  remainingSessions: AttendanceSession[],
+  shifts: CorrectedShift[],
+) {
+  const assignedKeys = shifts.map(shift => shift.shift_key);
+  const relatedKeys = (session: AttendanceSession) => new Set<string>(
+    inferShiftsForSession(session.day_key, session.started_at, session.ended_at, assignedKeys).map(shift => shift.shiftKey),
+  );
+  const affected = relatedKeys(removed);
+  return shifts.filter(shift => affected.has(shift.shift_key)).map(shift => {
+    const matching = remainingSessions.filter(session => session.day_key === removed.day_key && relatedKeys(session).has(shift.shift_key));
+    const starts = matching.map(session => session.started_at).sort();
+    const completions = matching.flatMap(session => {
+      const completedAt = getSessionShiftCompletedAt(session.day_key, shift.shift_key, session.started_at, session.ended_at, assignedKeys);
+      return completedAt ? [completedAt] : [];
+    }).sort();
+    return {
+      id: shift.id,
+      checked_in: matching.length > 0,
+      checked_in_at: starts[0] || null,
+      checked_out: completions.length > 0,
+      checked_out_at: completions.at(-1) || null,
+    };
+  });
+}

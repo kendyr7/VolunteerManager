@@ -302,6 +302,7 @@ export function VolunteerProfileView({
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [fetchedDbRecords, setFetchedDbRecords] = useState<any[]>([]);
   const [fetchedSessions, setFetchedSessions] = useState<any[]>([]);
+  const [undoneSessionIds, setUndoneSessionIds] = useState<Set<string>>(() => new Set());
   const [loadingAuditLogs, setLoadingAuditLogs] = useState<boolean>(false);
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState<boolean>(false);
   const [closedSessionToCorrect, setClosedSessionToCorrect] = useState<AttendanceSession | null>(null);
@@ -334,7 +335,7 @@ export function VolunteerProfileView({
       .filter((session: any) => (session.volunteer_id || session.volunteerId) === volunteer.id);
 
     for (const session of [...contextSessions, ...directlyFetchedSessions]) {
-      if (!session?.id) continue;
+      if (!session?.id || undoneSessionIds.has(session.id)) continue;
       const existing = merged.get(session.id);
       const existingTime = new Date(existing?.updated_at || existing?.started_at || 0).getTime();
       const incomingTime = new Date(session.updated_at || session.started_at || 0).getTime();
@@ -345,7 +346,7 @@ export function VolunteerProfileView({
       new Date(right.started_at || right.startedAt || 0).getTime()
       - new Date(left.started_at || left.startedAt || 0).getTime()
     ));
-  }, [coordinatorData?.sessionsData, fetchedSessions, preloadedAttendanceSessions, volunteer.id]);
+  }, [coordinatorData?.sessionsData, fetchedSessions, preloadedAttendanceSessions, undoneSessionIds, volunteer.id]);
 
   const sessionAttendance = useMemo(() => processShiftsData(
     dbShiftRecords,
@@ -848,12 +849,24 @@ export function VolunteerProfileView({
     });
 
     if (res.success) {
-      setLocalCheckedInMap(prev => ({ ...prev, [`${dayKey}-${shiftKey}`]: false }));
+      const affectedKeys = res.affectedShiftKeys || [shiftKey];
+      const updatesById = new Map((res.shiftUpdates || []).map(update => [update.id, update]));
+      const updatesByKey = new Map(dbShiftRecords.filter(rec => updatesById.has(rec.id))
+        .map(rec => [rec.shift_key, updatesById.get(rec.id)!]));
+      if (res.removedSessionId) setUndoneSessionIds(prev => new Set(prev).add(res.removedSessionId!));
+      setLocalCheckedInMap(prev => {
+        const next = { ...prev };
+        affectedKeys.forEach(key => { next[`${dayKey}-${key}`] = Boolean(updatesByKey.get(key)?.checked_in); });
+        return next;
+      });
+      setLocalCheckedOutMap(prev => {
+        const next = { ...prev };
+        affectedKeys.forEach(key => { next[`${dayKey}-${key}`] = Boolean(updatesByKey.get(key)?.checked_out); });
+        return next;
+      });
       setFetchedDbRecords(prev => prev.map(rec => {
-        if (rec.day_key === dayKey && rec.shift_key === shiftKey) {
-          return { ...rec, checked_in: false, checked_in_at: null, checked_out: false, checked_out_at: null };
-        }
-        return rec;
+        const update = updatesById.get(rec.id);
+        return update ? { ...rec, ...update } : rec;
       }));
 
       if (typeof window !== 'undefined') {
@@ -861,8 +874,10 @@ export function VolunteerProfileView({
           const stored = localStorage.getItem('vol_checkin_' + volunteer.id);
           if (stored) {
             const map = JSON.parse(stored);
-            delete map[`${volunteer.id}-${dayKey}-${shiftKey}`];
-            delete map[`${dayKey}-${shiftKey}`];
+            affectedKeys.filter(key => !updatesByKey.get(key)?.checked_in).forEach(key => {
+              delete map[`${volunteer.id}-${dayKey}-${key}`];
+              delete map[`${dayKey}-${key}`];
+            });
             localStorage.setItem('vol_checkin_' + volunteer.id, JSON.stringify(map));
           }
         } catch (e) {}
