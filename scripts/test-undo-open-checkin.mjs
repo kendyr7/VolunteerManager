@@ -9,7 +9,7 @@ const { calculateShiftUpdatesAfterSessionRemoval } = jiti(resolve('lib/session-c
 const db = new PGlite();
 await db.exec(`
   create role anon; create role authenticated; create role service_role;
-  create table public.volunteers (id uuid primary key, reliability_score integer);
+  create table public.volunteers (id uuid primary key);
   create table public.shifts (
     id uuid primary key, volunteer_id uuid, day_key text, shift_key text,
     checked_in boolean, checked_in_at timestamptz, checked_out boolean, checked_out_at timestamptz
@@ -24,7 +24,13 @@ await db.exec(`
     action_type text, description text, target_id text, details text
   );
 `);
-await db.exec(await readFile(new URL('../supabase/migrations/20261031000000_undo_open_attendance_checkin.sql', import.meta.url), 'utf8'));
+for (const migration of [
+  '20261028000000_add_reliability_score_to_volunteers.sql',
+  '20261030000000_correct_closed_attendance_session.sql',
+  '20261031000000_undo_open_attendance_checkin.sql',
+]) {
+  await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`, import.meta.url), 'utf8'));
+}
 
 const volunteer = '11111111-1111-4111-8111-111111111111';
 const session = '22222222-2222-4222-8222-222222222222';
