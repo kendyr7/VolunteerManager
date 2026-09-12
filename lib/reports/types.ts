@@ -1,4 +1,4 @@
-export type ReportShiftStatus = 'registered' | 'confirmed' | 'absent' | 'replaced';
+export type ReportShiftStatus = 'registered' | 'in_progress' | 'checkout_pending' | 'confirmed' | 'absent' | 'replaced';
 
 export interface ReportItem {
   registrationId: string;

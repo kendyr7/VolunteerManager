@@ -14,6 +14,8 @@ import { REPORT_SHEETS, REPORT_SHEET_ORDER, REPORT_THEME } from './theme';
 
 const STATUS_LABELS: Record<string, string> = {
   confirmed: 'Asistió',
+  in_progress: 'En turno',
+  checkout_pending: 'Salida pendiente',
   registered: 'Pendiente',
   absent: 'Ausente',
   replaced: 'Reemplazado',

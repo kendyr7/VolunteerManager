@@ -62,7 +62,7 @@ const source: ReportsData = {
   ],
   items: [
     item('r1', 0, officialDate, 1, 'confirmed'),
-    item('r2', 1, officialDate, 1, 'registered'),
+    item('r2', 1, officialDate, 1, 'in_progress'),
     item('r3', 0, secondDate, 2, 'absent'),
     item('r4', 2, officialDate, 1, 'confirmed'),
     item('r5', 2, secondDate, 2, 'registered'),
@@ -110,6 +110,7 @@ assert.equal(shiftData.rowCount, view.items.length + 6, 'The panel base includes
 assert.equal(volunteerData.rowCount, 8, 'The volunteer base respects the active committee filter');
 assert.equal(shiftData.getCell('A7').value, 'Ana Pérez');
 assert.equal(shiftData.getCell('A8').value, 'José López');
+assert.equal(shiftData.getCell('J8').value, 'En turno', 'An open attendance session is labeled in the exported Excel data');
 assert.equal(shiftData.getCell('A9').value, null, 'Other committees are excluded from the exported base');
 assert.equal(shiftData.getCell('G7').value, 'Recepción norte', 'Assigned area is present in the interactive detail base');
 const shiftHeaders = shiftData.getRow(6).values;

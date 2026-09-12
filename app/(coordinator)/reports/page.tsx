@@ -359,6 +359,9 @@ export default function ReportsPage() {
   }, [items]);
 
   const filteredItems = useMemo(() => reportView?.items || [], [reportView]);
+  const activeVolunteerCount = useMemo(() => new Set(
+    filteredItems.filter(item => item.status === 'in_progress').map(item => item.volunteerId),
+  ).size, [filteredItems]);
 
   const kpiStats = reportView?.kpiStats || {
     totalShifts: 0,
@@ -558,31 +561,35 @@ export default function ReportsPage() {
     setIsExporting(true);
     setExportError('');
     try {
+      // Attendance can change while this page stays open. Export a fresh snapshot.
+      const latest = await getReportsData({ includeSimulation });
+      if (latest.error || !latest.data) {
+        throw new Error(latest.error || 'No se pudieron actualizar los datos del reporte.');
+      }
+      const freshData = latest.data;
+      setData(freshData);
+      const filters = {
+        search: appliedSearch,
+        committeeIds: [...selectedCommittees],
+        neighborhoods: [...selectedNeighborhoods],
+        stakes: [...selectedStakes],
+        statuses: selectedStatuses as ReportShiftStatus[],
+        dates: [...selectedDates],
+      };
       const workbookInput = {
-        data,
-        view: reportView,
-        filters: {
-          search: appliedSearch,
-          committeeIds: [...selectedCommittees],
-          neighborhoods: [...selectedNeighborhoods],
-          stakes: [...selectedStakes],
-          statuses: selectedStatuses as ReportShiftStatus[],
-          dates: [...selectedDates],
-        },
+        data: freshData,
+        view: buildReportView(freshData, filters),
+        filters,
         includeSimulation,
         generatedAt: new Date(),
-        historyItems: [...sortedHistoryItems],
-        volunteerRanking: [...sortedVolunteerRanking],
-        committeeSummary: [...sortedCommitteeSummary],
-        recruitmentSummary: [...filteredRecruitmentSummary],
-        ageSegmentation: [...filteredAgeSegmentation],
-        dailyCoverage: [...sortedDailyCoverage],
       };
       const { downloadInteractiveReportWorkbook } = await import('@/lib/reports/export/interactive');
       await downloadInteractiveReportWorkbook(workbookInput);
     } catch (error) {
       console.error('Error exporting reports workbook:', error);
-      setExportError('No se pudo generar el archivo Excel. Intenta nuevamente.');
+      setExportError(error instanceof Error && error.message.startsWith('No se pudieron actualizar')
+        ? error.message
+        : 'No se pudo generar el archivo Excel. Intenta nuevamente.');
     } finally {
       setIsExporting(false);
     }
@@ -639,6 +646,8 @@ export default function ReportsPage() {
 
   const STATUS_LABELS: Record<string, string> = {
     'confirmed': 'Asistió',
+    'in_progress': 'En turno',
+    'checkout_pending': 'Salida pendiente',
     'registered': 'Pendiente',
     'absent': 'Ausente',
     'replaced': 'Reemplazado'
@@ -729,6 +738,8 @@ export default function ReportsPage() {
         <div className="grid grid-cols-2 gap-2">
           {[
             { id: 'confirmed', label: 'Asistió', color: 'border-emerald-500/30 text-emerald-500 bg-emerald-500/10' },
+            { id: 'in_progress', label: 'En turno', color: 'border-teal-500/30 text-teal-500 bg-teal-500/10' },
+            { id: 'checkout_pending', label: 'Salida pendiente', color: 'border-amber-500/30 text-amber-500 bg-amber-500/10' },
             { id: 'registered', label: 'Pendiente', color: 'border-blue-500/30 text-blue-500 bg-blue-500/10' },
             { id: 'absent', label: 'Ausente', color: 'border-rose-500/30 text-rose-500 bg-rose-500/10' },
             { id: 'replaced', label: 'Reemplazado', color: 'border-border text-text-dim bg-dark3' }
@@ -855,6 +866,17 @@ export default function ReportsPage() {
             >
               {includeSimulation ? 'Simulación incluida' : 'Incluir simulación'}
             </button>
+            <Button
+              type="button"
+              onClick={() => loadData(includeSimulation)}
+              variant="outline"
+              disabled={loading || isExporting}
+              className="rounded-full h-9 px-3 text-xs font-bold font-inter bg-dark2 border-border text-text hover:bg-dark3"
+              title="Actualizar la asistencia registrada hasta este momento"
+            >
+              <span className="material-symbols-outlined text-[16px]">refresh</span>
+              <span className="hidden sm:inline">Actualizar</span>
+            </Button>
             {/* Filter Toggle button */}
             <Button
               onClick={() => setIsFilterDrawerOpen(true)}
@@ -946,24 +968,24 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* KPI 3: Turnos Asistidos */}
+            {/* KPI 3: Personas actualmente en turno */}
             <div className="bg-dark2 p-4 sm:p-6 group transition-colors hover:bg-dark3">
               <div className="flex items-start justify-between mb-3 sm:mb-5">
                 <div className="p-2.5 bg-purple-500/10 text-purple-400 rounded-sm group-hover:bg-purple-500 group-hover:text-white transition-colors duration-300">
-                  <span className="material-symbols-outlined text-[18px]">done</span>
+                  <span className="material-symbols-outlined text-[18px]">group</span>
                 </div>
                 <div className="flex flex-col items-end">
-                  <span className="text-[10px] font-inter font-bold uppercase tracking-[0.15em] text-text-dim">Turnos</span>
+                  <span className="text-[10px] font-inter font-bold uppercase tracking-[0.15em] text-text-dim">En turno</span>
                   <Badge variant="secondary" className="bg-white/5 text-text-dim font-inter font-bold border-none text-[9px] px-2 h-4.5 mt-1">
-                    {pendingShifts} pend.
+                    {confirmedShifts} asist.
                   </Badge>
                 </div>
               </div>
               <div className="space-y-1">
                 <p className="text-2xl sm:text-3xl font-inter font-bold text-text tracking-tight">
-                  {confirmedShifts}
+                  {activeVolunteerCount}
                 </p>
-                <p className="text-[10px] text-text-dim font-inter font-bold">Turnos asistidos</p>
+                <p className="text-[10px] text-text-dim font-inter font-bold">Personas con entrada registrada y salida pendiente</p>
               </div>
             </div>
 
@@ -1264,14 +1286,13 @@ export default function ReportsPage() {
                             <td className="px-5 py-4 text-right">
                               <Badge variant="outline" className={`font-inter font-bold text-[10px] py-0.5 px-2 border ${
                                 item.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                                item.status === 'in_progress' ? 'bg-teal-500/10 text-teal-500 border-teal-500/20' :
+                                item.status === 'checkout_pending' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
                                 item.status === 'registered' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
                                 item.status === 'absent' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
                                 'bg-dark3 text-text-dim border-border'
                               }`}>
-                                {item.status === 'confirmed' && 'Asistió'}
-                                {item.status === 'registered' && 'Pendiente'}
-                                {item.status === 'absent' && 'Ausente'}
-                                {item.status === 'replaced' && 'Reemplazado'}
+                                {STATUS_LABELS[item.status] || item.status}
                               </Badge>
                             </td>
                           </tr>

@@ -10,6 +10,8 @@ import { INTERACTIVE_REPORT_SHEETS, REPORT_THEME } from './theme';
 
 const STATUS_OPTIONS: Array<{ key: ReportShiftStatus; label: string }> = [
   { key: 'confirmed', label: 'Asistió' },
+  { key: 'in_progress', label: 'En turno' },
+  { key: 'checkout_pending', label: 'Salida pendiente' },
   { key: 'registered', label: 'Pendiente' },
   { key: 'absent', label: 'Ausente' },
   { key: 'replaced', label: 'Reemplazado' },

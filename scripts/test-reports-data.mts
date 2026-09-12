@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { buildReportView } from '../lib/reports/aggregate';
+import { getSessionShiftCompletedAt, inferShiftsForSession } from '../lib/session-utils';
 import type { ReportsData } from '../lib/reports/types';
 
 const source: ReportsData = {
@@ -63,6 +64,37 @@ assert.equal(attendanceOnly.dailyCoverage.reduce((total, day) => total + day.mis
 const normalizedSearch = buildReportView(source, { search: 'maria', committeeIds: ['security'] });
 assert.equal(normalizedSearch.items.length, 1, 'Search ignores accents and combines with committee selection');
 check(normalizedSearch.recruitmentVolunteers[0]?.id === 'maria', 'Search applies to the complete volunteer population');
+
+const liveAttendanceSource: ReportsData = {
+  ...source,
+  items: source.items.map(item => item.registrationId === 'three'
+    ? { ...item, status: 'in_progress', durationMinutes: 0 }
+    : item),
+};
+const liveAttendance = buildReportView(liveAttendanceSource);
+assert.equal(liveAttendance.attendanceSummary.totalCheckedIn, 2, 'An open session counts as checked in before checkout');
+assert.equal(liveAttendance.kpiStats.confirmedShifts, 2, 'Live attendance appears in the main attendance count');
+assert.equal(liveAttendance.kpiStats.pendingShifts, 0, 'A checked-in volunteer is no longer pending');
+assert.equal(liveAttendance.committeeSummary.find(row => row.id === 'security')?.attendeesCount, 1, 'Committee attendees include people in an open shift');
+assert.equal(liveAttendance.kpiStats.totalMinutes, 120, 'Open sessions do not invent completed service time');
+assert.equal(buildReportView(liveAttendanceSource, { statuses: ['in_progress'] }).items.length, 1, 'The En turno filter isolates live shifts');
+const staleCheckoutSource: ReportsData = {
+  ...liveAttendanceSource,
+  items: liveAttendanceSource.items.map(item => item.registrationId === 'three'
+    ? { ...item, status: 'checkout_pending' }
+    : item),
+};
+assert.equal(buildReportView(staleCheckoutSource).attendanceSummary.totalCheckedIn, 2, 'A stale open session retains the recorded attendance');
+assert.equal(buildReportView(staleCheckoutSource, { statuses: ['in_progress'] }).items.length, 0, 'A stale open session is not counted as currently in turn');
+const openStart = '2026-09-12T15:30:00.000Z';
+const duringSecondShift = '2026-09-12T20:30:00.000Z';
+assert.deepEqual(
+  inferShiftsForSession('sáb 12', openStart, null, ['T1', 'T2'], duringSecondShift).map(shift => shift.shiftKey),
+  ['T1', 'T2'],
+  'A continuous open session reaches both scheduled shifts',
+);
+assert.ok(getSessionShiftCompletedAt('sáb 12', 'T1', openStart, null, ['T1', 'T2'], duringSecondShift), 'The earlier shift is attended before final checkout');
+assert.equal(getSessionShiftCompletedAt('sáb 12', 'T2', openStart, null, ['T1', 'T2'], duringSecondShift), null, 'Only the current shift remains En turno');
 
 const assignedByShift = { 1: 4, 2: 7, 3: 7, 4: 7 };
 const slotBalanceSource: ReportsData = {

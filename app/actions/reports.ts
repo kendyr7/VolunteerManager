@@ -7,7 +7,8 @@ import { hasCapability } from "@/lib/role-permissions";
 import { getActiveEventDays, getAvailableShiftKeys, getOfficialShiftTime, isSimulationEventDay, isOperationalEventDay, parseDayKeyToDateStr, parseGuatemalaShiftEnd } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { getGuatemalaHourFloat, calculateSessionMinutes, inferShiftsForSession } from "@/lib/session-utils";
+import { getGuatemalaHourFloat, calculateSessionMinutes, getSessionShiftCompletedAt, inferShiftsForSession } from "@/lib/session-utils";
+import { getGuatemalaDate } from "@/lib/scan-history";
 import type { ReportItem, ReportsData } from "@/lib/reports/types";
 
 export type { ReportItem, ReportsData } from "@/lib/reports/types";
@@ -137,7 +138,9 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
       assignedShiftsByVolunteerDay.get(key)!.add(shift.shift_key);
     });
 
-    type SessionAttendance = { completedMinutes: number; hasOpen: boolean };
+    const now = new Date();
+    const todayInGuatemala = getGuatemalaDate(now);
+    type SessionAttendance = { completedMinutes: number; hasOpen: boolean; hasStaleOpen: boolean; completedDuringOpen: boolean };
     const attendanceByShift = new Map<string, SessionAttendance>();
 
     (sessionsData || []).forEach(session => {
@@ -169,7 +172,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
           if (targetKeys.length === 1) {
             const shiftKey = targetKeys[0];
             const key = `${session.volunteer_id}|${dayKey}|${shiftKey}`;
-            const current = attendanceByShift.get(key) || { completedMinutes: 0, hasOpen: false };
+            const current = attendanceByShift.get(key) || { completedMinutes: 0, hasOpen: false, hasStaleOpen: false, completedDuringOpen: false };
             current.completedMinutes += totalSessionMinutes;
             attendanceByShift.set(key, current);
           } else {
@@ -191,21 +194,26 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
               allocated += mins;
 
               const key = `${session.volunteer_id}|${dayKey}|${o.shiftKey}`;
-              const current = attendanceByShift.get(key) || { completedMinutes: 0, hasOpen: false };
+              const current = attendanceByShift.get(key) || { completedMinutes: 0, hasOpen: false, hasStaleOpen: false, completedDuringOpen: false };
               current.completedMinutes += mins;
               attendanceByShift.set(key, current);
             });
           }
         }
-      } else if (session.status === 'open') {
-        targetKeys.forEach(shiftKey => {
-          const official = getOfficialShiftTime(session.day_key, shiftKey);
-          if (startHour < official.endHour && startHour >= official.startHour) {
-            const key = `${session.volunteer_id}|${dayKey}|${shiftKey}`;
-            const current = attendanceByShift.get(key) || { completedMinutes: 0, hasOpen: false };
+      } else if (session.status === 'open' && !session.ended_at) {
+        // An open session is attendance from check-in, including an approved early entry.
+        // Only the shifts inferred as reached so far belong to this live session.
+        matchedKeys.forEach(shiftKey => {
+          const key = `${session.volunteer_id}|${dayKey}|${shiftKey}`;
+          const current = attendanceByShift.get(key) || { completedMinutes: 0, hasOpen: false, hasStaleOpen: false, completedDuringOpen: false };
+          if (dayKey !== todayInGuatemala) {
+            current.hasStaleOpen = true;
+          } else if (getSessionShiftCompletedAt(session.day_key, shiftKey, session.started_at, null, assignedKeysList, now)) {
+            current.completedDuringOpen = true;
+          } else {
             current.hasOpen = true;
-            attendanceByShift.set(key, current);
           }
+          attendanceByShift.set(key, current);
         });
       }
     });
@@ -265,8 +273,6 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
       stakesSet.add(volunteer.stake);
     });
     
-    const now = new Date();
-
     reportShifts.forEach(s => {
       // Find matching volunteer
       const vol = volunteersById.get(s.volunteer_id);
@@ -291,16 +297,25 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
       const dateStr = parseDayKeyToDateStr(s.day_key);
       const shiftNum = parseInt(s.shift_key.substring(1)) || 1;
 
-      let status: 'registered' | 'confirmed' | 'absent' | 'replaced' = 'registered';
+      let status: ReportItem['status'] = 'registered';
       let durationMinutes = 0;
 
       const attendanceKey = `${s.volunteer_id}|${normalizeDayKey(s.day_key)}|${s.shift_key}`;
       const attendance = attendanceByShift.get(attendanceKey);
 
-      if (attendance && attendance.completedMinutes > 0) {
+      if (attendance?.hasOpen) {
+        status = 'in_progress';
+        durationMinutes = attendance.completedMinutes;
+      } else if (attendance?.hasStaleOpen) {
+        status = 'checkout_pending';
+        durationMinutes = attendance.completedMinutes;
+      } else if (attendance?.completedDuringOpen) {
         status = 'confirmed';
         durationMinutes = attendance.completedMinutes;
-      } else if (!attendance?.hasOpen) {
+      } else if (attendance && attendance.completedMinutes > 0) {
+        status = 'confirmed';
+        durationMinutes = attendance.completedMinutes;
+      } else {
         const shiftEndTime = parseGuatemalaShiftEnd(s.day_key, s.shift_key);
         if (now > shiftEndTime) status = 'absent';
       }

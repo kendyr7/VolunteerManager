@@ -21,6 +21,10 @@ import { calculateReliabilityScore } from '../services/volunteer-reliability.ser
 
 const AGE_RANGES = ['< 18', '18 - 25', '26 - 35', '36 - 50', '51+', 'Sin edad'] as const;
 
+function hasCheckedIn(status: ReportView['items'][number]['status']): boolean {
+  return status === 'in_progress' || status === 'checkout_pending' || status === 'confirmed';
+}
+
 function percentage(numerator: number, denominator: number): number {
   return denominator > 0 ? Math.round((numerator / denominator) * 100) : 0;
 }
@@ -91,7 +95,7 @@ function buildVolunteerRanking(items: ReportView['items']): VolunteerReportSumma
       minutes: 0,
     };
     value.totalShifts += 1;
-    if (item.status === 'confirmed') {
+    if (hasCheckedIn(item.status)) {
       value.confirmed += 1;
       value.minutes += item.durationMinutes;
     } else if (item.status === 'absent') {
@@ -132,8 +136,8 @@ export function buildReportView(data: ReportsData, filters: ReportFilters = {}):
   const committeeSummary: CommitteeReportSummary[] = activeCommittees.map((committee) => {
     const committeeItems = items.filter((item) => item.committeeId === committee.id);
     const uniqueVolunteerIds = new Set(committeeItems.map((item) => item.volunteerId));
-    const attendeeIds = new Set(committeeItems.filter((item) => item.status === 'confirmed').map((item) => item.volunteerId));
-    const confirmed = committeeItems.filter((item) => item.status === 'confirmed');
+    const attendeeIds = new Set(committeeItems.filter((item) => hasCheckedIn(item.status)).map((item) => item.volunteerId));
+    const confirmed = committeeItems.filter((item) => hasCheckedIn(item.status));
     const absent = committeeItems.filter((item) => item.status === 'absent');
     const totalMinutes = sum(confirmed.map((item) => item.durationMinutes));
     return {
@@ -151,9 +155,9 @@ export function buildReportView(data: ReportsData, filters: ReportFilters = {}):
     };
   });
 
-  const allAttendeeIds = new Set(items.filter((item) => item.status === 'confirmed').map((item) => item.volunteerId));
+  const allAttendeeIds = new Set(items.filter((item) => hasCheckedIn(item.status)).map((item) => item.volunteerId));
   const allVolunteerIds = new Set(items.map((item) => item.volunteerId));
-  const confirmedItems = items.filter((item) => item.status === 'confirmed');
+  const confirmedItems = items.filter((item) => hasCheckedIn(item.status));
   const absentItems = items.filter((item) => item.status === 'absent');
   const totalMinutes = sum(confirmedItems.map((item) => item.durationMinutes));
   const committeeTotals = {
@@ -193,7 +197,7 @@ export function buildReportView(data: ReportsData, filters: ReportFilters = {}):
   const byShift = shiftKeys.map((shiftKey) => {
     const matchingItems = items.filter((item) => `T${item.shiftNumber}` === shiftKey);
     const assigned = matchingItems.length;
-    const checkedIn = matchingItems.filter((item) => item.status === 'confirmed').length;
+    const checkedIn = matchingItems.filter((item) => hasCheckedIn(item.status)).length;
     const required = sum(requirements.filter((value) => value.shiftKey === shiftKey).map((value) => value.required));
     return { shiftKey, assigned, checkedIn, required, rate: percentage(checkedIn, assigned) };
   });
@@ -254,7 +258,7 @@ export function buildReportView(data: ReportsData, filters: ReportFilters = {}):
           assignmentCountBySlot,
         );
         const assigned = shiftItems.length;
-        const checkedIn = shiftItems.filter((item) => item.status === 'confirmed').length;
+        const checkedIn = shiftItems.filter((item) => hasCheckedIn(item.status)).length;
         return [shiftKey, {
           required: coverage.required,
           assigned,
@@ -266,7 +270,7 @@ export function buildReportView(data: ReportsData, filters: ReportFilters = {}):
       const required = sum(Object.values(byShift).map((value) => value.required));
       const assigned = dayItems.length;
       const covered = sum(Object.values(byShift).map((value) => value.covered));
-      const checkedIn = dayItems.filter((item) => item.status === 'confirmed').length;
+      const checkedIn = dayItems.filter((item) => hasCheckedIn(item.status)).length;
       return {
         date: day.date,
         dayLabel: day.dayLabel,
