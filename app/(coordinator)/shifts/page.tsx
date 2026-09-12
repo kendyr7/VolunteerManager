@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, getOfficialShiftTime, isSimulationEventDay } from "@/lib/dates";
+import { getAvailableShiftKeys, getOperationalEventDays, formatDateShort, getOfficialShiftTime, isSimulationEventDay, parseDayKeyToDateStr } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,6 @@ import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { checkOutVolunteer, adjustCheckoutTimeAction } from "@/app/actions/attendance";
 import { undoVolunteerCheckInAction } from "@/app/actions/audit-actions";
 import { getReminderDeliveryLogsAction } from "@/app/actions/whatsapp";
-import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
 import { cn, normalizeSearch } from "@/lib/utils";
 import { ShiftSectionTabs } from "@/components/ShiftSectionTabs";
@@ -33,28 +32,12 @@ import { attendanceSortPriority, getOpenAttendanceVolunteerIds, isLiveShiftRoste
 import { getGuatemalaDayKey } from '@/lib/scan-history';
 import { findAttendanceSessionForShift } from '@/lib/shift-calculations';
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.04
-    }
-  }
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      type: "spring" as const,
-      stiffness: 400,
-      damping: 30
-    }
-  }
-};
+const EVENT_DAYS_DEFAULT = getOperationalEventDays().map(date => ({
+  date,
+  key: formatDateShort(date),
+  label: formatDateShort(date).split(' ')[0],
+  dateNum: formatDateShort(date).split(' ')[1],
+}));
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 type VolunteerType = {
@@ -166,13 +149,6 @@ export default function ShiftsPage() {
   const requestedArchived = searchParams.get('archived') === '1';
   const requestedSubView = searchParams.get('subview') as 'areas' | 'assignments' | 'coverage' | null;
   const removeUrlSearch = useRemoveSearchParam();
-  const EVENT_DAYS_RAW = getOperationalEventDays();
-  const EVENT_DAYS_DEFAULT = useMemo(() => EVENT_DAYS_RAW.map(date => ({
-    date,
-    key: formatDateShort(date),                   // clave única: 'jue 10'
-    label: formatDateShort(date).split(' ')[0],    // solo el día: 'jue'
-    dateNum: formatDateShort(date).split(' ')[1],  // solo el número: '10'
-  })), [EVENT_DAYS_RAW]);
 
   // Estados de filtros
   const { inputValue, setInputValue, appliedSearch, setAppliedSearch, applySearch } = useDebouncedSearch();
@@ -280,6 +256,36 @@ export default function ShiftsPage() {
     return shiftDataIndex.records.get(`${volunteerId}|${normalizeSearch(dayKey)}|${shiftKey}`);
   }, [shiftDataIndex]);
 
+  // Each roster row used to scan every session and shift to find one person's
+  // attendance. Keep those lookups proportional to that person's day instead.
+  const attendanceLookup = useMemo(() => {
+    const sessions = new Map<string, typeof contextSessionsData>();
+    const shifts = new Map<string, typeof rawShiftsData>();
+    for (const session of contextSessionsData) {
+      const key = `${session.volunteer_id}|${session.day_key.toLowerCase().trim()}`;
+      const bucket = sessions.get(key);
+      if (bucket) bucket.push(session);
+      else sessions.set(key, [session]);
+    }
+    for (const shift of rawShiftsData) {
+      const key = `${shift.volunteer_id}|${shift.day_key.toLowerCase().trim()}`;
+      const bucket = shifts.get(key);
+      if (bucket) bucket.push(shift);
+      else shifts.set(key, [shift]);
+    }
+    return { sessions, shifts };
+  }, [contextSessionsData, rawShiftsData]);
+
+  const findRosterSession = useCallback((volunteerId: string, dayKey: string, shiftKey: string) => {
+    const key = `${volunteerId}|${dayKey.toLowerCase().trim()}`;
+    return findAttendanceSessionForShift(
+      dayKey, shiftKey,
+      attendanceLookup.sessions.get(key) || [],
+      attendanceLookup.shifts.get(key) || [],
+      volunteerId,
+    );
+  }, [attendanceLookup]);
+
   const EVENT_DAYS = useMemo(() => {
     const existingKeys = new Set(EVENT_DAYS_DEFAULT.map(d => d.key.toLowerCase()));
     const extraDays: Array<{ date: Date; key: string; label: string; dateNum: string }> = [];
@@ -289,7 +295,7 @@ export default function ShiftsPage() {
         existingKeys.add(s.day_key.toLowerCase());
         const parts = s.day_key.split(' ');
         extraDays.push({
-          date: new Date(),
+          date: new Date(`${parseDayKeyToDateStr(s.day_key)}T12:00:00`),
           key: s.day_key,
           label: (parts[0] || s.day_key).substring(0, 3),
           dateNum: parts[1] || ''
@@ -298,7 +304,7 @@ export default function ShiftsPage() {
     });
 
     return [...EVENT_DAYS_DEFAULT, ...extraDays];
-  }, [EVENT_DAYS_DEFAULT, rawShiftsData]);
+  }, [rawShiftsData]);
 
   // Toast State
   const [toast, setToast] = useState<{
@@ -349,10 +355,12 @@ export default function ShiftsPage() {
 
 
   const [isMobile, setIsMobile] = useState(false);
+  const [isRosterDrawerViewport, setIsRosterDrawerViewport] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 1024);
+      setIsRosterDrawerViewport(window.innerWidth < 768);
     };
     checkMobile();
     window.addEventListener("resize", checkMobile);
@@ -582,6 +590,7 @@ export default function ShiftsPage() {
   const filteredVolunteers = useMemo(() => {
     return volunteers.filter(v => matchesFilters(v, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole));
   }, [volunteers, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, matchesFilters]);
+  const filteredVolunteerIds = useMemo(() => new Set(filteredVolunteers.map(volunteer => volunteer.id)), [filteredVolunteers]);
 
   const attendanceShiftKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -621,42 +630,47 @@ export default function ShiftsPage() {
 
     for (const id of allCandidateIds) {
       const vol = volunteerMap.get(id);
-      if (!vol || !scopedCommitteeSet.has(vol.committee)) continue;
+      if (!vol || !scopedCommitteeSet.has(vol.committee) || !filteredVolunteerIds.has(id)) continue;
 
-      if (matchesFilters(vol, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole)) {
-        const s = getShiftRecord(vol.id, dateKey, shiftId);
-        const { isCheckedIn, isCheckedOut } = getShiftAttendanceState({
-          shift: s,
-          volunteerId: vol.id,
-          dayKey: dateKey,
-          shiftKey: shiftId,
-          checkedInMap: contextCheckedInMap,
-          checkedOutMap: contextCheckedOutMap,
-        });
+      const s = getShiftRecord(vol.id, dateKey, shiftId);
+      const { isCheckedIn, isCheckedOut } = getShiftAttendanceState({
+        shift: s,
+        volunteerId: vol.id,
+        dayKey: dateKey,
+        shiftKey: shiftId,
+        checkedInMap: contextCheckedInMap,
+        checkedOutMap: contextCheckedOutMap,
+      });
 
-        if (viewMode === 'active') {
-          // Keep today's full roster visible until midnight: pending first,
-          // completed attendees in gray next, and currently present last.
-          if (!liveRoster) continue;
-        } else if (viewMode === 'completed') {
-          // Completados: Muestra únicamente los que ya registraron salida
-          if (!isCheckedOut) continue;
-        }
-
-        priorities.set(vol.id, attendanceSortPriority(isCheckedIn, isCheckedOut));
-        result.push(vol);
+      if (viewMode === 'active') {
+        // Keep today's full roster visible until midnight: pending first,
+        // completed attendees in gray next, and currently present last.
+        if (!liveRoster) continue;
+      } else if (viewMode === 'completed') {
+        // Completados: Muestra únicamente los que ya registraron salida
+        if (!isCheckedOut) continue;
       }
+
+      priorities.set(vol.id, attendanceSortPriority(isCheckedIn, isCheckedOut));
+      result.push(vol);
     }
 
     return result.sort((a, b) => (viewMode !== 'completed' ? (priorities.get(a.id)! - priorities.get(b.id)!) : 0)
       || a.committee.localeCompare(b.committee) || a.name.localeCompare(b.name));
-  }, [contextIndexedAssignments, contextAdditionalCompletedByDayShift, volunteerMap, appliedSearch, selectedCommittees, selectedStakes, selectedWards, currentRole, viewMode, shiftDataIndex, matchesFilters, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet, attendanceShiftKeys, rosterNow]);
+  }, [contextIndexedAssignments, contextAdditionalCompletedByDayShift, volunteerMap, filteredVolunteerIds, viewMode, shiftDataIndex, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet, attendanceShiftKeys, rosterNow]);
 
-  const totalRosterCount = useMemo(() => EVENT_DAYS.reduce((total, day) => (
-    total + getAvailableShiftKeys(day.key).reduce((dayTotal, shiftKey) => (
-      dayTotal + getAssignedVolunteers(day.key, shiftKey).length
-    ), 0)
-  ), 0), [EVENT_DAYS, getAssignedVolunteers]);
+  const rosterByDayShift = useMemo(() => {
+    const roster = new Map<string, VolunteerType[]>();
+    for (const day of EVENT_DAYS) {
+      for (const shiftKey of getAvailableShiftKeys(day.key)) {
+        roster.set(`${day.key}|${shiftKey}`, getAssignedVolunteers(day.key, shiftKey));
+      }
+    }
+    return roster;
+  }, [EVENT_DAYS, getAssignedVolunteers]);
+
+  const totalRosterCount = useMemo(() => Array.from(rosterByDayShift.values())
+    .reduce((total, assigned) => total + assigned.length, 0), [rosterByDayShift]);
 
   const handleStartEditProfile = (vol: VolunteerType) => {
     const fn = (vol as any).first_name ?? vol.name ?? '';
@@ -1179,10 +1193,10 @@ export default function ShiftsPage() {
     const dayName = format(date, "EEEE", { locale: es });
     const monthName = format(date, "d 'de' MMMM", { locale: es });
     const shiftData = {
-      T1: getAssignedVolunteers(key, 'T1'),
-      T2: getAssignedVolunteers(key, 'T2'),
-      T3: getAssignedVolunteers(key, 'T3'),
-      T4: getAssignedVolunteers(key, 'T4'),
+      T1: rosterByDayShift.get(`${key}|T1`) || [],
+      T2: rosterByDayShift.get(`${key}|T2`) || [],
+      T3: rosterByDayShift.get(`${key}|T3`) || [],
+      T4: rosterByDayShift.get(`${key}|T4`) || [],
     };
     const availableShiftKeys = getAvailableShiftKeys(key) as Array<keyof typeof shiftData>;
     const totalVolsOnDay = availableShiftKeys.reduce((acc, t) => acc + shiftData[t].length, 0);
@@ -1279,19 +1293,10 @@ export default function ShiftsPage() {
             </div>
           </button>
 
-        <AnimatePresence initial={false}>
-          {isOpen && (
-            <motion.div
-              key={`desktop-expand-${key}`}
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              style={{ overflow: "hidden" }}
-              className="hidden md:block"
-            >
+        {isOpen && !isRosterDrawerViewport && (
+          <div className="hidden md:block">
               <div className="grid grid-cols-2 gap-4 p-4 md:p-5 items-start border-t border-border/50">
-                {availableShiftKeys.map((t, index) => {
+                {availableShiftKeys.map((t) => {
                   const info = getOfficialShiftTime(key, t);
                   const vols = shiftData[t];
                   const count = vols.length;
@@ -1306,11 +1311,8 @@ export default function ShiftsPage() {
                   const hasMore = vols.length > 10;
 
                   return (
-                    <motion.div
+                    <div
                       key={t}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.18, delay: index * 0.02, ease: [0.16, 1, 0.3, 1] }}
                       onClick={(e) => {
                         if (hasMore) {
                           e.stopPropagation();
@@ -1356,7 +1358,7 @@ export default function ShiftsPage() {
                                 });
                                 const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                 const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
-                                const attendanceSession = findAttendanceSessionForShift(key, t, contextSessionsData, rawShiftsData, vol.id);
+                                const attendanceSession = findRosterSession(vol.id, key, t);
                                 const isAdditional = Boolean(attendanceSession?.is_additional_shift);
                                 const attendanceStartedAt = attendanceSession?.started_at || shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
                                 const attendanceEndedAt = attendanceSession?.shift_completed_at || shiftRecord?.checked_out_at;
@@ -1510,13 +1512,12 @@ export default function ShiftsPage() {
                           </>
                         )}
                       </div>
-                    </motion.div>
+                    </div>
                   );
                 })}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          </div>
+        )}
 
         {mobileDrawerKey === key && (
           <>
@@ -1610,7 +1611,7 @@ export default function ShiftsPage() {
                           <div
                             key={t}
                             className={cn(
-                              "backdrop-blur-md rounded-[24px] p-4 shadow-lg border flex flex-col h-fit transition-all",
+                              "rounded-[24px] p-4 shadow-lg border flex flex-col h-fit",
                               drawerCardBg
                             )}
                           >
@@ -1644,7 +1645,7 @@ export default function ShiftsPage() {
                                   });
                                   const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                   const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
-                                  const attendanceSession = findAttendanceSessionForShift(key, t, contextSessionsData, rawShiftsData, vol.id);
+                                  const attendanceSession = findRosterSession(vol.id, key, t);
                                   const isAdditional = Boolean(attendanceSession?.is_additional_shift);
                                   const attendanceStartedAt = attendanceSession?.started_at || shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
                                   const attendanceEndedAt = attendanceSession?.shift_completed_at || shiftRecord?.checked_out_at;
@@ -1837,16 +1838,11 @@ export default function ShiftsPage() {
   }
 
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="w-full mx-auto pb-32 md:pb-12"
-    >
+    <div className="w-full mx-auto pb-32 md:pb-12">
 
       {/* Sticky Header matching unified design */}
-      <div className="sticky top-0 z-40 bg-dark/70 dark:bg-dark/70 backdrop-blur-xl pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-3.5 mb-4 pointer-events-auto border-b border-border">
-        <motion.div variants={itemVariants} className="flex w-full items-center justify-between gap-2.5 sm:gap-4">
+      <div className="sticky top-0 z-40 bg-dark pt-6 pb-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-3.5 mb-4 pointer-events-auto border-b border-border">
+        <div className="flex w-full items-center justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <h1 className="text-[24px] sm:text-3xl font-black text-text tracking-tight">Turnos</h1>
 
@@ -1878,10 +1874,10 @@ export default function ShiftsPage() {
               window.history.replaceState(null, '', newUrl);
             }}
           />
-        </motion.div>
+        </div>
 
         {/* Search Input */}
-        <motion.div variants={itemVariants} className="w-full relative z-10">
+        <div className="w-full relative z-10">
           <SmartSearchBar
             value={inputValue}
             onValueChange={setInputValue}
@@ -1889,7 +1885,7 @@ export default function ShiftsPage() {
             onClear={removeUrlSearch}
             placeholder={viewMode === 'active' ? "Buscar por voluntario o subcomité en turno..." : "Buscar por voluntario, subcomité o barrio..."}
           />
-        </motion.div>
+        </div>
       </div>
 
       {viewMode === 'active' && (
@@ -1922,26 +1918,17 @@ export default function ShiftsPage() {
         mode="coordinator"
       />
 
-      {/* Lista de días con transición suave */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={`shifts-view-${viewMode}-${selectedCommittees.join('-')}`}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          className="flex flex-col gap-2 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8"
-        >
-          {EVENT_DAYS.map(d => {
-            const card = renderDayCard(d);
-            return card ? (
-              <div key={d.key} className="w-full">
-                {card}
-              </div>
-            ) : null;
-          })}
-        </motion.div>
-      </AnimatePresence>
+      {/* Lista de días */}
+      <div className="flex flex-col gap-2 items-start w-full min-w-0 px-4 sm:px-6 lg:px-8">
+        {EVENT_DAYS.map(d => {
+          const card = renderDayCard(d);
+          return card ? (
+            <div key={d.key} className="w-full">
+              {card}
+            </div>
+          ) : null;
+        })}
+      </div>
       <Toast
         message={toast.message}
         type={toast.type}
@@ -2144,6 +2131,6 @@ export default function ShiftsPage() {
         onAction={toast.onAction}
         onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
       />
-    </motion.div>
+    </div>
   );
 }

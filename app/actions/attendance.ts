@@ -662,7 +662,7 @@ export async function createAttendanceSessionAdminAction(input: {
 
     const overlapCheck = await checkSessionOverlapInDb(volunteerId, startedAt, endedAt);
     if (overlapCheck.hasOverlap) {
-      return { success: false, error: "El intervalo solicitado se solapa con una sesión existente de este voluntario." };
+      return { success: false, error: "El intervalo se solapa con una asistencia existente. Si necesitas ajustar su salida o entrada, usa «Corregir horas» en el historial de esa asistencia." };
     }
 
     const nowIso = new Date().toISOString();

@@ -171,7 +171,13 @@ export class AuditMapper {
       try {
         const parsed = JSON.parse(safeDetails);
         if (Array.isArray(parsed.changes) && parsed.changes.length > 0) {
-          parsedChanges = parsed.changes;
+          parsedChanges = parsed.changes.map((change: any) => {
+            if (change.field !== 'started_at' && change.field !== 'ended_at') return change;
+            const display = (value: unknown) => typeof value === 'string' && Number.isFinite(new Date(value).getTime())
+              ? new Date(value).toLocaleString('es-GT', { timeZone: 'America/Guatemala', dateStyle: 'short', timeStyle: 'short' })
+              : value;
+            return { ...change, oldValue: display(change.oldValue), newValue: display(change.newValue) };
+          });
           const labels = parsed.changes.map((c: any) => c.label || c.field).join(', ');
           cleanSubtitle = typeof parsed.reason === 'string' && parsed.reason.trim()
             ? `Motivo: ${parsed.reason.trim()}`

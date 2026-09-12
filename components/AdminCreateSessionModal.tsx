@@ -41,12 +41,13 @@ export function AdminCreateSessionModal({
   const availableDayKeys = useMemo(() => {
     const dayKeys = new Set<string>();
     assignedShiftRecords.forEach((record) => dayKeys.add(record.day_key));
+    existingSessions.forEach((session) => dayKeys.add(session.day_key));
     if (initialDayKey) dayKeys.add(initialDayKey);
     if (dayKeys.size === 0) dayKeys.add('vie 11');
     return Array.from(dayKeys).sort((left, right) =>
       parseDayKeyToDateStr(left).localeCompare(parseDayKeyToDateStr(right)) || left.localeCompare(right)
     );
-  }, [assignedShiftRecords, initialDayKey]);
+  }, [assignedShiftRecords, existingSessions, initialDayKey]);
 
   const [selectedDayKey, setSelectedDayKey] = useState(initialDayKey || availableDayKeys[0] || 'vie 11');
   const [selectedShiftKey, setSelectedShiftKey] = useState<string | null>(null);

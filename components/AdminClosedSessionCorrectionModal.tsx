@@ -24,22 +24,26 @@ export function AdminClosedSessionCorrectionModal({ session, volunteerName, onCl
   onClose: () => void;
   onSuccess: () => void | Promise<void>;
 }) {
-  const [entry, setEntry] = useState(() => localDateTime(session.started_at));
-  const [exit, setExit] = useState(() => localDateTime(session.ended_at!));
+  const originalEntry = localDateTime(session.started_at);
+  const originalExit = localDateTime(session.ended_at!);
+  const [entry, setEntry] = useState(() => originalEntry);
+  const [exit, setExit] = useState(() => originalExit);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const duration = useMemo(() => {
-    const minutes = Math.round((new Date(toGuatemalaIso(exit)).getTime() - new Date(toGuatemalaIso(entry)).getTime()) / 60000);
+    const startedAt = entry === originalEntry ? session.started_at : toGuatemalaIso(entry);
+    const endedAt = exit === originalExit ? session.ended_at! : toGuatemalaIso(exit);
+    const minutes = Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000);
     return Number.isFinite(minutes) && minutes >= 0 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : '—';
-  }, [entry, exit]);
+  }, [entry, exit, originalEntry, originalExit, session.started_at, session.ended_at]);
 
   const submit = async () => {
     let startedAt = '';
     let endedAt = '';
     try {
-      startedAt = toGuatemalaIso(entry);
-      endedAt = toGuatemalaIso(exit);
+      startedAt = entry === originalEntry ? session.started_at : toGuatemalaIso(entry);
+      endedAt = exit === originalExit ? session.ended_at! : toGuatemalaIso(exit);
     } catch { setError('Ingresa fechas y horas válidas.'); return; }
     const invalid = validateCorrectedSession(session.day_key, startedAt, endedAt);
     if (invalid) { setError(invalid); return; }
