@@ -987,7 +987,7 @@ export default function ShiftsPage() {
     // Comparación de días en zona horaria de Guatemala
     const startDateGuatemala = start.toLocaleDateString('es-GT', { timeZone: 'America/Guatemala' });
     const endDateGuatemala = end.toLocaleDateString('es-GT', { timeZone: 'America/Guatemala' });
-    const isOverNextDay = startDateGuatemala !== endDateGuatemala || totalMins > 720;
+    const isOverNextDay = startDateGuatemala !== endDateGuatemala;
 
     const hours = Math.floor(totalMins / 60);
     const minutes = totalMins % 60;

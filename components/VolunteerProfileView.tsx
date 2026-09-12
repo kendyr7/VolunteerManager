@@ -46,6 +46,8 @@ import { getVolunteerProfileMetrics } from "@/lib/services/volunteer-profile.ser
 import { getVolunteerReliabilityMetrics } from "@/lib/services/volunteer-reliability.service";
 import { realtimeDebugLogger } from "@/lib/services/realtime-debug-logger";
 import { AdminSessionCorrectionModal } from "./AdminSessionCorrectionModal";
+import { AdminClosedSessionCorrectionModal } from "./AdminClosedSessionCorrectionModal";
+import type { AttendanceSession } from '@/lib/session-utils';
 import { AdminCreateSessionModal } from "./AdminCreateSessionModal";
 import type { ShiftAreaDetails } from "@/lib/shift-area";
 import { ShiftChangeReasonSelector } from "@/components/ShiftChangeReasonSelector";
@@ -302,6 +304,7 @@ export function VolunteerProfileView({
   const [fetchedSessions, setFetchedSessions] = useState<any[]>([]);
   const [loadingAuditLogs, setLoadingAuditLogs] = useState<boolean>(false);
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState<boolean>(false);
+  const [closedSessionToCorrect, setClosedSessionToCorrect] = useState<AttendanceSession | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
 
   const storeShifts = useVolunteerStore((s) => s.shiftsByVolunteerMap.get(volunteer.id)) || [];
@@ -1084,6 +1087,23 @@ export function VolunteerProfileView({
       )}
 
       {/* Admin Session Correction Modal */}
+      {closedSessionToCorrect && (
+        <AdminClosedSessionCorrectionModal
+          session={closedSessionToCorrect}
+          volunteerName={`${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || volunteer.name}
+          onClose={() => setClosedSessionToCorrect(null)}
+          onSuccess={async () => {
+            await loadAuditLogs();
+            const [sessionsResult, shiftsResult] = await Promise.all([
+              fetchVolunteerAttendanceSessionsAction(volunteer.id),
+              fetchVolunteerShiftRecordsAction(volunteer.id),
+            ]);
+            if (sessionsResult.success) setFetchedSessions(sessionsResult.sessions);
+            if (shiftsResult.success) setFetchedDbRecords(shiftsResult.shiftRecords);
+            await refresh?.(true);
+          }}
+        />
+      )}
       {isCorrectionModalOpen && staleOpenSession && (
         <AdminSessionCorrectionModal
           isOpen={isCorrectionModalOpen}
@@ -1122,6 +1142,11 @@ export function VolunteerProfileView({
           volunteerId={volunteer.id}
           volunteerName={`${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim()}
           assignedShiftRecords={dbShiftRecords}
+          existingSessions={volunteerSessions}
+          onCorrectSession={mayCorrectAttendance ? (session) => {
+            setIsCreateModalOpen(false);
+            setClosedSessionToCorrect(session);
+          } : undefined}
           onSuccess={async () => {
             const res = await fetchVolunteerAttendanceSessionsAction(volunteer.id);
             if (res?.success && res.sessions) setFetchedSessions(res.sessions);
@@ -1668,6 +1693,19 @@ export function VolunteerProfileView({
                           <span>Entrada: {formatSessionClock(session.startedAt)}</span>
                           <span aria-hidden="true">·</span>
                           <span>Salida: {formatSessionClock(session.endedAt)}</span>
+                          {mayCorrectAttendance && session.status === 'completed' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const original = volunteerSessions.find((item: AttendanceSession) => item.id === session.id);
+                                if (original?.ended_at) setClosedSessionToCorrect(original);
+                              }}
+                              className="ml-auto rounded-md border border-primary/40 px-2 py-1 text-[10px] font-extrabold text-primary hover:bg-primary/10"
+                              aria-label={`Corregir entrada o salida de la asistencia del ${dayKey}`}
+                            >
+                              Corregir horas
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1780,6 +1818,10 @@ export function VolunteerProfileView({
                   ) : item.subtitle ? (
                     <p className="text-[11px] text-text-dim font-medium leading-snug">{item.subtitle}</p>
                   ) : null}
+
+                  {item.parsedChanges?.length > 0 && item.subtitle?.startsWith('Motivo:') && (
+                    <p className="text-[11px] text-text-dim font-medium leading-snug">{item.subtitle}</p>
+                  )}
 
                   <div className="pt-2 border-t border-border/40 flex items-center justify-between text-[10px] text-text-dim font-inter">
                     <div className="flex items-center gap-1.5">

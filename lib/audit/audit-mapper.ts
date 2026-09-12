@@ -173,7 +173,9 @@ export class AuditMapper {
         if (Array.isArray(parsed.changes) && parsed.changes.length > 0) {
           parsedChanges = parsed.changes;
           const labels = parsed.changes.map((c: any) => c.label || c.field).join(', ');
-          cleanSubtitle = `Modificaciones: ${labels}`;
+          cleanSubtitle = typeof parsed.reason === 'string' && parsed.reason.trim()
+            ? `Motivo: ${parsed.reason.trim()}`
+            : `Modificaciones: ${labels}`;
         } else if (parsed.context) {
           cleanSubtitle = typeof parsed.context === 'string'
             ? parsed.context

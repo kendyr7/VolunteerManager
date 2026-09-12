@@ -22,6 +22,8 @@ import {
 import { createEntryPassPayload, validateEntryPassQrValue } from "@/lib/entry-pass";
 import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
 import { getGuatemalaDate, getGuatemalaDayKey } from '@/lib/scan-history';
+import { calculateAffectedShiftUpdates, validateCorrectedSession } from '@/lib/session-correction';
+import type { CorrectedShift } from '@/lib/session-correction';
 
 export async function getAttendanceSessionsAction(requestedDayKeys?: string[]): Promise<AttendanceSession[]> {
   const authorization = await requireCapability('view_volunteers');
@@ -383,6 +385,76 @@ export async function fetchVolunteerAttendanceSessionsAction(volunteerId: string
     return { success: true, sessions: validSessions };
   } catch (e: any) {
     return { success: false, error: e?.message || "Error al cargar sesiones", sessions: [] };
+  }
+}
+
+/** Correct a closed session without replacing its original check-in/out audit events. */
+export async function correctClosedAttendanceSessionAdminAction(input: {
+  sessionId: string;
+  expectedStartedAt: string;
+  expectedEndedAt: string;
+  startedAt: string;
+  endedAt: string;
+  reason: string;
+}) {
+  try {
+    const actor = await requireCapability('correct_attendance_times');
+    const reason = input.reason?.trim() || '';
+    if (reason.length < 5) return { success: false as const, error: 'Indica un motivo de al menos 5 caracteres.' };
+    const supabase = getAdminClient();
+    const { data: original, error: sessionError } = await supabase.from('attendance_sessions')
+      .select('*').eq('id', input.sessionId).maybeSingle();
+    if (sessionError) throw sessionError;
+    if (!original || original.status !== 'completed' || !original.ended_at) {
+      return { success: false as const, error: 'Solo se puede corregir una asistencia cerrada.' };
+    }
+    const validation = validateCorrectedSession(original.day_key, input.startedAt, input.endedAt);
+    if (validation) return { success: false as const, error: validation };
+    if (new Date(original.started_at).getTime() !== new Date(input.expectedStartedAt).getTime()
+      || new Date(original.ended_at).getTime() !== new Date(input.expectedEndedAt).getTime()) {
+      return { success: false as const, error: 'La asistencia cambió. Actualiza el historial antes de corregirla.' };
+    }
+
+    const [sessionsResult, shiftsResult] = await Promise.all([
+      supabase.from('attendance_sessions').select('*').eq('volunteer_id', original.volunteer_id).throwOnError(),
+      supabase.from('shifts').select('id, volunteer_id, day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at')
+        .eq('volunteer_id', original.volunteer_id).throwOnError(),
+    ]);
+    const sessions = (sessionsResult.data || []) as AttendanceSession[];
+    const shifts = (shiftsResult.data || []) as Array<CorrectedShift & { volunteer_id: string }>;
+    const corrected: AttendanceSession = { ...original, started_at: new Date(input.startedAt).toISOString(), ended_at: new Date(input.endedAt).toISOString(), auto_closed: false };
+    const dayShifts = shifts.filter(shift => shift.day_key === original.day_key);
+    const shiftUpdates = calculateAffectedShiftUpdates(original, corrected, sessions.filter(session => session.day_key === original.day_key), dayShifts);
+    const patches = new Map(shiftUpdates.map(shift => [shift.id, shift]));
+    const updatedShifts = shifts.map(shift => ({ ...shift, ...(patches.get(shift.id) || {}) }));
+    const updatedSessions = sessions.map(session => session.id === original.id ? corrected : session);
+    const score = getVolunteerReliabilityMetrics(original.volunteer_id, updatedShifts, updatedSessions).reliabilityScore;
+
+    const { data: saved, error } = await supabase.rpc('correct_closed_attendance_session', {
+      p_session_id: original.id,
+      p_expected_started_at: input.expectedStartedAt,
+      p_expected_ended_at: input.expectedEndedAt,
+      p_started_at: corrected.started_at,
+      p_ended_at: corrected.ended_at,
+      p_reason: reason,
+      p_actor_id: actor.userId || '',
+      p_actor_name: actor.name || 'Administrador',
+      p_actor_role: roleDisplayName(actor),
+      p_shift_updates: shiftUpdates,
+      p_reliability_score: score,
+    });
+    if (error) return { success: false as const, error: error.message };
+    if (!saved) throw new Error('La corrección no devolvió la asistencia actualizada.');
+    await broadcastSessionSync({ eventType: 'UPDATE', table: 'attendance_sessions', record: saved });
+    shiftUpdates.forEach(update => {
+      const shift = shifts.find(item => item.id === update.id);
+      if (shift) broadcastShiftSync({ eventType: 'UPDATE', table: 'shifts', record: { ...shift, ...update } });
+    });
+    for (const route of ['/shifts', '/volunteers', '/check-in', '/dashboard']) revalidatePath(route);
+    return { success: true as const, session: saved as AttendanceSession };
+  } catch (error: any) {
+    console.error('Error correcting closed attendance session:', error);
+    return { success: false as const, error: error?.message || 'No se pudo corregir la asistencia.' };
   }
 }
 

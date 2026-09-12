@@ -7,6 +7,7 @@ import { CustomTimePicker } from '@/components/CustomTimePicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { canRegisterMissingAttendance } from '@/lib/permissions';
 import { parseDayKeyToDateStr } from '@/lib/dates';
+import type { AttendanceSession } from '@/lib/session-utils';
 import { formatUnifiedDuration } from '@/lib/shift-calculations';
 import { calculateSessionMinutes, getContinuousScheduledBlocks } from '@/lib/session-utils';
 import { useMobileDrawerNavigation } from '@/lib/use-mobile-drawer-navigation';
@@ -17,6 +18,8 @@ export interface AdminCreateSessionModalProps {
   volunteerId: string;
   volunteerName: string;
   assignedShiftRecords?: { day_key: string; shift_key: string }[];
+  existingSessions?: AttendanceSession[];
+  onCorrectSession?: (session: AttendanceSession) => void;
   initialDayKey?: string;
   onSuccess?: () => void;
   isMockMode?: boolean;
@@ -27,6 +30,8 @@ export function AdminCreateSessionModal({
   onClose,
   volunteerId,
   assignedShiftRecords = [],
+  existingSessions = [],
+  onCorrectSession,
   initialDayKey,
   onSuccess,
   isMockMode = false,
@@ -38,7 +43,9 @@ export function AdminCreateSessionModal({
     assignedShiftRecords.forEach((record) => dayKeys.add(record.day_key));
     if (initialDayKey) dayKeys.add(initialDayKey);
     if (dayKeys.size === 0) dayKeys.add('vie 11');
-    return Array.from(dayKeys);
+    return Array.from(dayKeys).sort((left, right) =>
+      parseDayKeyToDateStr(left).localeCompare(parseDayKeyToDateStr(right)) || left.localeCompare(right)
+    );
   }, [assignedShiftRecords, initialDayKey]);
 
   const [selectedDayKey, setSelectedDayKey] = useState(initialDayKey || availableDayKeys[0] || 'vie 11');
@@ -236,6 +243,18 @@ export function AdminCreateSessionModal({
               </SelectContent>
             </Select>
           </div>
+
+          {onCorrectSession && existingSessions.some(session => session.day_key === selectedDayKey && session.status === 'completed') && (
+            <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+              <p className="text-xs font-bold text-text">¿Necesitas ajustar una salida ya registrada?</p>
+              <p className="text-xs text-text-dim">Corrige la asistencia existente para conservar su historial y evitar un registro solapado.</p>
+              {existingSessions.filter(session => session.day_key === selectedDayKey && session.status === 'completed').map(session => (
+                <button key={session.id} type="button" onClick={() => onCorrectSession(session)} className="block min-h-10 w-full rounded-lg border border-primary/40 px-3 py-2 text-left text-xs font-bold text-primary hover:bg-primary/10">
+                  Corregir {new Date(session.started_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit' })} – {new Date(session.ended_at!).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit' })}
+                </button>
+              ))}
+            </div>
+          )}
 
           <fieldset className="space-y-2">
             <legend className="text-xs font-extrabold text-text">Turno programado</legend>
