@@ -12,6 +12,7 @@ interface ConfirmationModalProps {
   onConfirm: () => void | Promise<void>
   onCancel: () => void
   type?: 'danger' | 'primary'
+  confirmDisabled?: boolean
 }
 
 export function ConfirmationModal({
@@ -22,12 +23,13 @@ export function ConfirmationModal({
   cancelText = "Cancelar",
   onConfirm,
   onCancel,
-  type = 'primary'
+  type = 'primary',
+  confirmDisabled = false
 }: ConfirmationModalProps) {
   const [isConfirming, setIsConfirming] = React.useState(false)
 
   const handleConfirm = async () => {
-    if (isConfirming) return
+    if (isConfirming || confirmDisabled) return
     setIsConfirming(true)
     try {
       await onConfirm()
@@ -82,7 +84,7 @@ export function ConfirmationModal({
               </button>
               <button
                 onClick={() => { void handleConfirm() }}
-                disabled={isConfirming}
+                disabled={isConfirming || confirmDisabled}
                 className={`flex-1 py-4 text-sm font-bold transition-colors disabled:cursor-wait disabled:opacity-70 ${
                   type === 'danger' 
                     ? 'bg-white dark:bg-dark2 text-red hover:bg-red-50 dark:hover:bg-red/10' 

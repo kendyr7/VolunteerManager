@@ -13,7 +13,7 @@ import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 import { AdminSessionCorrectionModal } from "@/components/AdminSessionCorrectionModal";
-import type { AttendanceSession } from "@/lib/session-utils";
+import { needsShortCheckoutConfirmation, type AttendanceSession } from "@/lib/session-utils";
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
@@ -551,8 +551,14 @@ export function CheckInScanner({
     item: null
   });
 
+  const [shortCheckoutConfirmed, setShortCheckoutConfirmed] = useState(false);
+  const [forceShortCheckoutWarning, setForceShortCheckoutWarning] = useState(false);
+  const shortCheckoutWarning = forceShortCheckoutWarning || needsShortCheckoutConfirmation(checkoutModal.item?.checkedInAt);
+
   const handleOpenCheckoutModal = (shiftId: string, volunteerName: string, checkedInAt?: string | Date) => {
     setCheckoutError('');
+    setShortCheckoutConfirmed(false);
+    setForceShortCheckoutWarning(false);
     setCheckoutModal({
       isOpen: true,
       item: {
@@ -570,14 +576,17 @@ export function CheckInScanner({
     setCheckoutError('');
     try {
       const result = item.sessionId
-        ? await closeAttendanceSessionAction({ sessionId: item.sessionId })
-        : await checkOutVolunteer(item.shiftId);
+        ? await closeAttendanceSessionAction({ sessionId: item.sessionId, confirmShortVisit: shortCheckoutConfirmed })
+        : await checkOutVolunteer(item.shiftId, { confirmShortVisit: shortCheckoutConfirmed });
       if (!result.success) {
         if ('requiresResolution' in result && result.requiresResolution && result.session) {
           setCheckoutModal({ isOpen: false, item: null });
           setMobileDrawerDayGroup(null);
           setPendingExit({ session: result.session, volunteerName: item.volunteerName, assignedShiftKeys: result.assignedShiftKeys });
           return;
+        }
+        if ('requiresShortVisitConfirmation' in result && result.requiresShortVisitConfirmation) {
+          setForceShortCheckoutWarning(true);
         }
         setCheckoutError(result.error || 'No se pudo guardar la salida. Intenta de nuevo.');
         return;
@@ -588,6 +597,7 @@ export function CheckInScanner({
           ? { ...entry, isCompleted: true } : entry
       ));
       setCheckoutModal({ isOpen: false, item: null });
+      setShortCheckoutConfirmed(false);
       await Promise.all([refresh(true), fetchDbHistory()]);
     } catch (error) {
       setCheckoutError(error instanceof Error ? error.message : 'No se pudo guardar la salida. Intenta de nuevo.');
@@ -877,13 +887,15 @@ export function CheckInScanner({
           shiftDetail: `Sesión Activa desde ${startTimeStr}`,
           session: res.session
         });
+        setShortCheckoutConfirmed(false);
+        setForceShortCheckoutWarning(false);
         setCheckoutModal({
           isOpen: true,
           item: {
             shiftId: res.session?.id || 'active-session',
             sessionId: res.session?.id,
             volunteerName: res.volunteer || "Voluntario",
-            checkedInAt: startTimeStr
+            checkedInAt: res.session?.started_at,
           }
         });
         setState('already_checked_in');
@@ -1901,7 +1913,7 @@ export function CheckInScanner({
       {/* CONFIRMATION MODAL FOR CHECK-OUT (Matching /shifts page 100%) */}
       <ConfirmationModal
         isOpen={checkoutModal.isOpen}
-        title={checkoutModal.item?.outsideOperationalDay ? "Cerrar sesión fuera del cronograma" : "Completar Turno"}
+        title={shortCheckoutWarning ? "Salida antes de una hora" : checkoutModal.item?.outsideOperationalDay ? "Cerrar sesión fuera del cronograma" : "Completar Turno"}
         message={(() => {
           const name = checkoutModal.item?.volunteerName || 'este voluntario';
           const checkedInAt = checkoutModal.item?.checkedInAt;
@@ -1941,6 +1953,15 @@ export function CheckInScanner({
                 )}
               </span>
               {!outsideOperationalDay && <span className="text-xs text-slate-500">Si pertenece a una sesión continua, se completarán todos los turnos asociados a esa sesión.</span>}
+              {shortCheckoutWarning && (
+                <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-left text-amber-700 dark:text-amber-300">
+                  <p>La entrada se registró hace menos de una hora. Comprueba si este fue un segundo escaneo accidental antes de cerrar la asistencia.</p>
+                  <label className="mt-2 flex items-start gap-2 font-bold">
+                    <input type="checkbox" checked={shortCheckoutConfirmed} onChange={event => setShortCheckoutConfirmed(event.target.checked)} className="mt-1" />
+                    Confirmo que la persona realmente salió.
+                  </label>
+                </div>
+              )}
               {elapsedText && (
                 <div className="pt-3 border-t border-black/10 dark:border-white/10 flex flex-col items-center gap-1.5">
                   <span className="text-xs font-inter font-medium text-slate-500 dark:text-text-dim">
@@ -1962,10 +1983,11 @@ export function CheckInScanner({
             </div>
           );
         })()}
-        confirmText={checkoutModal.item?.outsideOperationalDay ? "Cerrar sesión pendiente" : "Turno Completado"}
-        type="primary"
+        confirmText={shortCheckoutWarning ? "Confirmar salida breve" : checkoutModal.item?.outsideOperationalDay ? "Cerrar sesión pendiente" : "Turno Completado"}
+        type={shortCheckoutWarning ? "danger" : "primary"}
+        confirmDisabled={shortCheckoutWarning && !shortCheckoutConfirmed}
         onConfirm={handleConfirmCheckout}
-        onCancel={() => setCheckoutModal({ isOpen: false, item: null })}
+        onCancel={() => { setCheckoutModal({ isOpen: false, item: null }); setShortCheckoutConfirmed(false); setForceShortCheckoutWarning(false); }}
       />
 
       {/* Unified Volunteer Profile Drawer */}

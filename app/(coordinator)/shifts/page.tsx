@@ -30,6 +30,7 @@ import { getShiftCapacityStatus, getShiftCommitteeScope } from "@/lib/shift-capa
 import { attendanceSortPriority, isLiveShiftRoster, resolveShiftView, type ShiftViewMode } from '@/lib/shift-view';
 import { getGuatemalaDayKey } from '@/lib/scan-history';
 import { findAttendanceSessionForShift, getShiftDisplayState } from '@/lib/shift-calculations';
+import { needsShortCheckoutConfirmation } from '@/lib/session-utils';
 
 const EVENT_DAYS_DEFAULT = getOperationalEventDays().map(date => ({
   date,
@@ -159,6 +160,9 @@ export default function ShiftsPage() {
   const [showAttendanceReview, setShowAttendanceReview] = useState(false);
   const [rosterNow, setRosterNow] = useState(() => new Date());
   const [checkoutModal, setCheckoutModal] = useState<{ isOpen: boolean; item: any | null }>({ isOpen: false, item: null });
+  const [shortCheckoutConfirmed, setShortCheckoutConfirmed] = useState(false);
+  const [forceShortCheckoutWarning, setForceShortCheckoutWarning] = useState(false);
+  const shortCheckoutWarning = forceShortCheckoutWarning || needsShortCheckoutConfirmation(checkoutModal.item?.checkedInAt);
 
   // Reassign State
   const [isReassignSheetOpen, setIsReassignSheetOpen] = useState(false);
@@ -953,16 +957,21 @@ export default function ShiftsPage() {
     }
     let result;
     try {
-      result = await checkOutVolunteer(shiftId);
+      result = await checkOutVolunteer(shiftId, { confirmShortVisit: shortCheckoutConfirmed });
     } catch {
       showToast('No se pudo guardar la salida. Intenta de nuevo.', 'error');
       return;
     }
     if (!result.success) {
+      if ('requiresShortVisitConfirmation' in result && result.requiresShortVisitConfirmation) {
+        setForceShortCheckoutWarning(true);
+      }
       showToast(result.error || 'No se pudo guardar la salida. Intenta de nuevo.', 'error');
       return;
     }
     setCheckoutModal({ isOpen: false, item: null });
+    setShortCheckoutConfirmed(false);
+    setForceShortCheckoutWarning(false);
     if ('session' in result && result.session) {
       showToast(`Sesión completada para ${item.volunteer.name}. Se actualizaron los turnos asociados.`, 'success');
       await refresh(true);
@@ -1497,7 +1506,9 @@ export default function ShiftsPage() {
                                             type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, volunteer: vol, checkedInAt: shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
+                                              setShortCheckoutConfirmed(false);
+                                              setForceShortCheckoutWarning(false);
+                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, volunteer: vol, checkedInAt: attendanceSession?.started_at || shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
                                             }}
                                             className="w-7 h-7 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 transition-all flex items-center justify-center active:scale-95 cursor-pointer"
                                             title="Turno Completado"
@@ -1782,7 +1793,9 @@ export default function ShiftsPage() {
                                             type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, volunteer: vol, checkedInAt: shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
+                                              setShortCheckoutConfirmed(false);
+                                              setForceShortCheckoutWarning(false);
+                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, volunteer: vol, checkedInAt: attendanceSession?.started_at || shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
                                             }}
                                             className="w-7 h-7 rounded-full bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95"
                                             title="Turno Completado (Check-out)"
@@ -2029,7 +2042,7 @@ export default function ShiftsPage() {
 
       <ConfirmationModal
         isOpen={checkoutModal.isOpen}
-        title="Completar Turno"
+        title={shortCheckoutWarning ? "Salida antes de una hora" : "Completar Turno"}
         message={(() => {
           const name = checkoutModal.item?.volunteer?.name || 'este voluntario';
           const checkedInAt = checkoutModal.item?.checkedInAt;
@@ -2061,6 +2074,15 @@ export default function ShiftsPage() {
             <div className="flex flex-col gap-3 text-center">
               <span>¿Deseas marcar el turno de <strong>{name}</strong> como completado?</span>
               <span className="text-xs text-slate-500">Si pertenece a una sesión continua, se completarán todos los turnos asociados a esa sesión.</span>
+              {shortCheckoutWarning && (
+                <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-left text-amber-700 dark:text-amber-300">
+                  <p>La entrada se registró hace menos de una hora. Comprueba si este fue un segundo escaneo accidental antes de cerrar la asistencia.</p>
+                  <label className="mt-2 flex items-start gap-2 font-bold">
+                    <input type="checkbox" checked={shortCheckoutConfirmed} onChange={event => setShortCheckoutConfirmed(event.target.checked)} className="mt-1" />
+                    Confirmo que la persona realmente salió.
+                  </label>
+                </div>
+              )}
               {elapsedText && (
                 <div className="pt-3 border-t border-black/10 dark:border-white/10 flex flex-col items-center gap-1.5">
                   <span className="text-xs font-inter font-medium text-slate-500 dark:text-text-dim">
@@ -2082,10 +2104,11 @@ export default function ShiftsPage() {
             </div>
           );
         })()}
-        confirmText="Turno Completado"
-        type="primary"
+        confirmText={shortCheckoutWarning ? "Confirmar salida breve" : "Turno Completado"}
+        type={shortCheckoutWarning ? "danger" : "primary"}
+        confirmDisabled={shortCheckoutWarning && !shortCheckoutConfirmed}
         onConfirm={handleConfirmCheckout}
-        onCancel={() => setCheckoutModal({ isOpen: false, item: null })}
+        onCancel={() => { setCheckoutModal({ isOpen: false, item: null }); setShortCheckoutConfirmed(false); setForceShortCheckoutWarning(false); }}
       />
 
       {/* Reasignar Turno Modal Unificado */}

@@ -156,6 +156,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll
     const ctx = handler('components/CheckInScanner.tsx', variable, {
       ...actions, coordinatorId: actor.userId, scanResult: null, checkoutModal: { isOpen: false, item: null },
       mobileDrawerDayGroup: null, history: [], dbHistory: [], state: 'idle', errorMsg: '',
+      shortCheckoutConfirmed: false, forceShortCheckoutWarning: false,
       autoResetTimeoutRef: { current: null }, playWarningBeep: () => {}, playSuccessBeep: () => {},
       triggerVibration: () => {}, startScanning: () => {}, setSessionCount: () => {},
       SCAN_CONFIRMATION_DURATION_MS: 4000,
@@ -163,7 +164,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll
       fetchDbHistory: async () => actions.getHistoricalAttendanceLogs(),
       checkoutError: '',
     });
-    for (const key of ['scanResult', 'checkoutModal', 'history', 'dbHistory', 'state', 'errorMsg', 'mobileDrawerDayGroup', 'checkoutError', 'pendingExit']) {
+    for (const key of ['scanResult', 'checkoutModal', 'history', 'dbHistory', 'state', 'errorMsg', 'mobileDrawerDayGroup', 'checkoutError', 'pendingExit', 'shortCheckoutConfirmed', 'forceShortCheckoutWarning']) {
       ctx[`set${key[0].toUpperCase()}${key.slice(1)}`] = value => { ctx[key] = typeof value === 'function' ? value(ctx[key]) : value; };
     }
     ctx.updateHistory = ctx.setHistory;
@@ -182,8 +183,14 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll
     }).runHandler,
     sessionStore: load('@/lib/services/session-store'),
     profile: () => {
+      const shiftCalculations = load('@/lib/shift-calculations');
+      const getDisplayState = (dayKey, shiftKey) => shiftCalculations.getShiftDisplayState(
+        dayKey, shiftKey,
+        tables.shifts.find(shift => shift.day_key === dayKey && shift.shift_key === shiftKey),
+        tables.attendance_sessions, tables.shifts, volunteer.id, new Clock(),
+      );
       const bindings = {
-        useCallback: fn => fn, volunteer, dbShiftRecords: tables.shifts,
+        useCallback: fn => fn, volunteer, dbShiftRecords: tables.shifts, getDisplayState,
         auditLogs: [{ description: 'Completó salida jue 10 T1' }],
         externalCheckedOutMap: undefined, externalCheckedInMap: undefined,
         localCheckedOutMap: { [`${volunteer.id}-jue 10-T1`]: true },
@@ -202,6 +209,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll
     failShiftUpdate: () => { failShiftUpdate = true; },
     shiftCheckout: () => handler('app/(coordinator)/shifts/page.tsx', 'handleConfirmCheckout', {
       ...actions, supabase: db, checkoutModal: { item: { shiftId: shiftIds[1], dayKey: 'jue 10', shiftKey: 'T2', volunteer: { ...volunteer, name: `${volunteer.first_name} ${volunteer.last_name}` } } },
+      shortCheckoutConfirmed: false, setShortCheckoutConfirmed: () => {}, setForceShortCheckoutWarning: () => {},
       setCheckoutModal: () => {}, markShiftCompleted: () => {}, showToast: () => {}, refresh: async () => snapshot(),
     }),
   };
@@ -615,12 +623,16 @@ async function run() {
     assert.deepEqual(flow.snapshot().map(s => s.isCheckedOut), [true, true]);
     assert.equal(flow.tables.attendance_sessions.length, 1);
   });
-  await verify('Salida antes de comenzar el horario conserva asistencia solo en el primer turno', async () => {
+  await verify('Salida en cinco minutos requiere confirmar y no acredita ningun turno', async () => {
     const flow = createHarness(); flow.advance('06:50');
     const opened = await flow.actions.checkInVolunteer('', 'internal-test-actor', shiftIds[0]);
     flow.advance('06:55');
-    await flow.actions.closeAttendanceSessionAction({ sessionId: opened.session.id });
-    assert.deepEqual(flow.snapshot().map(s => s.isCheckedOut), [true, false]);
+    const accidental = await flow.actions.closeAttendanceSessionAction({ sessionId: opened.session.id });
+    assert.equal(accidental.requiresShortVisitConfirmation, true);
+    assert.equal(flow.tables.attendance_sessions[0].status, 'open');
+    const confirmed = await flow.actions.closeAttendanceSessionAction({ sessionId: opened.session.id, confirmShortVisit: true });
+    assert.equal(confirmed.success, true);
+    assert.deepEqual(flow.snapshot().map(s => s.isCheckedOut), [false, false]);
   });
   await verify('Seleccion manual repetida no cambia entrada, duplica ni cierra la sesion', async () => {
     const flow = createHarness(); flow.advance('06:55');

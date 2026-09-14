@@ -53,17 +53,40 @@ export function getGuatemalaHourFloat(dateInput: Date | string): number {
   return guatemalaDate.getHours() + guatemalaDate.getMinutes() / 60 + guatemalaDate.getSeconds() / 3600;
 }
 
+/** Presence in a scheduled shift, independent of whether it earned completion credit. */
+export function sessionTouchesAssignedShift(
+  dayKey: string,
+  shiftKey: string,
+  startedAt: Date | string,
+  endedAt: Date | string | null | undefined,
+  assignedShiftKeys: string[],
+  now: Date | string = new Date(),
+): boolean {
+  const block = getContinuousScheduledBlockForSession(dayKey, startedAt, assignedShiftKeys);
+  if (!block?.matchedShifts.some(shift => shift.shiftKey === shiftKey)) return false;
+  const shift = getOfficialShiftTime(dayKey, shiftKey);
+  const startHour = getGuatemalaHourFloat(startedAt);
+  let endHour = getGuatemalaHourFloat(endedAt || now);
+  if (endHour < startHour && new Date(endedAt || now).getTime() > new Date(startedAt).getTime()) endHour += 24;
+  return (startHour < shift.endHour && endHour > shift.startHour)
+    || (block.startShiftKey === shiftKey && startHour < shift.startHour);
+}
+
 /**
  * Minimum percentage of an assigned shift's duration required for it to be considered completed.
- * Default: 0.5 (50% of the shift duration, e.g. 2.5h for T1, 2.0h for T2/T3/T4).
+ * The volunteer must work strictly more than half of the scheduled window.
  */
 export const MIN_ASSIGNED_SHIFT_COMPLETION_RATIO = 0.5;
 
-/**
- * Minimum worked minutes required to earn an additional (unassigned) shift.
- * A volunteer must work at least 2.0 hours (120 minutes) within the additional shift's window.
- */
-export const MIN_ADDITIONAL_SHIFT_MINUTES = 120;
+export const SHORT_CHECKOUT_WARNING_MINUTES = 60;
+
+export function needsShortCheckoutConfirmation(startedAt: Date | string | null | undefined, endedAt: Date | string = new Date()): boolean {
+  if (!startedAt) return false;
+  const startMs = new Date(startedAt).getTime();
+  const endMs = new Date(endedAt).getTime();
+  return Number.isFinite(startMs) && Number.isFinite(endMs)
+    && endMs - startMs < SHORT_CHECKOUT_WARNING_MINUTES * 60_000;
+}
 
 /**
  * Mathematical Temporal Intersection Engine between session and assigned shifts
@@ -122,18 +145,12 @@ export function inferShiftsForSession(
 
     if (sessionEnd) {
       // Completed session:
-      // An explicitly confirmed early arrival is recognized as attendance in the first shift of its block.
-      // For all other shifts, require completion threshold (at least 50% of shift duration, min 60 min).
-      if (earlyArrival) {
+      // An early check-in records presence, but only time inside the official
+      // shift window can earn completion credit.
+      const effectiveDurationHours = Math.max(0, overlapEnd - overlapStart);
+      const effectiveDurationMinutes = effectiveDurationHours * 60;
+      if (effectiveDurationMinutes > official.durationMinutes * MIN_ASSIGNED_SHIFT_COMPLETION_RATIO) {
         matched.push(official);
-      } else {
-        const effectiveDurationHours = Math.max(0, overlapEnd - overlapStart);
-        const effectiveDurationMinutes = effectiveDurationHours * 60;
-        const minRequiredMinutes = Math.max(60, official.durationMinutes * MIN_ASSIGNED_SHIFT_COMPLETION_RATIO);
-
-        if (effectiveDurationMinutes >= minRequiredMinutes) {
-          matched.push(official);
-        }
       }
     } else {
       // Open session: match immediately upon any presence or confirmed early arrival
@@ -147,12 +164,11 @@ export function inferShiftsForSession(
 }
 
 /**
- * Returns unassigned official shifts earned after a completed attendance session
- * continued beyond the volunteer's original scheduled block.
+ * Returns unassigned official shifts that a closed session covered for more
+ * than half of each official shift window.
  *
  * Scheduled rows remain unchanged: this is attendance recognition, not a new
  * planning assignment. Open sessions never earn additional shifts.
- * Requires at least MIN_ADDITIONAL_SHIFT_MINUTES (120 min) within the additional shift.
  */
 export function inferAdditionalCompletedShifts(
   dayKey: string,
@@ -165,32 +181,16 @@ export function inferAdditionalCompletedShifts(
   const availableShifts = getOfficialShiftTimesList(dayKey);
   const assignedSet = new Set(assignedShiftKeys);
 
-  if (assignedShiftKeys.length === 0) {
-    return inferShiftsForSession(
-      dayKey,
-      sessionStart,
-      sessionEnd,
-      availableShifts.map(shift => shift.shiftKey),
-    );
-  }
-
-  const originalBlock = getContinuousScheduledBlockForSession(dayKey, sessionStart, assignedShiftKeys);
-  if (!originalBlock) return [];
-
-  const originalBlockEnd = getOfficialShiftTime(dayKey, originalBlock.endShiftKey).endHour;
   const sessionStartHour = getGuatemalaHourFloat(sessionStart);
   let sessionEndHour = getGuatemalaHourFloat(sessionEnd);
   if (sessionEndHour < sessionStartHour) sessionEndHour += 24;
 
-  const minAdditionalHours = MIN_ADDITIONAL_SHIFT_MINUTES / 60; // 2.0 hours
-
   return availableShifts.filter(shift => {
     if (assignedSet.has(shift.shiftKey)) return false;
-    if (shift.endHour <= originalBlockEnd) return false;
-    const overlapStart = Math.max(originalBlockEnd, sessionStartHour, shift.startHour);
+    const overlapStart = Math.max(sessionStartHour, shift.startHour);
     const overlapEnd = Math.min(sessionEndHour, shift.endHour);
-    const overlapHours = Math.max(0, overlapEnd - overlapStart);
-    return overlapHours >= minAdditionalHours;
+    const overlapMinutes = Math.max(0, overlapEnd - overlapStart) * 60;
+    return overlapMinutes > shift.durationMinutes * MIN_ASSIGNED_SHIFT_COMPLETION_RATIO;
   });
 }
 
@@ -213,7 +213,10 @@ export function getSessionShiftCompletedAt(
     const midnight = new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime();
     const shiftEndMs = midnight + shift.endHour * 3600000;
     const effectiveEndMs = new Date(endedAt || now).getTime();
-    if (effectiveEndMs >= shiftEndMs) return new Date(shiftEndMs).toISOString();
+    const shiftEndIso = new Date(shiftEndMs).toISOString();
+    if (effectiveEndMs >= shiftEndMs && inferShiftsForSession(
+      dayKey, startedAt, shiftEndIso, assignedShiftKeys,
+    ).some(item => item.shiftKey === shiftKey)) return shiftEndIso;
   }
   return endedAt || null;
 }

@@ -4,7 +4,7 @@ import { getAdminSupabase } from "@/lib/supabase/admin";
 import { createActivityLog } from "./activity-actions";
 import { broadcastShiftSync, broadcastSessionSync } from "@/lib/services/shift-broadcast.service";
 import { requireCapability } from '@/lib/authorization';
-import { AttendanceSession, inferShiftsForSession } from '@/lib/session-utils';
+import { AttendanceSession, inferShiftsForSession, sessionTouchesAssignedShift } from '@/lib/session-utils';
 import { calculateShiftUpdatesAfterSessionRemoval, CorrectedShift } from '@/lib/session-correction';
 import { getVolunteerReliabilityMetrics } from '@/lib/services/volunteer-reliability.service';
 import { revalidatePath } from 'next/cache';
@@ -150,7 +150,7 @@ export async function reopenCompletedShiftAction({
     const assignedKeys = shifts.map((shift: { shift_key: string }) => shift.shift_key);
     const sessions: AttendanceSession[] = sessionResult.data || [];
     const related = sessions.filter(session => session.day_key === dayKey &&
-      inferShiftsForSession(dayKey, session.started_at, session.ended_at, assignedKeys).some(shift => shift.shiftKey === shiftKey));
+      sessionTouchesAssignedShift(dayKey, shiftKey, session.started_at, session.ended_at, assignedKeys));
     if (related.length > 1) return { success: false, error: 'Hay varias sesiones asociadas a este turno. Revisa la sesión específica antes de reabrirlo.' };
     const originalSession = related[0];
     if (sessions.some(session => session.status === 'open' && session.id !== originalSession?.id)) {
@@ -176,7 +176,7 @@ export async function reopenCompletedShiftAction({
     // Reopen the actual session, not just its legacy shift flags. Only clear
     // flags on this volunteer's shifts belonging to that same session.
     const relatedKeys = originalSession
-      ? inferShiftsForSession(dayKey, originalSession.started_at, originalSession.ended_at, assignedKeys).map(shift => shift.shiftKey)
+      ? assignedKeys.filter(key => sessionTouchesAssignedShift(dayKey, key, originalSession.started_at, originalSession.ended_at, assignedKeys))
       : [shiftKey];
     const affectedIds = shifts.filter((shift: { shift_key: string }) => relatedKeys.includes(shift.shift_key)).map((shift: { id: string }) => shift.id);
     const { data: updatedShifts, error: shiftError } = await supabase.from('shifts')

@@ -160,10 +160,13 @@ export function getShiftDisplayState(
     const shortVisit = Boolean(endedAt && !inferShiftsForSession(
       dayKey, originalStart, endedAt, assignedKeys.length ? assignedKeys : [shiftKey], now,
     ).some(item => item.shiftKey === shiftKey) && !matching.is_additional_shift);
+    if (shortVisit) return {
+      status: 'needs_review', startAt: startedAt, endAt: endedAt,
+      flag: 'Asistencia registrada, pero no supera el 50% del turno',
+    };
     if (completedAt) return {
       status: 'completed', startAt: startedAt, endAt: completedAt,
       flag: [
-        shortVisit ? 'Asistencia breve: revisar si cumple el mínimo del turno' : null,
         matching.status === 'open' && endedAt ? 'Sesión abierta con salida registrada' : null,
         (shift?.checked_in || shift?.checked_in_at) && !shift?.checked_out && !shift?.checked_out_at
           ? 'Flag de entrada sin salida aunque la sesión finalizó' : null,

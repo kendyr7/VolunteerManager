@@ -44,6 +44,7 @@ import {
   getShiftDisplayState,
 } from "@/lib/shift-calculations";
 import { getVolunteerProfileMetrics } from "@/lib/services/volunteer-profile.service";
+import { reconcileVolunteerAssignedShifts } from "@/lib/volunteer-assignments";
 import { getVolunteerReliabilityMetrics } from "@/lib/services/volunteer-reliability.service";
 import { realtimeDebugLogger } from "@/lib/services/realtime-debug-logger";
 import { AdminSessionCorrectionModal } from "./AdminSessionCorrectionModal";
@@ -319,7 +320,7 @@ export function VolunteerProfileView({
       storeShiftsCount: storeShifts?.length ?? 0,
       timestamp: new Date().toISOString()
     });
-    if (hasStoreEntry) {
+    if (hasStoreEntry && storeShifts.length > 0) {
       return storeShifts;
     }
     const fromCoordinator = (coordinatorData?.shiftsData || []).filter((s: any) => s.volunteer_id === volunteer.id);
@@ -349,12 +350,6 @@ export function VolunteerProfileView({
     ));
   }, [coordinatorData?.sessionsData, fetchedSessions, preloadedAttendanceSessions, undoneSessionIds, volunteer.id]);
 
-  const sessionAttendance = useMemo(() => processShiftsData(
-    dbShiftRecords,
-    [{ id: volunteer.id }],
-    volunteerSessions,
-  ), [dbShiftRecords, volunteer.id, volunteerSessions]);
-
   // Permisos y Usuario
   const userRole = typeof window !== 'undefined' ? localStorage.getItem('mock_role') || 'Admin' : 'Admin';
   const userName = typeof window !== 'undefined' ? localStorage.getItem('mock_user_name') || 'Administrador' : 'Administrador';
@@ -375,17 +370,15 @@ export function VolunteerProfileView({
   }, []);
 
   const shiftsByDay = externalShiftsByDay || localShiftsByDay;
-  const assignedRecords = useMemo(() => {
-    const records = [...dbShiftRecords];
-    for (const [dayKey, keys] of Object.entries(shiftsByDay)) {
-      for (const shiftKey of keys) {
-        if (!records.some(record => record.day_key === dayKey && record.shift_key === shiftKey)) {
-          records.push({ volunteer_id: volunteer.id, day_key: dayKey, shift_key: shiftKey });
-        }
-      }
-    }
-    return records;
-  }, [dbShiftRecords, shiftsByDay, volunteer.id]);
+  const assignedRecords = useMemo(() => reconcileVolunteerAssignedShifts(
+    volunteer.id, dbShiftRecords, shiftsByDay,
+  ), [dbShiftRecords, shiftsByDay, volunteer.id]);
+
+  const sessionAttendance = useMemo(() => processShiftsData(
+    assignedRecords,
+    [{ id: volunteer.id }],
+    volunteerSessions,
+  ), [assignedRecords, volunteer.id, volunteerSessions]);
 
   const EVENT_DAYS_RAW = useMemo(() => getOperationalEventDays(), []);
   const EVENT_DAYS = useMemo(() => {
@@ -893,10 +886,10 @@ export function VolunteerProfileView({
   const reliabilityMetrics = useMemo(() => {
     return getVolunteerReliabilityMetrics(
       volunteer.id,
-      dbShiftRecords,
+      assignedRecords,
       volunteerSessions
     );
-  }, [volunteer.id, dbShiftRecords, volunteerSessions]);
+  }, [volunteer.id, assignedRecords, volunteerSessions]);
 
   const reliabilityScore = reliabilityMetrics.reliabilityScore;
 
@@ -907,12 +900,12 @@ export function VolunteerProfileView({
     // simulation attendance belongs here even when official reports exclude it.
     return getVolunteerProfileMetrics(
       volunteer.id,
-      dbShiftRecords,
+      assignedRecords,
       auditLogs,
       volunteerSessions,
       { includeSimulation: true },
     );
-  }, [volunteer.id, dbShiftRecords, auditLogs, volunteerSessions]);
+  }, [volunteer.id, assignedRecords, auditLogs, volunteerSessions]);
 
   const totalTurnos = scheduledTurnos + profileMetrics.additionalCompletedShiftsCount;
 

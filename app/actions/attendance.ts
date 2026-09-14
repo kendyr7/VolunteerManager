@@ -11,7 +11,7 @@ import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
 import { EARLY_CHECK_IN_MINUTES, getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay, parseGuatemalaShiftEnd, parseDayKeyToDateStr } from "@/lib/dates";
 import { getVolunteerReliabilityMetrics, computeBulkReliabilityMap } from "@/lib/services/volunteer-reliability.service";
 import { buildEventDayKeys } from '@/lib/coordinator-data';
-import { AttendanceSession, getGuatemalaHourFloat, getContinuousScheduledBlockForSession, requiresSessionExitResolution, inferShiftsForSession, validateSessionConstraints, getSessionShiftCompletedAt } from "@/lib/session-utils";
+import { AttendanceSession, getGuatemalaHourFloat, getContinuousScheduledBlockForSession, requiresSessionExitResolution, inferShiftsForSession, validateSessionConstraints, getSessionShiftCompletedAt, needsShortCheckoutConfirmation } from "@/lib/session-utils";
 import {
   saveAttendanceSession,
   getOpenSessionForVolunteer,
@@ -242,11 +242,13 @@ async function getSessionAssignedShiftKeys(session: AttendanceSession): Promise<
 export async function closeAttendanceSessionAction({
   sessionId,
   volunteerId,
+  confirmShortVisit,
   actorNameInput,
   actorRoleInput
 }: {
   sessionId?: string;
   volunteerId?: string;
+  confirmShortVisit?: boolean;
   endedAt?: string; // Ignored for normal checkout to enforce server timestamp!
   actorNameInput?: string;
   actorRoleInput?: string;
@@ -301,6 +303,13 @@ export async function closeAttendanceSessionAction({
   const previousEndedAt = sessionToClose.ended_at;
   // ENFORCE SERVER TIMESTAMP FOR NORMAL CHECKOUT (Rejects client-supplied endedAt)
   const newEndedAt = new Date().toISOString();
+  if (needsShortCheckoutConfirmation(sessionToClose.started_at, newEndedAt) && !confirmShortVisit) {
+    return {
+      success: false,
+      requiresShortVisitConfirmation: true,
+      error: 'Esta asistencia lleva menos de una hora. Verifica que no sea un doble escaneo y confirma la salida de forma explícita.',
+    };
+  }
 
   const atomicRes = await completeOpenAttendanceSessionInDb(sessionToClose.id, newEndedAt, false);
   if (!atomicRes.success) {
@@ -1085,7 +1094,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
 }
 
 // 4. Process Check-out (Turno Completado)
-export async function checkOutVolunteer(shiftId: string) {
+export async function checkOutVolunteer(shiftId: string, options: { confirmShortVisit?: boolean } = {}) {
   try {
     await requireCapability('scan_qr_attendance');
     const supabase = getAdminClient();
@@ -1104,10 +1113,17 @@ export async function checkOutVolunteer(shiftId: string) {
       inferShiftsForSession(session.day_key, session.started_at, session.ended_at, assignedKeys).some(s => s.shiftKey === shift.shift_key)
     );
     const active = related.find(session => session.status === 'open');
-    if (active) return closeAttendanceSessionAction({ sessionId: active.id });
+    if (active) return closeAttendanceSessionAction({ sessionId: active.id, confirmShortVisit: options.confirmShortVisit });
     const completed = related.find(session => session.status === 'completed');
     if (completed) return { success: true, alreadyClosed: true, session: completed };
     if (shift.checked_out) return { success: true, alreadyClosed: true };
+    if (needsShortCheckoutConfirmation(shift.checked_in_at) && !options.confirmShortVisit) {
+      return {
+        success: false,
+        requiresShortVisitConfirmation: true,
+        error: 'Este turno lleva menos de una hora. Verifica que no sea un doble escaneo y confirma la salida de forma explícita.',
+      };
+    }
 
     const { data: updatedShift, error } = await supabase
       .from('shifts')

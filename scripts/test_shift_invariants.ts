@@ -150,7 +150,7 @@ let shiftState: any = {
 // Event 1: Check-in
 shiftState = mergeRealtimeRecord(shiftState, {
   checked_in: true,
-  checked_in_at: new Date().toISOString(),
+  checked_in_at: '2026-09-11T17:00:00-06:00',
   status: 'confirmed',
 });
 assertTest('Scenario Step 1 (Check-In): status is confirmed', shiftState.checked_in === true);
@@ -158,7 +158,7 @@ assertTest('Scenario Step 1 (Check-In): status is confirmed', shiftState.checked
 // Event 2: Check-out
 shiftState = mergeRealtimeRecord(shiftState, {
   checked_out: true,
-  checked_out_at: new Date().toISOString(),
+  checked_out_at: '2026-09-11T21:00:00-06:00',
   status: 'completed',
 });
 assertTest('Scenario Step 2 (Check-Out): checked_out is true', shiftState.checked_out === true);
@@ -186,14 +186,14 @@ assertTest('Scenario Step 4 (Reassign): day_key updated to sáb 12 T3', shiftSta
 // Event 5: Check-in on new shift
 shiftState = mergeRealtimeRecord(shiftState, {
   checked_in: true,
-  checked_in_at: new Date().toISOString(),
+  checked_in_at: '2026-09-12T14:00:00-06:00',
   status: 'confirmed',
 });
 
 // Event 6: Final Check-out on new shift
 shiftState = mergeRealtimeRecord(shiftState, {
   checked_out: true,
-  checked_out_at: new Date().toISOString(),
+  checked_out_at: '2026-09-12T18:00:00-06:00',
   status: 'completed',
 });
 assertTest('Scenario Step 6 (Final Check-Out): final shift is completed', shiftState.checked_out === true && shiftState.status === 'completed');
