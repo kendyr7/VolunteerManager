@@ -8,7 +8,7 @@ const { createJiti } = require('jiti');
 const root = path.resolve(__dirname, '..');
 const jiti = createJiti(__filename, { alias: { '@': root } });
 const { resolveShiftView, isLiveShiftRoster, attendanceSortPriority, getOpenAttendanceVolunteerIds } = jiti('../lib/shift-view.ts');
-const { getUnifiedShiftTimes } = jiti('../lib/shift-calculations.ts');
+const { getUnifiedShiftTimes, getShiftDisplayState } = jiti('../lib/shift-calculations.ts');
 const { getShiftAttendanceState } = jiti('../lib/coordinator-data.ts');
 const { getVolunteerProfileMetrics } = jiti('../lib/services/volunteer-profile.service.ts');
 const at = time => new Date(`2026-09-05T${time}:00-06:00`);
@@ -35,6 +35,8 @@ const volunteers = [
   { id: 'private', name: 'No autorizado', committee: 'Private' },
 ];
 const shifts = volunteers.map(v => ({ id: `shift-${v.id}`, volunteer_id: v.id, day_key: 'sáb 5', shift_key: 'T1', checked_in: v.id !== 'pending', checked_out: v.id === 'closed' }));
+const arrivedSession = { id: 'session-arrived', volunteer_id: 'arrived', day_key: 'sáb 5',
+  started_at: at('09:00').toISOString(), ended_at: null, status: 'open' };
 function roster(mode, now = at('10:00'), day = 'sáb 5', hasOpen = true) {
   return evaluate('app/(coordinator)/shifts/page.tsx', 'getAssignedVolunteers', {
     useCallback: fn => fn,
@@ -43,9 +45,13 @@ function roster(mode, now = at('10:00'), day = 'sáb 5', hasOpen = true) {
     shiftDataIndex: { volunteerIdsByShift: new Map() },
     normalizeSearch: value => value.toLowerCase(),
     volunteerMap: new Map(volunteers.map(v => [v.id, v])),
+    filteredVolunteerIds: new Set(volunteers.map(v => v.id)),
     scopedCommitteeSet: new Set(['A', 'Z']),
     matchesFilters: () => true, appliedSearch: '', selectedCommittees: [], selectedStakes: [], selectedWards: [], currentRole: 'Admin',
     getShiftRecord: id => shifts.find(s => s.volunteer_id === id),
+    getRosterDisplayState: (id, dayKey, shiftKey) => getShiftDisplayState(dayKey, shiftKey,
+      shifts.find(s => s.volunteer_id === id), id === 'arrived' ? [arrivedSession] : [],
+      shifts.filter(s => s.volunteer_id === id), id, now),
     getShiftAttendanceState, contextCheckedInMap: {}, contextCheckedOutMap: {},
     viewMode: mode, isLiveShiftRoster, attendanceSortPriority,
     attendanceShiftKeys: new Set(hasOpen ? [`${day}|T1`] : []), rosterNow: now,
@@ -100,7 +106,7 @@ check('Calendario personal y tooltip consumen sesiones compartidas sin quedar re
   const calendar = fs.readFileSync(path.join(root, 'components/ShiftCalendar.tsx'), 'utf8');
   const profile = fs.readFileSync(path.join(root, 'components/VolunteerProfileView.tsx'), 'utf8');
   assert.ok(scheduleService.includes(".from('attendance_sessions')"));
-  assert.ok(scheduleService.includes('findAttendanceSessionForShift'));
+  assert.ok(scheduleService.includes('getShiftDisplayState'));
   assert.ok(calendar.includes("{ event: 'session_sync' }"));
   assert.ok(profile.includes('<Popover.Portal>'));
   assert.ok(profile.includes('className="z-[320]"'));

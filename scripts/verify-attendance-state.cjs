@@ -6,7 +6,7 @@ const jiti = createJiti(__filename, { alias: { '@': path.resolve(__dirname, '..'
 const { inferAdditionalCompletedShifts, inferShiftsForSession, calculateSessionMinutes, getContinuousScheduledBlocks } = jiti('../lib/session-utils.ts');
 const { processShiftsData, getShiftAttendanceState } = jiti('../lib/coordinator-data.ts');
 const { getVolunteerProfileMetrics } = jiti('../lib/services/volunteer-profile.service.ts');
-const { findAttendanceSessionForShift, getUnifiedShiftTimes } = jiti('../lib/shift-calculations.ts');
+const { findAttendanceSessionForShift, getUnifiedShiftTimes, getUnifiedShiftWorkedMinutes, getShiftDisplayState } = jiti('../lib/shift-calculations.ts');
 const RealDate = Date;
 const day = 'jue 10';
 const id = 'synthetic-volunteer';
@@ -201,5 +201,54 @@ check('Marcacion manual vuelve a pendiente al limpiar las banderas', () => {
   const manual = [{ ...shifts[0], checked_in: true, checked_out: true, checked_in_at: at('08:00'), checked_out_at: at('12:00') }];
   assert.equal(state(derive(manual, [], at('12:00')), 0, manual).isCheckedOut, true);
   assert.deepEqual(state(derive(shifts, [], at('12:00'))), { isCheckedIn: false, isCheckedOut: false });
+});
+check('Una salida breve se muestra como finalizada con alerta sin acreditarla', () => {
+  const brief = { ...completed, started_at: at('08:00'), ended_at: at('08:10') };
+  assert.equal(inferShiftsForSession(day, brief.started_at, brief.ended_at, ['T1']).length, 0);
+  const display = getShiftDisplayState(day, 'T1', shifts[0], [brief], [shifts[0]], id, new RealDate(at('09:00')));
+  assert.equal(display.status, 'completed');
+  assert.match(display.flag, /breve/i);
+  assert.equal(display.endAt, brief.ended_at);
+});
+check('Sesion abierta vencida no cuenta como persona en turno', () => {
+  const stale = getShiftDisplayState(day, 'T2', shifts[1], [session], shifts, id, new RealDate(at('16:00')));
+  assert.equal(stale.status, 'needs_review');
+  assert.match(stale.flag, /Salida pendiente/);
+});
+check('Flags antiguos de entrada sin sesion no cuentan como presencia real', () => {
+  const legacy = { ...shifts[0], checked_in: true, checked_in_at: at('08:00') };
+  const display = getShiftDisplayState(day, 'T1', legacy, [], [legacy], id, new RealDate(at('09:00')));
+  assert.equal(display.status, 'needs_review');
+  assert.match(display.flag, /verificar presencia/i);
+});
+check('La sesion prevalece sobre flags heredados contradictorios', () => {
+  const flagged = { ...shifts[1], checked_in: true, checked_out: true };
+  const otherBlock = { ...completed, started_at: at('07:00'), ended_at: at('10:00') };
+  const display = getShiftDisplayState(day, 'T2', flagged, [otherBlock], [shifts[0], flagged], id, new RealDate(at('11:00')));
+  assert.equal(display.status, 'scheduled');
+  assert.match(display.flag, /Flags/);
+});
+check('Entrada heredada sin salida se señala cuando la sesión ya terminó', () => {
+  const flagged = { ...shifts[0], checked_in: true, checked_out: false };
+  const display = getShiftDisplayState(day, 'T1', flagged, [completed], [flagged], id, new RealDate(at('16:00')));
+  assert.equal(display.status, 'completed');
+  assert.match(display.flag, /Flag de entrada sin salida/);
+});
+check('Turno continuo muestra la hora de inicio propia y no la entrada del bloque anterior', () => {
+  const joined = { ...completed, started_at: at('08:00'), ended_at: at('15:00') };
+  const display = getShiftDisplayState(day, 'T2', shifts[1], [joined], shifts, id, new RealDate(at('15:00')));
+  assert.equal(display.startAt, new RealDate(at('11:00')).toISOString());
+  assert.match(getUnifiedShiftTimes(day, 'T2', shifts, [], [joined], id).startTime, /11:00/);
+});
+check('Sin asignacion conocida una sesion abierta no se atribuye a todos los turnos', () => {
+  for (const shiftKey of ['T1', 'T2', 'T3', 'T4']) {
+    assert.equal(findAttendanceSessionForShift(day, shiftKey, [session], [], id), null);
+  }
+});
+check('No se inventan horas de prueba ni duraciones para turnos sin asistencia', () => {
+  assert.equal(getUnifiedShiftTimes('vie 11', 'T4', [], [], [], id).startTime, '5:00 PM');
+  assert.equal(getUnifiedShiftWorkedMinutes('vie 11', 'T4', []), 0);
+  assert.equal(getUnifiedShiftWorkedMinutes(day, 'T1', [{ ...shifts[0], checked_in: true, checked_out: true }]), 0);
+  assert.equal(getUnifiedShiftWorkedMinutes(day, 'T1', [{ ...shifts[0], checked_in_at: at('08:00'), checked_out_at: at('10:00') }]), 120);
 });
 console.log(`${count} verificaciones de dominio aprobadas. No se escribio en la base de datos.`);

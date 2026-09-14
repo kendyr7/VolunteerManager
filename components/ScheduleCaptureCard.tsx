@@ -17,6 +17,7 @@ export interface DayScheduleItem {
     isCheckedIn: boolean;
     isCheckedOut: boolean;
     isAdditional: boolean;
+    flag?: string | null;
     timeFormatted?: { startTime: string; endTime: string };
   }[];
   assignedAreas: { shiftKey: string; area: ShiftAreaDetails }[];
@@ -146,7 +147,11 @@ export const ScheduleCaptureCard = forwardRef<HTMLDivElement, ScheduleCaptureCar
                       let labelColor = 'text-text-dim/40';
                       let icon = <span className="text-[13px] font-bold text-text-dim/40">-</span>;
 
-                      if (s.isCheckedOut && s.isAdditional) {
+                      if (s.flag) {
+                        statusStyle = 'bg-amber-500/15 border-amber-500/40 text-amber-500 shadow-sm';
+                        icon = <span className="text-amber-500 text-sm font-black">!</span>;
+                        labelColor = 'text-amber-500 font-bold';
+                      } else if (s.isCheckedOut && s.isAdditional) {
                         statusStyle = 'bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm';
                         labelColor = 'text-slate-500 font-bold';
                         icon = <span className="text-sm font-black leading-none text-slate-500">+</span>;
@@ -249,6 +254,10 @@ export const ScheduleCaptureCard = forwardRef<HTMLDivElement, ScheduleCaptureCar
                 <Check className="w-2.5 h-2.5 text-slate-500" strokeWidth={3} />
               </span>
               <span className="text-text font-medium text-xs">Completado (Out)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-500 font-black">!</span>
+              <span className="text-text font-medium text-xs">Revisar</span>
             </div>
           </div>
         </div>

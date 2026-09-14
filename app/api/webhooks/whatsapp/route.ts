@@ -32,6 +32,7 @@ import {
   touchWhatsAppConversation,
 } from '@/lib/services/whatsapp-conversation-store';
 import { getShiftAreaDetails } from '@/lib/shift-area';
+import { findWhatsAppSenderProfiles, phoneMatchesSender } from '@/lib/services/whatsapp-sender-lookup';
 import { SHIFT_CHANGE_REASONS } from '@/lib/shift-change-reasons';
 import { getCommitteeCoverageSnapshot, isCoverageComplete } from '@/lib/shift-coverage';
 import { createValidatedShiftChangeRequest } from '@/lib/services/shift-change-request.service';
@@ -219,15 +220,6 @@ function isConversationClosingText(value: string): boolean {
 
 function volunteerFullName(volunteer: VolunteerRecord): string {
   return `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || 'Voluntario';
-}
-
-function phoneMatchesSender(phone: string | null | undefined, senderDigits: string): boolean {
-  const volunteerDigits = (phone || '').replace(/\D/g, '');
-  if (!volunteerDigits || !senderDigits) return false;
-  if (volunteerDigits === senderDigits) return true;
-  if (volunteerDigits.length === 8) return senderDigits === `505${volunteerDigits}`;
-  if (senderDigits.length === 8) return volunteerDigits === `505${senderDigits}`;
-  return false;
 }
 
 function sortShifts(shifts: ShiftRecord[]): ShiftRecord[] {
@@ -673,13 +665,14 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
     if (contextMsgId) {
       const { data: matchedLog } = await supabase
         .from('reminder_logs')
-        .select('*, volunteers(id, first_name, last_name, phone, committee_id, committees(name))')
+        .select('*, volunteers(id, first_name, last_name, phone, status, committee_id, committees(name))')
         .eq('whatsapp_message_id', contextMsgId)
         .maybeSingle();
 
       if (matchedLog && matchedLog.volunteers) {
         const matchedVolunteer = getVolunteerRecord(matchedLog.volunteers);
-        if (matchedVolunteer) {
+        if (matchedVolunteer && matchedVolunteer.status !== 'archived'
+          && phoneMatchesSender(matchedVolunteer.phone, senderDigits)) {
           targetVolId = matchedVolunteer.id;
           firstName = firstGivenName(matchedVolunteer.first_name);
           selectedVolunteerName = volunteerFullName(matchedVolunteer);
@@ -690,28 +683,22 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
     }
 
     if (!targetVolId) {
-      const [volunteersResult, usersResult] = await Promise.all([
-        supabase
-          .from('volunteers')
-          .select('id, first_name, last_name, phone, status, committee_id, committees(name)')
-          .or('status.is.null,status.neq.archived'),
-        supabase
-          .from('profiles')
-          .select('id, full_name, phone, role, coordinator_type, committee_id, status, committees(name)')
-          .or('status.is.null,status.eq.active'),
-      ]);
-
-      if (volunteersResult.error) {
-        console.error('[WHATSAPP WEBHOOK] Could not load volunteer identities.', volunteersResult.error.message);
+      let matchedVols: VolunteerRecord[];
+      let matchedUsers: UserProfileRecord[];
+      try {
+        [matchedVols, matchedUsers] = await Promise.all([
+          findWhatsAppSenderProfiles<VolunteerRecord>(
+            supabase, 'volunteers', 'id, first_name, last_name, phone, status, committee_id, committees(name)', senderDigits,
+          ),
+          findWhatsAppSenderProfiles<UserProfileRecord>(
+            supabase, 'profiles', 'id, full_name, phone, role, coordinator_type, committee_id, status, committees(name)', senderDigits,
+          ),
+        ]);
+      } catch (error) {
+        console.error('[WHATSAPP WEBHOOK] Could not load sender identities.', error);
+        await sendWhatsAppText({ to: rawFrom, text: 'No pudimos consultar tu perfil en este momento. Inténtalo nuevamente.' });
+        return NextResponse.json({ status: 'success' }, { status: 200 });
       }
-      if (usersResult.error) {
-        console.error('[WHATSAPP WEBHOOK] Could not load platform-user identities.', usersResult.error.message);
-      }
-
-      const matchedVols = ((volunteersResult.data || []) as VolunteerRecord[])
-        .filter(volunteer => phoneMatchesSender(volunteer.phone, senderDigits));
-      const matchedUsers = ((usersResult.data || []) as UserProfileRecord[])
-        .filter(profile => phoneMatchesSender(profile.phone, senderDigits));
       const isUserAction = Boolean(scopedAction?.action.startsWith('user_'));
 
       if (scopedAction) {
@@ -1210,29 +1197,19 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
         return NextResponse.json({ status: 'success' }, { status: 200 });
       }
 
-      const [targetRecoveryResult, phoneOwnersResult] = await Promise.all([
-        supabase
-          .from('volunteers')
-          .select('id, first_name, last_name, phone, pin, status')
-          .eq('id', targetVolId)
-          .or('status.is.null,status.neq.archived')
-          .maybeSingle(),
-        supabase
-          .from('volunteers')
-          .select('id, phone, status')
-          .or('status.is.null,status.neq.archived'),
-      ]);
-      const senderProfiles = ((phoneOwnersResult.data || []) as VolunteerRecord[])
-        .filter(volunteer => phoneMatchesSender(volunteer.phone, senderDigits));
+      const targetRecoveryResult = await supabase
+        .from('volunteers')
+        .select('id, first_name, last_name, phone, pin, status')
+        .eq('id', targetVolId)
+        .or('status.is.null,status.neq.archived')
+        .maybeSingle();
       const targetRecoveryVolunteer = targetRecoveryResult.data as VolunteerRecord | null;
-      const selectedProfileBelongsToSender = senderProfiles.some(profile => profile.id === targetVolId);
-      const recoveryVolunteer = selectedProfileBelongsToSender
-        && targetRecoveryVolunteer
+      const recoveryVolunteer = targetRecoveryVolunteer
         && phoneMatchesSender(targetRecoveryVolunteer.phone, senderDigits)
         ? targetRecoveryVolunteer
         : null;
 
-      if (targetRecoveryResult.error || phoneOwnersResult.error || !recoveryVolunteer?.pin) {
+      if (targetRecoveryResult.error || !recoveryVolunteer?.pin) {
         await sendWhatsAppText({
           to: rawFrom,
           text: 'No pudimos validar la recuperación para el perfil seleccionado. Vuelve al menú y elige nuevamente la persona.'
@@ -1300,23 +1277,25 @@ async function processIncomingMessage(message: MetaWhatsAppMessage) {
     }
 
     if (interactiveId === 'menu_switch_context') {
-      const [volunteersResult, usersResult] = await Promise.all([
-        supabase
-          .from('volunteers')
-          .select('id, first_name, last_name, phone, status, committee_id, committees(name)')
-          .or('status.is.null,status.neq.archived'),
-        supabase
-          .from('profiles')
-          .select('id, full_name, phone, role, coordinator_type, committee_id, status, committees(name)')
-          .or('status.is.null,status.eq.active'),
-      ]);
-      const senderVolunteers = ((volunteersResult.data || []) as VolunteerRecord[])
-        .filter(volunteer => phoneMatchesSender(volunteer.phone, senderDigits));
-      const senderUsers = ((usersResult.data || []) as UserProfileRecord[])
-        .filter(profile => phoneMatchesSender(profile.phone, senderDigits));
+      let senderVolunteers: VolunteerRecord[] = [];
+      let senderUsers: UserProfileRecord[] = [];
+      let lookupFailed = false;
+      try {
+        [senderVolunteers, senderUsers] = await Promise.all([
+          findWhatsAppSenderProfiles<VolunteerRecord>(
+            supabase, 'volunteers', 'id, first_name, last_name, phone, status, committee_id, committees(name)', senderDigits,
+          ),
+          findWhatsAppSenderProfiles<UserProfileRecord>(
+            supabase, 'profiles', 'id, full_name, phone, role, coordinator_type, committee_id, status, committees(name)', senderDigits,
+          ),
+        ]);
+      } catch (error) {
+        console.error('[WHATSAPP WEBHOOK] Could not load sender profiles for context switch.', error);
+        lookupFailed = true;
+      }
       const identityCount = senderUsers.length + senderVolunteers.length;
 
-      if (volunteersResult.error || usersResult.error || identityCount === 0) {
+      if (lookupFailed || identityCount === 0) {
         await sendWhatsAppText({
           to: rawFrom,
           text: 'No pudimos consultar los perfiles asociados a este número. Inténtalo nuevamente.',

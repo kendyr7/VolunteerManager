@@ -2,7 +2,7 @@ import 'server-only';
 
 import { getAdminSupabase } from '@/lib/supabase/admin';
 import type { VolunteerScheduleShift } from '@/lib/types/volunteer-schedule';
-import { findAttendanceSessionForShift } from '@/lib/shift-calculations';
+import { getShiftDisplayState } from '@/lib/shift-calculations';
 import { buildEventDayKeys } from '@/lib/coordinator-data';
 
 interface VolunteerScheduleRow {
@@ -50,7 +50,7 @@ export class VolunteerScheduleService {
     return { id: data.id, committeeId: data.committee_id, status: data.status };
   }
 
-  static async getSchedule(volunteerId: string): Promise<VolunteerScheduleShift[]> {
+  static async getScheduleSnapshot(volunteerId: string): Promise<{ shifts: VolunteerScheduleShift[]; sessions: any[] }> {
     const supabase = await getAdminSupabase();
     const [shiftsResult, sessionsResult] = await Promise.all([
       supabase
@@ -72,29 +72,26 @@ export class VolunteerScheduleService {
     const shifts = (shiftsResult.data || []) as VolunteerScheduleRow[];
     const sessions = ((sessionsResult.data || []) as any[]).filter((s: any) => s.day_key && allowedDayKeys.has(s.day_key));
 
-    return shifts.map((shift) => {
-      const attendanceSession = findAttendanceSessionForShift(
-        shift.day_key,
-        shift.shift_key,
-        sessions,
-        shifts,
-        volunteerId,
-      );
-      const sessionCompleted = Boolean(attendanceSession?.shift_completed_at);
-
+    return { sessions, shifts: shifts.map((shift) => {
+      const display = getShiftDisplayState(shift.day_key, shift.shift_key, shift, sessions, shifts, volunteerId);
       return {
         id: shift.id,
         volunteer_id: shift.volunteer_id,
         day_key: shift.day_key,
         shift_key: shift.shift_key,
-        checked_in: attendanceSession ? true : shift.checked_in,
-        checked_in_at: attendanceSession?.started_at || shift.checked_in_at,
-        checked_out: attendanceSession ? sessionCompleted : shift.checked_out,
-        checked_out_at: attendanceSession ? attendanceSession.shift_completed_at || null : shift.checked_out_at,
+        checked_in: display.status === 'in_progress' || display.status === 'completed',
+        checked_in_at: display.startAt,
+        checked_out: display.status === 'completed',
+        checked_out_at: display.endAt,
+        attendance_flag: display.flag,
         area_id: shift.area_id,
         area_name: relationName(shift.committee_areas),
         area_description: relationDescription(shift.committee_areas),
       };
-    });
+    }) };
+  }
+
+  static async getSchedule(volunteerId: string): Promise<VolunteerScheduleShift[]> {
+    return (await this.getScheduleSnapshot(volunteerId)).shifts;
   }
 }

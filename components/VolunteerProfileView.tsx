@@ -40,7 +40,8 @@ import { useVolunteerStore } from "@/lib/store/use-volunteer-store";
 import {
   getUnifiedShiftTimes,
   getUnifiedShiftWorkedMinutes,
-  formatUnifiedDuration
+  formatUnifiedDuration,
+  getShiftDisplayState,
 } from "@/lib/shift-calculations";
 import { getVolunteerProfileMetrics } from "@/lib/services/volunteer-profile.service";
 import { getVolunteerReliabilityMetrics } from "@/lib/services/volunteer-reliability.service";
@@ -51,7 +52,7 @@ import type { AttendanceSession } from '@/lib/session-utils';
 import { AdminCreateSessionModal } from "./AdminCreateSessionModal";
 import type { ShiftAreaDetails } from "@/lib/shift-area";
 import { ShiftChangeReasonSelector } from "@/components/ShiftChangeReasonSelector";
-import { getShiftAttendanceState, processShiftsData } from "@/lib/coordinator-data";
+import { processShiftsData } from "@/lib/coordinator-data";
 import { ScheduleCaptureCard, DayScheduleItem } from "@/components/ScheduleCaptureCard";
 import { downloadScheduleImage } from "@/lib/utils/capture-schedule";
 import { Toast } from "@/components/ui/toast";
@@ -367,8 +368,24 @@ export function VolunteerProfileView({
   const [localCheckedInMap, setLocalCheckedInMap] = useState<Record<string, boolean>>({});
   const [localCheckedOutMap, setLocalCheckedOutMap] = useState<Record<string, boolean>>({});
   const [localEditingShifts, setLocalEditingShifts] = useState(false);
+  const [profileNow, setProfileNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setProfileNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const shiftsByDay = externalShiftsByDay || localShiftsByDay;
+  const assignedRecords = useMemo(() => {
+    const records = [...dbShiftRecords];
+    for (const [dayKey, keys] of Object.entries(shiftsByDay)) {
+      for (const shiftKey of keys) {
+        if (!records.some(record => record.day_key === dayKey && record.shift_key === shiftKey)) {
+          records.push({ volunteer_id: volunteer.id, day_key: dayKey, shift_key: shiftKey });
+        }
+      }
+    }
+    return records;
+  }, [dbShiftRecords, shiftsByDay, volunteer.id]);
 
   const EVENT_DAYS_RAW = useMemo(() => getOperationalEventDays(), []);
   const EVENT_DAYS = useMemo(() => {
@@ -445,118 +462,31 @@ export function VolunteerProfileView({
     }
   }, [volunteer.id, externalShiftsByDay, EVENT_DAYS]);
 
-  const isShiftCheckedOut = useCallback((dayKey: string, shiftKey: string): boolean => {
-    const sessionKey = `${volunteer.id}-${dayKey}-${shiftKey}`;
-    if (sessionAttendance.checkedOutMap[sessionKey]) return true;
-
+  const getDisplayState = useCallback((dayKey: string, shiftKey: string) => {
     const dbRec = dbShiftRecords.find(r => r.day_key === dayKey && r.shift_key === shiftKey);
-    if (dbRec) {
-      const sessionState = getShiftAttendanceState({
-        shift: dbRec, volunteerId: volunteer.id, dayKey, shiftKey,
-        checkedOutMap: sessionAttendance.checkedOutMap,
-      });
-      if (sessionState.isCheckedOut) return true;
+    const hasMapValue = (map: Record<string, boolean> | Record<string, string[]> | undefined) => {
+      if (!map) return false;
+      const value = map[dayKey];
+      return (Array.isArray(value) && value.includes(shiftKey))
+        || Boolean(map[`${volunteer.id}-${dayKey}-${shiftKey}`])
+        || Boolean(map[`${dayKey}-${shiftKey}`]);
+    };
+    const fallback = dbRec || {
+      checked_in: hasMapValue(externalCheckedInMap) || hasMapValue(localCheckedInMap),
+      checked_out: hasMapValue(externalCheckedOutMap) || hasMapValue(localCheckedOutMap),
+    };
+    return getShiftDisplayState(dayKey, shiftKey, fallback, volunteerSessions, assignedRecords, volunteer.id, profileNow);
+  }, [assignedRecords, dbShiftRecords, externalCheckedInMap, externalCheckedOutMap, localCheckedInMap, localCheckedOutMap, volunteerSessions, volunteer.id, profileNow]);
 
-      const map = externalCheckedOutMap || {};
-      const dayValue = map[dayKey];
-      return getShiftAttendanceState({
-        shift: dbRec, volunteerId: volunteer.id, dayKey, shiftKey,
-        checkedOutMap: map as Record<string, boolean>,
-        completed: Array.isArray(dayValue) && dayValue.includes(shiftKey),
-      }).isCheckedOut;
-    }
-
-    // Check relevant audit logs for this specific shift sorted by newest first
-    const relevantLogs = auditLogs.filter((l: any) => {
-      const desc = (l.description || '').toLowerCase();
-      const det = (l.details || '').toLowerCase();
-      const matchDay = desc.includes(dayKey.toLowerCase()) || det.includes(dayKey.toLowerCase());
-      const matchShift = desc.includes(shiftKey.toLowerCase()) || det.includes(shiftKey.toLowerCase());
-      return matchDay && matchShift;
-    });
-
-    if (relevantLogs.length > 0) {
-      // If there is any completed / checkout adjustment log in history, restoring / undoing accidental reopen keeps it completed
-      const hasCheckoutInHistory = relevantLogs.some((l: any) => {
-        const d = (l.description || '').toLowerCase();
-        return d.includes('check-out') || d.includes('salida') || d.includes('ajustó hora de salida') || d.includes('completó');
-      });
-
-      if (hasCheckoutInHistory) {
-        return true;
-      }
-    }
-
-    const map = externalCheckedOutMap || localCheckedOutMap;
-    if (!map) return false;
-    const arrayVal = (map as Record<string, string[]>)[dayKey];
-    if (Array.isArray(arrayVal)) {
-      return arrayVal.includes(shiftKey);
-    }
-    return (
-      !!(map as Record<string, boolean>)[`${volunteer.id}-${dayKey}-${shiftKey}`] ||
-      !!(map as Record<string, boolean>)[`${dayKey}-${shiftKey}`]
-    );
-  }, [dbShiftRecords, auditLogs, externalCheckedOutMap, localCheckedOutMap, volunteer.id, sessionAttendance.checkedOutMap]);
+  const isShiftCheckedOut = useCallback((dayKey: string, shiftKey: string): boolean =>
+    getDisplayState(dayKey, shiftKey).status === 'completed', [getDisplayState]);
 
   const isAdditionalCompletedShift = useCallback((dayKey: string, shiftKey: string): boolean => (
     Boolean(sessionAttendance.sessionAdditionalCompletedShiftKeys[`${volunteer.id}-${dayKey}-${shiftKey}`])
   ), [sessionAttendance.sessionAdditionalCompletedShiftKeys, volunteer.id]);
 
-  const isShiftCheckedIn = useCallback((dayKey: string, shiftKey: string): boolean => {
-    if (isShiftCheckedOut(dayKey, shiftKey)) return false;
-
-    const dbRec = dbShiftRecords.find(r => r.day_key === dayKey && r.shift_key === shiftKey);
-    if (dbRec) {
-      const sessionState = getShiftAttendanceState({
-        shift: dbRec, volunteerId: volunteer.id, dayKey, shiftKey,
-        checkedInMap: sessionAttendance.checkedInMap,
-      });
-      if (sessionState.isCheckedIn) return true;
-
-      const map = externalCheckedInMap || {};
-      const dayValue = map[dayKey];
-      return (Array.isArray(dayValue) && dayValue.includes(shiftKey)) || getShiftAttendanceState({
-        shift: dbRec, volunteerId: volunteer.id, dayKey, shiftKey,
-        checkedInMap: map as Record<string, boolean>,
-      }).isCheckedIn;
-    }
-
-    const relevantLogs = auditLogs.filter((l: any) => {
-      const desc = (l.description || '').toLowerCase();
-      const det = (l.details || '').toLowerCase();
-      const matchDay = desc.includes(dayKey.toLowerCase()) || det.includes(dayKey.toLowerCase());
-      const matchShift = desc.includes(shiftKey.toLowerCase()) || det.includes(shiftKey.toLowerCase());
-      return matchDay && matchShift;
-    });
-
-    if (relevantLogs.length > 0) {
-      const latestLog = relevantLogs[0];
-      const desc = (latestLog.description || '').toLowerCase();
-
-      if (desc.includes('revirtió la entrada') || desc.includes('revertido a estado programado') || desc.includes('deshacer')) {
-        return false;
-      }
-
-      if (desc.includes('check-in') || desc.includes('escaneó') || desc.includes('llegada') || desc.includes('entrada') || desc.includes('registró asistencia')) {
-        return true;
-      }
-    }
-
-    const map = externalCheckedInMap || localCheckedInMap;
-    if (!map) return false;
-    const arrayVal = (map as Record<string, string[]>)[dayKey];
-    if (Array.isArray(arrayVal)) {
-      return arrayVal.includes(shiftKey);
-    }
-    return getShiftAttendanceState({
-      shift: dbRec,
-      volunteerId: volunteer.id,
-      dayKey,
-      shiftKey,
-      checkedInMap: map as Record<string, boolean>,
-    }).isCheckedIn;
-  }, [dbShiftRecords, auditLogs, isShiftCheckedOut, externalCheckedInMap, localCheckedInMap, volunteer.id, sessionAttendance.checkedInMap]);
+  const isShiftCheckedIn = useCallback((dayKey: string, shiftKey: string): boolean =>
+    getDisplayState(dayKey, shiftKey).status === 'in_progress', [getDisplayState]);
 
   // Contexto de validación para reagendamiento (turnos propios + capacidad por comité)
   const {
@@ -702,8 +632,8 @@ export function VolunteerProfileView({
   }, []);
 
   const getShiftTimesFormatted = useCallback((dayKey: string, shiftKey: string) => {
-    return getUnifiedShiftTimes(dayKey, shiftKey, dbShiftRecords, auditLogs, volunteerSessions, volunteer.id);
-  }, [dbShiftRecords, auditLogs, volunteerSessions, volunteer.id]);
+    return getUnifiedShiftTimes(dayKey, shiftKey, assignedRecords, auditLogs, volunteerSessions, volunteer.id);
+  }, [assignedRecords, auditLogs, volunteerSessions, volunteer.id]);
 
   const getShiftWorkedMinutes = useCallback((dayKey: string, shiftKey: string) => {
     if (!isShiftCheckedOut(dayKey, shiftKey)) return 0;
@@ -1018,14 +948,16 @@ export function VolunteerProfileView({
 
       const shifts = getAvailableShiftKeys(dayKey).map((t) => {
         const active = assignedList.includes(t);
-        const inCheck = isShiftCheckedIn(dayKey, t);
-        const outCheck = isShiftCheckedOut(dayKey, t);
+        const display = getDisplayState(dayKey, t);
+        const inCheck = display.status === 'in_progress';
+        const outCheck = display.status === 'completed';
         return {
           shiftKey: t,
           isActive: active,
           isCheckedIn: inCheck,
           isCheckedOut: outCheck,
           isAdditional: isAdditionalCompletedShift(dayKey, t),
+          flag: display.flag,
         };
       });
 
@@ -1050,6 +982,7 @@ export function VolunteerProfileView({
     isShiftCheckedIn,
     isShiftCheckedOut,
     isAdditionalCompletedShift,
+    getDisplayState,
   ]);
 
   return (
@@ -1105,9 +1038,13 @@ export function VolunteerProfileView({
       {closedSessionToCorrect && (
         <AdminClosedSessionCorrectionModal
           session={closedSessionToCorrect}
+          otherSessions={volunteerSessions}
           volunteerName={`${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim() || volunteer.name}
           onClose={() => setClosedSessionToCorrect(null)}
-          onSuccess={async () => {
+          onSuccess={async (absorbedSessionIds) => {
+            if (absorbedSessionIds.length > 0) {
+              setUndoneSessionIds(previous => new Set([...previous, ...absorbedSessionIds]));
+            }
             await loadAuditLogs();
             const [sessionsResult, shiftsResult] = await Promise.all([
               fetchVolunteerAttendanceSessionsAction(volunteer.id),
@@ -1426,6 +1363,12 @@ export function VolunteerProfileView({
                       </span>
                       <span>Completado (Out)</span>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/40 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[12px] text-amber-500">warning</span>
+                      </span>
+                      <span>Revisar asistencia</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1548,8 +1491,9 @@ export function VolunteerProfileView({
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     {getAvailableShiftKeys(dayKey).map((t) => {
                       const active = assignedList.includes(t);
-                      const inCheck = isShiftCheckedIn(dayKey, t);
-                      const outCheck = isShiftCheckedOut(dayKey, t);
+                      const display = getDisplayState(dayKey, t);
+                      const inCheck = display.status === 'in_progress';
+                      const outCheck = display.status === 'completed';
                       const isAdditional = isAdditionalCompletedShift(dayKey, t);
 
                       const canClick = isEditingShifts || localEditingShifts;
@@ -1558,7 +1502,11 @@ export function VolunteerProfileView({
                       let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-text-dim/40">-</span>;
                       let labelColor = "text-text-dim/40";
 
-                      if (outCheck && isAdditional) {
+                      if (display.flag) {
+                        statusStyle = "bg-amber-500/15 border-amber-500/40 text-amber-500 shadow-sm";
+                        iconContent = <span className="material-symbols-outlined text-[15px] text-amber-500">warning</span>;
+                        labelColor = "text-amber-500 font-bold";
+                      } else if (outCheck && isAdditional) {
                         statusStyle = "bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm";
                         iconContent = <span className="material-symbols-outlined text-[15px] text-slate-500">add_task</span>;
                         labelColor = "text-slate-500 font-bold";
@@ -1577,7 +1525,9 @@ export function VolunteerProfileView({
                       }
 
                       const times = getShiftTimesFormatted(dayKey, t);
-                      const baseTitleText = isAdditional
+                      const baseTitleText = display.flag
+                        ? `Turno ${t} ${outCheck ? 'Finalizó' : inCheck ? 'En turno' : active ? 'Programado' : 'Disponible'} · Revisar: ${display.flag}${display.startAt ? ` · Entrada: ${getShiftTimesFormatted(dayKey, t).startTime}` : ''}`
+                        : isAdditional
                         ? `Turno ${t} adicional completado | Entrada: ${times.startTime} · Salida: ${times.endTime}`
                         : outCheck
                         ? `Turno ${t} Completado | Entrada: ${times.startTime} · Salida: ${times.endTime}`

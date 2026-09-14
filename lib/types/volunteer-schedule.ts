@@ -7,6 +7,7 @@ export interface VolunteerScheduleShift {
   checked_in_at: string | null;
   checked_out: boolean | null;
   checked_out_at: string | null;
+  attendance_flag?: string | null;
   area_id: string | null;
   area_name: string | null;
   area_description: string | null;

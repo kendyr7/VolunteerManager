@@ -22,7 +22,7 @@ import {
 import { createEntryPassPayload, validateEntryPassQrValue } from "@/lib/entry-pass";
 import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
 import { getGuatemalaDate, getGuatemalaDayKey } from '@/lib/scan-history';
-import { calculateAffectedShiftUpdates, validateCorrectedSession } from '@/lib/session-correction';
+import { calculateAffectedShiftUpdates, getSessionsOverlappingCorrection, validateCorrectedSession } from '@/lib/session-correction';
 import type { CorrectedShift } from '@/lib/session-correction';
 
 export async function getAttendanceSessionsAction(requestedDayKeys?: string[]): Promise<AttendanceSession[]> {
@@ -375,13 +375,9 @@ export async function fetchVolunteerAttendanceSessionsAction(volunteerId: string
   try {
     await requireVolunteerSelfOrCapability('view_volunteers', volunteerId);
     const allowedDayKeys = new Set(buildEventDayKeys());
-    const { data, error } = await getAdminClient()
-      .from('attendance_sessions')
-      .select('*')
-      .eq('volunteer_id', volunteerId)
-      .order('started_at', { ascending: false });
-    if (error) throw error;
-    const validSessions = ((data || []) as any[]).filter((s: any) => s.day_key && allowedDayKeys.has(s.day_key));
+    const sessions = await fetchAllRowsStrict<AttendanceSession>(getAdminClient(), 'attendance_sessions', '*', query =>
+      query.eq('volunteer_id', volunteerId).order('started_at', { ascending: false }));
+    const validSessions = sessions.filter(session => session.day_key && allowedDayKeys.has(session.day_key));
     return { success: true, sessions: validSessions };
   } catch (e: any) {
     return { success: false, error: e?.message || "Error al cargar sesiones", sessions: [] };
@@ -396,6 +392,7 @@ export async function correctClosedAttendanceSessionAdminAction(input: {
   startedAt: string;
   endedAt: string;
   reason: string;
+  mergeOverlapping?: boolean;
 }) {
   try {
     const actor = await requireCapability('correct_attendance_times');
@@ -415,22 +412,37 @@ export async function correctClosedAttendanceSessionAdminAction(input: {
       return { success: false as const, error: 'La asistencia cambió. Actualiza el historial antes de corregirla.' };
     }
 
-    const [sessionsResult, shiftsResult] = await Promise.all([
-      supabase.from('attendance_sessions').select('*').eq('volunteer_id', original.volunteer_id).throwOnError(),
-      supabase.from('shifts').select('id, volunteer_id, day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at')
-        .eq('volunteer_id', original.volunteer_id).throwOnError(),
+    const [sessions, shifts] = await Promise.all([
+      fetchAllRowsStrict<AttendanceSession>(supabase, 'attendance_sessions', '*', query =>
+        query.eq('volunteer_id', original.volunteer_id)),
+      fetchAllRowsStrict<CorrectedShift & { volunteer_id: string }>(supabase, 'shifts',
+        'id, volunteer_id, day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at',
+        query => query.eq('volunteer_id', original.volunteer_id)),
     ]);
-    const sessions = (sessionsResult.data || []) as AttendanceSession[];
-    const shifts = (shiftsResult.data || []) as Array<CorrectedShift & { volunteer_id: string }>;
     const corrected: AttendanceSession = { ...original, started_at: new Date(input.startedAt).toISOString(), ended_at: new Date(input.endedAt).toISOString(), auto_closed: false };
+    const { absorbed, blocking } = getSessionsOverlappingCorrection(original, corrected, sessions);
+    if (blocking.length > 0) {
+      return { success: false as const, error: 'El horario se solapa parcialmente con otra asistencia o con una sesión abierta. Revisa esas horas antes de unirlas.' };
+    }
+    if (absorbed.length > 0 && !input.mergeOverlapping) {
+      return { success: false as const, error: 'Esta corrección abarcará otra asistencia cerrada. Confirma que deseas unir los registros.' };
+    }
+    if (input.mergeOverlapping && absorbed.length === 0) {
+      return { success: false as const, error: 'Las asistencias cambiaron. Actualiza el historial antes de unirlas.' };
+    }
     const dayShifts = shifts.filter(shift => shift.day_key === original.day_key);
-    const shiftUpdates = calculateAffectedShiftUpdates(original, corrected, sessions.filter(session => session.day_key === original.day_key), dayShifts);
+    const shiftUpdates = calculateAffectedShiftUpdates(
+      original, corrected, sessions.filter(session => session.day_key === original.day_key),
+      dayShifts, absorbed.map(session => session.id),
+    );
     const patches = new Map(shiftUpdates.map(shift => [shift.id, shift]));
     const updatedShifts = shifts.map(shift => ({ ...shift, ...(patches.get(shift.id) || {}) }));
-    const updatedSessions = sessions.map(session => session.id === original.id ? corrected : session);
+    const absorbedIds = new Set(absorbed.map(session => session.id));
+    const updatedSessions = sessions.filter(session => !absorbedIds.has(session.id))
+      .map(session => session.id === original.id ? corrected : session);
     const score = getVolunteerReliabilityMetrics(original.volunteer_id, updatedShifts, updatedSessions).reliabilityScore;
 
-    const { data: saved, error } = await supabase.rpc('correct_closed_attendance_session', {
+    const rpcArgs = {
       p_session_id: original.id,
       p_expected_started_at: input.expectedStartedAt,
       p_expected_ended_at: input.expectedEndedAt,
@@ -442,10 +454,21 @@ export async function correctClosedAttendanceSessionAdminAction(input: {
       p_actor_role: roleDisplayName(actor),
       p_shift_updates: shiftUpdates,
       p_reliability_score: score,
-    });
+    };
+    const { data: saved, error } = absorbed.length > 0
+      ? await supabase.rpc('merge_closed_attendance_sessions', {
+        ...rpcArgs,
+        p_absorbed_sessions: absorbed.map(session => ({
+          id: session.id, started_at: session.started_at, ended_at: session.ended_at,
+        })),
+      })
+      : await supabase.rpc('correct_closed_attendance_session', rpcArgs);
     if (error) return { success: false as const, error: error.message };
     if (!saved) throw new Error('La corrección no devolvió la asistencia actualizada.');
     await broadcastSessionSync({ eventType: 'UPDATE', table: 'attendance_sessions', record: saved });
+    for (const removed of absorbed) {
+      await broadcastSessionSync({ eventType: 'DELETE', table: 'attendance_sessions', record: removed });
+    }
     shiftUpdates.forEach(update => {
       const shift = shifts.find(item => item.id === update.id);
       if (shift) broadcastShiftSync({ eventType: 'UPDATE', table: 'shifts', record: { ...shift, ...update } });

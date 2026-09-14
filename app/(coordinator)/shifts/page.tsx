@@ -27,10 +27,9 @@ import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 import { getShiftCapacityStatus, getShiftCommitteeScope } from "@/lib/shift-capacity";
-import { getShiftAttendanceState } from "@/lib/coordinator-data";
-import { attendanceSortPriority, getOpenAttendanceVolunteerIds, isLiveShiftRoster, resolveShiftView, type ShiftViewMode } from '@/lib/shift-view';
+import { attendanceSortPriority, isLiveShiftRoster, resolveShiftView, type ShiftViewMode } from '@/lib/shift-view';
 import { getGuatemalaDayKey } from '@/lib/scan-history';
-import { findAttendanceSessionForShift } from '@/lib/shift-calculations';
+import { findAttendanceSessionForShift, getShiftDisplayState } from '@/lib/shift-calculations';
 
 const EVENT_DAYS_DEFAULT = getOperationalEventDays().map(date => ({
   date,
@@ -157,11 +156,8 @@ export default function ShiftsPage() {
   const [selectedWards, setSelectedWards] = useState<string[]>([]);
   const [currentRole, setCurrentRole] = useState<'Admin' | 'Editor' | 'Lector'>('Admin');
   const [selectedViewMode, setViewMode] = useState<ShiftViewMode | null>(null);
+  const [showAttendanceReview, setShowAttendanceReview] = useState(false);
   const [rosterNow, setRosterNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = window.setInterval(() => setRosterNow(new Date()), 30000);
-    return () => window.clearInterval(timer);
-  }, []);
   const [checkoutModal, setCheckoutModal] = useState<{ isOpen: boolean; item: any | null }>({ isOpen: false, item: null });
 
   // Reassign State
@@ -194,10 +190,7 @@ export default function ShiftsPage() {
     globalShifts: contextGlobalShifts,
     indexedAssignments: contextIndexedAssignments,
     additionalCompletedByDayShift: contextAdditionalCompletedByDayShift,
-    checkedInMap: contextCheckedInMap,
-    checkedOutMap: contextCheckedOutMap,
     sessionsData: contextSessionsData,
-    activeSessionsByVolunteer,
     shiftCounts: contextShiftCounts,
     reliabilityMap,
     loading,
@@ -286,6 +279,34 @@ export default function ShiftsPage() {
     );
   }, [attendanceLookup]);
 
+  // A single pass feeds the counters, filters and rendered rows. Attendance
+  // inference is expensive, so do not repeat it for every consumer on each render.
+  const rosterDisplayStates = useMemo(() => {
+    const states = new Map<string, ReturnType<typeof getShiftDisplayState>>();
+    for (const shift of rawShiftsData) {
+      const dayKey = shift.day_key.toLowerCase().trim();
+      const volunteerDayKey = `${shift.volunteer_id}|${dayKey}`;
+      states.set(`${volunteerDayKey}|${shift.shift_key}`, getShiftDisplayState(
+        shift.day_key, shift.shift_key, shift,
+        attendanceLookup.sessions.get(volunteerDayKey) || [],
+        attendanceLookup.shifts.get(volunteerDayKey) || [],
+        shift.volunteer_id, rosterNow,
+      ));
+    }
+    return states;
+  }, [rawShiftsData, attendanceLookup, rosterNow]);
+
+  const getRosterDisplayState = useCallback((volunteerId: string, dayKey: string, shiftKey: string) => {
+    const key = `${volunteerId}|${dayKey.toLowerCase().trim()}`;
+    const cached = rosterDisplayStates.get(`${key}|${shiftKey}`);
+    if (cached) return cached;
+    return getShiftDisplayState(
+      dayKey, shiftKey, getShiftRecord(volunteerId, dayKey, shiftKey),
+      attendanceLookup.sessions.get(key) || [], attendanceLookup.shifts.get(key) || [],
+      volunteerId, rosterNow,
+    );
+  }, [attendanceLookup, getShiftRecord, rosterDisplayStates, rosterNow]);
+
   const EVENT_DAYS = useMemo(() => {
     const existingKeys = new Set(EVENT_DAYS_DEFAULT.map(d => d.key.toLowerCase()));
     const extraDays: Array<{ date: Date; key: string; label: string; dateNum: string }> = [];
@@ -305,6 +326,18 @@ export default function ShiftsPage() {
 
     return [...EVENT_DAYS_DEFAULT, ...extraDays];
   }, [rawShiftsData]);
+
+  useEffect(() => {
+    const eventDayKeys = new Set(EVENT_DAYS.map(day => day.key.toLowerCase().trim()));
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      const now = new Date();
+      const today = getGuatemalaDayKey(now);
+      setRosterNow(previous => eventDayKeys.has(today) || eventDayKeys.has(getGuatemalaDayKey(previous))
+        ? now : previous);
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [EVENT_DAYS]);
 
   // Toast State
   const [toast, setToast] = useState<{
@@ -477,10 +510,7 @@ export default function ShiftsPage() {
   const buildEmptyShifts = () =>
     Object.fromEntries(EVENT_DAYS.map(d => [d.key, [] as string[]]));
 
-  // checkedInMap, checkedOutMap, and globalShifts come from CoordinatorDataProvider
   const globalShifts = contextGlobalShifts;
-  const checkedInMap = contextCheckedInMap;
-  const checkedOutMap = contextCheckedOutMap;
 
   const scopedCommittees = useMemo(() => getShiftCommitteeScope(
     committeesList.map(committee => committee.name), selectedCommittees, appliedSearch,
@@ -595,22 +625,41 @@ export default function ShiftsPage() {
   const attendanceShiftKeys = useMemo(() => {
     const keys = new Set<string>();
     rawShiftsData.forEach(shift => {
-      const attendance = getShiftAttendanceState({ shift, volunteerId: shift.volunteer_id, dayKey: shift.day_key, shiftKey: shift.shift_key,
-        checkedInMap: contextCheckedInMap, checkedOutMap: contextCheckedOutMap });
-      if (attendance.isCheckedIn || attendance.isCheckedOut) {
+      const attendance = getRosterDisplayState(shift.volunteer_id, shift.day_key, shift.shift_key);
+      if (attendance.status !== 'scheduled' || attendance.flag) {
         keys.add(`${shift.day_key}|${shift.shift_key}`);
       }
     });
     return keys;
-  }, [rawShiftsData, contextCheckedInMap, contextCheckedOutMap]);
+  }, [rawShiftsData, getRosterDisplayState]);
 
   const totalActiveCount = useMemo(() => {
-    const activeVolunteerIds = getOpenAttendanceVolunteerIds(contextSessionsData, getGuatemalaDayKey(rosterNow));
+    const today = getGuatemalaDayKey(rosterNow);
+    const activeVolunteerIds = new Set(rawShiftsData
+      .filter(shift => shift.day_key.toLowerCase().trim() === today &&
+        getRosterDisplayState(shift.volunteer_id, shift.day_key, shift.shift_key).status === 'in_progress')
+      .map(shift => shift.volunteer_id));
     return [...activeVolunteerIds].filter(volunteerId => {
       const vol = volunteerMap.get(volunteerId);
       return Boolean(vol && scopedCommitteeSet.has(vol.committee) && matchesFilters(vol, '', [], [], [], currentRole));
     }).length;
-  }, [contextSessionsData, rosterNow, volunteerMap, scopedCommitteeSet, matchesFilters, currentRole]);
+  }, [rawShiftsData, rosterNow, getRosterDisplayState, volunteerMap, scopedCommitteeSet, matchesFilters, currentRole]);
+  const attendanceReviewItems = useMemo(() => rawShiftsData.flatMap(shift => {
+    const volunteer = volunteerMap.get(shift.volunteer_id);
+    if (!volunteer || !matchesFilters(volunteer, '', selectedCommittees, [], [], currentRole)) return [];
+    const display = getRosterDisplayState(shift.volunteer_id, shift.day_key, shift.shift_key);
+    return display.flag ? [{
+      id: shift.id,
+      volunteer,
+      dayKey: shift.day_key,
+      shiftKey: shift.shift_key,
+      status: display.status,
+      flag: display.flag,
+    }] : [];
+  }).sort((a, b) => parseDayKeyToDateStr(b.dayKey).localeCompare(parseDayKeyToDateStr(a.dayKey))
+    || a.shiftKey.localeCompare(b.shiftKey)
+    || a.volunteer.name.localeCompare(b.volunteer.name)),
+  [rawShiftsData, volunteerMap, matchesFilters, selectedCommittees, currentRole, getRosterDisplayState]);
   const viewMode = resolveShiftView(selectedViewMode ?? requestedView, totalActiveCount);
 
   // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales
@@ -633,14 +682,9 @@ export default function ShiftsPage() {
       if (!vol || !scopedCommitteeSet.has(vol.committee) || !filteredVolunteerIds.has(id)) continue;
 
       const s = getShiftRecord(vol.id, dateKey, shiftId);
-      const { isCheckedIn, isCheckedOut } = getShiftAttendanceState({
-        shift: s,
-        volunteerId: vol.id,
-        dayKey: dateKey,
-        shiftKey: shiftId,
-        checkedInMap: contextCheckedInMap,
-        checkedOutMap: contextCheckedOutMap,
-      });
+      const display = getRosterDisplayState(vol.id, dateKey, shiftId);
+      const isCheckedIn = display.status === 'in_progress';
+      const isCheckedOut = display.status === 'completed';
 
       if (viewMode === 'active') {
         // Keep today's full roster visible until midnight: pending first,
@@ -657,7 +701,7 @@ export default function ShiftsPage() {
 
     return result.sort((a, b) => (viewMode !== 'completed' ? (priorities.get(a.id)! - priorities.get(b.id)!) : 0)
       || a.committee.localeCompare(b.committee) || a.name.localeCompare(b.name));
-  }, [contextIndexedAssignments, contextAdditionalCompletedByDayShift, volunteerMap, filteredVolunteerIds, viewMode, shiftDataIndex, contextCheckedInMap, contextCheckedOutMap, getShiftRecord, scopedCommitteeSet, attendanceShiftKeys, rosterNow]);
+  }, [contextIndexedAssignments, contextAdditionalCompletedByDayShift, volunteerMap, filteredVolunteerIds, viewMode, shiftDataIndex, getRosterDisplayState, scopedCommitteeSet, attendanceShiftKeys, rosterNow]);
 
   const rosterByDayShift = useMemo(() => {
     const roster = new Map<string, VolunteerType[]>();
@@ -851,7 +895,7 @@ export default function ShiftsPage() {
     }[] = [];
 
     rawShiftsData.forEach(s => {
-      if (getShiftAttendanceState({ shift: s, volunteerId: s.volunteer_id, dayKey: s.day_key, shiftKey: s.shift_key, checkedInMap, checkedOutMap }).isCheckedIn) {
+      if (getRosterDisplayState(s.volunteer_id, s.day_key, s.shift_key).status === 'in_progress') {
         const vol = volMap.get(s.volunteer_id);
         if (vol) {
           list.push({
@@ -859,7 +903,7 @@ export default function ShiftsPage() {
             volunteer: vol,
             dayKey: s.day_key,
             shiftKey: s.shift_key,
-            checkedInAt: s.checked_in_at,
+            checkedInAt: getRosterDisplayState(s.volunteer_id, s.day_key, s.shift_key).startAt,
             checkedOut: !!s.checked_out
           });
         }
@@ -892,7 +936,7 @@ export default function ShiftsPage() {
 
       return matchesSearch && matchesCommittee && matchesStake && matchesWard;
     });
-  }, [rawShiftsData, volunteers, currentRole, appliedSearch, selectedCommittees, selectedStakes, selectedWards, checkedInMap, checkedOutMap]);
+  }, [rawShiftsData, volunteers, currentRole, appliedSearch, selectedCommittees, selectedStakes, selectedWards, getRosterDisplayState]);
 
   const handleConfirmCheckout = async () => {
     if (!checkoutModal.item) return;
@@ -971,11 +1015,9 @@ export default function ShiftsPage() {
   };
 
   const totalCompletedCount = useMemo(() => rawShiftsData.filter(shift =>
-    volunteerMap.has(shift.volunteer_id) && getShiftAttendanceState({
-      shift, volunteerId: shift.volunteer_id, dayKey: shift.day_key, shiftKey: shift.shift_key,
-      checkedInMap, checkedOutMap,
-    }).isCheckedOut
-  ).length, [rawShiftsData, volunteerMap, checkedInMap, checkedOutMap]);
+    volunteerMap.has(shift.volunteer_id) &&
+    getRosterDisplayState(shift.volunteer_id, shift.day_key, shift.shift_key).status === 'completed'
+  ).length, [rawShiftsData, volunteerMap, getRosterDisplayState]);
 
   const formatGuatemalaTime = (isoString?: string | null) => {
     if (!isoString) return undefined;
@@ -1348,20 +1390,15 @@ export default function ShiftsPage() {
                             <div className="space-y-1">
                               {displayedVols.map(vol => {
                                 const shiftRecord = getShiftRecord(vol.id, key, t);
-                                const { isCheckedIn, isCheckedOut } = getShiftAttendanceState({
-                                  shift: shiftRecord,
-                                  volunteerId: vol.id,
-                                  dayKey: key,
-                                  shiftKey: t,
-                                  checkedInMap,
-                                  checkedOutMap,
-                                });
+                                const displayState = getRosterDisplayState(vol.id, key, t);
+                                const isCheckedIn = displayState.status === 'in_progress';
+                                const isCheckedOut = displayState.status === 'completed';
                                 const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                 const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                 const attendanceSession = findRosterSession(vol.id, key, t);
                                 const isAdditional = Boolean(attendanceSession?.is_additional_shift);
-                                const attendanceStartedAt = attendanceSession?.started_at || shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
-                                const attendanceEndedAt = attendanceSession?.shift_completed_at || shiftRecord?.checked_out_at;
+                                const attendanceStartedAt = displayState.startAt;
+                                const attendanceEndedAt = displayState.endAt;
                                 const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
                                 const checkOutTimeStr = formatGuatemalaTime(attendanceEndedAt);
                                 const elapsed = getElapsedInfoBetween(attendanceStartedAt, attendanceEndedAt);
@@ -1370,7 +1407,9 @@ export default function ShiftsPage() {
                                   <div
                                     key={vol.id}
                                     className={`flex items-center justify-between group border rounded-sm px-2 py-1.5 transition-all cursor-pointer ${
-                                      isCheckedOut
+                                      displayState.flag
+                                        ? 'bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/15'
+                                        : isCheckedOut
                                         ? 'opacity-60 bg-gray-500/10 border-gray-500/20 text-text-dim dark:bg-white/5 dark:border-white/10 dark:text-gray-400 hover:opacity-100'
                                         : isCheckedIn
                                         ? 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/15'
@@ -1397,7 +1436,9 @@ export default function ShiftsPage() {
                                         }`}>
                                           <HighlightText text={vol.name} term={appliedSearch} />
                                         </span>
-                                        {isCheckedOut ? (
+                                        {displayState.flag ? (
+                                           <span className="font-inter font-bold text-[9px] leading-tight text-amber-500" title={displayState.flag}>⚠ {displayState.flag}{isCheckedOut ? ` · Finalizó ${checkOutTimeStr || ''}` : ''}</span>
+                                         ) : isCheckedOut ? (
                                            <div className="flex flex-col gap-0.5 min-w-0">
                                              <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOverNextDay || elapsed?.isOver8Hours ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-500'}`}>
                                                {isAdditional ? 'Turno adicional completado' : 'Completado'} {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
@@ -1417,7 +1458,7 @@ export default function ShiftsPage() {
                                                </button>
                                              )}
                                            </div>
-                                        ) : isCheckedIn ? (
+                                         ) : isCheckedIn ? (
                                           <span className={`font-inter font-bold text-[9px] leading-tight ${
                                             shiftRecord?.checked_in_at && (Date.now() - new Date(shiftRecord.checked_in_at).getTime() > 8 * 3600 * 1000)
                                               ? 'text-red-400 font-extrabold'
@@ -1635,20 +1676,15 @@ export default function ShiftsPage() {
                                 (isShiftExpanded ? vols : vols.slice(0, limit)).map(vol => {
                                   const isMatch = appliedSearch.trim() !== '' && vol.name.toLowerCase().includes(appliedSearch.toLowerCase());
                                   const shiftRecord = getShiftRecord(vol.id, key, t);
-                                  const { isCheckedIn, isCheckedOut } = getShiftAttendanceState({
-                                    shift: shiftRecord,
-                                    volunteerId: vol.id,
-                                    dayKey: key,
-                                    shiftKey: t,
-                                    checkedInMap,
-                                    checkedOutMap,
-                                  });
+                                  const displayState = getRosterDisplayState(vol.id, key, t);
+                                  const isCheckedIn = displayState.status === 'in_progress';
+                                  const isCheckedOut = displayState.status === 'completed';
                                   const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                   const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                   const attendanceSession = findRosterSession(vol.id, key, t);
                                   const isAdditional = Boolean(attendanceSession?.is_additional_shift);
-                                  const attendanceStartedAt = attendanceSession?.started_at || shiftRecord?.checked_in_at || activeSessionsByVolunteer[vol.id]?.started_at;
-                                  const attendanceEndedAt = attendanceSession?.shift_completed_at || shiftRecord?.checked_out_at;
+                                  const attendanceStartedAt = displayState.startAt;
+                                  const attendanceEndedAt = displayState.endAt;
                                   const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
                                   const checkOutTimeStr = formatGuatemalaTime(attendanceEndedAt);
                                   const elapsed = getElapsedInfoBetween(attendanceStartedAt, attendanceEndedAt);
@@ -1657,9 +1693,11 @@ export default function ShiftsPage() {
                                     <div
                                       key={vol.id}
                                       className={`flex items-center justify-between gap-2 cursor-pointer p-2 rounded-xl transition-all ${
-                                        isCheckedOut
-                                          ? 'opacity-60 bg-gray-500/10 border border-gray-500/20 dark:bg-white/5 dark:border-white/10 hover:opacity-100'
-                                          : isCheckedIn
+                                         displayState.flag
+                                           ? 'bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25'
+                                           : isCheckedOut
+                                           ? 'opacity-60 bg-gray-500/10 border border-gray-500/20 dark:bg-white/5 dark:border-white/10 hover:opacity-100'
+                                           : isCheckedIn
                                           ? 'bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25'
                                           : isMatch
                                           ? 'bg-yellow-400/20 ring-1 ring-yellow-300/40 hover:bg-yellow-400/30'
@@ -1686,7 +1724,9 @@ export default function ShiftsPage() {
                                           }`}>
                                             <HighlightText text={vol.name} term={appliedSearch} />
                                           </span>
-                                          {isCheckedOut ? (
+                                          {displayState.flag ? (
+                                             <span className="font-inter font-bold text-[9px] leading-tight text-amber-400" title={displayState.flag}>⚠ {displayState.flag}{isCheckedOut ? ` · Finalizó ${checkOutTimeStr || ''}` : ''}</span>
+                                           ) : isCheckedOut ? (
                                              <div className="flex flex-col gap-0.5 min-w-0">
                                                <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOverNextDay || elapsed?.isOver8Hours ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-400'}`}>
                                                  {isAdditional ? 'Turno adicional completado' : 'Completado'} {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
@@ -1706,7 +1746,7 @@ export default function ShiftsPage() {
                                                  </button>
                                                )}
                                              </div>
-                                          ) : isCheckedIn ? (
+                                           ) : isCheckedIn ? (
                                             <span className={`font-inter font-bold text-[9px] leading-tight ${
                                               shiftRecord?.checked_in_at && (Date.now() - new Date(shiftRecord.checked_in_at).getTime() > 8 * 3600 * 1000)
                                                 ? 'text-red-400 font-extrabold'
@@ -1876,6 +1916,22 @@ export default function ShiftsPage() {
           />
         </div>
 
+        <button
+          type="button"
+          onClick={() => setShowAttendanceReview(value => !value)}
+          aria-expanded={showAttendanceReview}
+          aria-controls="attendance-review-list"
+          className={cn(
+            "self-start inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors cursor-pointer",
+            showAttendanceReview
+              ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-300"
+              : "border-border bg-dark2 text-text-dim hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-300"
+          )}
+        >
+          <span className="material-symbols-outlined text-[16px]" aria-hidden="true">warning</span>
+          Revisar asistencia ({attendanceReviewItems.length})
+        </button>
+
         {/* Search Input */}
         <div className="w-full relative z-10">
           <SmartSearchBar
@@ -1888,9 +1944,44 @@ export default function ShiftsPage() {
         </div>
       </div>
 
+      {showAttendanceReview && (
+        <section id="attendance-review-list" aria-label="Asistencias para revisar" className="mx-4 mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 sm:mx-6 lg:mx-8">
+          <div className="mb-3">
+            <h2 className="text-sm font-bold text-text">Asistencias para revisar</h2>
+            <p className="text-xs text-text-dim">Estos registros tienen una sesión incompleta o datos que no concuerdan. Abre un perfil para revisar la asistencia.</p>
+          </div>
+          {attendanceReviewItems.length === 0 ? (
+            <p className="text-xs font-medium text-text-dim">No hay alertas de asistencia en el alcance actual.</p>
+          ) : (
+            <div className="max-h-[420px] overflow-y-auto space-y-2">
+              {attendanceReviewItems.map(item => (
+                <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-dark2 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-text">
+                      {currentRole === 'Lector' ? 'Voluntario' : item.volunteer.name}
+                      <span className="ml-2 text-text-dim">{item.dayKey} · {item.shiftKey}</span>
+                    </p>
+                    <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-300">
+                      {item.status === 'completed' ? 'Finalizó · ' : item.status === 'in_progress' ? 'En turno · ' : ''}
+                      {item.flag}
+                    </p>
+                  </div>
+                  {currentRole !== 'Lector' && (
+                    <button type="button" onClick={() => handleEditClick(item.volunteer)}
+                      className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] font-bold text-text hover:border-amber-500/50 hover:text-amber-600 dark:hover:text-amber-300 cursor-pointer">
+                      Ver perfil
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {viewMode === 'active' && (
         <p className="px-4 sm:px-6 lg:px-8 mb-3 text-xs text-text-dim">
-          Pendientes primero, asistentes activos después y salidas completadas en gris hasta medianoche. El contador incluye solo sesiones abiertas.
+          Pendientes primero, asistentes activos después y salidas completadas en gris hasta medianoche. El contador incluye solo asistencias verificadas dentro del turno vigente; las salidas pendientes se señalan en ámbar.
         </p>
       )}
 

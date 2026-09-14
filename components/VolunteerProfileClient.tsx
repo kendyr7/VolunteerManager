@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { startRegistration } from "@simplewebauthn/browser";
 import { Button } from "@/components/ui/button";
 import { Toast } from "@/components/ui/toast";
 
 import { Badge } from "@/components/ui/badge";
-import { getOfficialShiftTime } from "@/lib/dates";
+import { getOfficialShiftTime, parseGuatemalaShiftEnd } from "@/lib/dates";
 import { getVolunteerReliabilityMetrics } from "@/lib/services/volunteer-reliability.service";
 import type { VolunteerScheduleShift } from "@/lib/types/volunteer-schedule";
+import { getVolunteerScheduleAction } from "@/app/actions/volunteer-schedule-actions";
 
 interface VolunteerProfileClientProps {
   volunteer: any;
@@ -22,6 +23,28 @@ export function VolunteerProfileClient({
   initialShifts = []
 }: VolunteerProfileClientProps) {
   const [hasPasskey, setHasPasskey] = useState(initialHasPasskey);
+  const [shifts, setShifts] = useState(initialShifts);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const result = await getVolunteerScheduleAction(volunteer.id);
+        if (!cancelled && result.success) setShifts(result.shifts);
+      } catch (error) {
+        console.error('No se pudo actualizar la asistencia:', error);
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [volunteer.id]);
   const [isRegistering, setIsRegistering] = useState(false);
 
   // Toast State
@@ -99,8 +122,8 @@ export function VolunteerProfileClient({
   };
 
   const computedScore = useMemo(() => {
-    return getVolunteerReliabilityMetrics(volunteer.id, initialShifts, []).reliabilityScore;
-  }, [initialShifts, volunteer.id]);
+    return getVolunteerReliabilityMetrics(volunteer.id, shifts, []).reliabilityScore;
+  }, [shifts, volunteer.id]);
 
   const score = computedScore;
   const radius = 32;
@@ -282,13 +305,13 @@ export function VolunteerProfileClient({
           </div>
           
           <div className="p-6 md:p-8">
-            {initialShifts.length === 0 ? (
+            {shifts.length === 0 ? (
               <div className="text-center py-8 text-text-dim italic text-sm font-inter">
                 No tienes turnos programados en el sistema.
               </div>
             ) : (
               <div className="divide-y divide-white/5 max-h-[360px] overflow-y-auto pr-1">
-                {[...initialShifts]
+                {[...shifts]
                   .sort((a, b) => {
                     const dayA = parseInt(a.day_key.split(' ')[1]) || 0;
                     const dayB = parseInt(b.day_key.split(' ')[1]) || 0;
@@ -299,11 +322,8 @@ export function VolunteerProfileClient({
                   })
                   .map((s) => {
                     // Check if shift has passed
-                    const now = new Date();
-                    const dayNumPart = s.day_key.split(' ')[1];
-                    const dayNum = parseInt(dayNumPart) || 10;
                     const official = getOfficialShiftTime(s.day_key, s.shift_key);
-                    const shiftEndTime = new Date(2026, 8, dayNum, Math.floor(official.endHour), Math.round((official.endHour % 1) * 60), 0); // Sept 2026
+                    const shiftEndTime = parseGuatemalaShiftEnd(s.day_key, s.shift_key);
                     const passed = now > shiftEndTime;
 
                     const timeLabel = official.timeLabel;
@@ -323,9 +343,17 @@ export function VolunteerProfileClient({
                           </p>
                         </div>
 
-                        {s.checked_in ? (
+                        {s.attendance_flag || (s.checked_in && !s.checked_out && passed) ? (
+                          <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/25 font-inter font-bold text-[10px] py-1 px-2.5" title={s.attendance_flag || 'Entrada sin salida después del horario'}>
+                            ⚠ {s.checked_out ? 'Finalizó · revisar' : 'Revisar asistencia'}
+                          </Badge>
+                        ) : s.checked_out ? (
+                          <Badge className="bg-slate-500/10 text-slate-400 border border-slate-500/20 font-inter font-bold text-[10px] py-1 px-2.5">
+                            Finalizó
+                          </Badge>
+                        ) : s.checked_in ? (
                           <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-inter font-bold text-[10px] py-1 px-2.5">
-                            Confirmado ✓
+                            Asistió
                           </Badge>
                         ) : passed ? (
                           <Badge className="bg-red-500/10 text-red border border-red-500/20 font-inter font-bold text-[10px] py-1 px-2.5">

@@ -1,5 +1,6 @@
-import { getOfficialShiftTime } from "@/lib/dates";
-import { inferAdditionalCompletedShifts, inferShiftsForSession, getSessionShiftCompletedAt } from "@/lib/session-utils";
+import { getOfficialShiftTime, parseDayKeyToDateStr } from "@/lib/dates";
+import { getGuatemalaDate } from "@/lib/scan-history";
+import { getContinuousScheduledBlockForSession, inferAdditionalCompletedShifts, inferShiftsForSession, getSessionShiftCompletedAt } from "@/lib/session-utils";
 
 export interface ShiftTimeResult {
   startTime: string;
@@ -26,6 +27,7 @@ interface AttendanceSessionTimeRecord {
   updated_at?: string;
   created_at?: string;
   shift_completed_at?: string | null;
+  shift_started_at?: string | null;
   is_additional_shift?: boolean;
 }
 
@@ -69,19 +71,33 @@ export function findAttendanceSessionForShift(
       const endedAt = session?.ended_at ?? session?.endedAt ?? null;
       if (!startedAt) return false;
       const assignedKeys = assignedShiftKeys.length > 0 ? assignedShiftKeys : [shiftKey];
-      const isAssignedMatch = inferShiftsForSession(
+      const isAssignedMatch = assignedShiftKeys.length > 0 && inferShiftsForSession(
         dayKey,
         startedAt,
         endedAt,
         assignedKeys,
       ).some((related) => related.shiftKey === shiftKey);
+      // Attendance display must include a real, short visit even when it did
+      // not meet the separate threshold for crediting a completed shift.
+      const block = getContinuousScheduledBlockForSession(dayKey, startedAt, assignedKeys);
+      const inBlock = block?.matchedShifts.some((related) => related.shiftKey === shiftKey);
+      const official = getOfficialShiftTime(dayKey, shiftKey);
+      const midnight = new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime();
+      const shiftStart = midnight + official.startHour * 3600000;
+      const shiftEnd = midnight + official.endHour * 3600000;
+      const startedMs = new Date(startedAt).getTime();
+      const endedMs = endedAt ? new Date(endedAt).getTime() : Date.now();
+      const visitedAssignedShift = Boolean(assignedShiftKeys.length > 0 && inBlock && (
+        (block?.startShiftKey === shiftKey && startedMs < shiftStart)
+        || (startedMs < shiftEnd && endedMs > shiftStart)
+      ));
       const isAdditionalMatch = Boolean(endedAt) && inferAdditionalCompletedShifts(
         dayKey,
         startedAt,
         endedAt,
         assignedShiftKeys,
       ).some((related) => related.shiftKey === shiftKey);
-      return isAssignedMatch || isAdditionalMatch;
+      return isAssignedMatch || visitedAssignedShift || isAdditionalMatch;
     })
     .sort((left, right) => {
       const leftTime = new Date(left.updated_at || left.started_at || left.startedAt || left.created_at || 0).getTime();
@@ -96,15 +112,96 @@ export function findAttendanceSessionForShift(
   const completionKeys = isAdditionalShift
     ? Array.from(new Set([...assignedShiftKeys, ...additionalShifts.map(shift => shift.shiftKey)]))
     : (assignedShiftKeys.length > 0 ? assignedShiftKeys : [shiftKey]);
+  const block = getContinuousScheduledBlockForSession(dayKey, startedAt, completionKeys);
+  const official = getOfficialShiftTime(dayKey, shiftKey);
+  const officialStart = new Date(
+    new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime()
+      + official.startHour * 3600000,
+  ).toISOString();
   return {
     ...session,
     is_additional_shift: isAdditionalShift,
+    shift_started_at: block?.startShiftKey === shiftKey ? startedAt :
+      (new Date(startedAt).getTime() > new Date(officialStart).getTime() ? startedAt : officialStart),
     shift_completed_at: getSessionShiftCompletedAt(
       dayKey, shiftKey, startedAt,
       endedAt,
       completionKeys,
     ),
   };
+}
+
+export type ShiftDisplayStatus = 'scheduled' | 'in_progress' | 'completed' | 'needs_review';
+
+/** One attendance interpretation for roster rows and both personal schedules. */
+export function getShiftDisplayState(
+  dayKey: string,
+  shiftKey: string,
+  shift: { checked_in?: boolean | null; checked_in_at?: string | null; checked_out?: boolean | null; checked_out_at?: string | null } | null | undefined,
+  sessions: AttendanceSessionTimeRecord[] = [],
+  assignedShifts: any[] = [],
+  volunteerId?: string,
+  now = new Date(),
+): { status: ShiftDisplayStatus; startAt: string | null; endAt: string | null; flag: string | null } {
+  if (sessions.length === 0 && !shift?.checked_in && !shift?.checked_in_at
+    && !shift?.checked_out && !shift?.checked_out_at) {
+    return { status: 'scheduled', startAt: null, endAt: null, flag: null };
+  }
+  const matching = findAttendanceSessionForShift(dayKey, shiftKey, sessions, assignedShifts, volunteerId);
+  if (matching) {
+    const startedAt = matching.shift_started_at || matching.started_at || matching.startedAt || null;
+    const endedAt = matching.ended_at ?? matching.endedAt ?? null;
+    const completedAt = matching.shift_completed_at || endedAt;
+    const assignedKeys = assignedShifts
+      .filter(item => String(item?.day_key || item?.dayKey || '').toLowerCase().trim() === dayKey.toLowerCase().trim()
+        && (!volunteerId || (item?.volunteer_id || item?.volunteerId) === volunteerId))
+      .map(item => item?.shift_key || item?.shiftKey).filter(Boolean);
+    const originalStart = matching.started_at || matching.startedAt || '';
+    const shortVisit = Boolean(endedAt && !inferShiftsForSession(
+      dayKey, originalStart, endedAt, assignedKeys.length ? assignedKeys : [shiftKey], now,
+    ).some(item => item.shiftKey === shiftKey) && !matching.is_additional_shift);
+    if (completedAt) return {
+      status: 'completed', startAt: startedAt, endAt: completedAt,
+      flag: [
+        shortVisit ? 'Asistencia breve: revisar si cumple el mínimo del turno' : null,
+        matching.status === 'open' && endedAt ? 'Sesión abierta con salida registrada' : null,
+        (shift?.checked_in || shift?.checked_in_at) && !shift?.checked_out && !shift?.checked_out_at
+          ? 'Flag de entrada sin salida aunque la sesión finalizó' : null,
+      ].filter(Boolean).join(' · ') || null,
+    };
+    const isToday = parseDayKeyToDateStr(dayKey) === getGuatemalaDate(now);
+    const officialEnd = new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime()
+      + getOfficialShiftTime(dayKey, shiftKey).endHour * 3600000;
+    if (matching.status !== 'open' || !isToday || now.getTime() >= officialEnd) return {
+      status: 'needs_review', startAt: startedAt, endAt: null,
+      flag: matching.status !== 'open' ? 'Sesión finalizada sin hora de salida'
+        : 'Salida pendiente: sesión abierta fuera del horario del turno',
+    };
+    return {
+      status: 'in_progress', startAt: startedAt, endAt: null,
+      flag: shift?.checked_out || shift?.checked_out_at ? 'Flag de salida aunque la sesión sigue abierta' : null,
+    };
+  }
+
+  const hasDaySession = sessions.some(session =>
+    String(session.day_key || session.dayKey || '').toLowerCase().trim() === dayKey.toLowerCase().trim()
+    && (!volunteerId || (session.volunteer_id || session.volunteerId) === volunteerId));
+  const legacyOut = Boolean(shift?.checked_out || shift?.checked_out_at);
+  const legacyIn = Boolean(shift?.checked_in || shift?.checked_in_at);
+  if (hasDaySession) return {
+    status: 'scheduled', startAt: null, endAt: null,
+    flag: legacyIn || legacyOut ? 'Flags del turno sin sesión de asistencia correspondiente' : null,
+  };
+  if (legacyOut) return { status: 'completed', startAt: shift?.checked_in_at || null, endAt: shift?.checked_out_at || null, flag: null };
+  if (legacyIn) return {
+    status: 'needs_review', startAt: shift?.checked_in_at || null, endAt: null,
+    flag: parseDayKeyToDateStr(dayKey) === getGuatemalaDate(now)
+      && now.getTime() < new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime()
+        + getOfficialShiftTime(dayKey, shiftKey).endHour * 3600000
+      ? 'Entrada sin sesión de asistencia: verificar presencia'
+      : 'Entrada antigua sin salida ni sesión',
+  };
+  return { status: 'scheduled', startAt: null, endAt: null, flag: null };
 }
 
 export function getAttendanceSessionTimes(
@@ -117,7 +214,7 @@ export function getAttendanceSessionTimes(
   const session = findAttendanceSessionForShift(dayKey, shiftKey, sessionsData, dbShiftRecords, volunteerId);
   if (!session) return null;
 
-  const startTime = formatGuatemalaTime(session.started_at || session.startedAt);
+  const startTime = formatGuatemalaTime(session.shift_started_at || session.started_at || session.startedAt);
   const endTime = formatGuatemalaTime(session.shift_completed_at);
   if (!startTime) return null;
   return { startTime, endTime: endTime || 'En curso' };
@@ -144,50 +241,19 @@ export function getUnifiedShiftTimes(
   if (sessionTimes) return sessionTimes;
 
   const official = getOfficialShiftTime(dayKey, shiftKey);
-  let startTime = official.startTime;
-  let endTime = official.endTime;
-
-  // 1. Precise override for known test shift records
-  if (dayKey.includes('11') && shiftKey === 'T4') {
-    return { startTime: '10:26 p. m.', endTime: '11:00 p. m.' };
-  }
-  if (dayKey.includes('12') && shiftKey === 'T3') {
-    return { startTime: '10:37 p. m.', endTime: '11:00 p. m.' };
-  }
-
-  // 2. Check audit logs for explicit time range text e.g. "de 12:08 p. m. a 11:00 p. m."
-  const relevantLogs = (auditLogs || []).filter((l) => {
-    const desc = (l.description || '').toLowerCase();
-    const det = (l.details || '').toLowerCase();
-    return (desc.includes(dayKey.toLowerCase()) || det.includes(dayKey.toLowerCase())) &&
-           (desc.includes(shiftKey.toLowerCase()) || det.includes(shiftKey.toLowerCase()));
-  });
-
-  const checkInLog = relevantLogs.find((l) => {
-    const desc = (l.description || '').toLowerCase();
-    return desc.includes('check-in') || desc.includes('escaneó') || desc.includes('registró asistencia');
-  });
-
-  if (checkInLog?.created_at) {
-    try {
-      startTime = new Date(checkInLog.created_at).toLocaleTimeString('es-GT', {
-        timeZone: 'America/Guatemala',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-    } catch {}
-  }
-
-  for (const log of relevantLogs) {
-    const desc = log.description || '';
-    const match = desc.match(/\bde\s+(\d{1,2}:\d{2}\s*(?:a\.?\s*m\.?|p\.?\s*m\.?))\s+\ba\s+(\d{1,2}:\d{2}\s*(?:a\.?\s*m\.?|p\.?\s*m\.?))/i);
-    if (match) {
-      endTime = match[2];
-      break;
-    }
-  }
-
+  const record = (dbShiftRecords as Array<{
+    volunteer_id?: string; day_key?: string; shift_key?: string;
+    checked_in?: boolean; checked_out?: boolean;
+    checked_in_at?: string | null; checked_out_at?: string | null;
+  }>).find((item) =>
+    item.day_key?.toLowerCase().trim() === dayKey.toLowerCase().trim()
+    && item.shift_key === shiftKey
+    && (!volunteerId || item.volunteer_id === volunteerId));
+  const hasAttendance = Boolean(record?.checked_in || record?.checked_out || record?.checked_in_at || record?.checked_out_at);
+  const startTime = formatGuatemalaTime(record?.checked_in_at)
+    || (hasAttendance ? 'Sin entrada registrada' : official.startTime);
+  const endTime = formatGuatemalaTime(record?.checked_out_at)
+    || (hasAttendance ? 'Sin salida registrada' : official.endTime);
   return { startTime, endTime };
 }
 
@@ -198,37 +264,18 @@ export function getUnifiedShiftWorkedMinutes(
   dayKey: string,
   shiftKey: string,
   dbShiftRecords: unknown[] = [],
-  auditLogs: ShiftAuditLog[] = []
+  _auditLogs: ShiftAuditLog[] = []
 ): number {
-  // Override for known test shifts to guarantee exact 34m and 23m
-  if (dayKey.includes('11') && shiftKey === 'T4') return 34;
-  if (dayKey.includes('12') && shiftKey === 'T3') return 23;
-
-  const maxMins = (shiftKey === 'T1' || shiftKey === 'T4') ? 300 : 240;
-  const times = getUnifiedShiftTimes(dayKey, shiftKey, dbShiftRecords, auditLogs);
-
-  const parseTimeStr = (tStr: string) => {
-    const isPm = tStr.toLowerCase().includes('p');
-    const clean = tStr.replace(/[^\d:]/g, '');
-    const [hStr, mStr] = clean.split(':');
-    let h = parseInt(hStr, 10) || 0;
-    const m = parseInt(mStr, 10) || 0;
-    if (isPm && h < 12) h += 12;
-    if (!isPm && h === 12) h = 0;
-    return h * 60 + m;
-  };
-
-  try {
-    const startMins = parseTimeStr(times.startTime);
-    const endMins = parseTimeStr(times.endTime);
-    let diff = endMins - startMins;
-    if (diff < 0) diff += 24 * 60;
-    if (diff > 0 && diff <= maxMins) {
-      return diff;
-    }
-  } catch {}
-
-  return 30;
+  const record = (dbShiftRecords as Array<{
+    day_key?: string; shift_key?: string;
+    checked_in_at?: string | null; checked_out_at?: string | null;
+  }>).find(item => item.day_key?.toLowerCase().trim() === dayKey.toLowerCase().trim()
+    && item.shift_key === shiftKey && item.checked_in_at && item.checked_out_at);
+  if (!record?.checked_in_at || !record.checked_out_at) return 0;
+  const duration = Math.round((new Date(record.checked_out_at).getTime()
+    - new Date(record.checked_in_at).getTime()) / 60000);
+  const maxMins = getOfficialShiftTime(dayKey, shiftKey).durationMinutes;
+  return Number.isFinite(duration) && duration > 0 && duration <= maxMins ? duration : 0;
 }
 
 /**

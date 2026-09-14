@@ -158,9 +158,14 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
     }));
 
   const [attendanceNow, setAttendanceNow] = useState(() => new Date());
+  const sessionsDataRef = useRef(sessionsData);
+  sessionsDataRef.current = sessionsData;
   useEffect(() => {
     const updateClock = () => {
-      if (document.visibilityState === 'visible') setAttendanceNow(new Date());
+      if (document.visibilityState === 'visible'
+        && sessionsDataRef.current.some(session => session.status === 'open' && !session.ended_at)) {
+        setAttendanceNow(new Date());
+      }
     };
     const timer = window.setInterval(updateClock, SESSION_SYNC_INTERVAL_MS);
     document.addEventListener('visibilitychange', updateClock);
@@ -293,7 +298,10 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           useVolunteerStore.getState().setInitialVolunteers(cleanVols);
           setCommitteesList(activeComms);
           setShiftsData(cleanShifts);
-          setSessionsData(loadedSessions ?? []);
+          setSessionsData(previous => {
+            const next = loadedSessions ?? [];
+            return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+          });
           useVolunteerStore.getState().setInitialShifts(cleanShifts);
 
           const parsedReqs = parseRequirementsData(reqsData ?? [], activeComms);
@@ -332,7 +340,10 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
         }
         const { getAttendanceSessionsAction } = await import('@/app/actions/attendance');
         const latestSessions = await getAttendanceSessionsAction(OPERATIONAL_EVENT_DAY_KEYS);
-        setSessionsData(latestSessions ?? []);
+        setSessionsData(previous => {
+          const next = latestSessions ?? [];
+          return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+        });
       } catch (error) {
         console.error('Error refreshing attendance sessions:', error);
       } finally {
@@ -348,7 +359,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
     fetchData();
     const handleAuthorizationChange = () => void fetchData(true);
     const refreshVisibleData = () => {
-      if (document.visibilityState === 'visible') void fetchData(true);
+      if (document.visibilityState === 'visible') void fetchData();
     };
     const timer = window.setInterval(refreshVisibleData, STALE_TIME_MS);
     window.addEventListener('permissions-changed', handleAuthorizationChange);

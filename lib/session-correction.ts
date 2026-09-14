@@ -27,18 +27,50 @@ export interface CorrectedShift {
   checked_out_at?: string | null;
 }
 
+/** A correction may absorb complete, closed sessions from the same day. */
+export function getSessionsOverlappingCorrection(
+  original: AttendanceSession,
+  corrected: AttendanceSession,
+  sessions: AttendanceSession[],
+): { absorbed: AttendanceSession[]; blocking: AttendanceSession[] } {
+  const start = new Date(corrected.started_at).getTime();
+  const end = new Date(corrected.ended_at || 0).getTime();
+  const absorbed: AttendanceSession[] = [];
+  const blocking: AttendanceSession[] = [];
+  for (const session of sessions) {
+    if (session.id === original.id || session.volunteer_id !== original.volunteer_id) continue;
+    const otherStart = new Date(session.started_at).getTime();
+    const otherEnd = session.ended_at ? new Date(session.ended_at).getTime() : Date.now();
+    if (otherStart >= end || otherEnd <= start) continue;
+    if (session.day_key === original.day_key && session.status === 'completed'
+      && session.ended_at && otherStart >= start && otherEnd <= end) {
+      absorbed.push(session);
+    } else {
+      blocking.push(session);
+    }
+  }
+  return { absorbed, blocking };
+}
+
 export function calculateAffectedShiftUpdates(
   original: AttendanceSession,
   corrected: AttendanceSession,
   sessions: AttendanceSession[],
   shifts: CorrectedShift[],
+  absorbedSessionIds: string[] = [],
 ) {
   const assignedKeys = shifts.map(shift => shift.shift_key);
   const relatedKeys = (session: AttendanceSession) => new Set<string>(
     inferShiftsForSession(session.day_key, session.started_at, session.ended_at, assignedKeys).map(shift => shift.shiftKey),
   );
-  const affected = new Set([...relatedKeys(original), ...relatedKeys(corrected)]);
-  const latestSessions = sessions.map(session => session.id === corrected.id ? corrected : session);
+  const absorbedIds = new Set(absorbedSessionIds);
+  const affected = new Set([
+    ...relatedKeys(original), ...relatedKeys(corrected),
+    ...sessions.filter(session => absorbedIds.has(session.id)).flatMap(session => [...relatedKeys(session)]),
+  ]);
+  const latestSessions = sessions
+    .filter(session => !absorbedIds.has(session.id))
+    .map(session => session.id === corrected.id ? corrected : session);
   return shifts.filter(shift => affected.has(shift.shift_key)).map(shift => {
     const matching = latestSessions.filter(session => relatedKeys(session).has(shift.shift_key));
     const starts = matching.map(session => session.started_at).sort();

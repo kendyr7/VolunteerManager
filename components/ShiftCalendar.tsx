@@ -70,6 +70,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [], 
   const [shiftsByDay, setShiftsByDay] = useState<Record<string, string[]>>(initialParsed.mapped);
   const [checkedInShifts, setCheckedInShifts] = useState<Record<string, string[]>>(initialParsed.confirmed);
   const [checkedOutShifts, setCheckedOutShifts] = useState<Record<string, string[]>>(initialParsed.checkedOut);
+  const [attendanceSessions, setAttendanceSessions] = useState<any[]>(initialSessions);
   const [shiftAreasBySlot, setShiftAreasBySlot] = useState<Record<string, ShiftAreaDetails | null>>(initialParsed.areas);
   const [loading, setLoading] = useState(!volunteerInfo && initialShifts.length === 0);
   const [pendingShiftKeys, setPendingShiftKeys] = useState<Set<string>>(() => new Set());
@@ -102,6 +103,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [], 
         setShiftsByDay(mapped);
         setCheckedInShifts(confirmed);
         setCheckedOutShifts(checkedOut);
+        setAttendanceSessions(result.sessions);
         setShiftAreasBySlot(areas);
       }
     } catch (e) {
@@ -216,7 +218,7 @@ export function ShiftCalendar({ volunteerId, volunteerInfo, initialShifts = [], 
       <VolunteerProfileView
         volunteer={volunteerData}
         mode="volunteer"
-        attendanceSessions={initialSessions}
+        attendanceSessions={attendanceSessions}
         shiftsByDay={shiftsByDay}
         checkedInMap={checkedInShifts}
         checkedOutMap={checkedOutShifts}

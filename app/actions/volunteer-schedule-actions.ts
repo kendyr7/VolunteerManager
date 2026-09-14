@@ -16,5 +16,5 @@ export async function getVolunteerScheduleAction(volunteerId: string) {
     : hasCapability(sessionUser, 'view_volunteers', volunteer.committeeId || undefined);
   if (!canRead) throw new AuthorizationError('No tienes permiso para consultar este horario.');
 
-  return { success: true as const, shifts: await VolunteerScheduleService.getSchedule(volunteer.id) };
+  return { success: true as const, ...await VolunteerScheduleService.getScheduleSnapshot(volunteer.id) };
 }
