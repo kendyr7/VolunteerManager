@@ -79,9 +79,11 @@ export class VolunteerScheduleService {
         volunteer_id: shift.volunteer_id,
         day_key: shift.day_key,
         shift_key: shift.shift_key,
-        checked_in: display.status === 'in_progress' || display.status === 'completed',
+        checked_in: display.status === 'in_progress' || display.status === 'completed' || Boolean(display.endAt),
         checked_in_at: display.startAt,
-        checked_out: display.status === 'completed',
+        // The exit is a recorded fact even when a brief visit needs review and
+        // does not earn completion credit. Keep the warning on that row.
+        checked_out: display.status === 'completed' || Boolean(display.endAt),
         checked_out_at: display.endAt,
         attendance_flag: display.flag,
         area_id: shift.area_id,

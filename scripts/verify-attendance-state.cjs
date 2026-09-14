@@ -233,6 +233,39 @@ check('El intento de salida antes de una hora exige una confirmacion explicita',
 check('Un turno separado no se marca durante el primer bloque', () => {
   assert.deepEqual(inferShiftsForSession(day, at('08:00'), at('12:00'), ['T1', 'T4']).map(s => s.shiftKey), ['T1']);
 });
+check('Una salida real que cubre dos bloques separados acredita ambos turnos agendados', () => {
+  const records = ['T1', 'T4'].map(key => ({ ...shifts[0], id: key, shift_key: key }));
+  const continuous = { ...completed, started_at: at('06:58'), ended_at: at('20:38') };
+  assert.deepEqual(inferShiftsForSession(day, continuous.started_at, continuous.ended_at, ['T1', 'T4']).map(s => s.shiftKey), ['T1', 'T4']);
+  const data = derive(records, [continuous], at('20:38'));
+  assert.deepEqual(state(data, 0, records), { isCheckedIn: false, isCheckedOut: true });
+  assert.deepEqual(state(data, 1, records), { isCheckedIn: false, isCheckedOut: true });
+  assert.equal(getShiftDisplayState(day, 'T4', records[1], [continuous], records, id).status, 'completed');
+  assert.equal(getVolunteerProfileMetrics(id, records, [], [continuous]).scheduledCompletedShiftsCount, 2);
+  assert.equal(findAttendanceSessionForShift(day, 'T1', [continuous], records, id).shift_completed_at, new RealDate(at('12:00')).toISOString());
+});
+check('Una sesion aun abierta no inventa presencia en otro bloque agendado', () => {
+  const records = ['T1', 'T4'].map(key => ({ ...shifts[0], id: key, shift_key: key }));
+  const open = { ...session, started_at: at('06:58') };
+  const data = derive(records, [open], at('19:00'));
+  assert.equal(data.sessionOpenShiftKeys[`${id}-${day}-T4`], undefined);
+  assert.equal(findAttendanceSessionForShift(day, 'T4', [open], records, id), null);
+});
+check('Una salida breve en el segundo bloque aparece como cerrada para revisar, sin acreditar', () => {
+  const records = ['T1', 'T4'].map(key => ({ ...shifts[0], id: key, shift_key: key }));
+  const shortLate = { ...completed, started_at: at('11:30'), ended_at: at('17:10') };
+  const display = getShiftDisplayState(day, 'T4', records[1], [shortLate], records, id);
+  assert.equal(display.status, 'needs_review');
+  assert.equal(display.endAt, shortLate.ended_at);
+  assert.match(display.flag, /50%/);
+});
+check('Una segunda asistencia breve no oculta un turno ya completado', () => {
+  const first = { ...completed, id: 'first', started_at: at('07:00'), ended_at: at('11:30') };
+  const second = { ...completed, id: 'second', started_at: at('11:40'), ended_at: at('11:50') };
+  const match = findAttendanceSessionForShift(day, 'T1', [first, second], [shifts[0]], id);
+  assert.equal(match.id, first.id);
+  assert.equal(getShiftDisplayState(day, 'T1', shifts[0], [first, second], [shifts[0]], id).status, 'completed');
+});
 check('Marcacion manual vuelve a pendiente al limpiar las banderas', () => {
   const manual = [{ ...shifts[0], checked_in: true, checked_out: true, checked_in_at: at('08:00'), checked_out_at: at('12:00') }];
   assert.equal(state(derive(manual, [], at('12:00')), 0, manual).isCheckedOut, true);

@@ -87,8 +87,8 @@ export function findAttendanceSessionForShift(
       const shiftEnd = midnight + official.endHour * 3600000;
       const startedMs = new Date(startedAt).getTime();
       const endedMs = endedAt ? new Date(endedAt).getTime() : Date.now();
-      const visitedAssignedShift = Boolean(assignedShiftKeys.length > 0 && inBlock && (
-        (block?.startShiftKey === shiftKey && startedMs < shiftStart)
+      const visitedAssignedShift = Boolean(assignedShiftKeys.length > 0 && (endedAt || inBlock) && (
+        (inBlock && block?.startShiftKey === shiftKey && startedMs < shiftStart)
         || (startedMs < shiftEnd && endedMs > shiftStart)
       ));
       const isAdditionalMatch = Boolean(endedAt) && inferAdditionalCompletedShifts(
@@ -100,6 +100,17 @@ export function findAttendanceSessionForShift(
       return isAssignedMatch || visitedAssignedShift || isAdditionalMatch;
     })
     .sort((left, right) => {
+      const leftEnd = left.ended_at ?? left.endedAt;
+      const rightEnd = right.ended_at ?? right.endedAt;
+      if (leftEnd && rightEnd) {
+        const earnsCredit = (item: AttendanceSessionTimeRecord, endedAt: string) => {
+          const startedAt = item.started_at || item.startedAt || '';
+          return inferShiftsForSession(dayKey, startedAt, endedAt, assignedShiftKeys).some(shift => shift.shiftKey === shiftKey)
+            || inferAdditionalCompletedShifts(dayKey, startedAt, endedAt, assignedShiftKeys).some(shift => shift.shiftKey === shiftKey);
+        };
+        const creditDifference = Number(earnsCredit(right, rightEnd)) - Number(earnsCredit(left, leftEnd));
+        if (creditDifference) return creditDifference;
+      }
       const leftTime = new Date(left.updated_at || left.started_at || left.startedAt || left.created_at || 0).getTime();
       const rightTime = new Date(right.updated_at || right.started_at || right.startedAt || right.created_at || 0).getTime();
       return rightTime - leftTime;

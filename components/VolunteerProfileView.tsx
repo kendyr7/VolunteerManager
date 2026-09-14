@@ -1487,6 +1487,7 @@ export function VolunteerProfileView({
                       const display = getDisplayState(dayKey, t);
                       const inCheck = display.status === 'in_progress';
                       const outCheck = display.status === 'completed';
+                      const recordedExit = display.status === 'needs_review' && Boolean(display.endAt);
                       const isAdditional = isAdditionalCompletedShift(dayKey, t);
 
                       const canClick = isEditingShifts || localEditingShifts;
@@ -1519,7 +1520,7 @@ export function VolunteerProfileView({
 
                       const times = getShiftTimesFormatted(dayKey, t);
                       const baseTitleText = display.flag
-                        ? `Turno ${t} ${outCheck ? 'Finalizó' : inCheck ? 'En turno' : active ? 'Programado' : 'Disponible'} · Revisar: ${display.flag}${display.startAt ? ` · Entrada: ${getShiftTimesFormatted(dayKey, t).startTime}` : ''}`
+                        ? `Turno ${t} ${outCheck ? 'Finalizó' : recordedExit ? 'Salida registrada' : inCheck ? 'En turno' : active ? 'Programado' : 'Disponible'} · Revisar: ${display.flag}${display.startAt ? ` · Entrada: ${times.startTime}` : ''}${recordedExit ? ` · Salida: ${times.endTime}` : ''}`
                         : isAdditional
                         ? `Turno ${t} adicional completado | Entrada: ${times.startTime} · Salida: ${times.endTime}`
                         : outCheck
@@ -1539,7 +1540,7 @@ export function VolunteerProfileView({
                       const shiftButtonClassName = cn(
                         "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all cursor-pointer",
                         statusStyle,
-                        (canClick || outCheck) && !isSavingShift && "hover:bg-dark hover:border-border active:scale-95",
+                        (canClick || outCheck || recordedExit) && !isSavingShift && "hover:bg-dark hover:border-border active:scale-95",
                         isSavingShift && "cursor-progress"
                       );
                       const shiftButtonContent = (
@@ -1555,7 +1556,7 @@ export function VolunteerProfileView({
 
                       return (
                         <div key={t} className="flex flex-col items-center relative">
-                          {outCheck ? (
+                          {outCheck || recordedExit ? (
                             <Popover.Root>
                               <Popover.Trigger
                                 type="button"
@@ -1607,7 +1608,7 @@ export function VolunteerProfileView({
                             <div className="h-4 mt-1 flex items-center justify-center shrink-0">
                               {isAdditional ? (
                                 <span className="text-[8px] font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">Adicional</span>
-                              ) : outCheck ? (
+                              ) : outCheck || recordedExit ? (
                                 <button
                                   type="button"
                                   disabled={isProcessingAudit}

@@ -397,12 +397,12 @@ async function run() {
     assert.deepEqual(forgotten.snapshot().map(s => s.isCheckedOut), [true, true]);
     assert.equal(forgotten.tables.attendance_sessions[0].ended_at, at('12:00'));
   });
-  await verify('Una correccion tardia de T1 nunca incluye T3 separado', async () => {
+  await verify('Una salida real a las 18:00 acredita T3 separado si cubre mas de la mitad', async () => {
     const flow = createHarness({ shiftKeys: ['T1', 'T3'] });
     await flow.scanner().runHandler(flow.qr);
     flow.advance('18:00');
     await flow.actions.adjustSessionTimesAdminAction({ sessionId: flow.tables.attendance_sessions[0].id, endedAt: at('18:00'), correctionType: 'custom_time', reason: 'Salida real verificada' });
-    assert.deepEqual(flow.snapshot().map(s => s.isCheckedOut), [true, false]);
+    assert.deepEqual(flow.snapshot().map(s => s.isCheckedOut), [true, true]);
   });
   await verify('Sesion del dia anterior exige correccion y respeta la fecha original', async () => {
     const flow = createHarness();

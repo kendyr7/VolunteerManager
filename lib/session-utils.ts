@@ -63,13 +63,14 @@ export function sessionTouchesAssignedShift(
   now: Date | string = new Date(),
 ): boolean {
   const block = getContinuousScheduledBlockForSession(dayKey, startedAt, assignedShiftKeys);
-  if (!block?.matchedShifts.some(shift => shift.shiftKey === shiftKey)) return false;
+  if (!assignedShiftKeys.includes(shiftKey)) return false;
+  if (!endedAt && !block?.matchedShifts.some(shift => shift.shiftKey === shiftKey)) return false;
   const shift = getOfficialShiftTime(dayKey, shiftKey);
   const startHour = getGuatemalaHourFloat(startedAt);
   let endHour = getGuatemalaHourFloat(endedAt || now);
   if (endHour < startHour && new Date(endedAt || now).getTime() > new Date(startedAt).getTime()) endHour += 24;
   return (startHour < shift.endHour && endHour > shift.startHour)
-    || (block.startShiftKey === shiftKey && startHour < shift.startHour);
+    || (block?.startShiftKey === shiftKey && startHour < shift.startHour);
 }
 
 /**
@@ -102,10 +103,12 @@ export function inferShiftsForSession(
   if (!sessionStart) return [];
 
   const sessionStartHour = getGuatemalaHourFloat(sessionStart);
-  // A session belongs to the block where it began, even when its exit is late.
-  // Never infer attendance in a separate block from the elapsed interval alone.
+  // An open session belongs to its starting block until an administrator resolves
+  // a forgotten exit. A closed session has verified exit evidence: credit each
+  // assigned shift whose own scheduled window was worked for more than half.
   const block = getContinuousScheduledBlockForSession(dayKey, sessionStart, assignedShifts);
-  const sessionShiftKeys = block ? block.matchedShifts.map(shift => shift.shiftKey) : assignedShifts;
+  const sessionShiftKeys = sessionEnd ? assignedShifts
+    : block ? block.matchedShifts.map(shift => shift.shiftKey) : assignedShifts;
 
   let sessionEndHour: number;
   if (sessionEnd) {
@@ -207,9 +210,16 @@ export function getSessionShiftCompletedAt(
   assignedShiftKeys: string[],
   now: string | Date = new Date(),
 ): string | null {
-  const block = getContinuousScheduledBlockForSession(dayKey, startedAt, assignedShiftKeys);
-  const shift = block?.matchedShifts.find(item => item.shiftKey === shiftKey);
-  if (block && shift && shift.endHour < getOfficialShiftTime(dayKey, block.endShiftKey).endHour) {
+  const block = endedAt
+    ? getContinuousScheduledBlocks(dayKey, assignedShiftKeys).find(item => item.shiftKeys.includes(shiftKey))
+    : getContinuousScheduledBlockForSession(dayKey, startedAt, assignedShiftKeys);
+  const shift = block && getOfficialShiftTime(dayKey, shiftKey);
+  const blockEndHour = block ? ('endHour' in block
+    ? block.endHour : getOfficialShiftTime(dayKey, block.endShiftKey).endHour) : null;
+  const laterCoveredBlock = Boolean(endedAt && blockEndHour !== null && inferShiftsForSession(
+    dayKey, startedAt, endedAt, assignedShiftKeys,
+  ).some(item => item.startHour >= blockEndHour));
+  if (block && shift && blockEndHour !== null && (shift.endHour < blockEndHour || laterCoveredBlock)) {
     const midnight = new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime();
     const shiftEndMs = midnight + shift.endHour * 3600000;
     const effectiveEndMs = new Date(endedAt || now).getTime();
