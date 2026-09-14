@@ -1,5 +1,6 @@
 import { getAdminSupabase } from "@/lib/supabase/admin";
 import { AttendanceSession } from "@/lib/session-utils";
+import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
 
 // In-memory session store used ONLY when explicitly running tests
 const memorySessionStore = new Map<string, AttendanceSession>();
@@ -21,27 +22,19 @@ export async function fetchAllAttendanceSessionsFromDb(
 
   try {
     const supabase = await getAdminSupabase();
-    let query = supabase
-      .from('attendance_sessions')
-      .select(committeeId ? '*, volunteers!inner(committee_id)' : '*')
-      .order('started_at', { ascending: false });
-    if (dayKeys?.length) query = query.in('day_key', dayKeys);
-    if (committeeId) query = query.eq('volunteers.committee_id', committeeId);
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("[SESSION STORE] Error fetching attendance sessions from DB:", error.message);
-      throw new Error('No se pudieron consultar las sesiones de asistencia. Intenta de nuevo.');
-    }
-
-    if (data) {
-      // The selected relation is only used for server-side filtering. Supabase's
-      // type parser cannot infer a conditional select string, while the returned
-      // session columns keep the same AttendanceSession shape at runtime.
-      const sessions = data as unknown as AttendanceSession[];
-      sessions.forEach((session) => memorySessionStore.set(session.id, session));
-      return sessions;
-    }
+    const sessions = await fetchAllRowsStrict<AttendanceSession>(
+      supabase,
+      'attendance_sessions',
+      committeeId ? '*, volunteers!inner(committee_id)' : '*',
+      query => {
+        let scoped = query.order('started_at', { ascending: false }).order('id', { ascending: false });
+        if (dayKeys?.length) scoped = scoped.in('day_key', dayKeys);
+        if (committeeId) scoped = scoped.eq('volunteers.committee_id', committeeId);
+        return scoped;
+      },
+    );
+    sessions.forEach((session) => memorySessionStore.set(session.id, session));
+    return sessions;
   } catch (e: any) {
     console.error("[SESSION STORE] Exception fetching attendance sessions:", e?.message);
     throw e;

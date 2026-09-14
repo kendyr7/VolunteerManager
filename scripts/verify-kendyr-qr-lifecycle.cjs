@@ -40,11 +40,11 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll
     static now() { return new Date(now).getTime(); }
   }
   class Query {
-    constructor(table) { assert.ok(tables[table], `Unexpected table ${table}`); this.table = table; this.filters = []; this.mode = 'select'; this.columns = '*'; }
+    constructor(table) { assert.ok(tables[table], `Unexpected table ${table}`); this.table = table; this.filters = []; this.mode = 'select'; this.columns = '*'; this.sorts = []; }
     select(columns = '*') { this.columns = columns; return this; }
     eq(key, value) { this.filters.push(row => key === 'volunteers.committee_id' ? tables.volunteers.find(v => v.id === row.volunteer_id)?.committee_id === value : row[key] === value); return this; }
     in(key, values) { this.filters.push(row => values.includes(row[key])); return this; }
-    order(key, options = {}) { this.sort = [key, options]; return this; }
+    order(key, options = {}) { this.sorts.push([key, options]); return this; }
     limit(value) { this.cap = value; return this; }
     range(from, to) { this.bounds = [from, to]; return this; }
     maybeSingle() { this.singleRow = true; return this; }
@@ -70,16 +70,20 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll
           table.push(row); return row;
         });
       }
-      if (this.sort) {
-        const [key, options] = this.sort;
+      if (this.sorts.length) {
         rows = [...rows].sort((a, b) => {
-          if (a[key] == null) return options.nullsFirst ? -1 : 1;
-          if (b[key] == null) return options.nullsFirst ? 1 : -1;
-          return String(a[key]).localeCompare(String(b[key])) * (options.ascending === false ? -1 : 1);
+          for (const [key, options] of this.sorts) {
+            if (a[key] == null && b[key] != null) return options.nullsFirst ? -1 : 1;
+            if (b[key] == null && a[key] != null) return options.nullsFirst ? 1 : -1;
+            const difference = String(a[key]).localeCompare(String(b[key])) * (options.ascending === false ? -1 : 1);
+            if (difference) return difference;
+          }
+          return 0;
         });
       }
       if (this.cap !== undefined) rows = rows.slice(0, this.cap);
       if (this.bounds) rows = rows.slice(this.bounds[0], this.bounds[1] + 1);
+      else if (this.mode === 'select' && this.table === 'attendance_sessions') rows = rows.slice(0, 1000);
       rows = rows.map(row => {
         const value = clone(row);
         if (this.table === 'shifts' && this.columns.includes('volunteers')) value.volunteers = clone(tables.volunteers.find(v => v.id === row.volunteer_id) || null);
@@ -171,6 +175,7 @@ function createHarness({ shiftKeys = ['T1', 'T2'], canCorrect = true, canViewAll
     return ctx;
   }
   return { tables, events, paths, actions, qr, snapshot, scanner, metrics,
+    shiftCalculations: load('@/lib/shift-calculations'),
     auditActions: load('@/app/actions/audit-actions'),
     correction: (variable = 'handleConfirmOfficial', initial = {}) => handler('components/AdminSessionCorrectionModal.tsx', variable, {
       ...actions, session: tables.attendance_sessions[0],
@@ -741,6 +746,34 @@ async function run() {
     assert.ok(scanned.error);
     assert.equal(scanned.requiresManualSelection, undefined);
     assert.ok(scanned.error.includes('sáb 12'));
+  });
+  await verify('La lista compartida incluye una asistencia antigua despues de superar 1000 registros', async () => {
+    const flow = createHarness({ canViewAll: false, committeeId: 'committee-test' });
+    flow.tables.volunteers[0].committee_id = 'committee-test';
+    flow.tables.volunteers.push({ id: 'another-volunteer', committee_id: 'committee-test' });
+    const oldSession = {
+      id: 'older-completed-session', volunteer_id: volunteer.id, day_key: 'jue 10',
+      started_at: at('07:19'), ended_at: at('14:54'), status: 'completed', auto_closed: false,
+    };
+    flow.tables.attendance_sessions.push(oldSession);
+    const base = new Date(at('08:00')).getTime();
+    for (let i = 0; i < 1192; i++) {
+      const started_at = new Date(base + i * 1000).toISOString();
+      flow.tables.attendance_sessions.push({
+        id: `newer-session-${String(i).padStart(4, '0')}`,
+        volunteer_id: 'another-volunteer', day_key: 'jue 10', started_at,
+        ended_at: new Date(base + i * 1000 + 500).toISOString(),
+        status: 'completed', auto_closed: false,
+      });
+    }
+    const loaded = await flow.actions.getAttendanceSessionsAction(['jue 10']);
+    assert.equal(loaded.length, 1193);
+    assert.ok(loaded.some(item => item.id === oldSession.id));
+    for (const shift of flow.tables.shifts) {
+      assert.equal(flow.shiftCalculations.getShiftDisplayState(
+        shift.day_key, shift.shift_key, shift, loaded, flow.tables.shifts, volunteer.id,
+      ).status, 'completed');
+    }
   });
   const passes = results.filter(r => r.passed).length;
   console.log(`RESULTADO: ${passes}/${results.length} aprobadas; ${results.length - passes} fallos reproducidos. Persistencia y autenticacion simuladas; datos de produccion intactos.`);
