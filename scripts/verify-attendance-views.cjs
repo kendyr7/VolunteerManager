@@ -9,6 +9,9 @@ const root = path.resolve(__dirname, '..');
 const jiti = createJiti(__filename, { alias: { '@': root } });
 const { resolveShiftView, isLiveShiftRoster, attendanceSortPriority, getOpenAttendanceVolunteerIds } = jiti('../lib/shift-view.ts');
 const { getUnifiedShiftTimes, getShiftDisplayState } = jiti('../lib/shift-calculations.ts');
+const { getAttendanceSessionReviewFlag } = jiti('../lib/attendance-review.ts');
+const { getAvailableShiftKeys, parseDayKeyToDateStr } = jiti('../lib/dates.ts');
+const { getGuatemalaDayKey } = jiti('../lib/scan-history.ts');
 const { getShiftAttendanceState } = jiti('../lib/coordinator-data.ts');
 const { getVolunteerProfileMetrics } = jiti('../lib/services/volunteer-profile.service.ts');
 const at = time => new Date(`2026-09-05T${time}:00-06:00`);
@@ -37,20 +40,23 @@ const volunteers = [
 const shifts = volunteers.map(v => ({ id: `shift-${v.id}`, volunteer_id: v.id, day_key: 'sáb 5', shift_key: 'T1', checked_in: v.id !== 'pending', checked_out: v.id === 'closed' }));
 const arrivedSession = { id: 'session-arrived', volunteer_id: 'arrived', day_key: 'sáb 5',
   started_at: at('09:00').toISOString(), ended_at: null, status: 'open' };
-function roster(mode, now = at('10:00'), day = 'sáb 5', hasOpen = true) {
+function roster(mode, now = at('10:00'), day = 'sáb 5', hasOpen = true, unscheduledSession = null) {
+  const rosterVolunteers = unscheduledSession
+    ? [...volunteers, { id: 'unassigned', name: 'Sin programa', committee: 'A' }] : volunteers;
   return evaluate('app/(coordinator)/shifts/page.tsx', 'getAssignedVolunteers', {
     useCallback: fn => fn,
     contextIndexedAssignments: { [day]: { T1: { A: volunteers.map(v => v.id) } } },
     contextAdditionalCompletedByDayShift: {},
+    activeVolunteerIdsByShift: new Map(unscheduledSession ? [[`${day}|T1`, new Set(['unassigned'])]] : []),
     shiftDataIndex: { volunteerIdsByShift: new Map() },
     normalizeSearch: value => value.toLowerCase(),
-    volunteerMap: new Map(volunteers.map(v => [v.id, v])),
-    filteredVolunteerIds: new Set(volunteers.map(v => v.id)),
+    volunteerMap: new Map(rosterVolunteers.map(v => [v.id, v])),
+    filteredVolunteerIds: new Set(rosterVolunteers.map(v => v.id)),
     scopedCommitteeSet: new Set(['A', 'Z']),
     matchesFilters: () => true, appliedSearch: '', selectedCommittees: [], selectedStakes: [], selectedWards: [], currentRole: 'Admin',
     getShiftRecord: id => shifts.find(s => s.volunteer_id === id),
     getRosterDisplayState: (id, dayKey, shiftKey) => getShiftDisplayState(dayKey, shiftKey,
-      shifts.find(s => s.volunteer_id === id), id === 'arrived' ? [arrivedSession] : [],
+      shifts.find(s => s.volunteer_id === id), id === 'arrived' ? [arrivedSession] : id === 'unassigned' ? [unscheduledSession] : [],
       shifts.filter(s => s.volunteer_id === id), id, now),
     getShiftAttendanceState, contextCheckedInMap: {}, contextCheckedOutMap: {},
     viewMode: mode, isLiveShiftRoster, attendanceSortPriority,
@@ -92,6 +98,52 @@ check('El contador usa personas con sesion abierta hoy, no banderas antiguas del
     { volunteer_id: 'old', day_key: 'vie 4', status: 'open', ended_at: null },
   ];
   assert.deepEqual([...getOpenAttendanceVolunteerIds(sessions, 'sáb 5')], ['arrived']);
+});
+check('Una entrada sin turno asignado aparece en el turno vigente sin acreditarse como completada', () => {
+  const now = at('10:00');
+  const unassignedSession = { id: 'open-unassigned', volunteer_id: 'unassigned', day_key: 'sáb 5',
+    started_at: at('09:25').toISOString(), ended_at: null, status: 'open' };
+  const display = getShiftDisplayState('sáb 5', 'T1', null, [unassignedSession], [], 'unassigned', now);
+  assert.equal(display.status, 'in_progress');
+  assert.equal(display.endAt, null);
+  assert.equal(getShiftDisplayState('sáb 5', 'T1', null, [unassignedSession], [], 'unassigned', at('08:00')).status, 'scheduled');
+  assert.equal(getShiftDisplayState('sáb 5', 'T1', null, [unassignedSession], [], 'unassigned', at('14:01')).status, 'scheduled');
+  assert.equal(getAttendanceSessionReviewFlag(unassignedSession, [], now), null);
+  assert.match(getAttendanceSessionReviewFlag(unassignedSession, [], at('14:01')), /Salida pendiente/);
+  const activeMap = evaluate('app/(coordinator)/shifts/page.tsx', 'activeVolunteerIdsByShift', {
+    useMemo: fn => fn(), rosterNow: now, getGuatemalaDayKey, getAvailableShiftKeys,
+    contextSessionsData: [unassignedSession],
+    getRosterDisplayState: (_id, dayKey, shiftKey) => getShiftDisplayState(dayKey, shiftKey,
+      null, [unassignedSession], [], 'unassigned', now),
+  });
+  assert.deepEqual([...activeMap.get('sáb 5|T1')], ['unassigned']);
+  assert.ok(roster('active', now, 'sáb 5', true, unassignedSession).some(vol => vol.id === 'unassigned'));
+});
+check('La revision distingue sesiones breves y fechas incorrectas sin alertar un adicional valido', () => {
+  const now = new Date('2026-09-14T16:00:00-06:00');
+  const short = { day_key: 'jue 10', started_at: '2026-09-10T09:00:00-06:00',
+    ended_at: '2026-09-10T09:03:00-06:00', status: 'completed' };
+  assert.match(getAttendanceSessionReviewFlag(short, ['T1'], now), /doble escaneo/);
+  assert.match(getAttendanceSessionReviewFlag({ ...short, day_key: 'vie 14' }, [], now), /fuera del cronograma/);
+  const additional = { day_key: 'jue 10', started_at: '2026-09-10T07:57:00-06:00',
+    ended_at: '2026-09-10T12:11:00-06:00', status: 'completed' };
+  assert.equal(getAttendanceSessionReviewFlag(additional, [], now), null);
+});
+check('Revisar asistencia incluye sesiones sin asignacion y sesiones breves ocultas por otra asistencia', () => {
+  const now = new Date('2026-09-14T16:00:00-06:00');
+  const short = { id: 'short', volunteer_id: 'arrived', day_key: 'jue 10',
+    started_at: '2026-09-10T09:00:00-06:00', ended_at: '2026-09-10T09:03:00-06:00', status: 'completed' };
+  const orphan = { id: 'orphan', volunteer_id: 'closed', day_key: 'vie 14',
+    started_at: '2026-08-14T20:15:00-06:00', ended_at: null, status: 'open' };
+  const items = evaluate('app/(coordinator)/shifts/page.tsx', 'attendanceReviewItems', {
+    useMemo: fn => fn(), rawShiftsData: [], contextSessionsData: [short, orphan],
+    attendanceLookup: { shifts: new Map() }, volunteerMap: new Map(volunteers.map(vol => [vol.id, vol])),
+    matchesFilters: () => true, selectedCommittees: [], currentRole: 'Admin',
+    getRosterDisplayState: () => ({ status: 'scheduled', flag: null }), findRosterSession: () => null,
+    getAttendanceSessionReviewFlag, parseDayKeyToDateStr, rosterNow: now,
+  });
+  assert.equal(items.length, 2);
+  assert.deepEqual(new Set(items.map(item => item.id)), new Set(['session:short', 'session:orphan']));
 });
 check('El perfil muestra las horas reales de attendance_sessions', () => {
   const times = getUnifiedShiftTimes('sáb 5', 'T1', shifts, [], [{

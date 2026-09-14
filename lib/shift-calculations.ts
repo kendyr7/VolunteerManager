@@ -1,4 +1,4 @@
-import { getOfficialShiftTime, parseDayKeyToDateStr } from "@/lib/dates";
+import { getOfficialShiftTime, isOperationalEventDay, parseDayKeyToDateStr } from "@/lib/dates";
 import { getGuatemalaDate } from "@/lib/scan-history";
 import { getContinuousScheduledBlockForSession, inferAdditionalCompletedShifts, inferShiftsForSession, getSessionShiftCompletedAt } from "@/lib/session-utils";
 
@@ -50,6 +50,7 @@ export function findAttendanceSessionForShift(
   sessionsData: AttendanceSessionTimeRecord[] = [],
   dbShiftRecords: any[] = [],
   volunteerId?: string,
+  now = new Date(),
 ): AttendanceSessionTimeRecord | null {
   const normalizedDay = dayKey.toLowerCase().trim();
   const assignedShiftKeys = dbShiftRecords
@@ -97,7 +98,19 @@ export function findAttendanceSessionForShift(
         endedAt,
         assignedShiftKeys,
       ).some((related) => related.shiftKey === shiftKey);
-      return isAssignedMatch || visitedAssignedShift || isAdditionalMatch;
+      // A person can be physically present without a scheduled row. Show that
+      // presence in the current official shift; credit remains checkout-only.
+      const currentShiftStart = new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime()
+        + official.startHour * 3600000;
+      const currentShiftEnd = new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime()
+        + official.endHour * 3600000;
+      const isUnassignedOpenMatch = !assignedShiftKeys.includes(shiftKey)
+        && session.status === 'open' && !endedAt && isOperationalEventDay(dayKey)
+        && parseDayKeyToDateStr(dayKey) === getGuatemalaDate(now)
+        && getGuatemalaDate(startedAt) === parseDayKeyToDateStr(dayKey)
+        && now.getTime() >= currentShiftStart && now.getTime() < currentShiftEnd
+        && startedMs <= now.getTime();
+      return isAssignedMatch || visitedAssignedShift || isAdditionalMatch || isUnassignedOpenMatch;
     })
     .sort((left, right) => {
       const leftEnd = left.ended_at ?? left.endedAt;
@@ -158,7 +171,7 @@ export function getShiftDisplayState(
     && !shift?.checked_out && !shift?.checked_out_at) {
     return { status: 'scheduled', startAt: null, endAt: null, flag: null };
   }
-  const matching = findAttendanceSessionForShift(dayKey, shiftKey, sessions, assignedShifts, volunteerId);
+  const matching = findAttendanceSessionForShift(dayKey, shiftKey, sessions, assignedShifts, volunteerId, now);
   if (matching) {
     const startedAt = matching.shift_started_at || matching.started_at || matching.startedAt || null;
     const endedAt = matching.ended_at ?? matching.endedAt ?? null;

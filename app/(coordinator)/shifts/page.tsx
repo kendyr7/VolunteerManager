@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
-import { checkOutVolunteer, adjustCheckoutTimeAction } from "@/app/actions/attendance";
+import { checkOutVolunteer, closeAttendanceSessionAction, adjustCheckoutTimeAction } from "@/app/actions/attendance";
 import { undoVolunteerCheckInAction } from "@/app/actions/audit-actions";
 import { getReminderDeliveryLogsAction } from "@/app/actions/whatsapp";
 import { AnimatedLogo } from "@/components/ui/animated-logo";
@@ -30,6 +30,7 @@ import { getShiftCapacityStatus, getShiftCommitteeScope } from "@/lib/shift-capa
 import { attendanceSortPriority, isLiveShiftRoster, resolveShiftView, type ShiftViewMode } from '@/lib/shift-view';
 import { getGuatemalaDayKey } from '@/lib/scan-history';
 import { findAttendanceSessionForShift, getShiftDisplayState } from '@/lib/shift-calculations';
+import { getAttendanceSessionReviewFlag } from '@/lib/attendance-review';
 import { needsShortCheckoutConfirmation } from '@/lib/session-utils';
 
 const EVENT_DAYS_DEFAULT = getOperationalEventDays().map(date => ({
@@ -280,8 +281,9 @@ export default function ShiftsPage() {
       attendanceLookup.sessions.get(key) || [],
       attendanceLookup.shifts.get(key) || [],
       volunteerId,
+      rosterNow,
     );
-  }, [attendanceLookup]);
+  }, [attendanceLookup, rosterNow]);
 
   // A single pass feeds the counters, filters and rendered rows. Attendance
   // inference is expensive, so do not repeat it for every consumer on each render.
@@ -637,33 +639,68 @@ export default function ShiftsPage() {
     return keys;
   }, [rawShiftsData, getRosterDisplayState]);
 
-  const totalActiveCount = useMemo(() => {
+  const activeVolunteerIdsByShift = useMemo(() => {
     const today = getGuatemalaDayKey(rosterNow);
-    const activeVolunteerIds = new Set(rawShiftsData
-      .filter(shift => shift.day_key.toLowerCase().trim() === today &&
-        getRosterDisplayState(shift.volunteer_id, shift.day_key, shift.shift_key).status === 'in_progress')
-      .map(shift => shift.volunteer_id));
+    const idsByShift = new Map<string, Set<string>>();
+    for (const session of contextSessionsData) {
+      if (session.day_key.toLowerCase().trim() !== today || session.status !== 'open' || session.ended_at) continue;
+      for (const shiftKey of getAvailableShiftKeys(today)) {
+        if (getRosterDisplayState(session.volunteer_id, today, shiftKey).status !== 'in_progress') continue;
+        const key = `${today}|${shiftKey}`;
+        const ids = idsByShift.get(key) || new Set<string>();
+        ids.add(session.volunteer_id);
+        idsByShift.set(key, ids);
+      }
+    }
+    return idsByShift;
+  }, [contextSessionsData, getRosterDisplayState, rosterNow]);
+
+  const totalActiveCount = useMemo(() => {
+    const activeVolunteerIds = new Set([...activeVolunteerIdsByShift.values()].flatMap(ids => [...ids]));
     return [...activeVolunteerIds].filter(volunteerId => {
       const vol = volunteerMap.get(volunteerId);
       return Boolean(vol && scopedCommitteeSet.has(vol.committee) && matchesFilters(vol, '', [], [], [], currentRole));
     }).length;
-  }, [rawShiftsData, rosterNow, getRosterDisplayState, volunteerMap, scopedCommitteeSet, matchesFilters, currentRole]);
-  const attendanceReviewItems = useMemo(() => rawShiftsData.flatMap(shift => {
-    const volunteer = volunteerMap.get(shift.volunteer_id);
-    if (!volunteer || !matchesFilters(volunteer, '', selectedCommittees, [], [], currentRole)) return [];
-    const display = getRosterDisplayState(shift.volunteer_id, shift.day_key, shift.shift_key);
-    return display.flag ? [{
-      id: shift.id,
-      volunteer,
-      dayKey: shift.day_key,
-      shiftKey: shift.shift_key,
-      status: display.status,
-      flag: display.flag,
-    }] : [];
-  }).sort((a, b) => parseDayKeyToDateStr(b.dayKey).localeCompare(parseDayKeyToDateStr(a.dayKey))
-    || a.shiftKey.localeCompare(b.shiftKey)
-    || a.volunteer.name.localeCompare(b.volunteer.name)),
-  [rawShiftsData, volunteerMap, matchesFilters, selectedCommittees, currentRole, getRosterDisplayState]);
+  }, [activeVolunteerIdsByShift, volunteerMap, scopedCommitteeSet, matchesFilters, currentRole]);
+  const attendanceReviewItems = useMemo(() => {
+    const coveredBriefSessionIds = new Set<string>();
+    const shiftItems = rawShiftsData.flatMap(shift => {
+      const volunteer = volunteerMap.get(shift.volunteer_id);
+      if (!volunteer || !matchesFilters(volunteer, '', selectedCommittees, [], [], currentRole)) return [];
+      const display = getRosterDisplayState(shift.volunteer_id, shift.day_key, shift.shift_key);
+      if (display.flag?.includes('no supera el 50%')) {
+        const matching = findRosterSession(shift.volunteer_id, shift.day_key, shift.shift_key);
+        if (matching?.id) coveredBriefSessionIds.add(matching.id);
+      }
+      return display.flag ? [{
+        id: shift.id,
+        volunteer,
+        dayKey: shift.day_key,
+        shiftKey: shift.shift_key,
+        status: display.status,
+        flag: display.flag,
+      }] : [];
+    });
+    const sessionItems = contextSessionsData.flatMap(session => {
+      const volunteer = volunteerMap.get(session.volunteer_id);
+      if (!volunteer || !matchesFilters(volunteer, '', selectedCommittees, [], [], currentRole)) return [];
+      const dayShifts = attendanceLookup.shifts.get(`${session.volunteer_id}|${session.day_key.toLowerCase().trim()}`) || [];
+      const flag = getAttendanceSessionReviewFlag(session, dayShifts.map(shift => shift.shift_key), rosterNow);
+      if (flag?.includes('antes de una hora') && coveredBriefSessionIds.has(session.id)) return [];
+      return flag ? [{
+        id: `session:${session.id}`,
+        volunteer,
+        dayKey: session.day_key,
+        shiftKey: 'Registro',
+        status: session.ended_at ? 'completed' : 'needs_review',
+        flag,
+      }] : [];
+    });
+    return [...shiftItems, ...sessionItems].sort((a, b) => parseDayKeyToDateStr(b.dayKey).localeCompare(parseDayKeyToDateStr(a.dayKey))
+      || a.shiftKey.localeCompare(b.shiftKey)
+      || a.volunteer.name.localeCompare(b.volunteer.name));
+  }, [rawShiftsData, contextSessionsData, attendanceLookup, volunteerMap, matchesFilters, selectedCommittees,
+    currentRole, getRosterDisplayState, findRosterSession, rosterNow]);
   const viewMode = resolveShiftView(selectedViewMode ?? requestedView, totalActiveCount);
 
   // Lógica determinista para asignar voluntarios a los turnos basándose en los filtros actuales
@@ -675,8 +712,9 @@ export default function ShiftsPage() {
     const additionalCompletedVols = viewMode === 'completed'
       ? (contextAdditionalCompletedByDayShift[dateKey]?.[shiftId] || [])
       : [];
+    const activeVols = viewMode === 'active' ? (activeVolunteerIdsByShift.get(`${dateKey}|${shiftId}`) || []) : [];
 
-    const allCandidateIds = Array.from(new Set([...assignedIdsFromProps, ...dbShiftVols, ...additionalCompletedVols]));
+    const allCandidateIds = Array.from(new Set([...assignedIdsFromProps, ...dbShiftVols, ...additionalCompletedVols, ...activeVols]));
     const result: VolunteerType[] = [];
     const priorities = new Map<string, number>();
     const liveRoster = isLiveShiftRoster(dateKey, shiftId, attendanceShiftKeys.has(`${dateKey}|${shiftId}`), rosterNow);
@@ -705,7 +743,7 @@ export default function ShiftsPage() {
 
     return result.sort((a, b) => (viewMode !== 'completed' ? (priorities.get(a.id)! - priorities.get(b.id)!) : 0)
       || a.committee.localeCompare(b.committee) || a.name.localeCompare(b.name));
-  }, [contextIndexedAssignments, contextAdditionalCompletedByDayShift, volunteerMap, filteredVolunteerIds, viewMode, shiftDataIndex, getRosterDisplayState, scopedCommitteeSet, attendanceShiftKeys, rosterNow]);
+  }, [contextIndexedAssignments, contextAdditionalCompletedByDayShift, activeVolunteerIdsByShift, volunteerMap, filteredVolunteerIds, viewMode, shiftDataIndex, getRosterDisplayState, scopedCommitteeSet, attendanceShiftKeys, rosterNow]);
 
   const rosterByDayShift = useMemo(() => {
     const roster = new Map<string, VolunteerType[]>();
@@ -951,13 +989,15 @@ export default function ShiftsPage() {
     const shiftKey = item.shiftKey || "";
 
     const shiftId = item.shiftId || getShiftRecord(volId, dayKey, shiftKey)?.id;
-    if (!shiftId) {
+    if (!shiftId && !item.sessionId) {
       showToast('No se encontró el turno. Actualiza la página e intenta de nuevo.', 'error');
       return;
     }
     let result;
     try {
-      result = await checkOutVolunteer(shiftId, { confirmShortVisit: shortCheckoutConfirmed });
+      result = item.sessionId
+        ? await closeAttendanceSessionAction({ sessionId: item.sessionId, confirmShortVisit: shortCheckoutConfirmed })
+        : await checkOutVolunteer(shiftId, { confirmShortVisit: shortCheckoutConfirmed });
     } catch {
       showToast('No se pudo guardar la salida. Intenta de nuevo.', 'error');
       return;
@@ -1406,6 +1446,7 @@ export default function ShiftsPage() {
                                 const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                 const attendanceSession = findRosterSession(vol.id, key, t);
                                 const isAdditional = Boolean(attendanceSession?.is_additional_shift);
+                                const isUnscheduledPresence = isCheckedIn && !shiftRecord;
                                 const attendanceStartedAt = displayState.startAt;
                                 const attendanceEndedAt = displayState.endAt;
                                 const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
@@ -1430,6 +1471,10 @@ export default function ShiftsPage() {
                                       {isAdditional ? (
                                         <span className="shrink-0 rounded-full border border-slate-500/30 bg-slate-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-slate-400 dark:text-slate-400">
                                           Adicional
+                                        </span>
+                                      ) : isUnscheduledPresence ? (
+                                        <span className="shrink-0 rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-sky-500">
+                                          Sin programar
                                         </span>
                                       ) : (
                                         <div
@@ -1488,7 +1533,7 @@ export default function ShiftsPage() {
 
                                       {isCheckedIn && !isCheckedOut ? (
                                         <div className="flex items-center gap-1">
-                                          {currentRole === 'Admin' && (
+                                          {currentRole === 'Admin' && shiftRecord && (
                                             <button
                                               type="button"
                                               onClick={(e) => {
@@ -1508,7 +1553,7 @@ export default function ShiftsPage() {
                                               e.stopPropagation();
                                               setShortCheckoutConfirmed(false);
                                               setForceShortCheckoutWarning(false);
-                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, volunteer: vol, checkedInAt: attendanceSession?.started_at || shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
+                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, sessionId: !shiftRecord ? attendanceSession?.id : undefined, volunteer: vol, checkedInAt: attendanceSession?.started_at || shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
                                             }}
                                             className="w-7 h-7 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 transition-all flex items-center justify-center active:scale-95 cursor-pointer"
                                             title="Turno Completado"
@@ -1516,7 +1561,7 @@ export default function ShiftsPage() {
                                           >
                                             <span className="material-symbols-outlined text-[14px]" aria-hidden="true">task_alt</span>
                                           </button>
-                                          <button
+                                          {shiftRecord && <button
                                             type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
@@ -1527,7 +1572,7 @@ export default function ShiftsPage() {
                                             aria-label={`Reasignar turno de ${vol.name}`}
                                           >
                                             <span className="material-symbols-outlined text-[14px]" aria-hidden="true">sync_alt</span>
-                                          </button>
+                                          </button>}
                                         </div>
                                       ) : (
                                         <button
@@ -1694,6 +1739,7 @@ export default function ShiftsPage() {
                                   const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                   const attendanceSession = findRosterSession(vol.id, key, t);
                                   const isAdditional = Boolean(attendanceSession?.is_additional_shift);
+                                  const isUnscheduledPresence = isCheckedIn && !shiftRecord;
                                   const attendanceStartedAt = displayState.startAt;
                                   const attendanceEndedAt = displayState.endAt;
                                   const checkInTimeStr = formatGuatemalaTime(attendanceStartedAt);
@@ -1720,6 +1766,10 @@ export default function ShiftsPage() {
                                         {isAdditional ? (
                                           <span className="shrink-0 rounded-full border border-slate-500/30 bg-slate-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-slate-400 dark:text-slate-400">
                                             Adicional
+                                          </span>
+                                        ) : isUnscheduledPresence ? (
+                                          <span className="shrink-0 rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-sky-300">
+                                            Sin programar
                                           </span>
                                         ) : (
                                           <div
@@ -1775,7 +1825,7 @@ export default function ShiftsPage() {
 
                                       {isCheckedIn && !isCheckedOut ? (
                                         <div className="flex items-center gap-1 shrink-0">
-                                          {currentRole === 'Admin' && (
+                                          {currentRole === 'Admin' && shiftRecord && (
                                             <button
                                               type="button"
                                               onClick={(e) => {
@@ -1795,7 +1845,7 @@ export default function ShiftsPage() {
                                               e.stopPropagation();
                                               setShortCheckoutConfirmed(false);
                                               setForceShortCheckoutWarning(false);
-                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, volunteer: vol, checkedInAt: attendanceSession?.started_at || shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
+                                              setCheckoutModal({ isOpen: true, item: { shiftId: shiftRecord?.id, sessionId: !shiftRecord ? attendanceSession?.id : undefined, volunteer: vol, checkedInAt: attendanceSession?.started_at || shiftRecord?.checked_in_at, dayKey: key, shiftKey: t } });
                                             }}
                                             className="w-7 h-7 rounded-full bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 hover:bg-emerald-500/40 transition-all flex items-center justify-center shrink-0 active:scale-95"
                                             title="Turno Completado (Check-out)"
@@ -1803,7 +1853,7 @@ export default function ShiftsPage() {
                                           >
                                             <span className="material-symbols-outlined text-[15px]" aria-hidden="true">task_alt</span>
                                           </button>
-                                          <button
+                                          {shiftRecord && <button
                                             type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
@@ -1814,7 +1864,7 @@ export default function ShiftsPage() {
                                             aria-label={`Reasignar turno de ${vol.name}`}
                                           >
                                             <span className="material-symbols-outlined text-[15px]" aria-hidden="true">sync_alt</span>
-                                          </button>
+                                          </button>}
                                         </div>
                                       ) : isCheckedOut ? (
                                         <button
@@ -1961,7 +2011,7 @@ export default function ShiftsPage() {
         <section id="attendance-review-list" aria-label="Asistencias para revisar" className="mx-4 mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 sm:mx-6 lg:mx-8">
           <div className="mb-3">
             <h2 className="text-sm font-bold text-text">Asistencias para revisar</h2>
-            <p className="text-xs text-text-dim">Estos registros tienen una sesión incompleta o datos que no concuerdan. Abre un perfil para revisar la asistencia.</p>
+            <p className="text-xs text-text-dim">Estos registros requieren revisar una salida, fecha o relación con un turno. Abre un perfil para verificar la asistencia.</p>
           </div>
           {attendanceReviewItems.length === 0 ? (
             <p className="text-xs font-medium text-text-dim">No hay alertas de asistencia en el alcance actual.</p>
