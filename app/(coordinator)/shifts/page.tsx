@@ -28,7 +28,7 @@ import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 import { getShiftCapacityStatus, getShiftCommitteeScope } from "@/lib/shift-capacity";
 import { attendanceSortPriority, isLiveShiftRoster, resolveShiftView, type ShiftViewMode } from '@/lib/shift-view';
-import { getGuatemalaDayKey } from '@/lib/scan-history';
+import { getGuatemalaDate, getGuatemalaDayKey } from '@/lib/scan-history';
 import { findAttendanceSessionForShift, getShiftDisplayState } from '@/lib/shift-calculations';
 import { getAttendanceSessionReviewFlag } from '@/lib/attendance-review';
 import { needsShortCheckoutConfirmation } from '@/lib/session-utils';
@@ -671,6 +671,10 @@ export default function ShiftsPage() {
       if (display.flag?.includes('no supera el 50%')) {
         const matching = findRosterSession(shift.volunteer_id, shift.day_key, shift.shift_key);
         if (matching?.id) coveredBriefSessionIds.add(matching.id);
+      }
+      const isShiftToday = parseDayKeyToDateStr(shift.day_key) === getGuatemalaDate(rosterNow);
+      if (display.flag?.includes('Salida pendiente') && isShiftToday) {
+        return [];
       }
       return display.flag ? [{
         id: shift.id,

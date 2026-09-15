@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { USER_TABLE_STYLES } from '@/app/(coordinator)/users/page';
+import { USER_TABLE_STYLES } from '@/lib/user-table-styles';
 import { HighlightText } from '@/components/HighlightText';
 
 export interface SwipeableMobileCardProps {

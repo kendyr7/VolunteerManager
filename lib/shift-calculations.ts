@@ -181,20 +181,27 @@ export function getShiftDisplayState(
         && (!volunteerId || (item?.volunteer_id || item?.volunteerId) === volunteerId))
       .map(item => item?.shift_key || item?.shiftKey).filter(Boolean);
     const originalStart = matching.started_at || matching.startedAt || '';
-    const shortVisit = Boolean(endedAt && !inferShiftsForSession(
+    const official = getOfficialShiftTime(dayKey, shiftKey);
+    const dayStr = parseDayKeyToDateStr(dayKey);
+    const shiftStartMs = new Date(`${dayStr}T00:00:00-06:00`).getTime() + official.startHour * 3600000;
+    const shiftEndMs = new Date(`${dayStr}T00:00:00-06:00`).getTime() + official.endHour * 3600000;
+    const sessionStartMs = originalStart ? new Date(originalStart).getTime() : 0;
+    const sessionEndMs = endedAt ? new Date(endedAt).getTime() : 0;
+    const overlapMs = Math.max(0, Math.min(sessionEndMs, shiftEndMs) - Math.max(sessionStartMs, shiftStartMs));
+    const isBriefVisitInShift = overlapMs <= 60 * 60 * 1000;
+
+    const earnsCredit = inferShiftsForSession(
       dayKey, originalStart, endedAt, assignedKeys.length ? assignedKeys : [shiftKey], now,
-    ).some(item => item.shiftKey === shiftKey) && !matching.is_additional_shift);
+    ).some(item => item.shiftKey === shiftKey) || matching.is_additional_shift;
+
+    const shortVisit = Boolean(endedAt && !earnsCredit && isBriefVisitInShift);
     if (shortVisit) return {
       status: 'needs_review', startAt: startedAt, endAt: endedAt,
       flag: 'Asistencia registrada, pero no supera el 50% del turno',
     };
     if (completedAt) return {
       status: 'completed', startAt: startedAt, endAt: completedAt,
-      flag: [
-        matching.status === 'open' && endedAt ? 'Sesión abierta con salida registrada' : null,
-        (shift?.checked_in || shift?.checked_in_at) && !shift?.checked_out && !shift?.checked_out_at
-          ? 'Flag de entrada sin salida aunque la sesión finalizó' : null,
-      ].filter(Boolean).join(' · ') || null,
+      flag: matching.status === 'open' && endedAt ? 'Sesión abierta con salida registrada' : null,
     };
     const isToday = parseDayKeyToDateStr(dayKey) === getGuatemalaDate(now);
     const officialEnd = new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime()

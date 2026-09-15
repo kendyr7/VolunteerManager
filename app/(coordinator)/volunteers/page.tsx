@@ -1,7 +1,8 @@
 'use client'
 
 import { AddVolunteerForm } from "@/components/AddVolunteerForm";
-import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { useRouter, useSearchParams } from "next/navigation";
 
 // ...
@@ -24,7 +25,7 @@ import { Toast } from "@/components/ui/toast";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCoordinatorData } from "@/lib/coordinator-data-context";
-import { USER_TABLE_STYLES } from "../users/page";
+import { USER_TABLE_STYLES } from "@/lib/user-table-styles";
 import { AlphabetScrubber } from "@/components/AlphabetScrubber";
 import { SwipeableMobileCard } from "@/components/SwipeableMobileCard";
 import { validatePhone8Digits } from "@/lib/whatsapp";
@@ -43,6 +44,8 @@ import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { useMobileDrawerNavigation } from "@/lib/use-mobile-drawer-navigation";
 
+
+const volunteerCollator = new Intl.Collator('es', { sensitivity: 'base', numeric: true });
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -718,7 +721,7 @@ export default function VolunteersPage() {
       if (typeof valA === 'string' || typeof valB === 'string') {
         valA = (valA || '').trim();
         valB = (valB || '').trim();
-        const cmp = valA.localeCompare(valB, 'es', { sensitivity: 'base', numeric: true });
+        const cmp = volunteerCollator.compare(valA, valB);
         return sortOrder === 'asc' ? cmp : -cmp;
       }
 
@@ -731,6 +734,26 @@ export default function VolunteersPage() {
       return 0;
     });
   }, [filteredVolunteers, sortField, sortOrder]);
+
+  const listRef = useRef<VirtuosoHandle>(null);
+  const [desktopScrollParent, setDesktopScrollParent] = useState<HTMLDivElement | null>(null);
+  const [mobileScrollParent, setMobileScrollParent] = useState<HTMLElement | null>(null);
+  const attachMobileList = useCallback((element: HTMLDivElement | null) => {
+    setMobileScrollParent(element?.closest('main') ?? null);
+  }, []);
+  const letterIndexes = useMemo(() => {
+    const indexes = new Map<string, number>();
+    sortedFilteredVolunteers.forEach((vol, index) => {
+      const initial = (vol.name || '').charAt(0).toUpperCase();
+      const letter = /^[A-Z]$/.test(initial) ? initial : '#';
+      if (!indexes.has(letter)) indexes.set(letter, index);
+    });
+    return indexes;
+  }, [sortedFilteredVolunteers]);
+  const scrollToLetter = useCallback((letter: string) => {
+    const index = letterIndexes.get(letter);
+    if (index !== undefined) listRef.current?.scrollToIndex({ index, align: 'center', behavior: 'auto' });
+  }, [letterIndexes]);
 
   const { activeCount, archivedCount } = useMemo(() => {
     const baseList = augmentedVolunteers.filter(v => {
@@ -948,12 +971,12 @@ export default function VolunteersPage() {
         )}
 
         <motion.div variants={itemVariants} className="bg-dark2 border border-border rounded-[20px] shadow-lg overflow-clip flex flex-col w-full">
-          <AlphabetScrubber isMobile={isMobile} />
+          <AlphabetScrubber isMobile={isMobile} onSelectLetter={scrollToLetter} />
           {/* Contenedor de Datos: Escritorio PC vs Móvil */}
           {!isMobile ? (
             <div className="bg-dark2 flex-1 relative w-full pb-10">
               {sortedFilteredVolunteers.length > 0 ? (
-                <div className="w-full max-h-[calc(100dvh-250px)] overflow-auto overscroll-contain bg-dark2">
+                <div ref={setDesktopScrollParent} className="w-full max-h-[calc(100dvh-250px)] overflow-auto overscroll-contain bg-dark2">
                   {/* Encabezado Fijo de Tabla con Ordenamiento */}
                   <div className="flex items-center w-full px-5 py-3.5 bg-dark3 sticky top-0 z-20 text-[10px] font-bold text-text-dim uppercase tracking-wider border-b border-border/70 select-none">
                     {canSendWhatsappMessages() && (
@@ -1078,21 +1101,16 @@ export default function VolunteersPage() {
                   </div>
 
                   {/* Cuerpo de la Tabla */}
-                  <div className="divide-y divide-white/5">
-                    {(() => {
-                      const seenLetters = new Set<string>();
-                      return sortedFilteredVolunteers.map((vol: VolunteerType) => {
-                        const firstChar = (vol.name || '').charAt(0).toUpperCase();
-                        const letterKey = /^[A-Z]$/.test(firstChar) ? firstChar : '#';
-                        let anchorId: string | undefined = undefined;
-                        if (!seenLetters.has(letterKey)) {
-                          seenLetters.add(letterKey);
-                          anchorId = `letter-${letterKey}`;
-                        }
-                        return (
+                  {desktopScrollParent && <Virtuoso
+                    ref={listRef}
+                    customScrollParent={desktopScrollParent}
+                    data={sortedFilteredVolunteers}
+                    computeItemKey={(_index, vol) => vol.id}
+                    increaseViewportBy={300}
+                    defaultItemHeight={65}
+                    itemContent={(_index, vol) => (
                           <VolunteerTableRow
                             key={vol.id}
-                            id={anchorId}
                             vol={vol}
                             appliedSearch={appliedSearch}
                             onEditClick={handleEditClick}
@@ -1106,10 +1124,8 @@ export default function VolunteersPage() {
                             canSendCredentials={canSendWhatsappMessages()}
                             onSendCredentials={handleSingleSendCredentials}
                           />
-                        );
-                      });
-                    })()}
-                  </div>
+                    )}
+                  />}
                 </div>
               ) : (
                 <div className="px-5 py-12 text-center flex flex-col items-center">
@@ -1122,23 +1138,18 @@ export default function VolunteersPage() {
               )}
             </div>
           ) : (
-            <div className="bg-dark2 w-full pb-10">
+            <div ref={attachMobileList} className="bg-dark2 w-full pb-10">
               {sortedFilteredVolunteers.length > 0 ? (
-                <div className="divide-y divide-white/5 w-full">
-                  {(() => {
-                    const seenLetters = new Set<string>();
-                    return sortedFilteredVolunteers.map((vol: VolunteerType) => {
-                      const firstChar = (vol.name || '').charAt(0).toUpperCase();
-                      const letterKey = /^[A-Z]$/.test(firstChar) ? firstChar : '#';
-                      let anchorId: string | undefined = undefined;
-                      if (!seenLetters.has(letterKey)) {
-                        seenLetters.add(letterKey);
-                        anchorId = `letter-mobile-${letterKey}`;
-                      }
-                      return (
+                mobileScrollParent && <Virtuoso
+                  ref={listRef}
+                  customScrollParent={mobileScrollParent}
+                  data={sortedFilteredVolunteers}
+                  computeItemKey={(_index, vol) => vol.id}
+                  increaseViewportBy={300}
+                  defaultItemHeight={90}
+                  itemContent={(_index, vol) => (
                         <SwipeableMobileCard
                           key={vol.id}
-                          id={anchorId}
                           name={vol.name}
                           phone={vol.phone}
                           searchTerm={appliedSearch}
@@ -1178,10 +1189,8 @@ export default function VolunteersPage() {
                             </>
                           }
                         />
-                      );
-                    });
-                  })()}
-                </div>
+                  )}
+                />
               ) : (
                 <div className="px-5 py-8 text-center flex flex-col items-center">
                   <div className="w-16 h-16 bg-dark3 border border-border rounded-full flex items-center justify-center mb-4 text-text-dim">

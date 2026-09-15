@@ -119,11 +119,10 @@ export function computeReliabilityMap(
   return computeBulkReliabilityMap(volunteers, shiftsData, sessionsData);
 }
 
-export function processShiftsData(
+/** Schedule indexes are independent of the attendance clock. */
+export function buildShiftScheduleData(
   shiftsData: CoordinatorShiftData[],
   volunteers: CoordinatorVolunteerData[] = [],
-  sessionsData: CoordinatorSessionData[] = [],
-  now: Date = new Date(),
 ) {
   const dayKeys = buildEventDayKeys();
   const emptyShifts = () =>
@@ -136,12 +135,40 @@ export function processShiftsData(
   });
 
   const globalShifts: Record<string, Record<string, string[]>> = {};
-  const checkedInMap: Record<string, boolean> = {};
-  const checkedOutMap: Record<string, boolean> = {};
   const shiftCounts: Record<string, number> = {};
   
   // New: day -> shift -> committee -> volunteerIds[]
   const indexedAssignments: Record<string, Record<string, Record<string, string[]>>> = {};
+
+  for (const s of shiftsData) {
+    if (!s.volunteer_id) continue;
+    if (isOperationalEventDay(s.day_key)) {
+      shiftCounts[s.volunteer_id] = (shiftCounts[s.volunteer_id] || 0) + 1;
+    }
+    if (!globalShifts[s.volunteer_id]) globalShifts[s.volunteer_id] = emptyShifts();
+    const assigned = globalShifts[s.volunteer_id][s.day_key];
+    if (assigned && !assigned.includes(s.shift_key)) assigned.push(s.shift_key);
+    if (!indexedAssignments[s.day_key]) indexedAssignments[s.day_key] = {};
+    if (!indexedAssignments[s.day_key][s.shift_key]) indexedAssignments[s.day_key][s.shift_key] = {};
+    const committee = volCommitteeMap[s.volunteer_id] || 'Sin comité';
+    const slot = indexedAssignments[s.day_key][s.shift_key];
+    if (!slot[committee]) slot[committee] = [];
+    slot[committee].push(s.volunteer_id);
+  }
+
+  return { globalShifts, shiftCounts, indexedAssignments };
+}
+
+export function processShiftsData(
+  shiftsData: CoordinatorShiftData[],
+  volunteers: CoordinatorVolunteerData[] = [],
+  sessionsData: CoordinatorSessionData[] = [],
+  now: Date = new Date(),
+  schedule = buildShiftScheduleData(shiftsData, volunteers),
+) {
+  const { globalShifts, shiftCounts, indexedAssignments } = schedule;
+  const checkedInMap: Record<string, boolean> = {};
+  const checkedOutMap: Record<string, boolean> = {};
 
   // Session-aware maps
   const activeSessionsByVolunteer: Record<string, CoordinatorSessionData> = {};
@@ -221,21 +248,6 @@ export function processShiftsData(
   for (const s of shiftsData) {
     if (!s.volunteer_id) continue;
 
-    // Basic stats
-    if (isOperationalEventDay(s.day_key)) {
-      shiftCounts[s.volunteer_id] = (shiftCounts[s.volunteer_id] || 0) + 1;
-    }
-
-    // Personal schedule
-    if (!globalShifts[s.volunteer_id]) {
-      globalShifts[s.volunteer_id] = emptyShifts();
-    }
-    if (globalShifts[s.volunteer_id][s.day_key]) {
-      if (!globalShifts[s.volunteer_id][s.day_key].includes(s.shift_key)) {
-        globalShifts[s.volunteer_id][s.day_key].push(s.shift_key);
-      }
-    }
-
     // Attendance maps (Legacy fallback if shift has legacy flags)
     const key = `${s.volunteer_id}-${s.day_key}-${s.shift_key}`;
     if (s.checked_in || s.checked_in_at || s.checked_out || s.checked_out_at) {
@@ -248,15 +260,6 @@ export function processShiftsData(
       if (s.volunteer_id) checkedOutMap[s.volunteer_id] = true;
     }
 
-    // Assignments index (The core optimization)
-    if (!indexedAssignments[s.day_key]) indexedAssignments[s.day_key] = {};
-    if (!indexedAssignments[s.day_key][s.shift_key]) indexedAssignments[s.day_key][s.shift_key] = {};
-    
-    const committeeName = volCommitteeMap[s.volunteer_id] || 'Sin comité';
-    if (!indexedAssignments[s.day_key][s.shift_key][committeeName]) {
-      indexedAssignments[s.day_key][s.shift_key][committeeName] = [];
-    }
-    indexedAssignments[s.day_key][s.shift_key][committeeName].push(s.volunteer_id);
   }
 
   return {

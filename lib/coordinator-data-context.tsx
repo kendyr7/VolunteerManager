@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/client';
 import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
 import {
   buildEventDayKeys,
+  buildShiftScheduleData,
   parseRequirementsData,
   processShiftsData,
   computeReliabilityMap,
@@ -34,9 +35,11 @@ import { SupabaseReconnectManager } from '@/lib/services/supabase-reconnect-mana
 import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
 import { withShiftAreaDetails } from '@/lib/shift-area';
+import { retainEqualSnapshot } from '@/lib/utils/stable-snapshot';
 
 const STALE_TIME_MS = 60_000;
 const SESSION_SYNC_INTERVAL_MS = 10_000;
+const SESSION_RECONCILE_INTERVAL_MS = 60_000;
 const SAFE_VOLUNTEER_FIELDS = 'id, first_name, last_name, phone, stake, neighborhood, committee_id, age, status, created_at, committees(name)';
 const OPERATIONAL_EVENT_DAY_KEYS = buildEventDayKeys();
 
@@ -111,6 +114,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   const lastFetchedAtRef = useRef(0);
   const lastCacheKeyRef = useRef('');
   const fetchPromiseRef = useRef<Promise<void> | null>(null);
+  const queuedFetchPromiseRef = useRef<Promise<void> | null>(null);
   const sessionsFetchPromiseRef = useRef<Promise<void> | null>(null);
   const visibleVolunteerIdsRef = useRef<Set<string>>(new Set());
 
@@ -175,9 +179,13 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const schedule = useMemo(
+    () => buildShiftScheduleData(shiftsData, rawVolunteers),
+    [shiftsData, rawVolunteers]
+  );
   const derived = useMemo(
-    () => processShiftsData(shiftsData, rawVolunteers, sessionsData, attendanceNow),
-    [shiftsData, rawVolunteers, sessionsData, attendanceNow]
+    () => processShiftsData(shiftsData, rawVolunteers, sessionsData, attendanceNow, schedule),
+    [shiftsData, rawVolunteers, sessionsData, attendanceNow, schedule]
   );
   
   const reliabilityMap = useMemo(
@@ -186,7 +194,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   );
 
   const fetchData = useCallback(
-    async (force = false) => {
+    async (force = false): Promise<void> => {
       const { authenticated, canViewAll, committeeId, cacheKey } = getAuthScope();
       const isFresh =
         !force &&
@@ -197,15 +205,27 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
       if (isFresh) return;
 
       if (fetchPromiseRef.current) {
+        if (force) {
+          // Many realtime events can invalidate one in-flight snapshot. Share
+          // one follow-up refresh, taken AFTER those edits, across all callers.
+          if (!queuedFetchPromiseRef.current) {
+            queuedFetchPromiseRef.current = fetchPromiseRef.current.then(() => {
+              queuedFetchPromiseRef.current = null;
+              return fetchData(true);
+            });
+          }
+          await queuedFetchPromiseRef.current;
+          return;
+        }
         await fetchPromiseRef.current;
-        if (!force) return;
+        return;
       }
 
       const isInitialLoad = lastFetchedAtRef.current === 0;
       if (isInitialLoad) setLoading(true);
       else setIsRefreshing(true);
 
-      const promise = (async () => {
+      const promise = Promise.resolve().then(async () => {
         try {
           if (!authenticated) {
             setRawVolunteers([]);
@@ -294,10 +314,10 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             : (shiftsResult ?? []).filter((shift) => allowedVolunteerIds.has(shift.volunteer_id));
           const cleanShifts = scopedShifts.map(withShiftAreaDetails);
 
-          setRawVolunteers(cleanVols);
+          setRawVolunteers(previous => retainEqualSnapshot(previous, cleanVols));
           useVolunteerStore.getState().setInitialVolunteers(cleanVols);
-          setCommitteesList(activeComms);
-          setShiftsData(cleanShifts);
+          setCommitteesList(previous => retainEqualSnapshot(previous, activeComms));
+          setShiftsData(previous => retainEqualSnapshot(previous, cleanShifts));
           setSessionsData(previous => {
             const next = loadedSessions ?? [];
             return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
@@ -305,7 +325,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           useVolunteerStore.getState().setInitialShifts(cleanShifts);
 
           const parsedReqs = parseRequirementsData(reqsData ?? [], activeComms);
-          setRequirementsByCommittee(parsedReqs);
+          setRequirementsByCommittee(previous => retainEqualSnapshot(previous, parsedReqs));
           localStorage.setItem('committee_requirements', JSON.stringify(parsedReqs));
 
           lastFetchedAtRef.current = Date.now();
@@ -317,7 +337,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           setIsRefreshing(false);
           fetchPromiseRef.current = null;
         }
-      })();
+      });
 
       fetchPromiseRef.current = promise;
       await promise;
@@ -326,12 +346,18 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshAttendanceSessions = useCallback(async () => {
+    // The full refresh already includes sessions. Do not enqueue a second
+    // Server Action behind it during startup, focus, or periodic reconciliation.
+    if (fetchPromiseRef.current) {
+      await fetchPromiseRef.current;
+      return;
+    }
     if (sessionsFetchPromiseRef.current) {
       await sessionsFetchPromiseRef.current;
       return;
     }
 
-    const promise = (async () => {
+    const promise = Promise.resolve().then(async () => {
       try {
         const { authenticated } = getAuthScope();
         if (!authenticated) {
@@ -349,7 +375,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
       } finally {
         sessionsFetchPromiseRef.current = null;
       }
-    })();
+    });
 
     sessionsFetchPromiseRef.current = promise;
     await promise;
@@ -377,8 +403,12 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
     const reconcileSessions = () => {
       if (document.visibilityState === 'visible') void refreshAttendanceSessions();
     };
-    const timer = window.setInterval(reconcileSessions, SESSION_SYNC_INTERVAL_MS);
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(reconcileSessions, SESSION_RECONCILE_INTERVAL_MS);
+    document.addEventListener('visibilitychange', reconcileSessions);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', reconcileSessions);
+    };
   }, [refreshAttendanceSessions]);
 
   // Set up Supabase Realtime for instant synchronization across all active coordinators
@@ -513,7 +543,6 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             next[index] = mergeRealtimeRecord(existing, record);
             return next;
           });
-          void refreshAttendanceSessions();
         }
       )
       .on(

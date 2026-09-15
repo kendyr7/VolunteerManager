@@ -3,6 +3,7 @@ import { useRealtimeStore } from '@/lib/store/use-realtime-store';
 import { mergeRealtimeRecord } from '@/lib/utils/realtime-merge';
 import { assertShiftConsistency, type ShiftDomainState } from '@/lib/utils/shift-invariants';
 import { realtimeDebugLogger } from '@/lib/services/realtime-debug-logger';
+import { retainEqualSnapshot } from '@/lib/utils/stable-snapshot';
 
 export interface VolunteerStoreRecord {
   id: string;
@@ -90,6 +91,11 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
   shiftsByVolunteerMap: new Map<string, ShiftStoreRecord[]>(),
 
   setInitialVolunteers: (volunteers: VolunteerStoreRecord[]) => {
+    const previous = Array.from(get().volunteersMap.values());
+    if (retainEqualSnapshot(previous, volunteers) === previous) {
+      useRealtimeStore.getState().setInitialSyncCompleted(true);
+      return;
+    }
     const map = new Map<string, VolunteerStoreRecord>();
     volunteers.forEach(v => {
       if (v.id) map.set(v.id, v);
@@ -184,6 +190,11 @@ export const useVolunteerStore = create<VolunteerStoreState>((set, get) => ({
         map.set(s.id, assertShiftConsistency(s) as ShiftStoreRecord);
       }
     });
+    const previous = Array.from(get().shiftsMap.values());
+    if (retainEqualSnapshot(previous, Array.from(map.values())) === previous) {
+      useRealtimeStore.getState().setInitialSyncCompleted(true);
+      return;
+    }
     const byVolMap = rebuildShiftsByVolunteerMap(map);
     set({ shiftsMap: map, shiftsByVolunteerMap: byVolMap });
     useRealtimeStore.getState().setInitialSyncCompleted(true);

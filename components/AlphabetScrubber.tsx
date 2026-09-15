@@ -4,7 +4,10 @@ import { cn } from '@/lib/utils';
 
 export const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split("");
 
-export const AlphabetScrubber = ({ isMobile }: { isMobile: boolean }) => {
+export const AlphabetScrubber = ({ isMobile, onSelectLetter }: {
+  isMobile: boolean;
+  onSelectLetter?: (letter: string, behavior: 'auto' | 'smooth') => void;
+}) => {
   const [activeLetter, setActiveLetter] = useState<string | null>(null);
 
   const handleDrag = (e: React.TouchEvent | React.MouseEvent) => {
@@ -16,6 +19,10 @@ export const AlphabetScrubber = ({ isMobile }: { isMobile: boolean }) => {
     if (letter) {
       if (activeLetter !== letter) {
         setActiveLetter(letter);
+      }
+      if (onSelectLetter) {
+        onSelectLetter(letter, 'auto');
+        return;
       }
       const targetId = isMobile ? `letter-mobile-${letter}` : `letter-${letter}`;
       const el = document.getElementById(targetId);
@@ -52,6 +59,10 @@ export const AlphabetScrubber = ({ isMobile }: { isMobile: boolean }) => {
                 : "text-text-dim hover:text-[#4d7cfe]"
             )}
             onClick={() => {
+              if (onSelectLetter) {
+                onSelectLetter(letter, 'auto');
+                return;
+              }
               const targetId = isMobile ? `letter-mobile-${letter}` : `letter-${letter}`;
               document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }}

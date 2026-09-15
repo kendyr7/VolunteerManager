@@ -297,11 +297,11 @@ check('La sesion prevalece sobre flags heredados contradictorios', () => {
   assert.equal(display.status, 'scheduled');
   assert.match(display.flag, /Flags/);
 });
-check('Entrada heredada sin salida se señala cuando la sesión ya terminó', () => {
+check('Entrada heredada no genera alerta cuando la sesión ya terminó normalmente', () => {
   const flagged = { ...shifts[0], checked_in: true, checked_out: false };
   const display = getShiftDisplayState(day, 'T1', flagged, [completed], [flagged], id, new RealDate(at('16:00')));
   assert.equal(display.status, 'completed');
-  assert.match(display.flag, /Flag de entrada sin salida/);
+  assert.equal(display.flag, null);
 });
 check('Turno continuo muestra la hora de inicio propia y no la entrada del bloque anterior', () => {
   const joined = { ...completed, started_at: at('08:00'), ended_at: at('15:00') };
@@ -319,5 +319,11 @@ check('No se inventan horas de prueba ni duraciones para turnos sin asistencia',
   assert.equal(getUnifiedShiftWorkedMinutes('vie 11', 'T4', []), 0);
   assert.equal(getUnifiedShiftWorkedMinutes(day, 'T1', [{ ...shifts[0], checked_in: true, checked_out: true }]), 0);
   assert.equal(getUnifiedShiftWorkedMinutes(day, 'T1', [{ ...shifts[0], checked_in_at: at('08:00'), checked_out_at: at('10:00') }]), 120);
+});
+check('Asistencia sustancial de mas de 1 hora se completa sin generar alerta de revision', () => {
+  const substantial = { ...completed, started_at: at('09:40'), ended_at: at('12:00') };
+  const display = getShiftDisplayState(day, 'T1', shifts[0], [substantial], shifts, id, new RealDate(at('16:00')));
+  assert.equal(display.status, 'completed');
+  assert.equal(display.flag, null);
 });
 console.log(`${count} verificaciones de dominio aprobadas. No se escribio en la base de datos.`);

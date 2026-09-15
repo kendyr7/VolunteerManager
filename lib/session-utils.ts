@@ -45,12 +45,24 @@ export function validateSessionConstraints(
 /**
  * Calculates Guatemala local hour float (e.g. 7.5 = 7:30 AM, 17.25 = 5:15 PM)
  */
+// Reuse ICU's timezone formatter. Constructing it for every shift/session used
+// to block the main thread for seconds when recalculating a full roster.
+const guatemalaHourFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+});
+
 export function getGuatemalaHourFloat(dateInput: Date | string): number {
   const d = new Date(dateInput);
   if (isNaN(d.getTime())) return 0;
-  const guatemalaString = d.toLocaleString("en-US", { timeZone: "America/Guatemala" });
-  const guatemalaDate = new Date(guatemalaString);
-  return guatemalaDate.getHours() + guatemalaDate.getMinutes() / 60 + guatemalaDate.getSeconds() / 3600;
+  let hours = 0;
+  let minutes = 0;
+  let seconds = 0;
+  for (const part of guatemalaHourFormatter.formatToParts(d)) {
+    if (part.type === 'hour') hours = Number(part.value);
+    else if (part.type === 'minute') minutes = Number(part.value);
+    else if (part.type === 'second') seconds = Number(part.value);
+  }
+  return hours + minutes / 60 + seconds / 3600;
 }
 
 /** Presence in a scheduled shift, independent of whether it earned completion credit. */

@@ -9,12 +9,14 @@ interface HistoryRecord {
   type: string;
 }
 
+const guatemalaDateFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Guatemala', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
 export function getGuatemalaDate(value: Date | string = new Date()): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Guatemala', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(date);
+  const parts = guatemalaDateFormatter.formatToParts(date);
   const part = (type: string) => parts.find(item => item.type === type)?.value;
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
