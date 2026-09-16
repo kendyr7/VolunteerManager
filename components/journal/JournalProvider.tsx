@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 export type NoteColor = 'default' | 'coral' | 'amber' | 'yellow' | 'emerald' | 'teal' | 'sky' | 'lavender' | 'rose' | 'slate';
@@ -41,7 +41,7 @@ export type JournalContextValue = {
   journals: Record<string, JournalState>;
   update: (userId: string, change: (state: JournalState) => JournalState) => void;
   load: (userId: string) => Promise<void>;
-  flush: (userId: string) => Promise<void>;
+  flush: (userId: string) => Promise<boolean>;
   status: (userId: string) => JournalStatus;
   retry: (userId: string) => Promise<void>;
   clear: (userId?: string) => void;
@@ -93,38 +93,48 @@ export function JournalProvider({ children }: { children: ReactNode }) {
   const loaded = useRef(new Set<string>());
   const loading = useRef(new Set<string>());
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const saveQueues = useRef(new Map<string, Promise<void>>());
+  const saveQueues = useRef(new Map<string, Promise<boolean>>());
+  // Only notes actually changed in this session may be written or removed.
+  const persistedNotes = useRef(new Map<string, KeepNote[]>());
+  const pendingUsers = useRef(new Set<string>());
   const dirtyDraftsRef = useRef(new Set<string>());
   const draftHandlersRef = useRef(new Map<string, () => Promise<void>>());
 
-  useEffect(() => { journalsRef.current = journals; }, [journals]);
-
   const saveNow = useCallback(async (userId: string, notes: KeepNote[]) => {
+    if (!loaded.current.has(userId)) return false;
     setStatuses(current => ({ ...current, [userId]: 'saving' }));
     try {
       const db = createClient();
-      const existing = await db.from('volunteer_journal_notes').select('id').eq('volunteer_id', userId);
-      if (existing.error) throw existing.error;
+      const baseline = persistedNotes.current.get(userId) ?? [];
+      const previous = new Map(baseline.map(note => [note.id, note]));
       const desiredIds = new Set(notes.map(note => note.id));
-      const staleIds = (existing.data || []).map(row => row.id).filter(id => !desiredIds.has(id));
-      const writes = notes.length
-        ? db.from('volunteer_journal_notes').upsert(notes.map(note => noteToRow(userId, note)), { onConflict: 'id' })
-        : Promise.resolve({ error: null });
-      const deletes = staleIds.length
-        ? db.from('volunteer_journal_notes').delete().eq('volunteer_id', userId).in('id', staleIds)
-        : Promise.resolve({ error: null });
-      const [writeResult, deleteResult] = await Promise.all([writes, deletes]);
-      if (writeResult.error || deleteResult.error) throw writeResult.error || deleteResult.error;
+      const changed = notes.filter(note => JSON.stringify(previous.get(note.id)) !== JSON.stringify(note));
+      const removedIds = baseline.filter(note => !desiredIds.has(note.id)).map(note => note.id);
+      if (changed.length) {
+        const result = await db.from('volunteer_journal_notes').upsert(changed.map(note => noteToRow(userId, note)), { onConflict: 'id' });
+        if (result.error) throw result.error;
+        changed.forEach(note => previous.set(note.id, note));
+        persistedNotes.current.set(userId, [...previous.values()]);
+      }
+      if (removedIds.length) {
+        const result = await db.from('volunteer_journal_notes').delete().eq('volunteer_id', userId).in('id', removedIds);
+        if (result.error) throw result.error;
+      }
+      persistedNotes.current.set(userId, notes);
+      if (JSON.stringify(journalsRef.current[userId]?.notes) === JSON.stringify(notes)) pendingUsers.current.delete(userId);
       setStatuses(current => ({ ...current, [userId]: 'ready' }));
+      return true;
     } catch {
+      pendingUsers.current.add(userId);
       setStatuses(current => ({ ...current, [userId]: 'error' }));
+      return false;
     }
   }, []);
 
   // Serialize writes per volunteer so a slower earlier request cannot finish
   // after a newer close-and-save request and restore stale content.
   const enqueueSave = useCallback((userId: string, notes: KeepNote[]) => {
-    const previous = saveQueues.current.get(userId) ?? Promise.resolve();
+    const previous = saveQueues.current.get(userId) ?? Promise.resolve(true);
     const next = previous.catch(() => undefined).then(() => saveNow(userId, notes));
     saveQueues.current.set(userId, next);
     return next;
@@ -133,7 +143,10 @@ export function JournalProvider({ children }: { children: ReactNode }) {
   const persist = useCallback((userId: string, notes: KeepNote[]) => {
     const existingTimer = timers.current.get(userId);
     if (existingTimer) clearTimeout(existingTimer);
-    const timer = setTimeout(() => { void enqueueSave(userId, notes); }, 700);
+    const timer = setTimeout(() => {
+      timers.current.delete(userId);
+      void enqueueSave(userId, notes);
+    }, 700);
     timers.current.set(userId, timer);
   }, [enqueueSave]);
 
@@ -141,11 +154,12 @@ export function JournalProvider({ children }: { children: ReactNode }) {
     const timer = timers.current.get(userId);
     if (timer) clearTimeout(timer);
     timers.current.delete(userId);
-    await enqueueSave(userId, journalsRef.current[userId]?.notes ?? []);
+    if (!loaded.current.has(userId)) return !pendingUsers.current.has(userId);
+    return enqueueSave(userId, journalsRef.current[userId]?.notes ?? []);
   }, [enqueueSave]);
 
   const load = useCallback(async (userId: string) => {
-    if (!userId || loading.current.has(userId)) return;
+    if (!userId || loaded.current.has(userId) || loading.current.has(userId)) return;
     loading.current.add(userId);
     setStatuses(current => ({ ...current, [userId]: 'loading' }));
     try {
@@ -163,35 +177,39 @@ export function JournalProvider({ children }: { children: ReactNode }) {
 
       loaded.current.add(userId);
       const loadedNotes = (result.data || []).map(rowToNote);
+      persistedNotes.current.set(userId, loadedNotes);
 
-      // The remote database is the authoritative source of truth.
-      // If the database has 0 notes (they were deleted), the local state reflects 0 notes.
-      // Never revive deleted notes by merging with stale in-memory state.
+      // Preserve drafts created during the initial request (including a retry).
       const current = journalsRef.current[userId] ?? emptyState;
-      const next = { ...current, notes: loadedNotes };
+      const localIds = new Set(current.notes.map(note => note.id));
+      const next = { ...current, notes: [...current.notes, ...loadedNotes.filter(note => !localIds.has(note.id))] };
       journalsRef.current = { ...journalsRef.current, [userId]: next };
       setJournals(journalsRef.current);
       setStatuses(currentStatuses => ({ ...currentStatuses, [userId]: 'ready' }));
+      loading.current.delete(userId);
+      if (pendingUsers.current.has(userId)) await enqueueSave(userId, next.notes);
     } catch {
       setStatuses(current => ({ ...current, [userId]: 'error' }));
     } finally {
       loading.current.delete(userId);
     }
-  }, []);
+  }, [enqueueSave]);
 
   const update = useCallback((userId: string, change: (state: JournalState) => JournalState) => {
     const previous = journalsRef.current[userId] ?? emptyState;
     const next = change(previous);
     journalsRef.current = { ...journalsRef.current, [userId]: next };
     setJournals(journalsRef.current);
-    if (loaded.current.has(userId) && !loading.current.has(userId) && JSON.stringify(previous.notes) !== JSON.stringify(next.notes)) persist(userId, next.notes);
+    if (JSON.stringify(previous.notes) !== JSON.stringify(next.notes)) {
+      pendingUsers.current.add(userId);
+      if (loaded.current.has(userId) && !loading.current.has(userId)) persist(userId, next.notes);
+    }
   }, [persist]);
 
   const retry = useCallback(async (userId: string) => {
-    loaded.current.delete(userId);
-    loading.current.delete(userId);
-    await load(userId);
-  }, [load]);
+    if (loaded.current.has(userId)) await flush(userId);
+    else await load(userId);
+  }, [flush, load]);
 
   const clear = useCallback((userId?: string) => {
     if (userId) {
@@ -201,6 +219,10 @@ export function JournalProvider({ children }: { children: ReactNode }) {
       if (timer) clearTimeout(timer);
       timers.current.delete(userId);
       saveQueues.current.delete(userId);
+      persistedNotes.current.delete(userId);
+      pendingUsers.current.delete(userId);
+      dirtyDraftsRef.current.delete(userId);
+      draftHandlersRef.current.delete(userId);
       setJournals(prev => {
         const next = { ...prev };
         delete next[userId];
@@ -218,6 +240,8 @@ export function JournalProvider({ children }: { children: ReactNode }) {
       timers.current.forEach(timer => clearTimeout(timer));
       timers.current.clear();
       saveQueues.current.clear();
+      persistedNotes.current.clear();
+      pendingUsers.current.clear();
       dirtyDraftsRef.current.clear();
       draftHandlersRef.current.clear();
       journalsRef.current = {};
@@ -247,12 +271,12 @@ export function JournalProvider({ children }: { children: ReactNode }) {
       const isDirty = dirtyDraftsRef.current.has(userId);
       const hasTimer = timers.current.has(userId);
       const isSaving = statuses[userId] === 'saving';
-      return isDirty || hasTimer || isSaving;
+      return isDirty || hasTimer || isSaving || pendingUsers.current.has(userId);
     }
     const hasAnyDirty = dirtyDraftsRef.current.size > 0;
     const hasAnyTimer = timers.current.size > 0;
     const hasAnySaving = Object.values(statuses).some(s => s === 'saving');
-    return hasAnyDirty || hasAnyTimer || hasAnySaving;
+    return hasAnyDirty || hasAnyTimer || hasAnySaving || pendingUsers.current.size > 0;
   }, [statuses]);
 
   const saveAndFlush = useCallback(async (userId?: string): Promise<boolean> => {
@@ -270,7 +294,7 @@ export function JournalProvider({ children }: { children: ReactNode }) {
         if (handler) {
           await handler();
         }
-        await flush(uid);
+        if (!await flush(uid)) return false;
         dirtyDraftsRef.current.delete(uid);
       }
       return true;
@@ -301,18 +325,23 @@ export function JournalProvider({ children }: { children: ReactNode }) {
 export function useJournal(userId: string) {
   const context = useContext(JournalContext);
   if (!context) throw new Error('JournalProvider is required');
-  useEffect(() => { void context.load(userId); }, [context, userId]);
+  const { load } = context;
+  useEffect(() => { void load(userId); }, [load, userId]);
+  const { update, flush, retry, clear, registerDraftHandler, setHasUnsavedDraft, saveAndFlush } = context;
+  const actions = useMemo(() => ({
+    update: (change: (state: JournalState) => JournalState) => update(userId, change),
+    flush: () => flush(userId),
+    retry: () => retry(userId),
+    clear: () => clear(userId),
+    registerDraftHandler: (handler: (() => Promise<void>) | null) => registerDraftHandler(userId, handler),
+    setHasUnsavedDraft: (dirty: boolean) => setHasUnsavedDraft(userId, dirty),
+    saveAndFlush: () => saveAndFlush(userId),
+  }), [userId, update, flush, retry, clear, registerDraftHandler, setHasUnsavedDraft, saveAndFlush]);
   return {
+    ...actions,
     state: context.journals[userId] ?? emptyState,
-    update: (change: (state: JournalState) => JournalState) => context.update(userId, change),
-    flush: () => context.flush(userId),
     status: context.status(userId),
-    retry: () => context.retry(userId),
-    clear: () => context.clear(userId),
     hasPendingChanges: () => context.hasPendingChanges(userId),
-    registerDraftHandler: (handler: (() => Promise<void>) | null) => context.registerDraftHandler(userId, handler),
-    setHasUnsavedDraft: (dirty: boolean) => context.setHasUnsavedDraft(userId, dirty),
-    saveAndFlush: () => context.saveAndFlush(userId),
   };
 }
 

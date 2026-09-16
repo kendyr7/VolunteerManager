@@ -136,6 +136,8 @@ function cleanHtml(html: string): string {
       // Attributes for checkboxes
       if (node.tagName === 'INPUT' && target instanceof HTMLInputElement) {
         target.setAttribute('type', 'checkbox');
+        target.setAttribute('contenteditable', 'false');
+        target.setAttribute('aria-label', 'Completar tarea');
         if ((node as HTMLInputElement).checked || node.getAttribute('checked') !== null) {
           target.setAttribute('checked', 'checked');
           target.checked = true;
@@ -148,6 +150,14 @@ function cleanHtml(html: string): string {
   const output = document.createElement('div');
   template.content.childNodes.forEach(node => output.appendChild(clean(node)));
   return output.innerHTML;
+}
+
+// Native checkbox activation differs inside contenteditable between browsers.
+// The serialized attribute is the previous state, even after native activation.
+function toggleEditorCheckbox(input: HTMLInputElement) {
+  const checked = !input.hasAttribute('checked');
+  input.checked = checked;
+  input.toggleAttribute('checked', checked);
 }
 
 // Toggle a checkbox inside HTML string by index
@@ -449,7 +459,7 @@ export function VolunteerJournal({
     const isCreatorDirty = isCreatorExpanded && Boolean(creatorTitle.trim() || creatorText.trim() || creatorHtml.trim());
     const isModalDirty = Boolean(editingNote && editDirty.current);
     setHasUnsavedDraft(isCreatorDirty || isModalDirty);
-  }, [isCreatorExpanded, creatorTitle, creatorText, creatorHtml, editingNote, setHasUnsavedDraft]);
+  }, [isCreatorExpanded, creatorTitle, creatorText, creatorHtml, editingNote, editTitle, editHtml, editText, editShift, editColor, editPattern, editIsPinned, setHasUnsavedDraft]);
 
   // Register emergency draft flusher for exit/logout scenarios
   useEffect(() => {
@@ -619,7 +629,7 @@ export function VolunteerJournal({
         ? current.notes.map(note => note.id === newNote.id ? { ...note, ...newNote, createdAt: note.createdAt } : note)
         : [newNote, ...(current.notes || [])],
     }));
-    void flush();
+    void flush().then(saved => showToast(saved ? 'Nota guardada' : 'No se pudo guardar. Tus cambios siguen aquí; reintenta.'));
 
     // Reset creator
     setCreatorTitle('');
@@ -634,13 +644,16 @@ export function VolunteerJournal({
       creatorEditorRef.current.innerHTML = '';
     }
     setIsCreatorExpanded(false);
-    showToast('Nota guardada');
   }, [buildCreatorNote, flush, update]);
 
   // Initialize modal editor innerHTML on note open
   useEffect(() => {
     if (editingNote && modalEditorRef.current) {
       modalEditorRef.current.innerHTML = editingNote.html || '';
+      modalEditorRef.current.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        input.setAttribute('contenteditable', 'false');
+        input.setAttribute('aria-label', 'Completar tarea');
+      });
     }
   }, [editingNote?.id]);
 
@@ -660,6 +673,12 @@ export function VolunteerJournal({
   // Save note edit modal
   const handleSaveEditModal = useCallback(() => {
     if (!editingNote) return;
+    // Opening and closing an existing note must never rewrite its stored HTML.
+    if (!editDirty.current) {
+      void flush();
+      setEditingNote(null);
+      return;
+    }
     const rawText = modalEditorRef.current ? modalEditorRef.current.innerText.replace(/\u200B/g, '').trim() : editText.trim();
     const rawHtml = modalEditorRef.current?.innerHTML ?? editHtml;
     const title = editTitle.trim();
@@ -685,11 +704,10 @@ export function VolunteerJournal({
 
     // Cerrar el editor fuerza la última escritura pendiente antes de desmontar
     // cualquier contenido local del formulario.
-    void flush();
+    void flush().then(saved => showToast(saved ? 'Cambios guardados' : 'No se pudo guardar. Tus cambios siguen aquí; reintenta.'));
 
     editDirty.current = false;
     setEditingNote(null);
-    showToast('Cambios guardados');
   }, [editingNote, editTitle, editText, editHtml, editShift, editColor, editPattern, editIsPinned, flush, update]);
 
   // Close creator or modal popovers on click outside and handle Escape key
@@ -749,7 +767,7 @@ export function VolunteerJournal({
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isCreatorExpanded, editingNote, linkModalData, noteToDelete, handleSaveCreator, handleSaveEditModal]);
+  }, [isCreatorExpanded, editingNote, linkModalData, noteToDelete, handleSaveCreator, handleSaveEditModal, creatorPaletteOpen, editPaletteOpen, cardPaletteNoteId, creatorShiftOpen, editShiftOpen, cardShiftNoteId]);
 
   // Delete note
   const handleDeleteNote = (noteId: string, e?: React.MouseEvent) => {
@@ -773,9 +791,8 @@ export function VolunteerJournal({
       ...current,
       notes: (current.notes || []).filter(n => n.id !== noteId),
     }));
-    void flush();
+    void flush().then(saved => showToast(saved ? 'Nota eliminada' : 'No se pudo eliminar. Reintenta.'));
     setNoteToDelete(null);
-    showToast('Nota eliminada');
   };
 
   // Toggle pin
@@ -988,7 +1005,7 @@ export function VolunteerJournal({
   const insertChecklist = () => {
     if (editingNote) editDirty.current = true;
     restoreActiveSelection();
-    const html = `<div style="display:flex;align-items:center;gap:8px;margin:6px 0;"><input type="checkbox" style="width:16px;height:16px;cursor:pointer;" /> <span>Tarea</span></div><p><br></p>`;
+    const html = '<div><input type="checkbox" contenteditable="false" aria-label="Completar tarea" /> <span>Tarea</span></div><p><br></p>';
     document.execCommand('insertHTML', false, html);
     const activeEditor = editingNote ? modalEditorRef.current : creatorEditorRef.current;
     if (activeEditor) {
@@ -1174,8 +1191,7 @@ export function VolunteerJournal({
                 const target = e.target as HTMLElement;
                 if (target && target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox') {
                   const input = target as HTMLInputElement;
-                  if (input.checked) input.setAttribute('checked', 'checked');
-                  else input.removeAttribute('checked');
+                  toggleEditorCheckbox(input);
                   if (creatorEditorRef.current) {
                     setCreatorHtml(creatorEditorRef.current.innerHTML);
                   }
@@ -1521,8 +1537,7 @@ export function VolunteerJournal({
                   const target = e.target as HTMLElement;
                   if (target && target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox') {
                     const input = target as HTMLInputElement;
-                    if (input.checked) input.setAttribute('checked', 'checked');
-                    else input.removeAttribute('checked');
+                    toggleEditorCheckbox(input);
                     if (modalEditorRef.current) {
                       editDirty.current = true;
                       setEditHtml(modalEditorRef.current.innerHTML);

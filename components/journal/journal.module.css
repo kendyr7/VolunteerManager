@@ -2249,6 +2249,24 @@
   pointer-events: none;
 }
 
+/* Keep paragraphs in document flow, including legacy checklist rows that
+   stored display:flex inline. Formatting must not create text columns. */
+.creatorBody :is(div, p),
+.noteCardBody :is(div, p) {
+  display: block !important;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.creatorBody input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0 6px 0 0;
+  vertical-align: middle;
+  cursor: pointer;
+  accent-color: var(--journal-action);
+}
+
 .creatorFooter {
   display: flex;
   align-items: center;
@@ -2802,6 +2820,7 @@
   overflow: hidden;
   position: relative;
   word-break: break-word;
+  white-space: pre-wrap;
   user-select: text;
   -webkit-user-select: text;
   -webkit-touch-callout: default;
@@ -3207,11 +3226,11 @@
   .noteCardCollapsed .noteCardBody :global(ol) {
     margin: 0 !important;
     padding: 0 !important;
-    display: inline;
+    display: block;
   }
 
   .noteCardCollapsed .noteCardBody :global(li) {
-    display: inline;
+    display: list-item;
     margin-right: 6px;
   }
 
