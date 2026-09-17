@@ -196,6 +196,7 @@ export default function ShiftsPage() {
     indexedAssignments: contextIndexedAssignments,
     additionalCompletedByDayShift: contextAdditionalCompletedByDayShift,
     sessionsData: contextSessionsData,
+    attendanceReviewResolutionIds,
     shiftCounts: contextShiftCounts,
     reliabilityMap,
     loading,
@@ -663,13 +664,17 @@ export default function ShiftsPage() {
     }).length;
   }, [activeVolunteerIdsByShift, volunteerMap, scopedCommitteeSet, matchesFilters, currentRole]);
   const attendanceReviewItems = useMemo(() => {
+    const resolvedSessionIds = new Set(attendanceReviewResolutionIds);
     const coveredBriefSessionIds = new Set<string>();
     const shiftItems = rawShiftsData.flatMap(shift => {
       const volunteer = volunteerMap.get(shift.volunteer_id);
       if (!volunteer || !matchesFilters(volunteer, '', selectedCommittees, [], [], currentRole)) return [];
       const display = getRosterDisplayState(shift.volunteer_id, shift.day_key, shift.shift_key);
+      const matching = display.flag
+        ? findRosterSession(shift.volunteer_id, shift.day_key, shift.shift_key)
+        : undefined;
+      if (matching?.id && resolvedSessionIds.has(matching.id)) return [];
       if (display.flag?.includes('no supera el 50%')) {
-        const matching = findRosterSession(shift.volunteer_id, shift.day_key, shift.shift_key);
         if (matching?.id) coveredBriefSessionIds.add(matching.id);
       }
       const isShiftToday = parseDayKeyToDateStr(shift.day_key) === getGuatemalaDate(rosterNow);
@@ -686,6 +691,7 @@ export default function ShiftsPage() {
       }] : [];
     });
     const sessionItems = contextSessionsData.flatMap(session => {
+      if (resolvedSessionIds.has(session.id)) return [];
       const volunteer = volunteerMap.get(session.volunteer_id);
       if (!volunteer || !matchesFilters(volunteer, '', selectedCommittees, [], [], currentRole)) return [];
       const dayShifts = attendanceLookup.shifts.get(`${session.volunteer_id}|${session.day_key.toLowerCase().trim()}`) || [];
@@ -703,7 +709,7 @@ export default function ShiftsPage() {
     return [...shiftItems, ...sessionItems].sort((a, b) => parseDayKeyToDateStr(b.dayKey).localeCompare(parseDayKeyToDateStr(a.dayKey))
       || a.shiftKey.localeCompare(b.shiftKey)
       || a.volunteer.name.localeCompare(b.volunteer.name));
-  }, [rawShiftsData, contextSessionsData, attendanceLookup, volunteerMap, matchesFilters, selectedCommittees,
+  }, [rawShiftsData, contextSessionsData, attendanceReviewResolutionIds, attendanceLookup, volunteerMap, matchesFilters, selectedCommittees,
     currentRole, getRosterDisplayState, findRosterSession, rosterNow]);
   const viewMode = resolveShiftView(selectedViewMode ?? requestedView, totalActiveCount);
 

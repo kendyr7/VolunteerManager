@@ -42,6 +42,46 @@ export async function getAttendanceSessionsAction(requestedDayKeys?: string[]): 
   return sessions;
 }
 
+export type AttendanceReviewResolution = {
+  session_id: string;
+  volunteer_id: string;
+  day_key: string;
+  hide_alert: boolean;
+};
+
+export async function getAttendanceReviewResolutionsAction(
+  requestedDayKeys?: string[]
+): Promise<AttendanceReviewResolution[]> {
+  const authorization = await requireCapability('view_volunteers');
+  const allowedDayKeys = new Set(buildEventDayKeys());
+  const dayKeys = Array.isArray(requestedDayKeys)
+    ? [...new Set(requestedDayKeys.filter(key => typeof key === 'string' && allowedDayKeys.has(key)))]
+    : undefined;
+  if (Array.isArray(requestedDayKeys) && dayKeys?.length === 0) return [];
+
+  const canViewAllVolunteers = hasCapability(authorization, 'view_all_volunteers');
+  let query = getAdminClient()
+    .from('attendance_review_resolutions')
+    .select('session_id, volunteer_id, day_key, hide_alert, volunteers!inner(committee_id)')
+    .eq('hide_alert', true)
+    .order('session_id');
+  if (dayKeys) query = query.in('day_key', dayKeys);
+  if (!canViewAllVolunteers) {
+    if (!authorization.committeeId) return [];
+    query = query.eq('volunteers.committee_id', authorization.committeeId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  const resolutions = (data || []) as Array<AttendanceReviewResolution & { volunteers?: unknown }>;
+  return resolutions.map(resolution => ({
+    session_id: resolution.session_id,
+    volunteer_id: resolution.volunteer_id,
+    day_key: resolution.day_key,
+    hide_alert: resolution.hide_alert,
+  }));
+}
+
 // 1. Generate the volunteer's permanent pass token
 export async function generateEntryPassToken(volunteerId: string) {
   await requireVolunteerSelfOrCapability('scan_qr_attendance', volunteerId);

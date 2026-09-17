@@ -63,6 +63,7 @@ interface CoordinatorDataContextValue {
   committeesList: CoordinatorCommitteeData[];
   shiftsData: CoordinatorShiftData[];
   sessionsData: CoordinatorSessionData[];
+  attendanceReviewResolutionIds: string[];
   requirementsByCommittee: Record<string, Record<string, number>>;
   globalShifts: Record<string, Record<string, string[]>>;
   indexedAssignments: Record<string, Record<string, Record<string, string[]>>>;
@@ -105,6 +106,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   const [committeesList, setCommitteesList] = useState<CoordinatorCommitteeData[]>([]);
   const [shiftsData, setShiftsData] = useState<CoordinatorShiftData[]>([]);
   const [sessionsData, setSessionsData] = useState<CoordinatorSessionData[]>([]);
+  const [attendanceReviewResolutionIds, setAttendanceReviewResolutionIds] = useState<string[]>([]);
   const [requirementsByCommittee, setRequirementsByCommittee] = useState<
     Record<string, Record<string, number>>
   >({});
@@ -232,6 +234,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             setCommitteesList([]);
             setShiftsData([]);
             setSessionsData([]);
+            setAttendanceReviewResolutionIds([]);
             setRequirementsByCommittee({});
             useVolunteerStore.getState().setInitialVolunteers([]);
             useVolunteerStore.getState().setInitialShifts([]);
@@ -250,13 +253,14 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             setCommitteesList(activeComms);
             setShiftsData([]);
             setSessionsData([]);
+            setAttendanceReviewResolutionIds([]);
             setRequirementsByCommittee({});
             useVolunteerStore.getState().setInitialVolunteers([]);
             useVolunteerStore.getState().setInitialShifts([]);
             return;
           }
 
-          const { getAttendanceSessionsAction } = await import('@/app/actions/attendance');
+          const { getAttendanceSessionsAction, getAttendanceReviewResolutionsAction } = await import('@/app/actions/attendance');
 
           const volsQuery = canViewAll
             ? fetchAllRowsStrict(
@@ -272,7 +276,7 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
                 (q) => q.eq('committee_id', committeeId!).order('id')
               );
 
-          const [volsData, commsRes, shiftsResult, reqsData, loadedSessions] =
+          const [volsData, commsRes, shiftsResult, reqsData, loadedSessions, reviewResolutions] =
             await Promise.all([
               volsQuery as Promise<CoordinatorVolunteerData[]>,
               supabase
@@ -301,7 +305,8 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
                   ? query.eq('committee_id', committeeId).order('committee_id').order('shift_key')
                   : query.order('committee_id').order('shift_key')
               ),
-              getAttendanceSessionsAction(OPERATIONAL_EVENT_DAY_KEYS)
+              getAttendanceSessionsAction(OPERATIONAL_EVENT_DAY_KEYS),
+              getAttendanceReviewResolutionsAction(OPERATIONAL_EVENT_DAY_KEYS),
             ]);
 
           if (commsRes.error) throw commsRes.error;
@@ -320,6 +325,10 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           setShiftsData(previous => retainEqualSnapshot(previous, cleanShifts));
           setSessionsData(previous => {
             const next = loadedSessions ?? [];
+            return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+          });
+          setAttendanceReviewResolutionIds(previous => {
+            const next = (reviewResolutions ?? []).map(resolution => resolution.session_id);
             return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
           });
           useVolunteerStore.getState().setInitialShifts(cleanShifts);
@@ -642,6 +651,7 @@ broadcast: session_sync
       committeesList,
       shiftsData,
       sessionsData,
+      attendanceReviewResolutionIds,
       requirementsByCommittee,
       globalShifts: derived.globalShifts,
       indexedAssignments: derived.indexedAssignments,
@@ -663,6 +673,7 @@ broadcast: session_sync
       committeesList,
       shiftsData,
       sessionsData,
+      attendanceReviewResolutionIds,
       requirementsByCommittee,
       derived,
       reliabilityMap,
