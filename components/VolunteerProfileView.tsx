@@ -38,6 +38,7 @@ import { fetchVolunteerAttendanceSessionsAction } from "@/app/actions/attendance
 import { useOptionalCoordinatorData } from "@/lib/coordinator-data-context";
 import { useVolunteerStore } from "@/lib/store/use-volunteer-store";
 import {
+  findAttendanceSessionForShift,
   getUnifiedShiftTimes,
   getUnifiedShiftWorkedMinutes,
   formatUnifiedDuration,
@@ -350,6 +351,11 @@ export function VolunteerProfileView({
     ));
   }, [coordinatorData?.sessionsData, fetchedSessions, preloadedAttendanceSessions, undoneSessionIds, volunteer.id]);
 
+  const resolvedAttendanceSessionIds = useMemo(
+    () => new Set(coordinatorData?.attendanceReviewResolutionIds ?? []),
+    [coordinatorData?.attendanceReviewResolutionIds],
+  );
+
   // Permisos y Usuario
   const userRole = typeof window !== 'undefined' ? localStorage.getItem('mock_role') || 'Admin' : 'Admin';
   const userName = typeof window !== 'undefined' ? localStorage.getItem('mock_user_name') || 'Administrador' : 'Administrador';
@@ -468,8 +474,22 @@ export function VolunteerProfileView({
       checked_in: hasMapValue(externalCheckedInMap) || hasMapValue(localCheckedInMap),
       checked_out: hasMapValue(externalCheckedOutMap) || hasMapValue(localCheckedOutMap),
     };
-    return getShiftDisplayState(dayKey, shiftKey, fallback, volunteerSessions, assignedRecords, volunteer.id, profileNow);
-  }, [assignedRecords, dbShiftRecords, externalCheckedInMap, externalCheckedOutMap, localCheckedInMap, localCheckedOutMap, volunteerSessions, volunteer.id, profileNow]);
+    const state = getShiftDisplayState(
+      dayKey, shiftKey, fallback, volunteerSessions, assignedRecords, volunteer.id, profileNow,
+    );
+    if (!state.flag) return state;
+
+    const matchingSession = findAttendanceSessionForShift(
+      dayKey, shiftKey, volunteerSessions, assignedRecords, volunteer.id, profileNow,
+    );
+    if (!matchingSession?.id || !resolvedAttendanceSessionIds.has(matchingSession.id)) return state;
+
+    return {
+      ...state,
+      status: matchingSession.ended_at || matchingSession.endedAt ? 'completed' as const : state.status,
+      flag: null,
+    };
+  }, [assignedRecords, dbShiftRecords, externalCheckedInMap, externalCheckedOutMap, localCheckedInMap, localCheckedOutMap, resolvedAttendanceSessionIds, volunteerSessions, volunteer.id, profileNow]);
 
   const isShiftCheckedOut = useCallback((dayKey: string, shiftKey: string): boolean =>
     getDisplayState(dayKey, shiftKey).status === 'completed', [getDisplayState]);
@@ -520,7 +540,9 @@ export function VolunteerProfileView({
     : { committeeName: '', count: 0, maxReq: 0, isFull: false };
 
   const staleOpenSession = useMemo(() => {
-    const openSess = volunteerSessions.find((s: any) => s.status === 'open');
+    const openSess = volunteerSessions.find((s: any) => (
+      s.status === 'open' && (!s.id || !resolvedAttendanceSessionIds.has(s.id))
+    ));
     if (!openSess) return null;
     const guatemalaString = new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" });
     const guatemalaNow = new Date(guatemalaString);
@@ -530,7 +552,7 @@ export function VolunteerProfileView({
       return openSess;
     }
     return null;
-  }, [volunteerSessions]);
+  }, [resolvedAttendanceSessionIds, volunteerSessions]);
 
   const isSourceDayFullyCompleted = (dayKey: string) => {
     const shifts = shiftsByDay[dayKey] || [];
