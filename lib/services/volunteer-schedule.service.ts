@@ -2,7 +2,7 @@ import 'server-only';
 
 import { getAdminSupabase } from '@/lib/supabase/admin';
 import type { VolunteerScheduleShift } from '@/lib/types/volunteer-schedule';
-import { getShiftDisplayState } from '@/lib/shift-calculations';
+import { findAttendanceSessionForShift, getShiftDisplayState } from '@/lib/shift-calculations';
 import { buildEventDayKeys } from '@/lib/coordinator-data';
 
 interface VolunteerScheduleRow {
@@ -52,7 +52,7 @@ export class VolunteerScheduleService {
 
   static async getScheduleSnapshot(volunteerId: string): Promise<{ shifts: VolunteerScheduleShift[]; sessions: any[] }> {
     const supabase = await getAdminSupabase();
-    const [shiftsResult, sessionsResult] = await Promise.all([
+    const [shiftsResult, sessionsResult, resolutionsResult] = await Promise.all([
       supabase
         .from('shifts')
         .select('id, volunteer_id, day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at, area_id, committee_areas(name, description)')
@@ -64,16 +64,37 @@ export class VolunteerScheduleService {
         .select('*')
         .eq('volunteer_id', volunteerId)
         .order('started_at', { ascending: false }),
+      supabase
+        .from('attendance_review_resolutions')
+        .select('session_id, resolved_session_id')
+        .eq('volunteer_id', volunteerId)
+        .eq('hide_alert', true),
     ]);
     if (shiftsResult.error) throw new Error(`No se pudo cargar el horario del voluntario: ${shiftsResult.error.message}`);
     if (sessionsResult.error) throw new Error(`No se pudo cargar la asistencia del voluntario: ${sessionsResult.error.message}`);
+    if (resolutionsResult.error) throw new Error(`No se pudieron cargar las revisiones de asistencia: ${resolutionsResult.error.message}`);
 
     const allowedDayKeys = new Set(buildEventDayKeys());
     const shifts = (shiftsResult.data || []) as VolunteerScheduleRow[];
     const sessions = ((sessionsResult.data || []) as any[]).filter((s: any) => s.day_key && allowedDayKeys.has(s.day_key));
+    const resolvedSessionIds = new Set(
+      (resolutionsResult.data || []).flatMap((resolution) => (
+        [resolution.session_id, resolution.resolved_session_id].filter(Boolean) as string[]
+      )),
+    );
 
     return { sessions, shifts: shifts.map((shift) => {
-      const display = getShiftDisplayState(shift.day_key, shift.shift_key, shift, sessions, shifts, volunteerId);
+      const rawDisplay = getShiftDisplayState(shift.day_key, shift.shift_key, shift, sessions, shifts, volunteerId);
+      const matchingSession = rawDisplay.flag
+        ? findAttendanceSessionForShift(shift.day_key, shift.shift_key, sessions, shifts, volunteerId)
+        : null;
+      const display = matchingSession?.id && resolvedSessionIds.has(matchingSession.id)
+        ? {
+            ...rawDisplay,
+            status: matchingSession.ended_at || matchingSession.endedAt ? 'completed' as const : rawDisplay.status,
+            flag: null,
+          }
+        : rawDisplay;
       return {
         id: shift.id,
         volunteer_id: shift.volunteer_id,
