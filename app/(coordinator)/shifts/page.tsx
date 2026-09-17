@@ -286,6 +286,27 @@ export default function ShiftsPage() {
     );
   }, [attendanceLookup, rosterNow]);
 
+  const resolvedAttendanceSessionIds = useMemo(
+    () => new Set(attendanceReviewResolutionIds),
+    [attendanceReviewResolutionIds],
+  );
+
+  const hideResolvedRosterWarning = useCallback((
+    state: ReturnType<typeof getShiftDisplayState>,
+    volunteerId: string,
+    dayKey: string,
+    shiftKey: string,
+  ) => {
+    if (!state.flag) return state;
+    const matching = findRosterSession(volunteerId, dayKey, shiftKey);
+    if (!matching?.id || !resolvedAttendanceSessionIds.has(matching.id)) return state;
+    return {
+      ...state,
+      status: matching.ended_at ? 'completed' as const : state.status,
+      flag: null,
+    };
+  }, [findRosterSession, resolvedAttendanceSessionIds]);
+
   // A single pass feeds the counters, filters and rendered rows. Attendance
   // inference is expensive, so do not repeat it for every consumer on each render.
   const rosterDisplayStates = useMemo(() => {
@@ -293,26 +314,30 @@ export default function ShiftsPage() {
     for (const shift of rawShiftsData) {
       const dayKey = shift.day_key.toLowerCase().trim();
       const volunteerDayKey = `${shift.volunteer_id}|${dayKey}`;
-      states.set(`${volunteerDayKey}|${shift.shift_key}`, getShiftDisplayState(
+      const state = getShiftDisplayState(
         shift.day_key, shift.shift_key, shift,
         attendanceLookup.sessions.get(volunteerDayKey) || [],
         attendanceLookup.shifts.get(volunteerDayKey) || [],
         shift.volunteer_id, rosterNow,
+      );
+      states.set(`${volunteerDayKey}|${shift.shift_key}`, hideResolvedRosterWarning(
+        state, shift.volunteer_id, shift.day_key, shift.shift_key,
       ));
     }
     return states;
-  }, [rawShiftsData, attendanceLookup, rosterNow]);
+  }, [rawShiftsData, attendanceLookup, rosterNow, hideResolvedRosterWarning]);
 
   const getRosterDisplayState = useCallback((volunteerId: string, dayKey: string, shiftKey: string) => {
     const key = `${volunteerId}|${dayKey.toLowerCase().trim()}`;
     const cached = rosterDisplayStates.get(`${key}|${shiftKey}`);
     if (cached) return cached;
-    return getShiftDisplayState(
+    const state = getShiftDisplayState(
       dayKey, shiftKey, getShiftRecord(volunteerId, dayKey, shiftKey),
       attendanceLookup.sessions.get(key) || [], attendanceLookup.shifts.get(key) || [],
       volunteerId, rosterNow,
     );
-  }, [attendanceLookup, getShiftRecord, rosterDisplayStates, rosterNow]);
+    return hideResolvedRosterWarning(state, volunteerId, dayKey, shiftKey);
+  }, [attendanceLookup, getShiftRecord, rosterDisplayStates, rosterNow, hideResolvedRosterWarning]);
 
   const EVENT_DAYS = useMemo(() => {
     const existingKeys = new Set(EVENT_DAYS_DEFAULT.map(d => d.key.toLowerCase()));
@@ -1455,6 +1480,9 @@ export default function ShiftsPage() {
                                 const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                 const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                 const attendanceSession = findRosterSession(vol.id, key, t);
+                                const isAttendanceResolved = Boolean(
+                                  attendanceSession?.id && resolvedAttendanceSessionIds.has(attendanceSession.id),
+                                );
                                 const isAdditional = Boolean(attendanceSession?.is_additional_shift);
                                 const isUnscheduledPresence = isCheckedIn && !shiftRecord;
                                 const attendanceStartedAt = displayState.startAt;
@@ -1504,10 +1532,10 @@ export default function ShiftsPage() {
                                            <span className="font-inter font-bold text-[9px] leading-tight text-amber-500" title={displayState.flag}>⚠ {displayState.flag}{isCheckedOut ? ` · Finalizó ${checkOutTimeStr || ''}` : ''}</span>
                                          ) : isCheckedOut ? (
                                            <div className="flex flex-col gap-0.5 min-w-0">
-                                             <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOverNextDay || elapsed?.isOver8Hours ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-500'}`}>
+                                             <span className={`font-inter font-bold text-[9px] leading-tight ${!isAttendanceResolved && (elapsed?.isOverNextDay || elapsed?.isOver8Hours) ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-500'}`}>
                                                {isAdditional ? 'Turno adicional completado' : 'Completado'} {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
                                              </span>
-                                             {elapsed?.isOverNextDay && (
+                                             {!isAttendanceResolved && elapsed?.isOverNextDay && (
                                                <button
                                                  type="button"
                                                  onClick={(e) => {
@@ -1748,6 +1776,9 @@ export default function ShiftsPage() {
                                   const reminderStatus = reminderStatusMap[`${vol.id}-${key}-${t}`] || 'pendiente';
                                   const reminderDot = REMINDER_STATUS_DOT[reminderStatus];
                                   const attendanceSession = findRosterSession(vol.id, key, t);
+                                  const isAttendanceResolved = Boolean(
+                                    attendanceSession?.id && resolvedAttendanceSessionIds.has(attendanceSession.id),
+                                  );
                                   const isAdditional = Boolean(attendanceSession?.is_additional_shift);
                                   const isUnscheduledPresence = isCheckedIn && !shiftRecord;
                                   const attendanceStartedAt = displayState.startAt;
@@ -1799,10 +1830,10 @@ export default function ShiftsPage() {
                                              <span className="font-inter font-bold text-[9px] leading-tight text-amber-400" title={displayState.flag}>⚠ {displayState.flag}{isCheckedOut ? ` · Finalizó ${checkOutTimeStr || ''}` : ''}</span>
                                            ) : isCheckedOut ? (
                                              <div className="flex flex-col gap-0.5 min-w-0">
-                                               <span className={`font-inter font-bold text-[9px] leading-tight ${elapsed?.isOverNextDay || elapsed?.isOver8Hours ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-400'}`}>
+                                               <span className={`font-inter font-bold text-[9px] leading-tight ${!isAttendanceResolved && (elapsed?.isOverNextDay || elapsed?.isOver8Hours) ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-400'}`}>
                                                  {isAdditional ? 'Turno adicional completado' : 'Completado'} {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
                                                </span>
-                                               {elapsed?.isOverNextDay && (
+                                               {!isAttendanceResolved && elapsed?.isOverNextDay && (
                                                  <button
                                                    type="button"
                                                    onClick={(e) => {
