@@ -328,7 +328,10 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
             return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
           });
           setAttendanceReviewResolutionIds(previous => {
-            const next = (reviewResolutions ?? []).map(resolution => resolution.session_id);
+            const next = [...new Set((reviewResolutions ?? []).flatMap(resolution => [
+              resolution.session_id,
+              resolution.resolved_session_id,
+            ].filter((id): id is string => Boolean(id))))].sort();
             return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
           });
           useVolunteerStore.getState().setInitialShifts(cleanShifts);

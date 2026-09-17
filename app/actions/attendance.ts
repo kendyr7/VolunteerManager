@@ -44,6 +44,7 @@ export async function getAttendanceSessionsAction(requestedDayKeys?: string[]): 
 
 export type AttendanceReviewResolution = {
   session_id: string;
+  resolved_session_id: string | null;
   volunteer_id: string;
   day_key: string;
   hide_alert: boolean;
@@ -62,7 +63,7 @@ export async function getAttendanceReviewResolutionsAction(
   const canViewAllVolunteers = hasCapability(authorization, 'view_all_volunteers');
   let query = getAdminClient()
     .from('attendance_review_resolutions')
-    .select('session_id, volunteer_id, day_key, hide_alert, volunteers!inner(committee_id)')
+    .select('session_id, resolved_session_id, volunteer_id, day_key, hide_alert, volunteers!inner(committee_id)')
     .eq('hide_alert', true)
     .order('session_id');
   if (dayKeys) query = query.in('day_key', dayKeys);
@@ -76,6 +77,7 @@ export async function getAttendanceReviewResolutionsAction(
   const resolutions = (data || []) as Array<AttendanceReviewResolution & { volunteers?: unknown }>;
   return resolutions.map(resolution => ({
     session_id: resolution.session_id,
+    resolved_session_id: resolution.resolved_session_id,
     volunteer_id: resolution.volunteer_id,
     day_key: resolution.day_key,
     hide_alert: resolution.hide_alert,
