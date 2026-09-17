@@ -129,7 +129,7 @@ export const ScheduleCaptureCard = forwardRef<HTMLDivElement, ScheduleCaptureCar
                       <>
                         <div className="h-7 w-[1px] bg-border" />
                         <div className="flex flex-col">
-                          <span className="text-[9px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                          <span className="text-[9px] font-black uppercase tracking-wider text-violet-700 dark:text-violet-300">
                             Simulación
                           </span>
                           <span className="text-[10px] font-bold text-text-dim">

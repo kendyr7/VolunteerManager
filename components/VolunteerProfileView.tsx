@@ -940,8 +940,8 @@ export function VolunteerProfileView({
 
   const captureDays: DayScheduleItem[] = useMemo(() => {
     const bgColors = [
-      '#10a562', '#4aa9df', '#f1c130', '#d54134',
-      '#981e32', '#2c44c2', '#f1c130', '#ed1b24'
+      '#10a562', '#4aa9df', '#8b5cf6', '#d54134',
+      '#981e32', '#2c44c2', '#06b6d4', '#ed1b24'
     ];
 
     return EVENT_DAYS.map((d, index) => {
@@ -1169,7 +1169,7 @@ export function VolunteerProfileView({
             </span>
           )}
           {volunteer.stake && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25 shadow-sm">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-inter font-extrabold bg-dark3 text-text-dim border border-border shadow-sm">
               <span className="material-symbols-outlined text-[13px]">account_balance</span>
               {volunteer.stake}
             </span>
@@ -1474,8 +1474,8 @@ export function VolunteerProfileView({
               ));
               const dayAbbr = d.label.substring(0, 3);
               const bgColors = [
-                'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
-                'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
+                'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#8b5cf6]', 'bg-[#d54134]',
+                'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#06b6d4]', 'bg-[#ed1b24]'
               ];
               const cardBg = bgColors[index % bgColors.length];
 
@@ -1497,7 +1497,7 @@ export function VolunteerProfileView({
                     <div className="h-8 w-[1px] bg-border" />
                     {isSimulationEventDay(dayKey) && (
                       <div className="hidden sm:flex flex-col">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">Simulación</span>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-violet-700 dark:text-violet-300">Simulación</span>
                         <span className="text-[10px] font-bold text-text-dim">9:00 AM – 2:00 PM</span>
                       </div>
                     )}
@@ -1636,7 +1636,7 @@ export function VolunteerProfileView({
                                   disabled={isProcessingAudit}
                                   onClick={() => handleReopenShift(dayKey, t)}
                                   title="Reabrir turno completado"
-                                  className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 text-[8px] font-bold transition-all cursor-pointer shadow-sm"
+                                  className="px-1.5 py-0.5 rounded bg-slate-500/15 text-slate-600 dark:text-slate-300 border border-slate-500/30 hover:bg-slate-500/25 text-[8px] font-bold transition-all cursor-pointer shadow-sm"
                                 >
                                   Reabrir
                                 </button>
@@ -1885,8 +1885,8 @@ export function VolunteerProfileView({
                           const dayCompleted = isSourceDayFullyCompleted(d.key);
                           const isSelected = sourceDayKey === d.key;
                           const bgColors = [
-                            'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
-                            'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
+                            'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#8b5cf6]', 'bg-[#d54134]',
+                            'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#06b6d4]', 'bg-[#ed1b24]'
                           ];
                           const cardBg = bgColors[index % bgColors.length];
 
@@ -1959,8 +1959,8 @@ export function VolunteerProfileView({
                         {EVENT_DAYS.map((d, index) => {
                           const isSelected = targetDayKey === d.key;
                           const bgColors = [
-                            'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#f1c130]', 'bg-[#d54134]',
-                            'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#f1c130]', 'bg-[#ed1b24]'
+                            'bg-[#10a562]', 'bg-[#4aa9df]', 'bg-[#8b5cf6]', 'bg-[#d54134]',
+                            'bg-[#981e32]', 'bg-[#2c44c2]', 'bg-[#06b6d4]', 'bg-[#ed1b24]'
                           ];
                           const cardBg = bgColors[index % bgColors.length];
 
