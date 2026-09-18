@@ -343,24 +343,20 @@ export function VolunteerProfileClient({
                           </p>
                         </div>
 
-                        {s.attendance_flag || (s.checked_in && !s.checked_out && passed) ? (
-                          <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/25 font-inter font-bold text-[10px] py-1 px-2.5" title={s.attendance_flag || 'Entrada sin salida después del horario'}>
-                            ⚠ {s.checked_out ? 'Finalizó · revisar' : 'Revisar asistencia'}
-                          </Badge>
-                        ) : s.checked_out ? (
+                        {s.checked_out ? (
                           <Badge className="bg-slate-500/10 text-slate-400 border border-slate-500/20 font-inter font-bold text-[10px] py-1 px-2.5">
-                            Finalizó
+                            Completado
                           </Badge>
                         ) : s.checked_in ? (
                           <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-inter font-bold text-[10px] py-1 px-2.5">
-                            Asistió
+                            En turno
                           </Badge>
                         ) : passed ? (
                           <Badge className="bg-red-500/10 text-red border border-red-500/20 font-inter font-bold text-[10px] py-1 px-2.5">
                             Ausente
                           </Badge>
                         ) : (
-                          <Badge className="bg-white/5 text-text-dim border border-white/10 font-inter font-bold text-[10px] py-1 px-2.5">
+                          <Badge className="bg-[#4d7cfe]/10 text-[#4d7cfe] border border-[#4d7cfe]/25 font-inter font-bold text-[10px] py-1 px-2.5">
                             Programado
                           </Badge>
                         )}

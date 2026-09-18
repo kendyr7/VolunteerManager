@@ -251,11 +251,11 @@ check('Una sesion aun abierta no inventa presencia en otro bloque agendado', () 
   assert.equal(data.sessionOpenShiftKeys[`${id}-${day}-T4`], undefined);
   assert.equal(findAttendanceSessionForShift(day, 'T4', [open], records, id), null);
 });
-check('Una salida breve en el segundo bloque aparece como cerrada para revisar, sin acreditar', () => {
+check('Una salida breve en el segundo bloque se muestra completada y conserva el diagnóstico separado', () => {
   const records = ['T1', 'T4'].map(key => ({ ...shifts[0], id: key, shift_key: key }));
   const shortLate = { ...completed, started_at: at('11:30'), ended_at: at('17:10') };
   const display = getShiftDisplayState(day, 'T4', records[1], [shortLate], records, id);
-  assert.equal(display.status, 'needs_review');
+  assert.equal(display.status, 'completed');
   assert.equal(display.endAt, shortLate.ended_at);
   assert.match(display.flag, /50%/);
 });
@@ -271,24 +271,49 @@ check('Marcacion manual vuelve a pendiente al limpiar las banderas', () => {
   assert.equal(state(derive(manual, [], at('12:00')), 0, manual).isCheckedOut, true);
   assert.deepEqual(state(derive(shifts, [], at('12:00'))), { isCheckedIn: false, isCheckedOut: false });
 });
-check('Una salida breve queda para revisar sin acreditar el turno', () => {
+check('Una salida breve queda completada sin acreditar el turno y conserva el diagnóstico', () => {
   const brief = { ...completed, started_at: at('08:00'), ended_at: at('08:10') };
   assert.equal(inferShiftsForSession(day, brief.started_at, brief.ended_at, ['T1']).length, 0);
   const display = getShiftDisplayState(day, 'T1', shifts[0], [brief], [shifts[0]], id, new RealDate(at('09:00')));
-  assert.equal(display.status, 'needs_review');
+  assert.equal(display.status, 'completed');
   assert.match(display.flag, /50%/);
   assert.equal(display.endAt, brief.ended_at);
 });
-check('Sesion abierta vencida no cuenta como persona en turno', () => {
+check('Sesion abierta vencida conserva el estado verde mientras la decisión está pendiente', () => {
   const stale = getShiftDisplayState(day, 'T2', shifts[1], [session], shifts, id, new RealDate(at('16:00')));
-  assert.equal(stale.status, 'needs_review');
+  assert.equal(stale.status, 'in_progress');
   assert.match(stale.flag, /Salida pendiente/);
 });
-check('Flags antiguos de entrada sin sesion no cuentan como presencia real', () => {
+check('Flags antiguos de entrada sin sesion usan el estado en turno y conservan el diagnóstico', () => {
   const legacy = { ...shifts[0], checked_in: true, checked_in_at: at('08:00') };
   const display = getShiftDisplayState(day, 'T1', legacy, [], [legacy], id, new RealDate(at('09:00')));
-  assert.equal(display.status, 'needs_review');
+  assert.equal(display.status, 'in_progress');
   assert.match(display.flag, /verificar presencia/i);
+});
+check('Una salida breve confirmada queda completada sin volver a generar alerta', () => {
+  const confirmed = {
+    ...completed,
+    started_at: at('08:00'),
+    ended_at: at('08:10'),
+    intended_shift_keys: ['T1'],
+    exit_decision: 'confirmed_short',
+    decision_hides_alert: true,
+  };
+  const display = getShiftDisplayState(day, 'T1', shifts[0], [confirmed], [shifts[0]], id, new RealDate(at('09:00')));
+  assert.equal(display.status, 'completed');
+  assert.equal(display.flag, null);
+});
+check('La decisión de turno evita que la misma sesión pinte un turno vecino', () => {
+  const decided = {
+    ...completed,
+    started_at: at('10:55'),
+    ended_at: at('15:05'),
+    intended_shift_keys: ['T2'],
+    decision_hides_alert: true,
+  };
+  assert.ok(findAttendanceSessionForShift(day, 'T2', [decided], shifts, id));
+  assert.equal(findAttendanceSessionForShift(day, 'T1', [decided], shifts, id), null);
+  assert.equal(findAttendanceSessionForShift(day, 'T3', [decided], shifts, id), null);
 });
 check('La sesion prevalece sobre flags heredados contradictorios', () => {
   const flagged = { ...shifts[1], checked_in: true, checked_out: true };

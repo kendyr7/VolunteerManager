@@ -1,6 +1,6 @@
 import { getOfficialShiftTime, isOperationalEventDay, parseDayKeyToDateStr } from "@/lib/dates";
 import { getGuatemalaDate } from "@/lib/scan-history";
-import { getContinuousScheduledBlockForSession, inferAdditionalCompletedShifts, inferShiftsForSession, getSessionShiftCompletedAt } from "@/lib/session-utils";
+import { getContinuousScheduledBlockForSession, inferAdditionalCompletedShifts, inferShiftsForSession, getSessionShiftCompletedAt, isSessionIncidentalHandover } from "@/lib/session-utils";
 
 export interface ShiftTimeResult {
   startTime: string;
@@ -29,6 +29,10 @@ interface AttendanceSessionTimeRecord {
   shift_completed_at?: string | null;
   shift_started_at?: string | null;
   is_additional_shift?: boolean;
+  intended_shift_keys?: string[];
+  attendance_kind?: string;
+  exit_decision?: string | null;
+  decision_hides_alert?: boolean;
 }
 
 function formatGuatemalaTime(value?: string | null): string | null {
@@ -71,7 +75,14 @@ export function findAttendanceSessionForShift(
       const startedAt = session?.started_at || session?.startedAt || '';
       const endedAt = session?.ended_at ?? session?.endedAt ?? null;
       if (!startedAt) return false;
-      const assignedKeys = assignedShiftKeys.length > 0 ? assignedShiftKeys : [shiftKey];
+      const decisionKeys = Array.isArray(session.intended_shift_keys)
+        ? session.intended_shift_keys.filter(key => ['T1', 'T2', 'T3', 'T4'].includes(key))
+        : [];
+      const assignedKeys = decisionKeys.length > 0
+        ? decisionKeys
+        : assignedShiftKeys.length > 0 ? assignedShiftKeys : [shiftKey];
+      if (decisionKeys.length > 0 && !decisionKeys.includes(shiftKey)
+        && session.attendance_kind !== 'additional') return false;
       const isAssignedMatch = assignedShiftKeys.length > 0 && inferShiftsForSession(
         dayKey,
         startedAt,
@@ -88,11 +99,17 @@ export function findAttendanceSessionForShift(
       const shiftEnd = midnight + official.endHour * 3600000;
       const startedMs = new Date(startedAt).getTime();
       const endedMs = endedAt ? new Date(endedAt).getTime() : Date.now();
-      const visitedAssignedShift = Boolean(assignedShiftKeys.length > 0 && (endedAt || inBlock) && (
+      // A brief overlap may flag a scheduled shift, but must not make an
+      // unassigned neighboring shift look like an attendance exception.
+      // Furthermore, incidental handover overlap from an assigned shift that was
+      // actually credited must not be treated as a visit to the adjacent shift.
+      const isIncidental = isSessionIncidentalHandover(dayKey, shiftKey, startedAt, endedAt, assignedShiftKeys);
+      const visitedAssignedShift = Boolean(assignedShiftKeys.includes(shiftKey) && !isIncidental && (endedAt || inBlock) && (
         (inBlock && block?.startShiftKey === shiftKey && startedMs < shiftStart)
         || (startedMs < shiftEnd && endedMs > shiftStart)
       ));
-      const isAdditionalMatch = Boolean(endedAt) && inferAdditionalCompletedShifts(
+      const isAdditionalMatch = (session.attendance_kind === 'additional' && decisionKeys.includes(shiftKey))
+        || Boolean(endedAt) && inferAdditionalCompletedShifts(
         dayKey,
         startedAt,
         endedAt,
@@ -131,11 +148,15 @@ export function findAttendanceSessionForShift(
   if (!session) return null;
   const startedAt = session.started_at || session.startedAt || '';
   const endedAt = session.ended_at ?? session.endedAt;
-  const additionalShifts = inferAdditionalCompletedShifts(dayKey, startedAt, endedAt, assignedShiftKeys);
-  const isAdditionalShift = additionalShifts.some(shift => shift.shiftKey === shiftKey);
+  const sessionDecisionKeys = Array.isArray(session.intended_shift_keys) ? session.intended_shift_keys : [];
+  const effectiveAssignedKeys = sessionDecisionKeys.length ? sessionDecisionKeys : assignedShiftKeys;
+  const additionalShifts = inferAdditionalCompletedShifts(dayKey, startedAt, endedAt, effectiveAssignedKeys);
+  const isAdditionalShift = session.attendance_kind === 'additional'
+    ? sessionDecisionKeys.includes(shiftKey)
+    : additionalShifts.some(shift => shift.shiftKey === shiftKey);
   const completionKeys = isAdditionalShift
     ? Array.from(new Set([...assignedShiftKeys, ...additionalShifts.map(shift => shift.shiftKey)]))
-    : (assignedShiftKeys.length > 0 ? assignedShiftKeys : [shiftKey]);
+    : (effectiveAssignedKeys.length > 0 ? effectiveAssignedKeys : [shiftKey]);
   const block = getContinuousScheduledBlockForSession(dayKey, startedAt, completionKeys);
   const official = getOfficialShiftTime(dayKey, shiftKey);
   const officialStart = new Date(
@@ -155,7 +176,7 @@ export function findAttendanceSessionForShift(
   };
 }
 
-export type ShiftDisplayStatus = 'scheduled' | 'in_progress' | 'completed' | 'needs_review';
+export type ShiftDisplayStatus = 'scheduled' | 'in_progress' | 'completed';
 
 /** One attendance interpretation for roster rows and both personal schedules. */
 export function getShiftDisplayState(
@@ -176,10 +197,13 @@ export function getShiftDisplayState(
     const startedAt = matching.shift_started_at || matching.started_at || matching.startedAt || null;
     const endedAt = matching.ended_at ?? matching.endedAt ?? null;
     const completedAt = matching.shift_completed_at || endedAt;
-    const assignedKeys = assignedShifts
+    const scheduledKeys = assignedShifts
       .filter(item => String(item?.day_key || item?.dayKey || '').toLowerCase().trim() === dayKey.toLowerCase().trim()
         && (!volunteerId || (item?.volunteer_id || item?.volunteerId) === volunteerId))
       .map(item => item?.shift_key || item?.shiftKey).filter(Boolean);
+    const assignedKeys = matching.intended_shift_keys?.length
+      ? matching.intended_shift_keys
+      : scheduledKeys;
     const originalStart = matching.started_at || matching.startedAt || '';
     const official = getOfficialShiftTime(dayKey, shiftKey);
     const dayStr = parseDayKeyToDateStr(dayKey);
@@ -194,10 +218,17 @@ export function getShiftDisplayState(
       dayKey, originalStart, endedAt, assignedKeys.length ? assignedKeys : [shiftKey], now,
     ).some(item => item.shiftKey === shiftKey) || matching.is_additional_shift;
 
+    const isIncidental = isSessionIncidentalHandover(dayKey, shiftKey, originalStart, endedAt, assignedKeys);
+    if (!earnsCredit && isIncidental) {
+      return { status: 'scheduled', startAt: null, endAt: null, flag: null };
+    }
+
     const shortVisit = Boolean(endedAt && !earnsCredit && isBriefVisitInShift);
     if (shortVisit) return {
-      status: 'needs_review', startAt: startedAt, endAt: endedAt,
-      flag: 'Asistencia registrada, pero no supera el 50% del turno',
+      status: 'completed', startAt: startedAt, endAt: endedAt,
+      flag: matching.decision_hides_alert
+        ? null
+        : 'Asistencia registrada, pero no supera el 50% del turno',
     };
     if (completedAt) return {
       status: 'completed', startAt: startedAt, endAt: completedAt,
@@ -207,8 +238,8 @@ export function getShiftDisplayState(
     const officialEnd = new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime()
       + getOfficialShiftTime(dayKey, shiftKey).endHour * 3600000;
     if (matching.status !== 'open' || !isToday || now.getTime() >= officialEnd) return {
-      status: 'needs_review', startAt: startedAt, endAt: null,
-      flag: matching.status !== 'open' ? 'Sesión finalizada sin hora de salida'
+      status: 'in_progress', startAt: startedAt, endAt: null,
+      flag: matching.decision_hides_alert ? null : matching.status !== 'open' ? 'Sesión finalizada sin hora de salida'
         : 'Salida pendiente: sesión abierta fuera del horario del turno',
     };
     return {
@@ -228,7 +259,7 @@ export function getShiftDisplayState(
   };
   if (legacyOut) return { status: 'completed', startAt: shift?.checked_in_at || null, endAt: shift?.checked_out_at || null, flag: null };
   if (legacyIn) return {
-    status: 'needs_review', startAt: shift?.checked_in_at || null, endAt: null,
+    status: 'in_progress', startAt: shift?.checked_in_at || null, endAt: null,
     flag: parseDayKeyToDateStr(dayKey) === getGuatemalaDate(now)
       && now.getTime() < new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime()
         + getOfficialShiftTime(dayKey, shiftKey).endHour * 3600000

@@ -1,4 +1,4 @@
-import { getOfficialShiftTime, getOfficialShiftTimesList, parseDayKeyToDateStr, OfficialShiftTime } from './dates';
+import { getOfficialShiftTime, getOfficialShiftTimesList, parseDayKeyToDateStr, OfficialShiftTime, EARLY_CHECK_IN_MINUTES } from './dates';
 
 export interface AttendanceSession {
   id: string;
@@ -10,7 +10,27 @@ export interface AttendanceSession {
   auto_closed: boolean;
   created_at?: string;
   updated_at?: string;
+  intended_shift_keys?: string[];
+  attendance_kind?: AttendanceKind;
+  exit_decision?: AttendanceExitDecision | null;
+  decision_reason_code?: string;
+  decision_explanation?: string;
+  decision_hides_alert?: boolean;
 }
+
+export type AttendanceKind =
+  | 'scheduled'
+  | 'full_block'
+  | 'additional'
+  | 'late_entry'
+  | 'forgotten_scan'
+  | 'historical_audit';
+
+export type AttendanceExitDecision =
+  | 'normal'
+  | 'confirmed_short'
+  | 'resolved_stale'
+  | 'admin_corrected';
 
 /**
  * Validates session domain & DB constraints:
@@ -77,6 +97,7 @@ export function sessionTouchesAssignedShift(
   const block = getContinuousScheduledBlockForSession(dayKey, startedAt, assignedShiftKeys);
   if (!assignedShiftKeys.includes(shiftKey)) return false;
   if (!endedAt && !block?.matchedShifts.some(shift => shift.shiftKey === shiftKey)) return false;
+  if (isSessionIncidentalHandover(dayKey, shiftKey, startedAt, endedAt, assignedShiftKeys)) return false;
   const shift = getOfficialShiftTime(dayKey, shiftKey);
   const startHour = getGuatemalaHourFloat(startedAt);
   let endHour = getGuatemalaHourFloat(endedAt || now);
@@ -92,6 +113,15 @@ export function sessionTouchesAssignedShift(
 export const MIN_ASSIGNED_SHIFT_COMPLETION_RATIO = 0.5;
 
 export const SHORT_CHECKOUT_WARNING_MINUTES = 60;
+export const PREMATURE_CHECKOUT_THRESHOLD_MINUTES = 15;
+
+export function isPrematureCheckout(startedAt: Date | string | null | undefined, endedAt: Date | string = new Date()): boolean {
+  if (!startedAt) return false;
+  const startMs = new Date(startedAt).getTime();
+  const endMs = new Date(endedAt).getTime();
+  return Number.isFinite(startMs) && Number.isFinite(endMs)
+    && endMs - startMs < PREMATURE_CHECKOUT_THRESHOLD_MINUTES * 60_000;
+}
 
 export function needsShortCheckoutConfirmation(startedAt: Date | string | null | undefined, endedAt: Date | string = new Date()): boolean {
   if (!startedAt) return false;
@@ -99,6 +129,111 @@ export function needsShortCheckoutConfirmation(startedAt: Date | string | null |
   const endMs = new Date(endedAt).getTime();
   return Number.isFinite(startMs) && Number.isFinite(endMs)
     && endMs - startMs < SHORT_CHECKOUT_WARNING_MINUTES * 60_000;
+}
+
+export interface ShiftAmbiguityOption {
+  shiftKey: string;
+  label: string;
+  timeLabel: string;
+  isRecommended: boolean;
+  description: string;
+}
+
+export interface ShiftAmbiguityResult {
+  isAmbiguous: boolean;
+  recommendedShiftKey?: string;
+  options: ShiftAmbiguityOption[];
+}
+
+export function detectShiftAmbiguity(
+  dayKey: string,
+  currentHourFloat: number,
+  assignedShiftKeys: string[]
+): ShiftAmbiguityResult {
+  if (!assignedShiftKeys || assignedShiftKeys.length === 0) {
+    return { isAmbiguous: false, options: [] };
+  }
+
+  const uniqueKeys = Array.from(new Set(assignedShiftKeys));
+  const assignedTimes = uniqueKeys
+    .map(key => getOfficialShiftTime(dayKey, key))
+    .sort((a, b) => a.startHour - b.startHour);
+
+  if (assignedTimes.length <= 1) {
+    return { isAmbiguous: false, options: [] };
+  }
+
+  const activeOrUpcoming = assignedTimes.filter(t => currentHourFloat < t.endHour);
+
+  // In overlap/handover window, prefer the newly starting shift rather than the shift about to end:
+  const activeShifts = assignedTimes.filter(t => currentHourFloat >= t.startHour - 0.5 && currentHourFloat < t.endHour);
+  let recommended = activeShifts.length > 1
+    ? activeShifts[activeShifts.length - 1] // The latest starting active shift (e.g. T2 over T1)
+    : activeShifts[0];
+
+  if (!recommended && activeOrUpcoming.length > 0) {
+    recommended = activeOrUpcoming[0];
+  }
+  if (!recommended && assignedTimes.length > 0) {
+    recommended = assignedTimes[assignedTimes.length - 1];
+  }
+
+  const recommendedKey = recommended ? recommended.shiftKey : assignedTimes[0].shiftKey;
+  const options: ShiftAmbiguityOption[] = [];
+
+  const isContinuous = assignedTimes.length >= 2 && assignedTimes.every((t, i) => {
+    if (i === 0) return true;
+    return assignedTimes[i - 1].endHour >= t.startHour;
+  });
+
+  const isStartOfBlock = currentHourFloat <= assignedTimes[0].startHour + 2;
+
+  if (isContinuous) {
+    const firstShift = assignedTimes[0];
+    const lastShift = assignedTimes[assignedTimes.length - 1];
+    const fullBlockLabel = assignedTimes.map(t => t.shiftKey).join(' + ');
+    const fullTimeLabel = `${firstShift.shortTimeLabel.split(' - ')[0] || firstShift.shortTimeLabel} - ${lastShift.shortTimeLabel.split(' - ')[1] || lastShift.shortTimeLabel}`;
+
+    options.push({
+      shiftKey: 'ALL',
+      label: `Jornada Completa (${fullBlockLabel})`,
+      timeLabel: fullTimeLabel,
+      isRecommended: isStartOfBlock,
+      description: 'El voluntario cubrirá sus turnos asignados de forma continua.',
+    });
+  }
+
+  for (const t of assignedTimes) {
+    const isCurrent = currentHourFloat >= t.startHour - 0.5 && currentHourFloat < t.endHour;
+    const isPast = currentHourFloat >= t.endHour;
+    const isFuture = currentHourFloat < t.startHour - 0.5;
+
+    let desc = '';
+    if (isCurrent) desc = 'Turno en curso · Entrada a tiempo';
+    else if (isPast) desc = 'Turno finalizado · Entrada tardía';
+    else if (isFuture) desc = 'Turno próximo más tarde';
+
+    const isRec = !isStartOfBlock && t.shiftKey === recommendedKey;
+
+    options.push({
+      shiftKey: t.shiftKey,
+      label: `Turno ${t.shiftKey}`,
+      timeLabel: t.shortTimeLabel,
+      isRecommended: isRec,
+      description: desc,
+    });
+  }
+
+  if (!options.some(o => o.isRecommended) && options.length > 0) {
+    const fallback = options.find(o => o.shiftKey === recommendedKey) || options[0];
+    fallback.isRecommended = true;
+  }
+
+  return {
+    isAmbiguous: true,
+    recommendedShiftKey: options.find(o => o.isRecommended)?.shiftKey || recommendedKey,
+    options,
+  };
 }
 
 /**
@@ -176,6 +311,53 @@ export function inferShiftsForSession(
   }
 
   return matched;
+}
+
+/**
+ * Determines whether a session's overlap with an assigned shift is purely incidental handover
+ * overlap from another assigned shift that was actually credited.
+ *
+ * For example, in Guatemala official shifts overlap by 1 hour for team handover:
+ *   - T1: 07:00 – 12:00
+ *   - T2: 11:00 – 15:00
+ *   - T3: 14:00 – 18:00
+ *   - T4: 17:00 – 22:00
+ *
+ * If a volunteer is assigned to T1, T2, T3 and completes T2 (11:00 – 15:00), the 11:00–12:00
+ * overlap with T1 and the 14:00–15:00 overlap with T3 are scheduled handover times of T2.
+ * They must NOT be treated as incomplete/abandoned visits to T1 or T3.
+ */
+export function isSessionIncidentalHandover(
+  dayKey: string,
+  shiftKey: string,
+  startedAt: Date | string,
+  endedAt: Date | string | null | undefined,
+  assignedShiftKeys: string[] = [],
+): boolean {
+  if (!assignedShiftKeys || assignedShiftKeys.length <= 1) return false;
+  const creditedShifts = inferShiftsForSession(dayKey, startedAt, endedAt, assignedShiftKeys);
+  if (creditedShifts.length === 0) return false;
+  if (creditedShifts.some(s => s.shiftKey === shiftKey)) return false;
+
+  const midnight = new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime();
+  const creditedMinStart = Math.min(...creditedShifts.map(c => midnight + c.startHour * 3600000));
+  const creditedMaxEnd = Math.max(...creditedShifts.map(c => midnight + c.endHour * 3600000));
+
+  const official = getOfficialShiftTime(dayKey, shiftKey);
+  const shiftStart = midnight + official.startHour * 3600000;
+  const shiftEnd = midnight + official.endHour * 3600000;
+  const startedMs = new Date(startedAt).getTime();
+  const endedMs = endedAt ? new Date(endedAt).getTime() : Date.now();
+
+  const overlapStart = Math.max(startedMs, shiftStart);
+  const overlapEnd = Math.min(endedMs, shiftEnd);
+  if (overlapStart >= overlapEnd) return false;
+
+  const bufferMs = (EARLY_CHECK_IN_MINUTES || 30) * 60 * 1000;
+  const hasAttendanceBeforeCredited = overlapStart < creditedMinStart - bufferMs;
+  const hasAttendanceAfterCredited = overlapEnd > creditedMaxEnd + bufferMs;
+
+  return !hasAttendanceBeforeCredited && !hasAttendanceAfterCredited;
 }
 
 /**

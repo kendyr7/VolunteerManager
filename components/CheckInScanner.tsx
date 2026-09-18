@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { checkInVolunteer, getHistoricalAttendanceLogs, getCurrentAttendanceHistoryAction, checkOutVolunteer, reassignVolunteerShift, closeAttendanceSessionAction } from "@/app/actions/attendance";
+import { checkInVolunteer, getHistoricalAttendanceLogs, getCurrentAttendanceHistoryAction, checkOutVolunteer, reassignVolunteerShift, closeAttendanceSessionAction, resolvePreviousAndCheckInTodayAction } from "@/app/actions/attendance";
 import { canQrCheckin } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,7 +13,7 @@ import { useCoordinatorData } from "@/lib/coordinator-data-context";
 import { ReassignShiftModal } from "@/components/ReassignShiftModal";
 import { VolunteerProfileDrawer } from "@/components/VolunteerProfileDrawer";
 import { AdminSessionCorrectionModal } from "@/components/AdminSessionCorrectionModal";
-import { needsShortCheckoutConfirmation, type AttendanceSession } from "@/lib/session-utils";
+import { needsShortCheckoutConfirmation, isPrematureCheckout, type AttendanceSession, type ShiftAmbiguityOption } from "@/lib/session-utils";
 import { SmartSearchBar } from "@/components/SmartSearchBar";
 import { useDebouncedSearch } from "@/lib/use-debounced-search";
 import { HighlightText } from "@/components/HighlightText";
@@ -34,6 +34,45 @@ interface CheckInScannerProps {
 
 type ScannerState = 'idle' | 'scanning' | 'loading' | 'success' | 'already_checked_in' | 'manual_selection' | 'error';
 
+export interface FailedScanDetail {
+  errorMsg: string;
+  errorCode?: string;
+  volunteer?: {
+    id: string;
+    name: string;
+    firstName?: string;
+    lastName?: string;
+    committee?: string;
+    phone?: string;
+    status?: string;
+    reliabilityScore?: number | null;
+    photoUrl?: string | null;
+  };
+  nextScheduledShift?: {
+    dayKey: string;
+    shiftKey: string;
+    timeLabel: string;
+  } | null;
+  endedShift?: {
+    dayKey: string;
+    shiftKey: string;
+    timeLabel: string;
+  } | null;
+  allShifts?: any[];
+  todayShifts?: any[];
+  qrValue?: string;
+}
+
+export interface DisambiguationModalState {
+  isOpen: boolean;
+  volunteerId: string;
+  volunteerName: string;
+  committee: string;
+  options: ShiftAmbiguityOption[];
+  selectedShiftKey: string;
+  qrValue: string;
+}
+
 interface ScanEntry {
   id: string;
   sessionId?: string;
@@ -46,6 +85,7 @@ interface ScanEntry {
   timestamp: Date;
   type: 'success' | 'already_checked_in' | 'error';
   errorMsg?: string;
+  errorCode?: string;
   isCompleted?: boolean;
 }
 
@@ -53,6 +93,7 @@ type ScannerCamera = { id: string; label: string };
 
 const PREFERRED_CAMERA_STORAGE_KEY = 'volunteer_manager_preferred_camera_id';
 const SCAN_CONFIRMATION_DURATION_MS = 4000;
+const DUPLICATE_SCAN_WINDOW_MS = 5000;
 
 function getCameraPriority(camera: ScannerCamera, preferredCameraId: string | null): number {
   if (camera.id === preferredCameraId) return 10_000;
@@ -133,6 +174,139 @@ export function CheckInScanner({
     session?: any;
     outsideOperationalDay?: boolean;
   } | null>(null);
+
+  const [failedScanData, setFailedScanData] = useState<FailedScanDetail | null>(null);
+  const [disambiguationData, setDisambiguationData] = useState<DisambiguationModalState | null>(null);
+  const lastScannedQrRef = useRef<{ qr: string; timestamp: number } | null>(null);
+
+  const handleOpenQuickAssignToday = (vol: any) => {
+    if (!vol) return;
+    const today = getGuatemalaDayKey();
+    setReassignTarget({
+      shiftId: '',
+      volunteerId: vol.id,
+      volunteerName: vol.name || `${vol.first_name || ''} ${vol.last_name || ''}`.trim(),
+      committee: vol.committee || vol.committees?.name || 'Sin comité',
+      dayKey: today,
+      shiftKey: 'T1',
+      isNewAssignment: true,
+    });
+    setReassignDayKey(today);
+    setReassignShiftKey('T1');
+  };
+
+  const handleConfirmDisambiguation = async (shiftKey: string, qrVal?: string) => {
+    const qr = qrVal || disambiguationData?.qrValue;
+    setDisambiguationData(null);
+    if (!qr) return;
+    setState('loading');
+    try {
+      const res = await checkInVolunteer(qr, coordinatorId, undefined, { intendedShiftKey: shiftKey });
+      if (res.error) {
+        playWarningBeep();
+        triggerVibration(300);
+        setErrorMsg(res.error);
+        const volSummary = (res as any).volunteerSummary;
+        const volName = res.volunteer || volSummary?.name || '—';
+        const commName = res.committee || volSummary?.committee || '—';
+        const volId = res.volunteerId || volSummary?.id;
+        const failEntry: ScanEntry = {
+          id: crypto.randomUUID(),
+          volunteerId: volId,
+          volunteer: volName,
+          committee: commName,
+          timestamp: new Date(),
+          type: 'error',
+          errorMsg: res.error,
+          errorCode: (res as any).errorCode,
+        };
+        updateHistory(prev => [failEntry, ...prev]);
+        setFailedScanData({
+          errorMsg: res.error,
+          errorCode: (res as any).errorCode,
+          volunteer: volSummary || (volId ? { id: volId, name: volName, committee: commName } : undefined),
+          nextScheduledShift: (res as any).nextScheduledShift,
+          endedShift: (res as any).endedShift,
+          allShifts: (res as any).allShifts,
+          todayShifts: (res as any).todayShifts,
+          qrValue: qr,
+        });
+        setState('error');
+      } else if (res.success) {
+        void refresh(true);
+        playSuccessBeep();
+        triggerVibration(150);
+        setSessionCount(c => c + 1);
+        const entry: ScanEntry = {
+          id: res.shiftId || res.session?.id || crypto.randomUUID(),
+          sessionId: res.session?.id,
+          volunteerId: res.volunteerId || res.session?.volunteer_id,
+          volunteer: res.volunteer || "Voluntario",
+          committee: res.committee || "Sin comité",
+          shiftDetail: res.shiftDetail,
+          timestamp: new Date(),
+          type: 'success',
+        };
+        updateHistory(prev => [entry, ...prev]);
+        setScanResult({
+          volunteer: entry.volunteer,
+          committee: entry.committee,
+          shiftDetail: entry.shiftDetail,
+        });
+        setState('success');
+        autoResetTimeoutRef.current = setTimeout(() => {
+          startScanning();
+        }, SCAN_CONFIRMATION_DURATION_MS);
+      }
+    } catch (e) {
+      console.error("Error in disambiguation confirmation:", e);
+      setErrorMsg("Ocurrió un error al confirmar el turno.");
+      setState('error');
+    }
+  };
+
+  const handleResolveStaleSessionAndCheckInToday = async (sessionId: string, volunteerId: string) => {
+    setState('loading');
+    try {
+      const res = await resolvePreviousAndCheckInTodayAction({
+        previousSessionId: sessionId,
+        volunteerId,
+      });
+      if (!res.success) {
+        playWarningBeep();
+        setErrorMsg(res.error || 'No se pudo resolver la salida pendiente.');
+        setState('error');
+        return;
+      }
+      void refresh(true);
+      playSuccessBeep();
+      triggerVibration(150);
+      setSessionCount(c => c + 1);
+      const entry: ScanEntry = {
+        id: res.session?.id || crypto.randomUUID(),
+        sessionId: res.session?.id,
+        volunteerId: res.volunteerId,
+        volunteer: res.volunteer || "Voluntario",
+        committee: res.committee || "Sin comité",
+        shiftDetail: res.shiftDetail,
+        timestamp: new Date(),
+        type: 'success',
+      };
+      updateHistory(prev => [entry, ...prev]);
+      setScanResult({
+        volunteer: entry.volunteer,
+        committee: entry.committee,
+        shiftDetail: entry.shiftDetail,
+      });
+      setState('success');
+      autoResetTimeoutRef.current = setTimeout(() => {
+        startScanning();
+      }, SCAN_CONFIRMATION_DURATION_MS);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Error al resolver sesión anterior.');
+      setState('error');
+    }
+  };
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setMainView(initialView));
@@ -451,10 +625,12 @@ export function CheckInScanner({
   // Reassign & Checkout state and handlers
   const [reassignTarget, setReassignTarget] = useState<{
     shiftId: string;
+    volunteerId?: string;
     volunteerName: string;
     committee?: string;
     dayKey: string;
     shiftKey: string;
+    isNewAssignment?: boolean;
   } | null>(null);
   const [reassignDayKey, setReassignDayKey] = useState<string>("");
   const [reassignShiftKey, setReassignShiftKey] = useState<string>("T1");
@@ -538,6 +714,7 @@ export function CheckInScanner({
 
   const [checkoutModal, setCheckoutModal] = useState<{
     isOpen: boolean;
+    isPremature?: boolean;
     item: {
       shiftId: string;
       volunteerName: string;
@@ -548,12 +725,14 @@ export function CheckInScanner({
     } | null;
   }>({
     isOpen: false,
+    isPremature: false,
     item: null
   });
 
   const [shortCheckoutConfirmed, setShortCheckoutConfirmed] = useState(false);
   const [forceShortCheckoutWarning, setForceShortCheckoutWarning] = useState(false);
-  const shortCheckoutWarning = forceShortCheckoutWarning || needsShortCheckoutConfirmation(checkoutModal.item?.checkedInAt);
+  const isPrematureExit = Boolean(checkoutModal.isPremature || isPrematureCheckout(checkoutModal.item?.checkedInAt));
+  const shortCheckoutWarning = isPrematureExit || forceShortCheckoutWarning || needsShortCheckoutConfirmation(checkoutModal.item?.checkedInAt);
 
   const handleOpenCheckoutModal = (shiftId: string, volunteerName: string, checkedInAt?: string | Date) => {
     setCheckoutError('');
@@ -675,6 +854,7 @@ export function CheckInScanner({
     setState('scanning');
     setErrorMsg("");
     setScanResult(null);
+    setFailedScanData(null);
   };
 
   // Initialize html5-qrcode
@@ -816,7 +996,14 @@ export function CheckInScanner({
   };
 
   const handleScannedData = async (qrValue: string) => {
+    const now = Date.now();
+    if (lastScannedQrRef.current && lastScannedQrRef.current.qr === qrValue && (now - lastScannedQrRef.current.timestamp) < DUPLICATE_SCAN_WINDOW_MS) {
+      return;
+    }
+    lastScannedQrRef.current = { qr: qrValue, timestamp: now };
+
     setState('loading');
+    setFailedScanData(null);
     try {
       const res = await checkInVolunteer(qrValue, coordinatorId);
 
@@ -824,15 +1011,45 @@ export function CheckInScanner({
         playWarningBeep();
         triggerVibration(300);
         setErrorMsg(res.error);
-        updateHistory(prev => [{
+        const volSummary = (res as any).volunteerSummary;
+        const volName = res.volunteer || volSummary?.name || '—';
+        const commName = res.committee || volSummary?.committee || '—';
+        const volId = res.volunteerId || volSummary?.id;
+        const failEntry: ScanEntry = {
           id: crypto.randomUUID(),
-          volunteer: '—',
-          committee: '—',
+          volunteerId: volId,
+          volunteer: volName,
+          committee: commName,
           timestamp: new Date(),
           type: 'error',
           errorMsg: res.error,
-        }, ...prev]);
+          errorCode: (res as any).errorCode,
+        };
+        updateHistory(prev => [failEntry, ...prev]);
+        setFailedScanData({
+          errorMsg: res.error,
+          errorCode: (res as any).errorCode,
+          volunteer: volSummary || (volId ? { id: volId, name: volName, committee: commName } : undefined),
+          nextScheduledShift: (res as any).nextScheduledShift,
+          endedShift: (res as any).endedShift,
+          allShifts: (res as any).allShifts,
+          todayShifts: (res as any).todayShifts,
+          qrValue,
+        });
         setState('error');
+      } else if ((res as any).requiresDisambiguation && (res as any).ambiguityData) {
+        playWarningBeep();
+        const amb = (res as any).ambiguityData;
+        setDisambiguationData({
+          isOpen: true,
+          volunteerId: amb.volunteerId,
+          volunteerName: amb.volunteer,
+          committee: amb.committee,
+          options: amb.options,
+          selectedShiftKey: amb.recommendedShiftKey || (amb.options[0]?.shiftKey ?? 'ALL'),
+          qrValue: amb.qrValue || qrValue,
+        });
+        setState('idle');
       } else if ('alreadyCheckedIn' in res && res.alreadyCheckedIn) {
         playWarningBeep();
         triggerVibration(100);
@@ -864,8 +1081,8 @@ export function CheckInScanner({
           volunteer: res.volunteer || "Voluntario",
           committee: res.committee || "Sin comité",
           shiftDetail: isOutsideOperationalDay
-            ? `⚠ Sesión fuera del cronograma: ${dayLabel} (${startTimeStr})`
-            : `⚠ Sesión pendiente de ${dayLabel} (${startTimeStr})`,
+            ? `Sesión fuera del cronograma: ${dayLabel} (${startTimeStr})`
+            : `Sesión pendiente de ${dayLabel} (${startTimeStr})`,
           session: res.session
         });
         setCheckoutModal({ isOpen: false, item: null });
@@ -887,10 +1104,12 @@ export function CheckInScanner({
           shiftDetail: `Sesión Activa desde ${startTimeStr}`,
           session: res.session
         });
+        const isPremature = Boolean((res as any).isPrematureCheckout) || (res.session?.started_at ? isPrematureCheckout(res.session.started_at) : false);
         setShortCheckoutConfirmed(false);
         setForceShortCheckoutWarning(false);
         setCheckoutModal({
           isOpen: true,
+          isPremature,
           item: {
             shiftId: res.session?.id || 'active-session',
             sessionId: res.session?.id,
@@ -938,7 +1157,8 @@ export function CheckInScanner({
       }
     } catch (e) {
       console.error("Error in check-in transaction:", e);
-      setErrorMsg("Ocurrió un error al registrar la asistencia.");
+      playWarningBeep();
+      setErrorMsg("Ocurrió un error inesperado al procesar el pase QR.");
       setState('error');
     }
   };
@@ -1020,7 +1240,7 @@ export function CheckInScanner({
   if (mounted && !canQrCheckin()) {
     return (
       <div className="w-full min-h-[65vh] flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center mb-4">
+        <div className="w-16 h-16 rounded-xl bg-[#fe4d97]/10 text-[#fe4d97] border border-[#fe4d97]/25 flex items-center justify-center mb-4">
           <span className="material-symbols-outlined text-[32px]">lock</span>
         </div>
         <h2 className="text-xl font-bold text-text mb-2">Acceso Restringido a Escáner QR</h2>
@@ -1144,18 +1364,18 @@ export function CheckInScanner({
                   <div className="flex flex-col items-center text-center pt-2" role="status" aria-live="polite" aria-atomic="true">
                     <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 transition-colors duration-300 ${
                       state === 'success' ? 'bg-emerald-500/15 border border-emerald-500/20' :
-                      state === 'already_checked_in' ? 'bg-amber-500/15 border border-amber-500/20' :
+                      state === 'already_checked_in' ? 'bg-[#4d7cfe]/15 border border-[#4d7cfe]/25' :
                       state === 'error' ? 'bg-red-500/15 border border-red-500/20' :
                       'bg-[#4d7cfe]/10 border border-[#4d7cfe]/20'
                     }`}>
                       <span className={`material-symbols-outlined text-[28px] ${
                         state === 'success' ? 'text-emerald-400' :
-                        state === 'already_checked_in' ? 'text-amber-400' :
+                        state === 'already_checked_in' ? 'text-[#4d7cfe]' :
                         state === 'error' ? 'text-red-400' :
                         'text-[#4d7cfe] animate-pulse'
                       }`}>
                         {state === 'success' ? 'check_circle' :
-                         state === 'already_checked_in' ? 'warning' :
+                         state === 'already_checked_in' ? 'fact_check' :
                          state === 'error' ? 'error' :
                          'qr_code_scanner'}
                       </span>
@@ -1167,7 +1387,68 @@ export function CheckInScanner({
                        state === 'error' ? 'Fallo de Validación' :
                        'Procesando...'}
                     </h2>
-                    {(state === 'success' || state === 'already_checked_in') && scanResult ? (
+                    {state === 'error' && failedScanData?.volunteer ? (
+                      <div className="mt-3 w-full min-w-0 space-y-3 text-left">
+                        <div className="p-3 bg-black/5 dark:bg-white/5 rounded-2xl border border-red-500/20 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center shrink-0">
+                            <span className="text-sm font-black text-red-500">
+                              {failedScanData.volunteer.name.charAt(0)}
+                            </span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-extrabold text-text truncate">
+                              {failedScanData.volunteer.name}
+                            </p>
+                            <p className="text-xs text-text-dim truncate">
+                              {failedScanData.volunteer.committee}
+                              {failedScanData.volunteer.phone ? ` · ${failedScanData.volunteer.phone}` : ''}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-300 leading-snug flex items-start gap-2">
+                          <span className="material-symbols-outlined text-[16px] shrink-0 mt-0.5">error</span>
+                          <span>{errorMsg}</span>
+                        </div>
+
+                        {failedScanData.nextScheduledShift && (
+                          <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[16px] text-[#4d7cfe] shrink-0">event</span>
+                            <span className="truncate">
+                              Próximo: <strong>{failedScanData.nextScheduledShift.dayKey}</strong> ({failedScanData.nextScheduledShift.shiftKey} · {failedScanData.nextScheduledShift.timeLabel})
+                            </span>
+                          </div>
+                        )}
+
+                        {failedScanData.endedShift && (
+                          <div className="p-3 rounded-xl bg-[#fe4d97]/10 border border-[#fe4d97]/25 text-xs text-[#fe4d97] flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[16px] text-[#fe4d97] shrink-0">schedule</span>
+                            <span className="truncate">
+                              Turno finalizado: <strong>{failedScanData.endedShift.shiftKey}</strong> ({failedScanData.endedShift.timeLabel})
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenQuickAssignToday(failedScanData.volunteer)}
+                            className="h-11 rounded-xl text-xs font-bold font-inter bg-[#4d7cfe] hover:bg-[#3b66e0] text-white flex items-center justify-center gap-1.5 transition-all active:scale-[0.97] cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">add_circle</span>
+                            <span>Asignar Hoy</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenVolunteerProfile(failedScanData.volunteer)}
+                            className="h-11 rounded-xl text-xs font-bold font-inter bg-black/10 dark:bg-white/10 hover:bg-black/15 dark:hover:bg-white/15 text-text border border-black/10 dark:border-white/10 flex items-center justify-center gap-1.5 transition-all active:scale-[0.97] cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">person</span>
+                            <span>Ver Perfil</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (state === 'success' || state === 'already_checked_in') && scanResult ? (
                       <div className="mt-2 w-full min-w-0 space-y-1.5">
                         <p className="text-2xl font-extrabold text-text leading-tight break-words">
                           {scanResult.volunteer}
@@ -1179,6 +1460,20 @@ export function CheckInScanner({
                           <p className="pt-1 text-xs text-slate-600 dark:text-slate-300">
                             Puedes continuar con «Escanear siguiente».
                           </p>
+                        )}
+                        {scanResult?.session && (scanResult.shiftDetail?.includes('pendiente') || scanResult.shiftDetail?.includes('cronograma')) && (
+                          <div className="p-3 rounded-xl bg-[#fe4d97]/10 border border-[#fe4d97]/25 space-y-2 mt-2 text-left">
+                            <p className="text-xs text-text font-medium">
+                              ¿Deseas cerrar la sesión pendiente y abrir inmediatamente la asistencia de hoy?
+                            </p>
+                            <Button
+                              onClick={() => handleResolveStaleSessionAndCheckInToday(scanResult.session.id, scanResult.session.volunteer_id)}
+                              className="w-full h-11 rounded-xl text-xs font-bold bg-[#fe4d97] hover:bg-[#e83c84] text-white flex items-center justify-center gap-1.5 active:scale-[0.97]"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">done_all</span>
+                              <span>Cerrar anterior y Marcar Hoy</span>
+                            </Button>
+                          </div>
                         )}
                       </div>
                     ) : (
@@ -1201,7 +1496,7 @@ export function CheckInScanner({
                     }
                     className={`w-full rounded-[16px] h-12 font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg text-white ${
                       state === 'success' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20' :
-                      state === 'already_checked_in' ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20' :
+                      state === 'already_checked_in' ? 'bg-[#4d7cfe] hover:bg-[#3b66e0] shadow-blue-500/20' :
                       state === 'error' ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20' :
                       'bg-[#4d7cfe] hover:bg-[#3b66e0] shadow-blue-500/20'
                     }`}
@@ -1310,8 +1605,8 @@ export function CheckInScanner({
                   </div>
 
                   {/* Notice Banner */}
-                  <div className="flex items-center gap-2.5 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-600 dark:text-amber-300 text-xs font-inter font-medium">
-                    <span className="material-symbols-outlined text-[18px] shrink-0 text-amber-500">info</span>
+                  <div className="flex items-center gap-2.5 px-4 py-3 bg-[#4d7cfe]/10 border border-[#4d7cfe]/20 rounded-xl text-text text-xs font-inter font-medium">
+                    <span className="material-symbols-outlined text-[18px] shrink-0 text-[#4d7cfe]">info</span>
                     <span>
                       {scanResult.outsideOperationalDay
                         ? 'Hoy no es una jornada operativa del cronograma. Para una prueba controlada, selecciona manualmente el turno que deseas marcar:'
@@ -1396,7 +1691,7 @@ export function CheckInScanner({
                                       <span>Marcar Asistencia</span>
                                     </button>
                                   ) : (
-                                    <span className="h-9 px-3 rounded-full text-xs font-inter font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center shrink-0">
+                                    <span className="h-9 px-3 rounded-full text-xs font-inter font-bold bg-[#4d7cfe]/10 text-[#4d7cfe] border border-[#4d7cfe]/20 flex items-center shrink-0">
                                       Turno futuro
                                     </span>
                                   )
@@ -1521,7 +1816,7 @@ export function CheckInScanner({
                   <div className="space-y-4">
 
                     {historyError && <p role="alert" className="text-sm text-rose-500">{historyError}</p>}
-                    {localHistoryError && <p role="alert" className="text-sm text-amber-500">{localHistoryError}</p>}
+                    {localHistoryError && <p role="alert" className="text-sm text-[#fe4d97]">{localHistoryError}</p>}
 
                     {/* Loading State for DB tab */}
                     {loadingDbHistory && filteredList.length === 0 && (
@@ -1650,7 +1945,7 @@ export function CheckInScanner({
                                                           : entry.type === 'success'
                                                           ? 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/15'
                                                           : entry.type === 'already_checked_in'
-                                                          ? 'bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/15'
+                                                          ? 'bg-[#4d7cfe]/10 border-[#4d7cfe]/20 hover:bg-[#4d7cfe]/15'
                                                           : 'bg-rose-500/10 border-rose-500/20 hover:bg-rose-500/15'
                                                       }`}
                                                     >
@@ -1658,7 +1953,7 @@ export function CheckInScanner({
                                                         <div className={`w-2 h-2 rounded-full shrink-0 ${
                                                           entry.isCompleted ? 'bg-gray-400 dark:bg-gray-600' :
                                                           entry.type === 'success' ? 'bg-emerald-400 animate-pulse' :
-                                                          entry.type === 'already_checked_in' ? 'bg-amber-400' :
+                                                          entry.type === 'already_checked_in' ? 'bg-[#4d7cfe]' :
                                                           'bg-rose-400'
                                                         }`} />
                                                         <div className="flex flex-col min-w-0">
@@ -1668,13 +1963,13 @@ export function CheckInScanner({
                                                             className={`font-inter font-bold text-[12px] truncate text-left cursor-pointer hover:underline hover:text-[#4d7cfe] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4d7cfe]/60 rounded-sm ${
                                                             entry.isCompleted ? 'text-gray-400 dark:text-gray-400 font-bold' :
                                                             entry.type === 'success' ? 'text-emerald-400 font-extrabold' :
-                                                            entry.type === 'already_checked_in' ? 'text-amber-400 font-extrabold' :
+                                                            entry.type === 'already_checked_in' ? 'text-[#4d7cfe] font-extrabold' :
                                                             'text-rose-400 font-extrabold'
                                                           }`}
                                                             title={`Ver perfil de ${entry.volunteer}`}
                                                             aria-label={`Ver perfil de ${entry.volunteer}`}
                                                           >
-                                                            {entry.type === 'error' ? '—' : <HighlightText text={entry.volunteer} term={searchQuery} />}
+                                                            {entry.volunteer && entry.volunteer !== '—' ? <HighlightText text={entry.volunteer} term={searchQuery} /> : (entry.type === 'error' ? 'QR No Reconocido' : '—')}
                                                           </button>
                                                           <span className={`font-inter font-bold text-[9px] leading-tight truncate ${
                                                             entry.isCompleted
@@ -1683,7 +1978,7 @@ export function CheckInScanner({
                                                               ? 'text-red-400 font-extrabold'
                                                               : 'text-emerald-400/90'
                                                           }`}>
-                                                            {entry.isCompleted ? 'Completado' : (entry.type === 'success' ? 'En turno' : entry.type === 'already_checked_in' ? 'Ya marcado' : 'Error')}
+                                                            {entry.isCompleted ? 'Completado' : (entry.type === 'success' ? 'En turno' : entry.type === 'already_checked_in' ? 'Ya marcado' : (entry.errorMsg || 'Error'))}
                                                             {' · '}
                                                             {formatDateLabel(entry.timestamp)}
                                                           </span>
@@ -1760,8 +2055,10 @@ export function CheckInScanner({
           name: reassignTarget.volunteerName,
           committee: reassignTarget.committee
         } : null}
-        sourceDayKey={reassignTarget?.dayKey}
-        sourceShiftId={reassignTarget?.shiftKey}
+        sourceDayKey={reassignTarget?.isNewAssignment ? '' : reassignTarget?.dayKey}
+        sourceShiftId={reassignTarget?.isNewAssignment ? '' : reassignTarget?.shiftKey}
+        initialDayKey={reassignTarget?.dayKey}
+        initialShiftId={reassignTarget?.shiftKey}
         onSuccess={(msg) => {
           refresh(true);
         }}
@@ -1850,7 +2147,7 @@ export function CheckInScanner({
                                     title={`Ver perfil de ${entry.volunteer}`}
                                     aria-label={`Ver perfil de ${entry.volunteer}`}
                                   >
-                                    {entry.type === 'error' ? '—' : <HighlightText text={entry.volunteer} term={searchQuery} />}
+                                    {entry.volunteer && entry.volunteer !== '—' ? <HighlightText text={entry.volunteer} term={searchQuery} /> : (entry.type === 'error' ? 'QR No Reconocido' : '—')}
                                   </button>
                                   <span className={`font-inter font-bold text-[9px] leading-tight truncate ${
                                     entry.isCompleted
@@ -1859,7 +2156,7 @@ export function CheckInScanner({
                                       ? 'text-red-400 font-extrabold'
                                       : 'text-emerald-400/90'
                                   }`}>
-                                    {entry.isCompleted ? 'Completado' : 'En turno'}
+                                    {entry.isCompleted ? 'Completado' : (entry.type === 'success' ? 'En turno' : entry.type === 'already_checked_in' ? 'Ya marcado' : (entry.errorMsg || 'Error'))}
                                     {' · '}
                                     {formatDateLabel(entry.timestamp)}
                                   </span>
@@ -1913,7 +2210,7 @@ export function CheckInScanner({
       {/* CONFIRMATION MODAL FOR CHECK-OUT (Matching /shifts page 100%) */}
       <ConfirmationModal
         isOpen={checkoutModal.isOpen}
-        title={shortCheckoutWarning ? "Salida antes de una hora" : checkoutModal.item?.outsideOperationalDay ? "Cerrar sesión fuera del cronograma" : "Completar Turno"}
+        title={isPrematureExit ? "⚠ Posible Doble Escaneo / Salida Prematura" : shortCheckoutWarning ? "Salida antes de una hora" : checkoutModal.item?.outsideOperationalDay ? "Cerrar sesión fuera del cronograma" : "Completar Turno"}
         message={(() => {
           const name = checkoutModal.item?.volunteerName || 'este voluntario';
           const checkedInAt = checkoutModal.item?.checkedInAt;
@@ -1953,15 +2250,37 @@ export function CheckInScanner({
                 )}
               </span>
               {!outsideOperationalDay && <span className="text-xs text-slate-500">Si pertenece a una sesión continua, se completarán todos los turnos asociados a esa sesión.</span>}
-              {shortCheckoutWarning && (
-                <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-left text-amber-700 dark:text-amber-300">
+              {isPrematureExit ? (
+                <div role="alert" className="rounded-xl border-2 border-[#fe4d97]/40 bg-[#fe4d97]/10 p-4 text-left space-y-2">
+                  <div className="flex items-center gap-2 text-[#fe4d97] font-black text-sm">
+                    <span className="material-symbols-outlined text-[20px]">warning</span>
+                    <span>¡ALERTA DE POSIBLE DOBLE ESCANEO ACCIDENTAL!</span>
+                  </div>
+                  <p className="text-xs text-text-dim leading-relaxed">
+                    La entrada de <strong>{name}</strong> se registró hace apenas <strong>{elapsedText}</strong>. La mayoría de estos casos son lecturas accidentales del pase QR.
+                  </p>
+                  <p className="text-xs font-bold text-[#fe4d97]">
+                    Se recomienda cancelar para mantener al voluntario en turno activo.
+                  </p>
+                  <label className="mt-2 flex items-start gap-2.5 font-bold text-xs cursor-pointer p-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-[#fe4d97]/30">
+                    <input
+                      type="checkbox"
+                      checked={shortCheckoutConfirmed}
+                      onChange={event => setShortCheckoutConfirmed(event.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded text-[#fe4d97] focus:ring-[#fe4d97]"
+                    />
+                    <span>Confirmo explícitamente que la persona realmente se retira antes de tiempo.</span>
+                  </label>
+                </div>
+              ) : shortCheckoutWarning ? (
+                <div role="alert" className="rounded-xl border border-[#fe4d97]/30 bg-[#fe4d97]/10 p-3 text-left text-text">
                   <p>La entrada se registró hace menos de una hora. Comprueba si este fue un segundo escaneo accidental antes de cerrar la asistencia.</p>
                   <label className="mt-2 flex items-start gap-2 font-bold">
                     <input type="checkbox" checked={shortCheckoutConfirmed} onChange={event => setShortCheckoutConfirmed(event.target.checked)} className="mt-1" />
                     Confirmo que la persona realmente salió.
                   </label>
                 </div>
-              )}
+              ) : null}
               {elapsedText && (
                 <div className="pt-3 border-t border-black/10 dark:border-white/10 flex flex-col items-center gap-1.5">
                   <span className="text-xs font-inter font-medium text-slate-500 dark:text-text-dim">
@@ -1983,12 +2302,101 @@ export function CheckInScanner({
             </div>
           );
         })()}
-        confirmText={shortCheckoutWarning ? "Confirmar salida breve" : checkoutModal.item?.outsideOperationalDay ? "Cerrar sesión pendiente" : "Turno Completado"}
+        confirmText={isPrematureExit ? "Confirmar salida prematura" : shortCheckoutWarning ? "Confirmar salida breve" : checkoutModal.item?.outsideOperationalDay ? "Cerrar sesión pendiente" : "Turno Completado"}
+        cancelText={isPrematureExit ? "Mantener en Turno" : "Cancelar"}
         type={shortCheckoutWarning ? "danger" : "primary"}
         confirmDisabled={shortCheckoutWarning && !shortCheckoutConfirmed}
         onConfirm={handleConfirmCheckout}
-        onCancel={() => { setCheckoutModal({ isOpen: false, item: null }); setShortCheckoutConfirmed(false); setForceShortCheckoutWarning(false); }}
+        onCancel={() => { setCheckoutModal({ isOpen: false, item: null, isPremature: false }); setShortCheckoutConfirmed(false); setForceShortCheckoutWarning(false); }}
       />
+
+      {/* MODAL DE DESAMBIGUACIÓN INTELIGENTE DE TURNO */}
+      {disambiguationData && disambiguationData.isOpen && (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 sm:items-center sm:p-4 animate-in fade-in duration-200">
+          <div role="dialog" aria-modal="true" aria-labelledby="attendance-shift-choice-title" className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-dark2 p-4 shadow-xl sm:max-w-lg sm:rounded-xl sm:p-6 space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#4d7cfe] animate-ping" />
+                  <span className="text-xs font-black uppercase tracking-wider text-[#4d7cfe]">
+                    Confirmar Turno
+                  </span>
+                </div>
+                <h3 id="attendance-shift-choice-title" className="text-xl font-black text-text tracking-tight">
+                  {disambiguationData.volunteerName}
+                </h3>
+                <p className="text-xs font-semibold text-text-dim">
+                  {disambiguationData.committee}
+                </p>
+              </div>
+              <span className="material-symbols-outlined text-[28px] text-[#4d7cfe] bg-[#4d7cfe]/10 p-2.5 rounded-xl">
+                fact_check
+              </span>
+            </div>
+
+            <p className="text-xs text-text-dim leading-relaxed">
+              Detectamos múltiples turnos asignados o una ventana de cambio de turno. ¿A qué bloque se presenta el voluntario?
+            </p>
+
+            <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
+              {disambiguationData.options.map((opt) => {
+                const isSelected = disambiguationData.selectedShiftKey === opt.shiftKey;
+                return (
+                  <button
+                    key={opt.shiftKey}
+                    type="button"
+                    onClick={() => setDisambiguationData(prev => prev ? { ...prev, selectedShiftKey: opt.shiftKey } : null)}
+                    className={cn(
+                      "min-h-12 w-full text-left p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3",
+                      isSelected
+                        ? "bg-[#4d7cfe]/15 border-[#4d7cfe] shadow-sm shadow-blue-500/10"
+                        : "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10 hover:bg-black/8 dark:hover:bg-white/8"
+                    )}
+                  >
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={cn("text-sm font-extrabold", isSelected ? "text-[#4d7cfe]" : "text-text")}>
+                          {opt.label}
+                        </span>
+                        {opt.isRecommended && (
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
+                            Recomendado
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-text-dim">
+                        {opt.timeLabel} · {opt.description}
+                      </p>
+                    </div>
+                    <div className={cn(
+                      "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                      isSelected ? "border-[#4d7cfe] bg-[#4d7cfe]" : "border-black/20 dark:border-white/20"
+                    )}>
+                      {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setDisambiguationData(null)}
+                className="flex-1 rounded-xl h-12 text-xs font-bold border-black/10 dark:border-white/10"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => handleConfirmDisambiguation(disambiguationData.selectedShiftKey)}
+                className="flex-1 rounded-xl h-12 text-xs font-bold bg-[#4d7cfe] hover:bg-[#3b66e0] text-white active:scale-[0.97]"
+              >
+                Confirmar Turno
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Unified Volunteer Profile Drawer */}
       <VolunteerProfileDrawer

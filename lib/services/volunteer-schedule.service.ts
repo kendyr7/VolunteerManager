@@ -74,9 +74,32 @@ export class VolunteerScheduleService {
     if (sessionsResult.error) throw new Error(`No se pudo cargar la asistencia del voluntario: ${sessionsResult.error.message}`);
     if (resolutionsResult.error) throw new Error(`No se pudieron cargar las revisiones de asistencia: ${resolutionsResult.error.message}`);
 
+    const sessionRows = (sessionsResult.data || []) as any[];
+    const { data: decisionRows, error: decisionsError } = sessionRows.length > 0
+      ? await supabase
+          .from('attendance_session_decisions')
+          .select('session_id, intended_shift_keys, attendance_kind, exit_decision, reason_code, explanation, hide_alert')
+          .in('session_id', sessionRows.map(session => session.id))
+      : { data: [], error: null };
+    if (decisionsError && decisionsError.code !== '42P01' && decisionsError.code !== 'PGRST205') {
+      throw new Error(`No se pudieron cargar las decisiones de asistencia: ${decisionsError.message}`);
+    }
+    const decisionsBySession = new Map((decisionRows || []).map((decision: any) => [decision.session_id, decision]));
+
     const allowedDayKeys = new Set(buildEventDayKeys());
     const shifts = (shiftsResult.data || []) as VolunteerScheduleRow[];
-    const sessions = ((sessionsResult.data || []) as any[]).filter((s: any) => s.day_key && allowedDayKeys.has(s.day_key));
+    const sessions = sessionRows.filter((s: any) => s.day_key && allowedDayKeys.has(s.day_key)).map((session: any) => {
+      const decision: any = decisionsBySession.get(session.id);
+      return decision ? {
+        ...session,
+        intended_shift_keys: decision.intended_shift_keys,
+        attendance_kind: decision.attendance_kind,
+        exit_decision: decision.exit_decision,
+        decision_reason_code: decision.reason_code,
+        decision_explanation: decision.explanation,
+        decision_hides_alert: decision.hide_alert,
+      } : session;
+    });
     const resolvedSessionIds = new Set(
       (resolutionsResult.data || []).flatMap((resolution) => (
         [resolution.session_id, resolution.resolved_session_id].filter(Boolean) as string[]

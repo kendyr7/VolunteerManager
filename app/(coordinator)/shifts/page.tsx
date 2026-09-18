@@ -727,7 +727,7 @@ export default function ShiftsPage() {
         volunteer,
         dayKey: session.day_key,
         shiftKey: 'Registro',
-        status: session.ended_at ? 'completed' : 'needs_review',
+        status: session.ended_at ? 'completed' : 'in_progress',
         flag,
       }] : [];
     });
@@ -1495,9 +1495,7 @@ export default function ShiftsPage() {
                                   <div
                                     key={vol.id}
                                     className={`flex items-center justify-between group border rounded-sm px-2 py-1.5 transition-all cursor-pointer ${
-                                      displayState.flag
-                                        ? 'bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/15'
-                                        : isCheckedOut
+                                      isCheckedOut
                                         ? 'opacity-60 bg-gray-500/10 border-gray-500/20 text-text-dim dark:bg-white/5 dark:border-white/10 dark:text-gray-400 hover:opacity-100'
                                         : isCheckedIn
                                         ? 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/15'
@@ -1528,11 +1526,9 @@ export default function ShiftsPage() {
                                         }`}>
                                           <HighlightText text={vol.name} term={appliedSearch} />
                                         </span>
-                                        {displayState.flag ? (
-                                           <span className="font-inter font-bold text-[9px] leading-tight text-amber-500" title={displayState.flag}>⚠ {displayState.flag}{isCheckedOut ? ` · Finalizó ${checkOutTimeStr || ''}` : ''}</span>
-                                         ) : isCheckedOut ? (
+                                        {isCheckedOut ? (
                                            <div className="flex flex-col gap-0.5 min-w-0">
-                                             <span className={`font-inter font-bold text-[9px] leading-tight ${!isAttendanceResolved && (elapsed?.isOverNextDay || elapsed?.isOver8Hours) ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-500'}`}>
+                                             <span className="font-inter font-bold text-[9px] leading-tight text-gray-400 dark:text-gray-500">
                                                {isAdditional ? 'Turno adicional completado' : 'Completado'} {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
                                              </span>
                                              {!isAttendanceResolved && elapsed?.isOverNextDay && (
@@ -1542,10 +1538,10 @@ export default function ShiftsPage() {
                                                    e.stopPropagation();
                                                    handleOpenAdjustCheckoutModal(shiftRecord, vol, checkInTimeStr, checkOutTimeStr, elapsed);
                                                  }}
-                                                 className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold flex items-center gap-1 hover:bg-amber-500/30 transition-all cursor-pointer w-fit mt-0.5"
+                                                 className="px-1.5 py-0.5 rounded-full bg-[#fe4d97]/10 text-[#fe4d97] border border-[#fe4d97]/30 text-[9px] font-bold flex items-center gap-1 hover:bg-[#fe4d97]/15 transition-all cursor-pointer w-fit mt-0.5"
                                                  title="El check-out ocurrió en un día distinto al check-in. Haz clic para ajustar la hora de salida al mismo día."
                                                >
-                                                 <span className="material-symbols-outlined text-[11px] text-amber-400">warning</span>
+                                                 <span className="material-symbols-outlined text-[11px] text-[#fe4d97]">edit</span>
                                                  <span>⚠️ Pasó al siguiente día (Ajustar Salida)</span>
                                                </button>
                                              )}
@@ -1559,7 +1555,7 @@ export default function ShiftsPage() {
                                             En turno {checkInTimeStr ? `· ${checkInTimeStr}` : ''}
                                           </span>
                                         ) : viewMode === 'active' ? (
-                                          <span className="font-inter font-bold text-[10px] text-amber-700 dark:text-amber-300">Sin entrada</span>
+                                          <span className="font-inter font-bold text-[10px] text-text-dim">Sin entrada</span>
                                         ) : null}
                                       </div>
                                     </div>
@@ -1791,9 +1787,7 @@ export default function ShiftsPage() {
                                     <div
                                       key={vol.id}
                                       className={`flex items-center justify-between gap-2 cursor-pointer p-2 rounded-xl transition-all ${
-                                         displayState.flag
-                                           ? 'bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25'
-                                           : isCheckedOut
+                                         isCheckedOut
                                            ? 'opacity-60 bg-gray-500/10 border border-gray-500/20 dark:bg-white/5 dark:border-white/10 hover:opacity-100'
                                            : isCheckedIn
                                           ? 'bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25'
@@ -1826,11 +1820,9 @@ export default function ShiftsPage() {
                                           }`}>
                                             <HighlightText text={vol.name} term={appliedSearch} />
                                           </span>
-                                          {displayState.flag ? (
-                                             <span className="font-inter font-bold text-[9px] leading-tight text-amber-400" title={displayState.flag}>⚠ {displayState.flag}{isCheckedOut ? ` · Finalizó ${checkOutTimeStr || ''}` : ''}</span>
-                                           ) : isCheckedOut ? (
+                                          {isCheckedOut ? (
                                              <div className="flex flex-col gap-0.5 min-w-0">
-                                               <span className={`font-inter font-bold text-[9px] leading-tight ${!isAttendanceResolved && (elapsed?.isOverNextDay || elapsed?.isOver8Hours) ? 'text-amber-400 font-extrabold' : 'text-gray-400 dark:text-gray-400'}`}>
+                                               <span className="font-inter font-bold text-[9px] leading-tight text-gray-400 dark:text-gray-400">
                                                  {isAdditional ? 'Turno adicional completado' : 'Completado'} {checkInTimeStr ? `· ${checkInTimeStr} - ${checkOutTimeStr || ''}` : ''} {elapsed ? `(${elapsed.text})` : ''}
                                                </span>
                                                {!isAttendanceResolved && elapsed?.isOverNextDay && (
@@ -1840,10 +1832,10 @@ export default function ShiftsPage() {
                                                      e.stopPropagation();
                                                      handleOpenAdjustCheckoutModal(shiftRecord, vol, checkInTimeStr, checkOutTimeStr, elapsed);
                                                    }}
-                                                   className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold flex items-center gap-1 hover:bg-amber-500/30 transition-all cursor-pointer w-fit mt-0.5"
+                                                   className="px-1.5 py-0.5 rounded-full bg-[#fe4d97]/10 text-[#fe4d97] border border-[#fe4d97]/30 text-[9px] font-bold flex items-center gap-1 hover:bg-[#fe4d97]/15 transition-all cursor-pointer w-fit mt-0.5"
                                                    title="El check-out ocurrió en un día distinto al check-in. Haz clic para ajustar la hora de salida al mismo día."
                                                  >
-                                                   <span className="material-symbols-outlined text-[11px] text-amber-400">warning</span>
+                                                   <span className="material-symbols-outlined text-[11px] text-[#fe4d97]">edit</span>
                                                    <span>⚠️ Pasó al siguiente día (Ajustar Salida)</span>
                                                  </button>
                                                )}
@@ -2028,12 +2020,12 @@ export default function ShiftsPage() {
           className={cn(
             "self-start inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors cursor-pointer",
             showAttendanceReview
-              ? "border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-300"
-              : "border-border bg-dark2 text-text-dim hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-300"
+              ? "border-[#4d7cfe]/50 bg-[#4d7cfe]/15 text-[#4d7cfe]"
+              : "border-border bg-dark2 text-text-dim hover:border-[#4d7cfe]/40 hover:text-[#4d7cfe]"
           )}
         >
-          <span className="material-symbols-outlined text-[16px]" aria-hidden="true">warning</span>
-          Revisar asistencia ({attendanceReviewItems.length})
+          <span className="material-symbols-outlined text-[16px]" aria-hidden="true">fact_check</span>
+          Decisiones pendientes ({attendanceReviewItems.length})
         </button>
 
         {/* Search Input */}
@@ -2049,30 +2041,30 @@ export default function ShiftsPage() {
       </div>
 
       {showAttendanceReview && (
-        <section id="attendance-review-list" aria-label="Asistencias para revisar" className="mx-4 mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 sm:mx-6 lg:mx-8">
+        <section id="attendance-review-list" aria-label="Decisiones de asistencia pendientes" className="mx-4 mb-4 rounded-xl border border-[#4d7cfe]/30 bg-[#4d7cfe]/5 p-4 sm:mx-6 lg:mx-8">
           <div className="mb-3">
-            <h2 className="text-sm font-bold text-text">Asistencias para revisar</h2>
-            <p className="text-xs text-text-dim">Estos registros requieren revisar una salida, fecha o relación con un turno. Abre un perfil para verificar la asistencia.</p>
+            <h2 className="text-sm font-bold text-text">Decisiones de asistencia pendientes</h2>
+            <p className="text-xs text-text-dim">Estos registros todavía no tienen una decisión documentada. Abre el perfil para resolverlos sin alterar la evidencia original.</p>
           </div>
           {attendanceReviewItems.length === 0 ? (
-            <p className="text-xs font-medium text-text-dim">No hay alertas de asistencia en el alcance actual.</p>
+            <p className="text-xs font-medium text-text-dim">No hay decisiones de asistencia pendientes en el alcance actual.</p>
           ) : (
             <div className="max-h-[420px] overflow-y-auto space-y-2">
               {attendanceReviewItems.map(item => (
-                <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-dark2 px-3 py-2.5">
+                <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#4d7cfe]/20 bg-dark2 px-3 py-2.5">
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-text">
                       {currentRole === 'Lector' ? 'Voluntario' : item.volunteer.name}
                       <span className="ml-2 text-text-dim">{item.dayKey} · {item.shiftKey}</span>
                     </p>
-                    <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-300">
+                    <p className="mt-1 text-[11px] font-medium text-[#4d7cfe]">
                       {item.status === 'completed' ? 'Finalizó · ' : item.status === 'in_progress' ? 'En turno · ' : ''}
                       {item.flag}
                     </p>
                   </div>
                   {currentRole !== 'Lector' && (
                     <button type="button" onClick={() => handleEditClick(item.volunteer)}
-                      className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] font-bold text-text hover:border-amber-500/50 hover:text-amber-600 dark:hover:text-amber-300 cursor-pointer">
+                      className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] font-bold text-text hover:border-[#4d7cfe]/50 hover:text-[#4d7cfe] cursor-pointer">
                       Ver perfil
                     </button>
                   )}

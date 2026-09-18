@@ -11,13 +11,17 @@ import { hasCapability, roleDisplayName } from "@/lib/role-permissions";
 import { EARLY_CHECK_IN_MINUTES, getOfficialShiftTime, isShiftAvailableForDay, isSimulationEventDay, parseGuatemalaShiftEnd, parseDayKeyToDateStr } from "@/lib/dates";
 import { getVolunteerReliabilityMetrics, computeBulkReliabilityMap } from "@/lib/services/volunteer-reliability.service";
 import { buildEventDayKeys } from '@/lib/coordinator-data';
-import { AttendanceSession, getGuatemalaHourFloat, getContinuousScheduledBlockForSession, requiresSessionExitResolution, inferShiftsForSession, validateSessionConstraints, getSessionShiftCompletedAt, needsShortCheckoutConfirmation } from "@/lib/session-utils";
+import { AttendanceKind, AttendanceSession, getGuatemalaHourFloat, getContinuousScheduledBlockForSession, requiresSessionExitResolution, inferShiftsForSession, validateSessionConstraints, getSessionShiftCompletedAt, needsShortCheckoutConfirmation, detectShiftAmbiguity, isPrematureCheckout } from "@/lib/session-utils";
 import {
   saveAttendanceSession,
   getOpenSessionForVolunteer,
   fetchAllAttendanceSessionsFromDb,
   completeOpenAttendanceSessionInDb,
   checkSessionOverlapInDb,
+  closeAttendanceSessionWithDecisionInDb,
+  openAttendanceSessionWithDecisionInDb,
+  resolveStaleAndOpenAttendanceInDb,
+  isTestMode,
 } from "@/lib/services/session-store";
 import { createEntryPassPayload, validateEntryPassQrValue } from "@/lib/entry-pass";
 import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
@@ -187,15 +191,22 @@ export async function recalculateAllVolunteersReliabilityAction() {
 // 1. Open Attendance Session Action
 export async function openAttendanceSessionAction(
   volunteerId: string,
-  dayKeyInput?: string,
-  isInternalCall = false
+  _dayKeyInput?: string,
+  _isInternalCall = false,
+  decision?: {
+    intendedShiftKeys?: string[];
+    attendanceKind?: AttendanceKind;
+    reasonCode?: string;
+    explanation?: string;
+    idempotencyKey?: string;
+  },
 ) {
-  await requireCapability('scan_qr_attendance');
+  const authorizedActor = await requireVolunteerCapability('scan_qr_attendance', volunteerId);
   // Server-generated Guatemala time & day_key (never trust client timestamp/dayKey for check-in)
   const guatemalaString = new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" });
   const guatemalaNow = new Date(guatemalaString);
   const serverDayKey = format(guatemalaNow, "EEE d", { locale: es }).toLowerCase();
-  const dayKey = isInternalCall ? serverDayKey : (dayKeyInput || serverDayKey);
+  const dayKey = serverDayKey;
 
   // Check if open session already exists (Caso 4: Doble check-in)
   const existingOpen = await getOpenSessionForVolunteer(volunteerId);
@@ -222,7 +233,62 @@ export async function openAttendanceSessionAction(
     updated_at: nowIso,
   };
 
-  const saved = await saveAttendanceSession(sessionRecord);
+  let assignedShiftKeys: string[];
+  if (isTestMode()) {
+    assignedShiftKeys = decision?.intendedShiftKeys?.length ? decision.intendedShiftKeys : ['T1'];
+  } else {
+    const { data: assignedRows, error: assignedError } = await getAdminClient()
+      .from('shifts')
+      .select('shift_key')
+      .eq('volunteer_id', volunteerId)
+      .eq('day_key', dayKey);
+    if (assignedError) throw new Error('No se pudieron consultar los turnos asignados para registrar la entrada.');
+    assignedShiftKeys = [...new Set<string>((assignedRows || []).map((row: { shift_key: string }) => row.shift_key))]
+      .filter(key => ['T1', 'T2', 'T3', 'T4'].includes(key));
+  }
+  const intendedShiftKeys = [...new Set(decision?.intendedShiftKeys?.length
+    ? decision.intendedShiftKeys
+    : assignedShiftKeys)];
+  if (intendedShiftKeys.length === 0 || intendedShiftKeys.some(key => !['T1', 'T2', 'T3', 'T4'].includes(key))) {
+    throw new Error('Selecciona el turno que se registrará antes de abrir la asistencia.');
+  }
+  const attendanceKind = decision?.attendanceKind || (intendedShiftKeys.length > 1 ? 'full_block' : 'scheduled');
+  if (attendanceKind !== 'additional' && intendedShiftKeys.some(key => !assignedShiftKeys.includes(key))) {
+    throw new Error('La selección incluye un turno que no está asignado al voluntario.');
+  }
+
+  const decisionResult = await openAttendanceSessionWithDecisionInDb({
+    sessionId: sessionRecord.id,
+    volunteerId,
+    dayKey,
+    startedAt: nowIso,
+    intendedShiftKeys,
+    attendanceKind,
+    reasonCode: decision?.reasonCode || 'scanner_confirmed',
+    explanation: decision?.explanation,
+    actor: {
+      id: authorizedActor.userId,
+      name: authorizedActor.name || 'Coordinador',
+      role: roleDisplayName(authorizedActor),
+    },
+    idempotencyKey: decision?.idempotencyKey || `checkin:${volunteerId}:${Math.floor(Date.now() / 5000)}`,
+  });
+  let saved: AttendanceSession;
+  if (decisionResult.success && decisionResult.session) {
+    saved = decisionResult.session;
+    if (decisionResult.alreadyOpen) {
+      return {
+        success: true,
+        session: saved,
+        alreadyOpen: true,
+        message: 'El voluntario ya posee una sesión activa.',
+      };
+    }
+  } else {
+    throw new Error(decisionResult.infrastructureMissing
+      ? 'La infraestructura de decisiones de asistencia aún no está disponible. No se registró ninguna entrada parcial.'
+      : decisionResult.error || 'No se pudo registrar la decisión de asistencia.');
+  }
 
   // Broadcast realtime event
   await broadcastSessionSync({
@@ -230,34 +296,6 @@ export async function openAttendanceSessionAction(
     table: 'attendance_sessions',
     record: saved,
   });
-
-  // Audit Log in activity_logs with JSON payload
-  try {
-    const supabase = getAdminClient();
-    const { getCurrentUserSession } = await import('@/lib/auth-helpers');
-    const actor = await getCurrentUserSession();
-    const { data: vol } = await supabase
-      .from('volunteers')
-      .select('first_name, last_name')
-      .eq('id', volunteerId)
-      .maybeSingle();
-
-    const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : 'Voluntario';
-
-    await supabase.from('activity_logs').insert({
-      user_name: actor.userName || 'Coordinador',
-      user_role: actor.userRole || 'Editor',
-      action_type: 'Check-in',
-      description: `Inició sesión de asistencia de ${volName}`,
-      details: JSON.stringify({
-        sessionId: saved.id,
-        volunteerId,
-        startedAt: saved.started_at,
-        dayKey: saved.day_key
-      }),
-      target_id: volunteerId
-    });
-  } catch {}
 
   try {
     revalidatePath('/shifts');
@@ -310,6 +348,7 @@ export async function closeAttendanceSessionAction({
   if (!sessionToClose) {
     return { success: false, error: "No se encontró una sesión activa para cerrar." };
   }
+  const authorizedActor = await requireVolunteerCapability('scan_qr_attendance', sessionToClose.volunteer_id);
 
   // Idempotencia: Si ya estaba completada (Caso 6: Doble check-out), NO sobrescribir ended_at
   if (sessionToClose.status === 'completed') {
@@ -342,7 +381,6 @@ export async function closeAttendanceSessionAction({
     if (actor.userRole) actorRole = actor.userRole;
   } catch (e) {}
 
-  const previousEndedAt = sessionToClose.ended_at;
   // ENFORCE SERVER TIMESTAMP FOR NORMAL CHECKOUT (Rejects client-supplied endedAt)
   const newEndedAt = new Date().toISOString();
   if (needsShortCheckoutConfirmation(sessionToClose.started_at, newEndedAt) && !confirmShortVisit) {
@@ -353,20 +391,47 @@ export async function closeAttendanceSessionAction({
     };
   }
 
-  const atomicRes = await completeOpenAttendanceSessionInDb(sessionToClose.id, newEndedAt, false);
-  if (!atomicRes.success) {
-    return { success: false, error: atomicRes.error || 'No se pudo guardar la salida. Intenta de nuevo.' };
+  const inferredShiftKeys = inferShiftsForSession(
+    sessionToClose.day_key,
+    sessionToClose.started_at,
+    newEndedAt,
+    ['T1', 'T2', 'T3', 'T4'],
+  ).map(shift => shift.shiftKey);
+  const intendedShiftKeys = sessionToClose.intended_shift_keys?.length
+    ? sessionToClose.intended_shift_keys
+    : assignedShiftKeys.length ? assignedShiftKeys : inferredShiftKeys.length ? inferredShiftKeys : ['T1'];
+  const isShortVisit = needsShortCheckoutConfirmation(sessionToClose.started_at, newEndedAt);
+  const decisionRes = await closeAttendanceSessionWithDecisionInDb({
+    session: sessionToClose,
+    endedAt: newEndedAt,
+    intendedShiftKeys,
+    exitDecision: isShortVisit ? 'confirmed_short' : 'normal',
+    reasonCode: isShortVisit ? 'short_visit_confirmed_by_coordinator' : 'scanner_checkout',
+    explanation: isShortVisit ? 'El coordinador confirmó que la salida breve es correcta.' : '',
+    actor: {
+      id: authorizedActor.userId,
+      name: actorName,
+      role: actorRole,
+    },
+  });
+  if (!decisionRes.success) {
+    return {
+      success: false,
+      error: decisionRes.infrastructureMissing
+        ? 'La infraestructura de decisiones de asistencia aún no está disponible. No se registró ninguna salida parcial.'
+        : decisionRes.error || 'No se pudo guardar la salida. Intenta de nuevo.',
+    };
   }
-  if (atomicRes.alreadyClosed) {
+  if (decisionRes.alreadyClosed) {
     return {
       success: true,
       alreadyClosed: true,
-      session: atomicRes.session || sessionToClose,
+      session: decisionRes.session || sessionToClose,
       message: "La sesión ya fue finalizada previamente."
     };
   }
 
-  const saved = atomicRes.session!;
+  const saved = decisionRes.session!;
 
   // Broadcast realtime event
   await broadcastSessionSync({
@@ -374,32 +439,6 @@ export async function closeAttendanceSessionAction({
     table: 'attendance_sessions',
     record: saved,
   });
-
-  // Audit Log in activity_logs with JSON payload
-  try {
-    const supabase = getAdminClient();
-    const { data: vol } = await supabase
-      .from('volunteers')
-      .select('first_name, last_name')
-      .eq('id', saved.volunteer_id)
-      .maybeSingle();
-
-    const volName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : 'Voluntario';
-
-    await supabase.from('activity_logs').insert({
-      user_name: actorName,
-      user_role: actorRole,
-      action_type: 'Check-out',
-      description: `Finalizó sesión de asistencia de ${volName}`,
-      details: JSON.stringify({
-        sessionId: saved.id,
-        volunteerId: saved.volunteer_id,
-        previousEndedAt,
-        newEndedAt: saved.ended_at
-      }),
-      target_id: saved.volunteer_id
-    });
-  } catch (e) {}
 
   try {
     revalidatePath('/shifts');
@@ -417,6 +456,7 @@ export async function closeAttendanceSessionAction({
 
 // 3. Get Open Attendance Session Action
 export async function getOpenAttendanceSessionAction(volunteerId: string) {
+  await requireVolunteerSelfOrCapability('view_volunteers', volunteerId);
   const session = await getOpenSessionForVolunteer(volunteerId);
   return { success: true, session };
 }
@@ -801,7 +841,12 @@ export async function createAttendanceSessionAdminAction(input: {
 }
 
 // 5. Process Check-in via QR Scan or manual selection
-export async function checkInVolunteer(qrValueString: string, coordinatorId: string, manualShiftId?: string) {
+export async function checkInVolunteer(
+  qrValueString: string,
+  coordinatorId: string,
+  manualShiftId?: string,
+  options?: { intendedShiftKey?: string; isConfirmedDoubleShift?: boolean; overrideLate?: boolean }
+) {
   const authorizedActor = await requireCapability('scan_qr_attendance');
   coordinatorId = authorizedActor.userId || coordinatorId;
   const supabase = getAdminClient();
@@ -817,7 +862,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         .single();
 
       if (shiftErr || !shift) {
-        return { error: "No se encontró el turno seleccionado." };
+        return { error: "No se encontró el turno seleccionado.", errorCode: 'SHIFT_NOT_FOUND' };
       }
       volunteerId = shift.volunteer_id;
       await requireVolunteerCapability('scan_qr_attendance', volunteerId);
@@ -829,23 +874,23 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         .single();
 
       if (!vol || vol.status === 'archived') {
-        return { error: 'Voluntario no disponible para registrar asistencia.' };
+        return { error: 'Voluntario no disponible para registrar asistencia.', errorCode: 'ARCHIVED' };
       }
       const now = new Date();
       const localNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Guatemala' }));
       const today = format(localNow, 'EEE d', { locale: es }).toLowerCase();
       if (shift.day_key !== today || !buildEventDayKeys().includes(today) || !isShiftAvailableForDay(shift.day_key, shift.shift_key)) {
-        return { error: 'La entrada en vivo debe corresponder a un turno de hoy. Para otra fecha utiliza una corrección de asistencia.' };
+        return { error: 'La entrada en vivo debe corresponder a un turno de hoy. Para otra fecha utiliza una corrección de asistencia.', errorCode: 'NOT_TODAY' };
       }
       if (shift.checked_out || shift.checked_out_at) {
-        return { error: 'Este turno ya está completado. Utiliza Reabrir turno si la salida fue un error.' };
+        return { error: 'Este turno ya está completado. Utiliza Reabrir turno si la salida fue un error.', errorCode: 'ALREADY_COMPLETED' };
       }
       if (await getOpenSessionForVolunteer(volunteerId)) {
-        return { error: 'El voluntario ya tiene una sesión abierta. Vuelve a escanear su QR para registrar la salida o resolver la salida pendiente.' };
+        return { error: 'El voluntario ya tiene una sesión abierta. Vuelve a escanear su QR para registrar la salida o resolver la salida pendiente.', errorCode: 'ALREADY_OPEN' };
       }
       const { data: assigned, error: assignedError } = await supabase.from('shifts')
         .select('shift_key').eq('volunteer_id', volunteerId).eq('day_key', today);
-      if (assignedError) return { error: 'No se pudieron consultar los turnos asignados.' };
+      if (assignedError) return { error: 'No se pudieron consultar los turnos asignados.', errorCode: 'SERVER_ERROR' };
       const assignedKeys = (assigned || []).map((s: { shift_key: string }) => s.shift_key);
       const currentHour = getGuatemalaHourFloat(now);
       const available = assignedKeys.map((key: string) => getOfficialShiftTime(today, key))
@@ -854,14 +899,19 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       const eligible = available.filter((s: { startHour: number }) => s.startHour <= currentHour);
       const selectable = eligible.length ? eligible : available.slice(0, 1);
       if (!selectable.some((s: { shiftKey: string }) => s.shiftKey === shift.shift_key)) {
-        return { error: 'Selecciona el turno actual o el próximo turno asignado de hoy. Un turno pasado requiere corrección de asistencia.' };
+        return { error: 'Selecciona el turno actual o el próximo turno asignado de hoy. Un turno pasado requiere corrección de asistencia.', errorCode: 'PAST_SHIFT' };
       }
 
       // Use the same persistence and broadcasts as a normal QR entry. Do not
       // write only legacy shift flags: all consumers need the actual session.
-      const opened = await openAttendanceSessionAction(volunteerId, today, true);
+      const opened = await openAttendanceSessionAction(volunteerId, today, true, {
+        intendedShiftKeys: [shift.shift_key],
+        attendanceKind: 'scheduled',
+        reasonCode: 'manual_shift_selected',
+        idempotencyKey: `manual-checkin:${volunteerId}:${shift.id}:${Math.floor(Date.now() / 5000)}`,
+      });
       if (!opened.success || !opened.session || opened.alreadyOpen) {
-        return { error: 'No se abrió una nueva sesión. Vuelve a escanear para consultar el estado actual.' };
+        return { error: 'No se abrió una nueva sesión. Vuelve a escanear para consultar el estado actual.', errorCode: 'FAILED_TO_OPEN' };
       }
       const volunteerName = vol ? `${vol.first_name} ${vol.last_name}` : "Voluntario";
       const shiftDetail = `${shift.day_key} - ${shift.shift_key}`;
@@ -886,14 +936,15 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       };
     } catch (manualErr) {
       console.error("Unexpected error in manual check-in:", manualErr);
-      return { error: "Error inesperado al registrar la asistencia." };
+      return { error: "Error inesperado al registrar la asistencia.", errorCode: 'UNEXPECTED' };
     }
   }
 
   // standard QR scan flow
   const validation = validateEntryPassQrValue(qrValueString);
-  if (!validation.success) return { error: validation.error };
+  if (!validation.success) return { error: validation.error, errorCode: 'INVALID_QR' };
   volunteerId = validation.payload.id;
+  await requireVolunteerCapability('scan_qr_attendance', volunteerId);
 
   // Fetch volunteer details
   const { data: volunteer, error: volError } = await supabase
@@ -903,13 +954,33 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
     .single();
 
   if (volError || !volunteer) {
-    return { error: "Voluntario no encontrado en el sistema." };
-  }
-  if (volunteer.status === 'archived') {
-    return { error: "El pase QR pertenece a un voluntario archivado." };
+    return { error: "Voluntario no encontrado en el sistema.", errorCode: 'NOT_FOUND' };
   }
 
   const volunteerName = `${volunteer.first_name || ''} ${volunteer.last_name || ''}`.trim();
+  const volunteerSummary = {
+    id: volunteer.id,
+    name: volunteerName,
+    firstName: volunteer.first_name || '',
+    lastName: volunteer.last_name || '',
+    committee: volunteer.committees?.name || "Sin comité",
+    committeeId: volunteer.committee_id,
+    phone: volunteer.phone || '',
+    status: volunteer.status,
+    reliabilityScore: volunteer.reliability_score ?? null,
+    photoUrl: volunteer.photo_url || null,
+  };
+
+  if (volunteer.status === 'archived') {
+    return {
+      error: "El pase QR pertenece a un voluntario archivado.",
+      errorCode: 'ARCHIVED',
+      volunteer: volunteerName,
+      volunteerSummary,
+      volunteerId,
+      committee: volunteerSummary.committee,
+    };
+  }
 
   // 1. Check if volunteer already has an open session
   const guatemalaString = new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" });
@@ -926,8 +997,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
 
     if (!isSameDay || !isOperationalSessionDay || needsExitResolution) {
       // A previous-day or out-of-calendar session must be resolved before a new
-      // scheduled shift can start. Treating it as a normal same-day checkout
-      // creates an active session that none of the operational views can display.
+      // scheduled shift can start.
       return {
         success: true,
         action: 'stale_open_session',
@@ -939,6 +1009,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         startedAt: openSession.started_at,
         volunteerId,
         volunteer: volunteerName,
+        volunteerSummary,
         committee: volunteer.committees?.name || "Sin comité",
         message: isOperationalSessionDay
           ? `El voluntario ${volunteerName} tiene una salida pendiente de un bloque anterior (${openSession.day_key}). Resuelve esa salida y vuelve a escanear para iniciar el siguiente turno.`
@@ -947,27 +1018,36 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
     }
 
     // Same day open session (Caso 5: Segundo QR)
+    const premature = isPrematureCheckout(openSession.started_at);
     return {
       success: true,
       action: 'confirm_checkout',
       alreadyOpen: true,
+      isPrematureCheckout: premature,
       session: openSession,
       volunteerId,
       volunteer: volunteerName,
+      volunteerSummary,
       committee: volunteer.committees?.name || "Sin comité",
       message: `El voluntario ${volunteerName} ya posee una sesión activa iniciada a las ${new Date(openSession.started_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true })}.`
     };
   }
 
-  // Load the assignments before opening a session. This keeps the QR flow from
-  // creating invisible sessions on dates or hours that do not exist in Turnos.
+  // Load the assignments before opening a session.
   const { data: rawShifts, error: shiftsError } = await supabase
     .from('shifts')
     .select('*')
     .eq('volunteer_id', volunteerId);
 
   if (shiftsError) {
-    return { error: "No se pudieron consultar los turnos asignados del voluntario." };
+    return {
+      error: "No se pudieron consultar los turnos asignados del voluntario.",
+      errorCode: 'SERVER_ERROR',
+      volunteer: volunteerName,
+      volunteerSummary,
+      volunteerId,
+      committee: volunteerSummary.committee,
+    };
   }
 
   const allVolunteerShifts = rawShifts || [];
@@ -996,7 +1076,6 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       const eligibleTodayShifts = todayShifts.filter((shift: any) => {
         if (!isShiftAvailableForDay(shift.day_key, shift.shift_key)) return false;
         const official = getOfficialShiftTime(shift.day_key, shift.shift_key);
-        // Exclude shifts that already ended in the past unless they are already checked in
         return Boolean(shift.checked_in) || official.endHour > currentHour;
       });
 
@@ -1008,26 +1087,67 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
 
         if (futureShifts.length > 0) {
           const nextShift = futureShifts[0];
+          const official = getOfficialShiftTime(nextShift.day_key, nextShift.shift_key);
           return {
-            error: `${volunteerName} no tiene turnos programados para hoy (${currentDayKey}). Su próximo turno asignado es el ${nextShift.day_key} (${nextShift.shift_key}).`
+            error: `${volunteerName} no tiene turnos programados para hoy (${currentDayKey}). Su próximo turno asignado es el ${nextShift.day_key} (${nextShift.shift_key}).`,
+            errorCode: 'NO_SHIFTS_TODAY',
+            volunteer: volunteerName,
+            volunteerSummary,
+            volunteerId,
+            committee: volunteerSummary.committee,
+            allShifts: allVolunteerShifts,
+            todayShifts: [],
+            nextScheduledShift: {
+              dayKey: nextShift.day_key,
+              shiftKey: nextShift.shift_key,
+              timeLabel: official.shortTimeLabel,
+            },
           };
         }
 
         const endedTodayShifts = todayShifts.filter((s: any) => !s.checked_in);
         if (endedTodayShifts.length > 0) {
+          const endedShift = endedTodayShifts[0];
+          const official = getOfficialShiftTime(endedShift.day_key, endedShift.shift_key);
           return {
-            error: `${volunteerName} no tiene turnos pendientes para hoy (${currentDayKey}). El turno programado ya finalizó (requiere corrección de asistencia).`
+            error: `${volunteerName} no tiene turnos pendientes para hoy (${currentDayKey}). El turno programado (${endedShift.shift_key} - ${official.shortTimeLabel}) ya finalizó.`,
+            errorCode: 'SHIFT_ENDED',
+            volunteer: volunteerName,
+            volunteerSummary,
+            volunteerId,
+            committee: volunteerSummary.committee,
+            allShifts: allVolunteerShifts,
+            todayShifts,
+            endedShift: {
+              dayKey: endedShift.day_key,
+              shiftKey: endedShift.shift_key,
+              timeLabel: official.shortTimeLabel,
+            },
           };
         }
 
         if (allVolunteerShifts.length > 0) {
           return {
-            error: `${volunteerName} no tiene turnos asignados para hoy (${currentDayKey}). Los turnos de fechas anteriores ya pasaron y requieren corrección de asistencia.`
+            error: `${volunteerName} no tiene turnos asignados para hoy (${currentDayKey}). Los turnos de fechas anteriores ya pasaron y requieren corrección de asistencia.`,
+            errorCode: 'NO_SHIFTS_TODAY',
+            volunteer: volunteerName,
+            volunteerSummary,
+            volunteerId,
+            committee: volunteerSummary.committee,
+            allShifts: allVolunteerShifts,
+            todayShifts: [],
           };
         }
 
         return {
-          error: `${volunteerName} no tiene turnos asignados para registrar asistencia.`
+          error: `${volunteerName} no tiene turnos asignados para registrar asistencia.`,
+          errorCode: 'NO_ASSIGNED_SHIFTS',
+          volunteer: volunteerName,
+          volunteerSummary,
+          volunteerId,
+          committee: volunteerSummary.committee,
+          allShifts: [],
+          todayShifts: [],
         };
       }
 
@@ -1050,6 +1170,7 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
         outsideOperationalDay: false,
         volunteerId,
         volunteer: volunteerName,
+        volunteerSummary,
         committee: volunteer.committees?.name || "Sin comité",
         shifts: formattedTodayShifts,
       };
@@ -1068,9 +1189,27 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
 
     if (nonPastShifts.length === 0) {
       if (allVolunteerShifts.length > 0) {
-        return { error: `${volunteerName} no tiene turnos disponibles para registrar asistencia. Los turnos asignados corresponden a fechas pasadas.` };
+        return {
+          error: `${volunteerName} no tiene turnos disponibles para registrar asistencia. Los turnos asignados corresponden a fechas pasadas.`,
+          errorCode: 'NO_SHIFTS_TODAY',
+          volunteer: volunteerName,
+          volunteerSummary,
+          volunteerId,
+          committee: volunteerSummary.committee,
+          allShifts: allVolunteerShifts,
+          todayShifts: [],
+        };
       }
-      return { error: `${volunteerName} no tiene turnos asignados para registrar asistencia.` };
+      return {
+        error: `${volunteerName} no tiene turnos asignados para registrar asistencia.`,
+        errorCode: 'NO_ASSIGNED_SHIFTS',
+        volunteer: volunteerName,
+        volunteerSummary,
+        volunteerId,
+        committee: volunteerSummary.committee,
+        allShifts: [],
+        todayShifts: [],
+      };
     }
 
     const formattedNonPastShifts = nonPastShifts.map((s: any) => {
@@ -1092,22 +1231,66 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
       outsideOperationalDay: true,
       volunteerId,
       volunteer: volunteerName,
+      volunteerSummary,
       committee: volunteer.committees?.name || "Sin comité",
       shifts: formattedNonPastShifts,
     };
   }
 
+  // Ambiguity check: If volunteer has multiple assigned shifts today and no intended shift was specified
+  const assignedTodayKeys = todayShifts.map((s: any) => s.shift_key);
+  if (!options?.intendedShiftKey && isOperationalDay) {
+    const ambiguity = detectShiftAmbiguity(currentDayKey, currentHour, assignedTodayKeys);
+    if (ambiguity.isAmbiguous && ambiguity.options.length > 1) {
+      return {
+        requiresDisambiguation: true,
+        ambiguityData: {
+          volunteerId,
+          volunteer: volunteerName,
+          committee: volunteerSummary.committee,
+          dayKey: currentDayKey,
+          currentHour,
+          recommendedShiftKey: ambiguity.recommendedShiftKey,
+          options: ambiguity.options,
+          qrValue: qrValueString,
+        },
+        volunteerId,
+        volunteer: volunteerName,
+        volunteerSummary,
+        committee: volunteerSummary.committee,
+        shifts: todayShifts,
+      };
+    }
+  }
+
   // 2. Open new attendance session (Caso 1-3)
-  const openRes = await openAttendanceSessionAction(volunteerId, currentDayKey, true);
+  const intendedShiftKeys = options?.intendedShiftKey === 'ALL'
+    ? assignedTodayKeys
+    : options?.intendedShiftKey ? [options.intendedShiftKey] : assignedTodayKeys;
+  const openRes = await openAttendanceSessionAction(volunteerId, currentDayKey, true, {
+    intendedShiftKeys,
+    attendanceKind: options?.intendedShiftKey === 'ALL' || intendedShiftKeys.length > 1
+      ? 'full_block'
+      : 'scheduled',
+    reasonCode: options?.intendedShiftKey ? 'scanner_shift_selected' : 'scanner_single_assignment',
+    idempotencyKey: `qr-checkin:${volunteerId}:${options?.intendedShiftKey || intendedShiftKeys.join('+')}:${Math.floor(Date.now() / 5000)}`,
+  });
   if (openRes.success && openRes.session) {
+    let shiftDetail = `${openRes.session.day_key} - Sesión Continua`;
+    if (options?.intendedShiftKey) {
+      shiftDetail = options.intendedShiftKey === 'ALL'
+        ? `${openRes.session.day_key} - Jornada Completa (${assignedTodayKeys.join('+')})`
+        : `${openRes.session.day_key} - Turno ${options.intendedShiftKey}`;
+    }
     return {
       success: true,
       action: 'opened',
       session: openRes.session,
       volunteerId,
       volunteer: volunteerName,
+      volunteerSummary,
       committee: volunteer.committees?.name || "Sin comité",
-      shiftDetail: `${openRes.session.day_key} - Sesión Continua`
+      shiftDetail
     };
   }
 
@@ -1130,8 +1313,132 @@ export async function checkInVolunteer(qrValueString: string, coordinatorId: str
     outsideOperationalDay: !isOperationalDay,
     volunteerId,
     volunteer: volunteerName,
+    volunteerSummary,
     committee: volunteer.committees?.name || "Sin comité",
     shifts: fallbackShifts,
+  };
+}
+
+// 5b. Resolve Stale Session from Previous Day and Open Today's Session in 1 atomic action
+export async function resolvePreviousAndCheckInTodayAction({
+  previousSessionId,
+  volunteerId,
+  intendedShiftKey,
+}: {
+  previousSessionId: string;
+  volunteerId: string;
+  intendedShiftKey?: string;
+}) {
+  const authorizedActor = await requireVolunteerCapability('scan_qr_attendance', volunteerId);
+  const supabase = getAdminClient();
+  const { data: previousSession, error: previousError } = await supabase
+    .from('attendance_sessions')
+    .select('*')
+    .eq('id', previousSessionId)
+    .eq('volunteer_id', volunteerId)
+    .maybeSingle();
+  if (previousError || !previousSession || previousSession.status !== 'open') {
+    return { success: false, error: 'La sesión anterior ya no está abierta. Actualiza y vuelve a intentar.' };
+  }
+
+  const guatemalaString = new Date().toLocaleString('en-US', { timeZone: 'America/Guatemala' });
+  const guatemalaNow = new Date(guatemalaString);
+  const currentDayKey = format(guatemalaNow, 'EEE d', { locale: es }).toLowerCase();
+  const nowIso = new Date().toISOString();
+  const [{ data: previousAssignments, error: previousAssignmentsError }, { data: todayAssignments, error: todayAssignmentsError }] = await Promise.all([
+    supabase.from('shifts').select('shift_key').eq('volunteer_id', volunteerId).eq('day_key', previousSession.day_key),
+    supabase.from('shifts').select('shift_key').eq('volunteer_id', volunteerId).eq('day_key', currentDayKey),
+  ]);
+  if (previousAssignmentsError || todayAssignmentsError) {
+    return { success: false, error: 'No se pudieron consultar los turnos para resolver la asistencia.' };
+  }
+  const previousShiftKeys: string[] = [...new Set<string>((previousAssignments || []).map((row: { shift_key: string }) => row.shift_key))];
+  const todayShiftKeys: string[] = [...new Set<string>((todayAssignments || []).map((row: { shift_key: string }) => row.shift_key))];
+  if (todayShiftKeys.length === 0) {
+    return { success: false, error: 'El voluntario no tiene un turno asignado para hoy.' };
+  }
+  const selectedTodayKeys = intendedShiftKey === 'ALL'
+    ? todayShiftKeys
+    : intendedShiftKey ? [intendedShiftKey] : (() => {
+        const ambiguity = detectShiftAmbiguity(currentDayKey, getGuatemalaHourFloat(new Date()), todayShiftKeys);
+        const recommended = ambiguity.recommendedShiftKey;
+        if (recommended === 'ALL') return todayShiftKeys;
+        return recommended ? [recommended] : [todayShiftKeys[0]];
+      })();
+  const effectivePreviousKeys = previousShiftKeys.length
+    ? previousShiftKeys
+    : inferShiftsForSession(previousSession.day_key, previousSession.started_at, nowIso, ['T1', 'T2', 'T3', 'T4'])
+      .map(shift => shift.shiftKey);
+  const fallbackPreviousKeys = effectivePreviousKeys.length ? effectivePreviousKeys : ['T1'];
+  const block = getContinuousScheduledBlockForSession(
+    previousSession.day_key,
+    previousSession.started_at,
+    fallbackPreviousKeys,
+  );
+  const finalPreviousShiftKey = block?.endShiftKey || fallbackPreviousKeys[fallbackPreviousKeys.length - 1];
+  const officialEnd = getOfficialShiftTime(previousSession.day_key, finalPreviousShiftKey).endHour;
+  const previousDayStartMs = new Date(`${parseDayKeyToDateStr(previousSession.day_key)}T00:00:00-06:00`).getTime();
+  const previousEndedAt = new Date(Math.max(
+    new Date(previousSession.started_at).getTime(),
+    previousDayStartMs + officialEnd * 3600000,
+  )).toISOString();
+
+  const atomic = await resolveStaleAndOpenAttendanceInDb({
+    previousSession,
+    previousEndedAt,
+    previousShiftKeys: fallbackPreviousKeys,
+    newSessionId: crypto.randomUUID(),
+    newDayKey: currentDayKey,
+    newStartedAt: nowIso,
+    newShiftKeys: selectedTodayKeys,
+    newAttendanceKind: selectedTodayKeys.length > 1 ? 'full_block' : 'scheduled',
+    actor: {
+      id: authorizedActor.userId,
+      name: authorizedActor.name || 'Coordinador',
+      role: roleDisplayName(authorizedActor),
+    },
+    idempotencyKey: `resolve-stale:${previousSessionId}:${currentDayKey}`,
+  });
+  if (!atomic.success || !atomic.session) {
+    return {
+      success: false,
+      error: atomic.infrastructureMissing
+        ? 'La migración de decisiones de asistencia aún no está aplicada. No se hizo ningún cambio parcial.'
+        : atomic.error || 'No se pudo resolver la salida e iniciar la asistencia de hoy.',
+    };
+  }
+
+  const { data: vol } = await supabase
+    .from('volunteers')
+    .select('first_name, last_name, committees(name)')
+    .eq('id', volunteerId)
+    .maybeSingle();
+
+  const volunteerName = vol ? `${vol.first_name || ''} ${vol.last_name || ''}`.trim() : 'Voluntario';
+  const committeeName = vol?.committees?.name || 'Sin comité';
+  const shiftDetail = `${currentDayKey} - ${selectedTodayKeys.join(' + ')}`;
+
+  await broadcastSessionSync({
+    eventType: 'INSERT',
+    table: 'attendance_sessions',
+    record: atomic.session,
+  });
+
+  try {
+    revalidatePath('/shifts');
+    revalidatePath('/volunteers');
+    revalidatePath('/check-in');
+    revalidatePath('/dashboard');
+  } catch {}
+
+  return {
+    success: true,
+    session: atomic.session,
+    volunteerId,
+    volunteer: volunteerName,
+    committee: committeeName,
+    shiftDetail,
+    message: `Se cerró la salida anterior y se inició la asistencia de hoy para ${volunteerName}.`,
   };
 }
 

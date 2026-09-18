@@ -141,6 +141,7 @@ check('Revisar asistencia incluye sesiones sin asignacion y sesiones breves ocul
     matchesFilters: () => true, selectedCommittees: [], currentRole: 'Admin',
     getRosterDisplayState: () => ({ status: 'scheduled', flag: null }), findRosterSession: () => null,
     getAttendanceSessionReviewFlag, parseDayKeyToDateStr, rosterNow: now,
+    attendanceReviewResolutionIds: [],
   });
   assert.equal(items.length, 2);
   assert.deepEqual(new Set(items.map(item => item.id)), new Set(['session:short', 'session:orphan']));
@@ -182,6 +183,9 @@ check('Esta sesion es la pestana inicial y sus datos del servidor no esperan esc
   const page = fs.readFileSync(path.join(root, 'app/(coordinator)/check-in/page.tsx'), 'utf8');
   assert.ok(page.includes("params.view === 'scanner' ? 'scanner' : 'history'"));
   assert.ok(page.includes('initialHistory={initialHistory}'));
+  const context = fs.readFileSync(path.join(root, 'lib/coordinator-data-context.tsx'), 'utf8');
+  assert.ok(context.includes('getAttendanceReviewResolutionsAction(OPERATIONAL_EVENT_DAY_KEYS)'));
+  assert.ok(context.includes('setAttendanceReviewResolutionIds(previous =>'));
 });
 check('Drawer precarga las horas desde el contexto sin consulta individual al abrir', () => {
   const drawer = fs.readFileSync(path.join(root, 'components/VolunteerProfileDrawer.tsx'), 'utf8');

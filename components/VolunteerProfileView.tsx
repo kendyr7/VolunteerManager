@@ -1020,15 +1020,15 @@ export function VolunteerProfileView({
         </div>
       )}
 
-      {/* Stale Open Session Alert Banner (Día Anterior) */}
+      {/* Blocking attendance decision (Día Anterior) */}
       {staleOpenSession && (
-        <div className="mb-4 p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-medium flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in shadow-lg">
+        <div className="mb-4 p-4 rounded-xl bg-[#fe4d97]/10 border border-[#fe4d97]/30 text-text text-xs font-medium flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[18px] text-amber-400">warning</span>
+            <div className="w-8 h-8 rounded-full bg-[#fe4d97]/15 flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-[18px] text-[#fe4d97]">event_busy</span>
             </div>
             <div>
-              <span className="font-bold text-amber-300 block text-xs">⚠ Salida pendiente (Día anterior o turno finalizado)</span>
+              <span className="font-bold text-[#fe4d97] block text-xs">Salida pendiente de decisión</span>
               <span className="text-text-dim text-[11px] block mt-0.5">
                 Entrada: {new Date(staleOpenSession.started_at).toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala', hour: '2-digit', minute: '2-digit', hour12: true })} ({staleOpenSession.day_key}) · Salida: No registrada
               </span>
@@ -1037,12 +1037,12 @@ export function VolunteerProfileView({
           {mayCorrectAttendance ? (
             <button
               onClick={() => setIsCorrectionModalOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-extrabold text-[11px] shrink-0 shadow transition-transform active:scale-95"
+              className="min-h-11 px-3.5 py-1.5 rounded-xl bg-[#fe4d97] hover:bg-[#e83c84] text-white font-extrabold text-[11px] shrink-0 transition-transform active:scale-[0.97]"
             >
               Corregir salida
             </button>
           ) : (
-            <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] shrink-0 font-bold uppercase">
+            <Badge className="bg-[#fe4d97]/10 text-[#fe4d97] border border-[#fe4d97]/30 text-[10px] shrink-0 font-bold uppercase">
               Pendiente
             </Badge>
           )}
@@ -1370,19 +1370,13 @@ export function VolunteerProfileView({
                       <span className="w-5 h-5 rounded-md bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
                         <span className="material-symbols-outlined text-[12px] text-emerald-500">check</span>
                       </span>
-                      <span>Asistió (Check-in)</span>
+                      <span>En turno</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-5 h-5 rounded-md bg-slate-500/15 border border-slate-500/30 flex items-center justify-center">
                         <span className="material-symbols-outlined text-[12px] text-slate-500">check</span>
                       </span>
                       <span>Completado (Out)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/40 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-[12px] text-amber-500">warning</span>
-                      </span>
-                      <span>Revisar asistencia</span>
                     </div>
                   </div>
                 )}
@@ -1509,7 +1503,6 @@ export function VolunteerProfileView({
                       const display = getDisplayState(dayKey, t);
                       const inCheck = display.status === 'in_progress';
                       const outCheck = display.status === 'completed';
-                      const recordedExit = display.status === 'needs_review' && Boolean(display.endAt);
                       const isAdditional = isAdditionalCompletedShift(dayKey, t);
 
                       const canClick = isEditingShifts || localEditingShifts;
@@ -1518,11 +1511,7 @@ export function VolunteerProfileView({
                       let iconContent: React.ReactNode = <span className="text-[13px] font-bold text-text-dim/40">-</span>;
                       let labelColor = "text-text-dim/40";
 
-                      if (display.flag) {
-                        statusStyle = "bg-amber-500/15 border-amber-500/40 text-amber-500 shadow-sm";
-                        iconContent = <span className="material-symbols-outlined text-[15px] text-amber-500">warning</span>;
-                        labelColor = "text-amber-500 font-bold";
-                      } else if (outCheck && isAdditional) {
+                      if (outCheck && isAdditional) {
                         statusStyle = "bg-slate-500/15 border-slate-500/30 text-slate-500 shadow-sm";
                         iconContent = <span className="material-symbols-outlined text-[15px] text-slate-500">add_task</span>;
                         labelColor = "text-slate-500 font-bold";
@@ -1541,9 +1530,7 @@ export function VolunteerProfileView({
                       }
 
                       const times = getShiftTimesFormatted(dayKey, t);
-                      const baseTitleText = display.flag
-                        ? `Turno ${t} ${outCheck ? 'Finalizó' : recordedExit ? 'Salida registrada' : inCheck ? 'En turno' : active ? 'Programado' : 'Disponible'} · Revisar: ${display.flag}${display.startAt ? ` · Entrada: ${times.startTime}` : ''}${recordedExit ? ` · Salida: ${times.endTime}` : ''}`
-                        : isAdditional
+                      const baseTitleText = isAdditional
                         ? `Turno ${t} adicional completado | Entrada: ${times.startTime} · Salida: ${times.endTime}`
                         : outCheck
                         ? `Turno ${t} Completado | Entrada: ${times.startTime} · Salida: ${times.endTime}`
@@ -1562,7 +1549,7 @@ export function VolunteerProfileView({
                       const shiftButtonClassName = cn(
                         "flex flex-col items-center justify-center w-10 sm:w-13 h-11 rounded-lg border transition-all cursor-pointer",
                         statusStyle,
-                        (canClick || outCheck || recordedExit) && !isSavingShift && "hover:bg-dark hover:border-border active:scale-95",
+                        (canClick || outCheck) && !isSavingShift && "hover:bg-dark hover:border-border active:scale-95",
                         isSavingShift && "cursor-progress"
                       );
                       const shiftButtonContent = (
@@ -1578,7 +1565,7 @@ export function VolunteerProfileView({
 
                       return (
                         <div key={t} className="flex flex-col items-center relative">
-                          {outCheck || recordedExit ? (
+                          {outCheck ? (
                             <Popover.Root>
                               <Popover.Trigger
                                 type="button"
@@ -1630,7 +1617,7 @@ export function VolunteerProfileView({
                             <div className="h-4 mt-1 flex items-center justify-center shrink-0">
                               {isAdditional ? (
                                 <span className="text-[8px] font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">Adicional</span>
-                              ) : outCheck || recordedExit ? (
+                              ) : outCheck ? (
                                 <button
                                   type="button"
                                   disabled={isProcessingAudit}

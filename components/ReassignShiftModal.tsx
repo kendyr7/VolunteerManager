@@ -16,6 +16,8 @@ export interface ReassignShiftModalProps {
   } | null;
   sourceDayKey?: string;
   sourceShiftId?: string;
+  initialDayKey?: string;
+  initialShiftId?: string;
   onSuccess?: (message: string, undoAction?: () => Promise<void>) => void;
   onError?: (error: string) => void;
   mode?: 'coordinator' | 'volunteer';
@@ -27,6 +29,8 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
   volunteer,
   sourceDayKey = '',
   sourceShiftId = '',
+  initialDayKey,
+  initialShiftId,
   onSuccess,
   onError,
   mode = 'coordinator',
@@ -41,8 +45,8 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
     }));
   }, []);
 
-  const [targetDayKey, setTargetDayKey] = useState<string>(sourceDayKey || eventDays[0]?.key || '');
-  const [targetShiftId, setTargetShiftId] = useState<string>(sourceShiftId || 'T1');
+  const [targetDayKey, setTargetDayKey] = useState<string>(initialDayKey || sourceDayKey || eventDays[0]?.key || '');
+  const [targetShiftId, setTargetShiftId] = useState<string>(initialShiftId || sourceShiftId || 'T1');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { drawerRef, scrollAreaRef } = useMobileDrawerNavigation({
     isOpen,
@@ -63,10 +67,10 @@ export const ReassignShiftModal: React.FC<ReassignShiftModalProps> = ({
   // Reset values when modal opens with new source parameters
   React.useEffect(() => {
     if (isOpen) {
-      setTargetDayKey(sourceDayKey || eventDays[0]?.key || '');
-      setTargetShiftId(sourceShiftId || 'T1');
+      setTargetDayKey(initialDayKey || sourceDayKey || eventDays[0]?.key || '');
+      setTargetShiftId(initialShiftId || sourceShiftId || 'T1');
     }
-  }, [isOpen, sourceDayKey, sourceShiftId, eventDays]);
+  }, [isOpen, sourceDayKey, sourceShiftId, initialDayKey, initialShiftId, eventDays]);
 
   React.useEffect(() => {
     const availableShiftKeys = getAvailableShiftKeys(targetDayKey);

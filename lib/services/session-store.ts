@@ -1,9 +1,69 @@
 import { getAdminSupabase } from "@/lib/supabase/admin";
-import { AttendanceSession } from "@/lib/session-utils";
+import { AttendanceSession, AttendanceExitDecision, AttendanceKind } from "@/lib/session-utils";
 import { fetchAllRowsStrict } from '@/lib/supabase-helpers';
 
 // In-memory session store used ONLY when explicitly running tests
 const memorySessionStore = new Map<string, AttendanceSession>();
+
+type AttendanceDecisionRow = {
+  session_id: string;
+  intended_shift_keys: string[];
+  attendance_kind: AttendanceKind;
+  exit_decision: AttendanceExitDecision | null;
+  reason_code: string;
+  explanation: string;
+  hide_alert: boolean;
+};
+
+function applyDecision(session: AttendanceSession, decision?: AttendanceDecisionRow): AttendanceSession {
+  if (!decision) return session;
+  return {
+    ...session,
+    intended_shift_keys: decision.intended_shift_keys,
+    attendance_kind: decision.attendance_kind,
+    exit_decision: decision.exit_decision,
+    decision_reason_code: decision.reason_code,
+    decision_explanation: decision.explanation,
+    decision_hides_alert: decision.hide_alert,
+  };
+}
+
+async function enrichSessionsWithDecisions(
+  supabase: Awaited<ReturnType<typeof getAdminSupabase>>,
+  sessions: AttendanceSession[],
+): Promise<AttendanceSession[]> {
+  if (sessions.length === 0) return sessions;
+
+  // PostgREST serializes `.in()` as a query-string value. Loading the complete
+  // event in one request can exceed the URL limit and Supabase then reports an
+  // unhelpful `{ message: "" }` network error. Keep each request comfortably
+  // below that limit while still reading the decisions as one logical snapshot.
+  const decisionsData: AttendanceDecisionRow[] = [];
+  const sessionIds = [...new Set(sessions.map(session => session.id))];
+  const decisionBatchSize = 100;
+  for (let start = 0; start < sessionIds.length; start += decisionBatchSize) {
+    const batch = sessionIds.slice(start, start + decisionBatchSize);
+    const { data, error } = await supabase
+      .from('attendance_session_decisions')
+      .select('session_id, intended_shift_keys, attendance_kind, exit_decision, reason_code, explanation, hide_alert')
+      .in('session_id', batch);
+
+    // During local review the migration may intentionally still be pending.
+    // Preserve the existing resolution-based read path in that state. Other
+    // failures must remain visible so we never present undecided data as final.
+    if (error) {
+      if (isMissingDecisionInfrastructure(error)) return sessions;
+      const detail = [error.message, error.details, error.hint].find(value => value?.trim());
+      throw new Error(detail || `No se pudieron cargar las decisiones de asistencia (${error.code || 'sin código'}).`);
+    }
+    decisionsData.push(...((data || []) as AttendanceDecisionRow[]));
+  }
+
+  const decisions = new Map(
+    decisionsData.map(decision => [decision.session_id, decision]),
+  );
+  return sessions.map(session => applyDecision(session, decisions.get(session.id)));
+}
 
 export function isTestMode(): boolean {
   return (
@@ -33,8 +93,9 @@ export async function fetchAllAttendanceSessionsFromDb(
         return scoped;
       },
     );
-    sessions.forEach((session) => memorySessionStore.set(session.id, session));
-    return sessions;
+    const enriched = await enrichSessionsWithDecisions(supabase, sessions);
+    enriched.forEach((session) => memorySessionStore.set(session.id, session));
+    return enriched;
   } catch (e: any) {
     console.error("[SESSION STORE] Exception fetching attendance sessions:", e?.message);
     throw e;
@@ -68,8 +129,9 @@ export async function getOpenSessionForVolunteer(volunteerId: string): Promise<A
     }
 
     if (data) {
-      memorySessionStore.set(data.id, data);
-      return data;
+      const [enriched] = await enrichSessionsWithDecisions(supabase, [data as AttendanceSession]);
+      memorySessionStore.set(enriched.id, enriched);
+      return enriched;
     }
     for (const [id, cached] of memorySessionStore) {
       if (cached.volunteer_id === volunteerId && cached.status === 'open') memorySessionStore.delete(id);
@@ -104,6 +166,213 @@ export async function saveAttendanceSession(session: AttendanceSession): Promise
 
   memorySessionStore.set(data.id, data);
   return data;
+}
+
+function isMissingDecisionInfrastructure(error: { code?: string; message?: string } | null | undefined): boolean {
+  return error?.code === '42883'
+    || error?.code === 'PGRST202'
+    || error?.code === '42P01'
+    || Boolean(error?.message?.includes('attendance_session_decisions'));
+}
+
+export type AttendanceDecisionActor = {
+  id?: string | null;
+  name: string;
+  role: string;
+};
+
+export async function openAttendanceSessionWithDecisionInDb(input: {
+  sessionId: string;
+  volunteerId: string;
+  dayKey: string;
+  startedAt: string;
+  intendedShiftKeys: string[];
+  attendanceKind: AttendanceKind;
+  reasonCode: string;
+  explanation?: string;
+  actor: AttendanceDecisionActor;
+  idempotencyKey: string;
+}): Promise<{ success: boolean; session?: AttendanceSession; alreadyOpen?: boolean; infrastructureMissing?: boolean; error?: string }> {
+  const baseSession: AttendanceSession = {
+    id: input.sessionId,
+    volunteer_id: input.volunteerId,
+    day_key: input.dayKey,
+    started_at: input.startedAt,
+    ended_at: null,
+    status: 'open',
+    auto_closed: false,
+    created_at: input.startedAt,
+    updated_at: input.startedAt,
+    intended_shift_keys: input.intendedShiftKeys,
+    attendance_kind: input.attendanceKind,
+    decision_reason_code: input.reasonCode,
+    decision_explanation: input.explanation || '',
+    decision_hides_alert: true,
+  };
+  if (isTestMode()) {
+    const existing = await getOpenSessionForVolunteer(input.volunteerId);
+    if (existing) return { success: true, session: existing, alreadyOpen: true };
+    memorySessionStore.set(baseSession.id, baseSession);
+    return { success: true, session: baseSession, alreadyOpen: false };
+  }
+
+  const supabase = await getAdminSupabase();
+  const { data, error } = await supabase.rpc('open_attendance_session_with_decision', {
+    p_session_id: input.sessionId,
+    p_volunteer_id: input.volunteerId,
+    p_day_key: input.dayKey,
+    p_started_at: input.startedAt,
+    p_intended_shift_keys: input.intendedShiftKeys,
+    p_attendance_kind: input.attendanceKind,
+    p_reason_code: input.reasonCode,
+    p_explanation: input.explanation || '',
+    p_actor_id: input.actor.id || null,
+    p_actor_name: input.actor.name,
+    p_actor_role: input.actor.role,
+    p_idempotency_key: input.idempotencyKey,
+  });
+  if (error) {
+    return {
+      success: false,
+      infrastructureMissing: isMissingDecisionInfrastructure(error),
+      error: error.message,
+    };
+  }
+  const payload = data as { session?: AttendanceSession; alreadyOpen?: boolean } | null;
+  if (!payload?.session) return { success: false, error: 'La base de datos no devolvió la sesión creada.' };
+  const session: AttendanceSession = payload.session.id === input.sessionId ? {
+    ...payload.session,
+    intended_shift_keys: input.intendedShiftKeys,
+    attendance_kind: input.attendanceKind,
+    decision_reason_code: input.reasonCode,
+    decision_explanation: input.explanation || '',
+    decision_hides_alert: true,
+  } : payload.session;
+  memorySessionStore.set(session.id, session);
+  return { success: true, session, alreadyOpen: Boolean(payload.alreadyOpen) };
+}
+
+export async function closeAttendanceSessionWithDecisionInDb(input: {
+  session: AttendanceSession;
+  endedAt: string;
+  intendedShiftKeys: string[];
+  exitDecision: AttendanceExitDecision;
+  reasonCode: string;
+  explanation?: string;
+  actor: AttendanceDecisionActor;
+}): Promise<{ success: boolean; session?: AttendanceSession; alreadyClosed?: boolean; infrastructureMissing?: boolean; error?: string }> {
+  if (isTestMode()) {
+    const result = await completeOpenAttendanceSessionInDb(input.session.id, input.endedAt, false);
+    if (result.session) {
+      result.session = {
+        ...result.session,
+        intended_shift_keys: input.intendedShiftKeys,
+        exit_decision: input.exitDecision,
+        decision_reason_code: input.reasonCode,
+        decision_explanation: input.explanation || '',
+        decision_hides_alert: true,
+      };
+      memorySessionStore.set(result.session.id, result.session);
+    }
+    return result;
+  }
+
+  const supabase = await getAdminSupabase();
+  const { data, error } = await supabase.rpc('close_attendance_session_with_decision', {
+    p_session_id: input.session.id,
+    p_volunteer_id: input.session.volunteer_id,
+    p_ended_at: input.endedAt,
+    p_intended_shift_keys: input.intendedShiftKeys,
+    p_exit_decision: input.exitDecision,
+    p_reason_code: input.reasonCode,
+    p_explanation: input.explanation || '',
+    p_actor_id: input.actor.id || null,
+    p_actor_name: input.actor.name,
+    p_actor_role: input.actor.role,
+  });
+  if (error) {
+    return {
+      success: false,
+      infrastructureMissing: isMissingDecisionInfrastructure(error),
+      error: error.message,
+    };
+  }
+  const payload = data as { session?: AttendanceSession; alreadyClosed?: boolean } | null;
+  if (!payload?.session) return { success: false, error: 'La base de datos no devolvió la sesión finalizada.' };
+  const session: AttendanceSession = {
+    ...payload.session,
+    intended_shift_keys: input.intendedShiftKeys,
+    exit_decision: input.exitDecision,
+    decision_reason_code: input.reasonCode,
+    decision_explanation: input.explanation || '',
+    decision_hides_alert: true,
+  };
+  memorySessionStore.set(session.id, session);
+  return { success: true, session, alreadyClosed: Boolean(payload.alreadyClosed) };
+}
+
+export async function resolveStaleAndOpenAttendanceInDb(input: {
+  previousSession: AttendanceSession;
+  previousEndedAt: string;
+  previousShiftKeys: string[];
+  newSessionId: string;
+  newDayKey: string;
+  newStartedAt: string;
+  newShiftKeys: string[];
+  newAttendanceKind: AttendanceKind;
+  actor: AttendanceDecisionActor;
+  idempotencyKey: string;
+}): Promise<{ success: boolean; session?: AttendanceSession; infrastructureMissing?: boolean; error?: string }> {
+  if (isTestMode()) {
+    const closed = await completeOpenAttendanceSessionInDb(input.previousSession.id, input.previousEndedAt, true);
+    if (!closed.success) return closed;
+    return openAttendanceSessionWithDecisionInDb({
+      sessionId: input.newSessionId,
+      volunteerId: input.previousSession.volunteer_id,
+      dayKey: input.newDayKey,
+      startedAt: input.newStartedAt,
+      intendedShiftKeys: input.newShiftKeys,
+      attendanceKind: input.newAttendanceKind,
+      reasonCode: 'stale_resolved_then_checkin',
+      actor: input.actor,
+      idempotencyKey: input.idempotencyKey,
+    });
+  }
+
+  const supabase = await getAdminSupabase();
+  const { data, error } = await supabase.rpc('resolve_stale_and_open_attendance', {
+    p_previous_session_id: input.previousSession.id,
+    p_new_session_id: input.newSessionId,
+    p_volunteer_id: input.previousSession.volunteer_id,
+    p_previous_ended_at: input.previousEndedAt,
+    p_new_day_key: input.newDayKey,
+    p_new_started_at: input.newStartedAt,
+    p_previous_shift_keys: input.previousShiftKeys,
+    p_new_shift_keys: input.newShiftKeys,
+    p_new_attendance_kind: input.newAttendanceKind,
+    p_actor_id: input.actor.id || null,
+    p_actor_name: input.actor.name,
+    p_actor_role: input.actor.role,
+    p_idempotency_key: input.idempotencyKey,
+  });
+  if (error) {
+    return {
+      success: false,
+      infrastructureMissing: isMissingDecisionInfrastructure(error),
+      error: error.message,
+    };
+  }
+  const payload = data as { session?: AttendanceSession } | null;
+  if (!payload?.session) return { success: false, error: 'La base de datos no devolvió la nueva sesión.' };
+  const session: AttendanceSession = {
+    ...payload.session,
+    intended_shift_keys: input.newShiftKeys,
+    attendance_kind: input.newAttendanceKind,
+    decision_reason_code: 'stale_resolved_then_checkin',
+    decision_hides_alert: true,
+  };
+  memorySessionStore.set(session.id, session);
+  return { success: true, session };
 }
 
 export function resetMemorySessionStore(): void {

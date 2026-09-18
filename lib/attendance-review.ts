@@ -7,6 +7,7 @@ export interface ReviewableAttendanceSession {
   started_at: string;
   ended_at?: string | null;
   status: string;
+  decision_hides_alert?: boolean;
 }
 
 /** Session-level exceptions, including records that have no scheduled shift row. */
@@ -15,6 +16,7 @@ export function getAttendanceSessionReviewFlag(
   assignedShiftKeys: string[],
   now = new Date(),
 ): string | null {
+  if (session.decision_hides_alert) return null;
   const day = parseDayKeyToDateStr(session.day_key);
   const start = new Date(session.started_at).getTime();
   const end = session.ended_at ? new Date(session.ended_at).getTime() : null;

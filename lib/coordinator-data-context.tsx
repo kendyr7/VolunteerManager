@@ -358,8 +358,9 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshAttendanceSessions = useCallback(async () => {
-    // The full refresh already includes sessions. Do not enqueue a second
-    // Server Action behind it during startup, focus, or periodic reconciliation.
+    // Keep sessions and their review resolutions in the same snapshot. Reloading
+    // only sessions can leave an open tab showing a warning that was already
+    // resolved by an administrator on another device.
     if (fetchPromiseRef.current) {
       await fetchPromiseRef.current;
       return;
@@ -376,10 +377,20 @@ export function CoordinatorDataProvider({ children }: { children: ReactNode }) {
           setSessionsData([]);
           return;
         }
-        const { getAttendanceSessionsAction } = await import('@/app/actions/attendance');
-        const latestSessions = await getAttendanceSessionsAction(OPERATIONAL_EVENT_DAY_KEYS);
+        const { getAttendanceSessionsAction, getAttendanceReviewResolutionsAction } = await import('@/app/actions/attendance');
+        const [latestSessions, reviewResolutions] = await Promise.all([
+          getAttendanceSessionsAction(OPERATIONAL_EVENT_DAY_KEYS),
+          getAttendanceReviewResolutionsAction(OPERATIONAL_EVENT_DAY_KEYS),
+        ]);
         setSessionsData(previous => {
           const next = latestSessions ?? [];
+          return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+        });
+        setAttendanceReviewResolutionIds(previous => {
+          const next = [...new Set((reviewResolutions ?? []).flatMap(resolution => [
+            resolution.session_id,
+            resolution.resolved_session_id,
+          ].filter((id): id is string => Boolean(id))))].sort();
           return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
         });
       } catch (error) {
