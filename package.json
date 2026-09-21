@@ -23,7 +23,9 @@
     "test:reliability": "jiti scripts/test-volunteer-reliability.mts",
     "test:shift-calculations": "node scripts/test-shift-calculations.mjs",
     "test:attendance-decisions": "node scripts/test-attendance-decisions.mjs",
+    "test:attendance-decision-backfill": "node scripts/test-attendance-decision-backfill.mjs",
     "verify:attendance-flow": "node scripts/verify-attendance-decision-flow.cjs",
+    "verify:attendance-decision-backfill": "node scripts/verify-attendance-decision-backfill.mjs",
     "verify:attendance-alerts": "node scripts/verify-no-historical-attendance-alerts.mjs",
     "test:performance": "node scripts/test-coordinator-performance.cjs && node scripts/test-coordinator-refresh.cjs && node scripts/benchmark-coordinator.cjs",
     "test:report-excel": "jiti scripts/test-report-excel-stage3.mts && jiti scripts/test-report-excel-stage4.mts"

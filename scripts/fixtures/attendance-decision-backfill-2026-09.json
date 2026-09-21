@@ -1,0 +1,1433 @@
+{
+  "batch_id": "attendance-audit-2026-09-reviewed-44",
+  "source_resolution_count": 44,
+  "linked_resolution_count": 43,
+  "deleted_resolution_count": 1,
+  "decision_row_count": 42,
+  "source_resolutions": [
+    {
+      "session_id": "04e5c653-2a6a-4d24-b224-fbe728aa7f2d",
+      "case_id": "ASI-032",
+      "volunteer_id": "16689847-ff9f-445d-83e9-d7cc86d630fc",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "04e5c653-2a6a-4d24-b224-fbe728aa7f2d",
+      "hide_alert": true
+    },
+    {
+      "session_id": "05183e14-6651-4e02-8ce0-7db3e68651d6",
+      "case_id": "ASI-027",
+      "volunteer_id": "47c409cf-9480-42b0-9c1c-74bfe6157f14",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "05183e14-6651-4e02-8ce0-7db3e68651d6",
+      "hide_alert": true
+    },
+    {
+      "session_id": "0d7a4c9b-b6d1-4d79-8efc-d3812f76cb4c",
+      "case_id": "ASI-049",
+      "volunteer_id": "9cc9f0fd-3b9e-4e5f-8cbd-6587d29bdbff",
+      "day_key": "sáb 12",
+      "expected_resolved_session_id": "0d7a4c9b-b6d1-4d79-8efc-d3812f76cb4c",
+      "hide_alert": true
+    },
+    {
+      "session_id": "119bdfa5-631c-4967-81d0-b22f9af93c36",
+      "case_id": "ASI-029",
+      "volunteer_id": "d1342418-7cf9-4d33-8e24-21fbbee0abe1",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "119bdfa5-631c-4967-81d0-b22f9af93c36",
+      "hide_alert": true
+    },
+    {
+      "session_id": "15d243c8-0c1b-4730-90d8-3998f852d751",
+      "case_id": "ASI-045",
+      "volunteer_id": "00de3a2f-2ee4-4a9f-9273-32e2a699bf8b",
+      "day_key": "sáb 12",
+      "expected_resolved_session_id": "15d243c8-0c1b-4730-90d8-3998f852d751",
+      "hide_alert": true
+    },
+    {
+      "session_id": "1a9a8780-1492-41ba-8da7-7c5ceef6e2f3",
+      "case_id": "ASI-054",
+      "volunteer_id": "2fa86313-078b-4f7b-8e64-9ee87c580bbe",
+      "day_key": "vie 11",
+      "expected_resolved_session_id": "1a9a8780-1492-41ba-8da7-7c5ceef6e2f3",
+      "hide_alert": true
+    },
+    {
+      "session_id": "1d6865ea-66d6-415f-92b5-ae2b1c5effa0",
+      "case_id": "ASI-031",
+      "volunteer_id": "a454a749-2ba2-4b14-8a1b-f41964978a4f",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "1d6865ea-66d6-415f-92b5-ae2b1c5effa0",
+      "hide_alert": true
+    },
+    {
+      "session_id": "1f2a5c27-c03d-4f57-8f83-a4dc2a872a6d",
+      "case_id": "ASI-021",
+      "volunteer_id": "8bbd9344-19be-4de8-8ecf-418a42915534",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "1f2a5c27-c03d-4f57-8f83-a4dc2a872a6d",
+      "hide_alert": true
+    },
+    {
+      "session_id": "2a0cb363-677d-4a62-ac13-824ae437f43d",
+      "case_id": "ASI-023",
+      "volunteer_id": "cda23ae9-6cc2-4026-b844-e2ab2583c412",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "2a0cb363-677d-4a62-ac13-824ae437f43d",
+      "hide_alert": true
+    },
+    {
+      "session_id": "2bb99e08-00cb-4515-8f54-5340e3f8b5e6",
+      "case_id": "ASI-042",
+      "volunteer_id": "d57bd3d3-11db-4398-a344-f8b09ac0fff2",
+      "day_key": "sáb 12",
+      "expected_resolved_session_id": "7966aa3f-f0bf-4235-9beb-af4fedf02231",
+      "hide_alert": true
+    },
+    {
+      "session_id": "2dde6994-6bdc-48b6-8141-038b36f8aa42",
+      "case_id": "ASI-040",
+      "volunteer_id": "80e38f21-5b1f-46c5-a6df-e4950c8e82c6",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "2dde6994-6bdc-48b6-8141-038b36f8aa42",
+      "hide_alert": true
+    },
+    {
+      "session_id": "3e51d16b-5d67-42a6-b59f-cc81220bbf85",
+      "case_id": "ASI-043",
+      "volunteer_id": "ae840bb2-3294-4a24-93cc-2ddcd595dcb4",
+      "day_key": "sáb 12",
+      "expected_resolved_session_id": "3e51d16b-5d67-42a6-b59f-cc81220bbf85",
+      "hide_alert": true
+    },
+    {
+      "session_id": "46cf378d-3905-4c8c-b3d2-aee486057273",
+      "case_id": "ASI-061",
+      "volunteer_id": "4e1d8d70-b9c8-466c-974a-2e743b60df36",
+      "day_key": "jue 10",
+      "expected_resolved_session_id": "51a9cc83-abb7-40be-ab79-08a9224dec4b",
+      "hide_alert": true
+    },
+    {
+      "session_id": "47769ef1-bf94-4b58-a5da-d179d1eb5b0b",
+      "case_id": "ASI-022",
+      "volunteer_id": "addf895d-878c-4c21-9891-cb2c7f814cbb",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "47769ef1-bf94-4b58-a5da-d179d1eb5b0b",
+      "hide_alert": true
+    },
+    {
+      "session_id": "4842f392-dda5-4c58-951b-c489a0af50bb",
+      "case_id": "ASI-025",
+      "volunteer_id": "82b73111-9fff-4f73-a42c-667d78bfa6fa",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "8d7d7dca-676e-4141-9df3-9753ada02c35",
+      "hide_alert": true
+    },
+    {
+      "session_id": "49503268-72e9-43de-b92e-c664d298ce75",
+      "case_id": "ASI-041",
+      "volunteer_id": "5153f5b8-6a17-4b54-b67c-9168dac90faa",
+      "day_key": "sáb 12",
+      "expected_resolved_session_id": "dcdfdb64-729b-4e69-921d-e7a76a7a1076",
+      "hide_alert": true
+    },
+    {
+      "session_id": "49816226-b787-4085-9329-06ec0e0d913e",
+      "case_id": "ASI-058",
+      "volunteer_id": "0ca862e2-c950-42e0-b48d-efc54402a514",
+      "day_key": "jue 10",
+      "expected_resolved_session_id": "49816226-b787-4085-9329-06ec0e0d913e",
+      "hide_alert": true
+    },
+    {
+      "session_id": "4f0c90cc-746d-4282-be00-cc4296788fe8",
+      "case_id": "ASI-034",
+      "volunteer_id": "6c4837ab-122c-4ee8-b388-96a0a9a476ec",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "4f0c90cc-746d-4282-be00-cc4296788fe8",
+      "hide_alert": true
+    },
+    {
+      "session_id": "517abdaa-f4a2-48c8-b245-96fc9f472f44",
+      "case_id": "ASI-039",
+      "volunteer_id": "e1a00c57-ac52-438b-a9ae-c7c5091b44f0",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "517abdaa-f4a2-48c8-b245-96fc9f472f44",
+      "hide_alert": true
+    },
+    {
+      "session_id": "6344ff23-f17d-42a5-9aa2-c12e14d3cb07",
+      "case_id": "ASI-048",
+      "volunteer_id": "21fef061-6381-42e3-abc0-910b033a9f80",
+      "day_key": "sáb 12",
+      "expected_resolved_session_id": "6344ff23-f17d-42a5-9aa2-c12e14d3cb07",
+      "hide_alert": true
+    },
+    {
+      "session_id": "6ac2e6f4-b903-4a31-9812-e42e571a3df5",
+      "case_id": "ASI-055",
+      "volunteer_id": "b5764b78-33cb-48a4-bc08-7f15e1fe42a8",
+      "day_key": "vie 11",
+      "expected_resolved_session_id": "6ac2e6f4-b903-4a31-9812-e42e571a3df5",
+      "hide_alert": true
+    },
+    {
+      "session_id": "6bcbc660-cf17-43ad-a333-fbca2877c8c1",
+      "case_id": "ASI-037",
+      "volunteer_id": "55279f01-a4f4-44ed-8de9-d739f5093957",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "6bcbc660-cf17-43ad-a333-fbca2877c8c1",
+      "hide_alert": true
+    },
+    {
+      "session_id": "6cb5ed69-2874-48f9-8aa1-fc0ebaefc1c7",
+      "case_id": "ASI-033",
+      "volunteer_id": "7e4ed5d5-d884-411e-a5d2-58cf0f29b385",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "9b8e4ee2-a5b2-4c71-8d53-df12f16eeffc",
+      "hide_alert": true
+    },
+    {
+      "session_id": "6db84ae1-cec3-4c1a-be71-609aaad3ecf8",
+      "case_id": "ASI-030",
+      "volunteer_id": "f5d4e535-be8d-41bd-9620-5d4d4bd8f3ef",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "6db84ae1-cec3-4c1a-be71-609aaad3ecf8",
+      "hide_alert": true
+    },
+    {
+      "session_id": "6ef05eb8-0a7f-45f7-a363-2dc22a0a721a",
+      "case_id": "ASI-036",
+      "volunteer_id": "5ecdd2cb-8965-40fc-90f9-0f55513f19f7",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "7e4ad187-bf21-4efc-ba35-45ef247a3fdc",
+      "hide_alert": true
+    },
+    {
+      "session_id": "80a4d37c-ae04-490c-a3c1-fb4a9d56721c",
+      "case_id": "ASI-024",
+      "volunteer_id": "ac328779-4326-4807-a010-c09df5606faf",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "80a4d37c-ae04-490c-a3c1-fb4a9d56721c",
+      "hide_alert": true
+    },
+    {
+      "session_id": "8302a2f5-b54f-45a8-adf2-41a8f749a28b",
+      "case_id": "ASI-038",
+      "volunteer_id": "55d39ccc-6119-4f96-bb74-5700c5141ccb",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "8302a2f5-b54f-45a8-adf2-41a8f749a28b",
+      "hide_alert": true
+    },
+    {
+      "session_id": "8866c6f3-85af-46f3-8270-90e5741c514d",
+      "case_id": "ASI-050",
+      "volunteer_id": "4e1d8d70-b9c8-466c-974a-2e743b60df36",
+      "day_key": "sáb 12",
+      "expected_resolved_session_id": "8866c6f3-85af-46f3-8270-90e5741c514d",
+      "hide_alert": true
+    },
+    {
+      "session_id": "89aa45e4-04c1-445d-ae3e-1019f1607074",
+      "case_id": "ASI-035",
+      "volunteer_id": "b8211508-a7aa-4ce2-bc75-98fb8e64554b",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "59fca870-5afc-445a-85cf-684ef9dd4b06",
+      "hide_alert": true
+    },
+    {
+      "session_id": "9a847cf6-a9d8-4ca0-9487-a878bbfa190c",
+      "case_id": "ASI-057",
+      "volunteer_id": "b712bd4e-4372-4ebb-8c36-de426a14c066",
+      "day_key": "vie 11",
+      "expected_resolved_session_id": "9e7b6909-b6d9-48cb-a3dc-8f540de6e606",
+      "hide_alert": true
+    },
+    {
+      "session_id": "9be300bd-cf55-4101-be5f-f45e571a1e9c",
+      "case_id": "ASI-051",
+      "volunteer_id": "da538a1c-26b7-43e9-8e0f-895fb623ddf1",
+      "day_key": "vie 11",
+      "expected_resolved_session_id": "9be300bd-cf55-4101-be5f-f45e571a1e9c",
+      "hide_alert": true
+    },
+    {
+      "session_id": "9cc7a31a-e81e-42ef-84d4-e238c0aa956b",
+      "case_id": "ASI-026",
+      "volunteer_id": "d23d2170-a23f-44e9-81fd-c2b76744c97c",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "cb84e3d0-3228-43d5-8f7f-fb4a6a28454e",
+      "hide_alert": true
+    },
+    {
+      "session_id": "9d8c41cb-8791-45fc-8d4c-7b455ad41136",
+      "case_id": "ASI-060",
+      "volunteer_id": "5ca4a68d-c81d-4549-abcb-2a44df35745d",
+      "day_key": "jue 10",
+      "expected_resolved_session_id": "9d8c41cb-8791-45fc-8d4c-7b455ad41136",
+      "hide_alert": true
+    },
+    {
+      "session_id": "9eb58018-d8ea-438a-9bff-03e458c7f5dd",
+      "case_id": "ASI-062",
+      "volunteer_id": "ad110571-56e1-42d0-91fd-28fb831440d8",
+      "day_key": "jue 10",
+      "expected_resolved_session_id": "9eb58018-d8ea-438a-9bff-03e458c7f5dd",
+      "hide_alert": true
+    },
+    {
+      "session_id": "a0830ad7-488a-4366-9139-d6b624631f1d",
+      "case_id": "ASI-052",
+      "volunteer_id": "b2623e1e-f851-4432-b31f-1f6fc3d3fae2",
+      "day_key": "vie 11",
+      "expected_resolved_session_id": "a0830ad7-488a-4366-9139-d6b624631f1d",
+      "hide_alert": true
+    },
+    {
+      "session_id": "a48a42bf-4d06-410f-92eb-05a636602427",
+      "case_id": "ASI-103",
+      "volunteer_id": "731746a6-9a42-4ca9-9be8-30d6cc7489dc",
+      "day_key": "sáb 5",
+      "expected_resolved_session_id": "71901497-1b31-499e-b99c-1a6ddc5d21b0",
+      "hide_alert": true
+    },
+    {
+      "session_id": "ac38aad7-b7be-44bd-9760-7b28b645ed1e",
+      "case_id": "ASI-046",
+      "volunteer_id": "00de3a2f-2ee4-4a9f-9273-32e2a699bf8b",
+      "day_key": "sáb 12",
+      "expected_resolved_session_id": "15d243c8-0c1b-4730-90d8-3998f852d751",
+      "hide_alert": true
+    },
+    {
+      "session_id": "c0208122-27a3-45ab-8e6b-666fc45e0aad",
+      "case_id": "ASI-056",
+      "volunteer_id": "445498d4-e083-4366-ab80-60b51936cc9a",
+      "day_key": "vie 11",
+      "expected_resolved_session_id": "c0208122-27a3-45ab-8e6b-666fc45e0aad",
+      "hide_alert": true
+    },
+    {
+      "session_id": "c39e2248-3b51-41c3-b482-ea8368343b56",
+      "case_id": "ASI-028",
+      "volunteer_id": "3f5abdb0-d69a-40af-8083-b0495f47bfdd",
+      "day_key": "lun 14",
+      "expected_resolved_session_id": "4820be35-f563-40e4-9e36-409e2828202d",
+      "hide_alert": true
+    },
+    {
+      "session_id": "e30626fa-e7ad-431e-a1c8-c66ff04ac927",
+      "case_id": "ASI-102",
+      "volunteer_id": "19f61086-2e54-4426-9916-68f843f291dd",
+      "day_key": "vie 14",
+      "expected_resolved_session_id": null,
+      "hide_alert": true
+    },
+    {
+      "session_id": "e4302122-fdad-4afa-9dd0-93e7b0870e8b",
+      "case_id": "ASI-053",
+      "volunteer_id": "d89c19c5-236a-4051-ac3f-512a6e1f3115",
+      "day_key": "vie 11",
+      "expected_resolved_session_id": "e4302122-fdad-4afa-9dd0-93e7b0870e8b",
+      "hide_alert": true
+    },
+    {
+      "session_id": "ef3bd754-226a-4529-be31-5cd081872406",
+      "case_id": "ASI-044",
+      "volunteer_id": "ff6be90f-1a1c-45fa-afc4-32dee9780a4d",
+      "day_key": "sáb 12",
+      "expected_resolved_session_id": "ef3bd754-226a-4529-be31-5cd081872406",
+      "hide_alert": true
+    },
+    {
+      "session_id": "fa92248a-1261-4b78-b737-04f78ee8a6a4",
+      "case_id": "ASI-059",
+      "volunteer_id": "744c6274-39d2-4c90-966d-54f41a58ee99",
+      "day_key": "jue 10",
+      "expected_resolved_session_id": "fa92248a-1261-4b78-b737-04f78ee8a6a4",
+      "hide_alert": true
+    },
+    {
+      "session_id": "fdaaf6f0-5962-4b73-9711-5519d7cd0e5e",
+      "case_id": "ASI-047",
+      "volunteer_id": "f418fbb4-75dc-4e80-9c3d-d4046f46004a",
+      "day_key": "sáb 12",
+      "expected_resolved_session_id": "fdaaf6f0-5962-4b73-9711-5519d7cd0e5e",
+      "hide_alert": true
+    }
+  ],
+  "decisions": [
+    {
+      "session_id": "04e5c653-2a6a-4d24-b224-fbe728aa7f2d",
+      "volunteer_id": "16689847-ff9f-445d-83e9-d7cc86d630fc",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Hizo el turno 4 dentro de las horas oficiales, el escaneo lo hicieron mal | Marcar turno 4 entrada y salida en base a las horas oficiales",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:04e5c653-2a6a-4d24-b224-fbe728aa7f2d",
+      "source_resolution_ids": [
+        "04e5c653-2a6a-4d24-b224-fbe728aa7f2d"
+      ],
+      "source_case_ids": [
+        "ASI-032"
+      ]
+    },
+    {
+      "session_id": "05183e14-6651-4e02-8ce0-7db3e68651d6",
+      "volunteer_id": "47c409cf-9480-42b0-9c1c-74bfe6157f14",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T1"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "No se marco la hora de salida del Turno 1, salio a las 12:00 PM",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:05183e14-6651-4e02-8ce0-7db3e68651d6",
+      "source_resolution_ids": [
+        "05183e14-6651-4e02-8ce0-7db3e68651d6"
+      ],
+      "source_case_ids": [
+        "ASI-027"
+      ]
+    },
+    {
+      "session_id": "0d7a4c9b-b6d1-4d79-8efc-d3812f76cb4c",
+      "volunteer_id": "9cc9f0fd-3b9e-4e5f-8cbd-6587d29bdbff",
+      "day_key": "sáb 12",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entro tarde al Turno 4 y salio temprano",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:0d7a4c9b-b6d1-4d79-8efc-d3812f76cb4c",
+      "source_resolution_ids": [
+        "0d7a4c9b-b6d1-4d79-8efc-d3812f76cb4c"
+      ],
+      "source_case_ids": [
+        "ASI-049"
+      ]
+    },
+    {
+      "session_id": "119bdfa5-631c-4967-81d0-b22f9af93c36",
+      "volunteer_id": "d1342418-7cf9-4d33-8e24-21fbbee0abe1",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T3"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "No hizo turno 4, solo el turno 3 | Marcar solamente turno 3, entrada a las 2:09 pm y salio a las 6:00 PM",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:119bdfa5-631c-4967-81d0-b22f9af93c36",
+      "source_resolution_ids": [
+        "119bdfa5-631c-4967-81d0-b22f9af93c36"
+      ],
+      "source_case_ids": [
+        "ASI-029"
+      ]
+    },
+    {
+      "session_id": "15d243c8-0c1b-4730-90d8-3998f852d751",
+      "volunteer_id": "00de3a2f-2ee4-4a9f-9273-32e2a699bf8b",
+      "day_key": "sáb 12",
+      "intended_shift_keys": [
+        "T2"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entro normal a su turno 2 pero escanearon mal las dos veces | Eliminar este registro porque solo hizo Turno  pero escanearon doble | Hizo Turno 2 completo, usar horas oficiales",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:15d243c8-0c1b-4730-90d8-3998f852d751",
+      "source_resolution_ids": [
+        "15d243c8-0c1b-4730-90d8-3998f852d751",
+        "ac38aad7-b7be-44bd-9760-7b28b645ed1e"
+      ],
+      "source_case_ids": [
+        "ASI-045",
+        "ASI-046"
+      ]
+    },
+    {
+      "session_id": "1a9a8780-1492-41ba-8da7-7c5ceef6e2f3",
+      "volunteer_id": "2fa86313-078b-4f7b-8e64-9ee87c580bbe",
+      "day_key": "vie 11",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Escanearon dos veces | Poner Turno 4 completo con hora oficial de entrada y salida",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:1a9a8780-1492-41ba-8da7-7c5ceef6e2f3",
+      "source_resolution_ids": [
+        "1a9a8780-1492-41ba-8da7-7c5ceef6e2f3"
+      ],
+      "source_case_ids": [
+        "ASI-054"
+      ]
+    },
+    {
+      "session_id": "1d6865ea-66d6-415f-92b5-ae2b1c5effa0",
+      "volunteer_id": "a454a749-2ba2-4b14-8a1b-f41964978a4f",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T1",
+        "T2"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Mantener Turno 1 como adicional, empezo tarde a las 9:08 AM y salio a las 2:23 PM, entonces marcar turno  tambien, turno 3 no lo hizo",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:1d6865ea-66d6-415f-92b5-ae2b1c5effa0",
+      "source_resolution_ids": [
+        "1d6865ea-66d6-415f-92b5-ae2b1c5effa0"
+      ],
+      "source_case_ids": [
+        "ASI-031"
+      ]
+    },
+    {
+      "session_id": "1f2a5c27-c03d-4f57-8f83-a4dc2a872a6d",
+      "volunteer_id": "8bbd9344-19be-4de8-8ecf-418a42915534",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "No hizo T1 pero hizo T2, 3 y 4 como adicionales",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:1f2a5c27-c03d-4f57-8f83-a4dc2a872a6d",
+      "source_resolution_ids": [
+        "1f2a5c27-c03d-4f57-8f83-a4dc2a872a6d"
+      ],
+      "source_case_ids": [
+        "ASI-021"
+      ]
+    },
+    {
+      "session_id": "2a0cb363-677d-4a62-ac13-824ae437f43d",
+      "volunteer_id": "cda23ae9-6cc2-4026-b844-e2ab2583c412",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T2"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "No hizo turno 1, entro tarde al turno 2 | No hizo Turno 1, entro tarde al T2, poner hora oficial del turno 2",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:2a0cb363-677d-4a62-ac13-824ae437f43d",
+      "source_resolution_ids": [
+        "2a0cb363-677d-4a62-ac13-824ae437f43d"
+      ],
+      "source_case_ids": [
+        "ASI-023"
+      ]
+    },
+    {
+      "session_id": "2dde6994-6bdc-48b6-8141-038b36f8aa42",
+      "volunteer_id": "80e38f21-5b1f-46c5-a6df-e4950c8e82c6",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entro al turno 4 a las 5:37 PM y salio a las 8:41 PM , no hizo turno 3",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:2dde6994-6bdc-48b6-8141-038b36f8aa42",
+      "source_resolution_ids": [
+        "2dde6994-6bdc-48b6-8141-038b36f8aa42"
+      ],
+      "source_case_ids": [
+        "ASI-040"
+      ]
+    },
+    {
+      "session_id": "3e51d16b-5d67-42a6-b59f-cc81220bbf85",
+      "volunteer_id": "ae840bb2-3294-4a24-93cc-2ddcd595dcb4",
+      "day_key": "sáb 12",
+      "intended_shift_keys": [
+        "T2",
+        "T3"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Empezo el T2 como adicional, luego termino el turno 3 tambien | Marcar el T2 como adicional, entro tarde y luego marcar el T3 completo, el T4 no lo hizo",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:3e51d16b-5d67-42a6-b59f-cc81220bbf85",
+      "source_resolution_ids": [
+        "3e51d16b-5d67-42a6-b59f-cc81220bbf85"
+      ],
+      "source_case_ids": [
+        "ASI-043"
+      ]
+    },
+    {
+      "session_id": "47769ef1-bf94-4b58-a5da-d179d1eb5b0b",
+      "volunteer_id": "addf895d-878c-4c21-9891-cb2c7f814cbb",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T2"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entro tarde al T2, y nunca se marco la salida, T4 no se completo | Entro tarde al T2, y nunca se marco la salida, poner salida oficial del turno 2, T4 no se completo",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:47769ef1-bf94-4b58-a5da-d179d1eb5b0b",
+      "source_resolution_ids": [
+        "47769ef1-bf94-4b58-a5da-d179d1eb5b0b"
+      ],
+      "source_case_ids": [
+        "ASI-022"
+      ]
+    },
+    {
+      "session_id": "4820be35-f563-40e4-9e36-409e2828202d",
+      "volunteer_id": "3f5abdb0-d69a-40af-8083-b0495f47bfdd",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Empezo turno 4 a las 4:16 PM y salio antes del turno 4 a las 4:16 PM, no hizo el turno 3",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:4820be35-f563-40e4-9e36-409e2828202d",
+      "source_resolution_ids": [
+        "c39e2248-3b51-41c3-b482-ea8368343b56"
+      ],
+      "source_case_ids": [
+        "ASI-028"
+      ]
+    },
+    {
+      "session_id": "49816226-b787-4085-9329-06ec0e0d913e",
+      "volunteer_id": "0ca862e2-c950-42e0-b48d-efc54402a514",
+      "day_key": "jue 10",
+      "intended_shift_keys": [
+        "T1"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Hizo mas tiempo del T1 | Termino T1 mas tarde",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:49816226-b787-4085-9329-06ec0e0d913e",
+      "source_resolution_ids": [
+        "49816226-b787-4085-9329-06ec0e0d913e"
+      ],
+      "source_case_ids": [
+        "ASI-058"
+      ]
+    },
+    {
+      "session_id": "4f0c90cc-746d-4282-be00-cc4296788fe8",
+      "volunteer_id": "6c4837ab-122c-4ee8-b388-96a0a9a476ec",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T2"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entro normal a su turno2 , a las 11:01 am, salio temprano a las 2:55 de ese mismo turno, no hizo turno 3",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:4f0c90cc-746d-4282-be00-cc4296788fe8",
+      "source_resolution_ids": [
+        "4f0c90cc-746d-4282-be00-cc4296788fe8"
+      ],
+      "source_case_ids": [
+        "ASI-034"
+      ]
+    },
+    {
+      "session_id": "517abdaa-f4a2-48c8-b245-96fc9f472f44",
+      "volunteer_id": "e1a00c57-ac52-438b-a9ae-c7c5091b44f0",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T1",
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Empezo el Turno 1 a las 9:04 AM tarde y salio hasta las 9:02 PM, entonces hizo T1,2, 3 y 4",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:517abdaa-f4a2-48c8-b245-96fc9f472f44",
+      "source_resolution_ids": [
+        "517abdaa-f4a2-48c8-b245-96fc9f472f44"
+      ],
+      "source_case_ids": [
+        "ASI-039"
+      ]
+    },
+    {
+      "session_id": "51a9cc83-abb7-40be-ab79-08a9224dec4b",
+      "volunteer_id": "4e1d8d70-b9c8-466c-974a-2e743b60df36",
+      "day_key": "jue 10",
+      "intended_shift_keys": [
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Hicieron mal el escaneo | No hizo T1, Entrada: 02:51 p. m como parte del turno 2 y terminar a las Salida: 08:01 p. m. como que Salio temprano del turno 4",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:51a9cc83-abb7-40be-ab79-08a9224dec4b",
+      "source_resolution_ids": [
+        "46cf378d-3905-4c8c-b3d2-aee486057273"
+      ],
+      "source_case_ids": [
+        "ASI-061"
+      ]
+    },
+    {
+      "session_id": "59fca870-5afc-445a-85cf-684ef9dd4b06",
+      "volunteer_id": "b8211508-a7aa-4ce2-bc75-98fb8e64554b",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entraron temprano al turno 4, no hizo el turno 3 entonces turno 4 queda como adicional | Entraron temprano al turno 4 desde las 4:20PM, no hizo el turno 3 entonces turno 4 queda como adicional y lo termino a las 9:54 PM",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:59fca870-5afc-445a-85cf-684ef9dd4b06",
+      "source_resolution_ids": [
+        "89aa45e4-04c1-445d-ae3e-1019f1607074"
+      ],
+      "source_case_ids": [
+        "ASI-035"
+      ]
+    },
+    {
+      "session_id": "6344ff23-f17d-42a5-9aa2-c12e14d3cb07",
+      "volunteer_id": "21fef061-6381-42e3-abc0-910b033a9f80",
+      "day_key": "sáb 12",
+      "intended_shift_keys": [
+        "T2",
+        "T3"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "No hizo Turno 1, entro tarde al T2 y salio temprano del Turno 3, el turno 4 no lo hizo",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:6344ff23-f17d-42a5-9aa2-c12e14d3cb07",
+      "source_resolution_ids": [
+        "6344ff23-f17d-42a5-9aa2-c12e14d3cb07"
+      ],
+      "source_case_ids": [
+        "ASI-048"
+      ]
+    },
+    {
+      "session_id": "6ac2e6f4-b903-4a31-9812-e42e571a3df5",
+      "volunteer_id": "b5764b78-33cb-48a4-bc08-7f15e1fe42a8",
+      "day_key": "vie 11",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Hizo su turno 4 normal pero entro tarde | Entro tarde a su turno 4 y salio un poco despues",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:6ac2e6f4-b903-4a31-9812-e42e571a3df5",
+      "source_resolution_ids": [
+        "6ac2e6f4-b903-4a31-9812-e42e571a3df5"
+      ],
+      "source_case_ids": [
+        "ASI-055"
+      ]
+    },
+    {
+      "session_id": "6bcbc660-cf17-43ad-a333-fbca2877c8c1",
+      "volunteer_id": "55279f01-a4f4-44ed-8de9-d739f5093957",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T2"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entro al turno 2  a las 11:03 aM y salio a las 2:55 PM, no hizo otro turno",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:6bcbc660-cf17-43ad-a333-fbca2877c8c1",
+      "source_resolution_ids": [
+        "6bcbc660-cf17-43ad-a333-fbca2877c8c1"
+      ],
+      "source_case_ids": [
+        "ASI-037"
+      ]
+    },
+    {
+      "session_id": "6db84ae1-cec3-4c1a-be71-609aaad3ecf8",
+      "volunteer_id": "f5d4e535-be8d-41bd-9620-5d4d4bd8f3ef",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T1"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Hizo turno 1, salio mas tarde | Marcar solamente turno 1, se quedo un poco mas tarde del mismo turno",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:6db84ae1-cec3-4c1a-be71-609aaad3ecf8",
+      "source_resolution_ids": [
+        "6db84ae1-cec3-4c1a-be71-609aaad3ecf8"
+      ],
+      "source_case_ids": [
+        "ASI-030"
+      ]
+    },
+    {
+      "session_id": "71901497-1b31-499e-b99c-1a6ddc5d21b0",
+      "volunteer_id": "731746a6-9a42-4ca9-9be8-30d6cc7489dc",
+      "day_key": "sáb 5",
+      "intended_shift_keys": [
+        "T1"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Este registro pertenece a Sep 5 al unico turno existente | Turno1 de Sep 5",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:71901497-1b31-499e-b99c-1a6ddc5d21b0",
+      "source_resolution_ids": [
+        "a48a42bf-4d06-410f-92eb-05a636602427"
+      ],
+      "source_case_ids": [
+        "ASI-103"
+      ]
+    },
+    {
+      "session_id": "7966aa3f-f0bf-4235-9beb-af4fedf02231",
+      "volunteer_id": "d57bd3d3-11db-4398-a344-f8b09ac0fff2",
+      "day_key": "sáb 12",
+      "intended_shift_keys": [
+        "T2"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Se genero la alerta mal | Empezo temprano el T2 a las 10:42 am y salio a las 2:08PM, no hizo turno 1",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:7966aa3f-f0bf-4235-9beb-af4fedf02231",
+      "source_resolution_ids": [
+        "2bb99e08-00cb-4515-8f54-5340e3f8b5e6"
+      ],
+      "source_case_ids": [
+        "ASI-042"
+      ]
+    },
+    {
+      "session_id": "7e4ad187-bf21-4efc-ba35-45ef247a3fdc",
+      "volunteer_id": "5ecdd2cb-8965-40fc-90f9-0f55513f19f7",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T1",
+        "T2"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Empezo T1 que no tenia agendado a las 09:08 PM y luego hizo turno 2 hasta las 2:23 PM, no hizo turno 3",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:7e4ad187-bf21-4efc-ba35-45ef247a3fdc",
+      "source_resolution_ids": [
+        "6ef05eb8-0a7f-45f7-a363-2dc22a0a721a"
+      ],
+      "source_case_ids": [
+        "ASI-036"
+      ]
+    },
+    {
+      "session_id": "80a4d37c-ae04-490c-a3c1-fb4a9d56721c",
+      "volunteer_id": "ac328779-4326-4807-a010-c09df5606faf",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T2"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "No se marco la salida del Turno 2 | Poner Turno 2 unicamente, entrada a las 10:58 am y salida oficial del turno 2",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:80a4d37c-ae04-490c-a3c1-fb4a9d56721c",
+      "source_resolution_ids": [
+        "80a4d37c-ae04-490c-a3c1-fb4a9d56721c"
+      ],
+      "source_case_ids": [
+        "ASI-024"
+      ]
+    },
+    {
+      "session_id": "8302a2f5-b54f-45a8-adf2-41a8f749a28b",
+      "volunteer_id": "55d39ccc-6119-4f96-bb74-5700c5141ccb",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entro normal a su turno 1 a las 8:05 AM, y salio en el turno 2 a las 2:53 PM. Luego entro al turno 4 a las 5:47 PM y salio a las 9:17 PM",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:8302a2f5-b54f-45a8-adf2-41a8f749a28b",
+      "source_resolution_ids": [
+        "8302a2f5-b54f-45a8-adf2-41a8f749a28b"
+      ],
+      "source_case_ids": [
+        "ASI-038"
+      ]
+    },
+    {
+      "session_id": "8866c6f3-85af-46f3-8270-90e5741c514d",
+      "volunteer_id": "4e1d8d70-b9c8-466c-974a-2e743b60df36",
+      "day_key": "sáb 12",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "No hizo turno 1 ni 3, entro tarde al turno 4 y salio temprano del turno 4",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:8866c6f3-85af-46f3-8270-90e5741c514d",
+      "source_resolution_ids": [
+        "8866c6f3-85af-46f3-8270-90e5741c514d"
+      ],
+      "source_case_ids": [
+        "ASI-050"
+      ]
+    },
+    {
+      "session_id": "8d7d7dca-676e-4141-9df3-9753ada02c35",
+      "volunteer_id": "82b73111-9fff-4f73-a42c-667d78bfa6fa",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T2",
+        "T3",
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entro tarde al Turno 2 y salio hasta el turno 4 | Marcar el Turno 2 (entro tarde) y salio hasta el turno 4",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:8d7d7dca-676e-4141-9df3-9753ada02c35",
+      "source_resolution_ids": [
+        "4842f392-dda5-4c58-951b-c489a0af50bb"
+      ],
+      "source_case_ids": [
+        "ASI-025"
+      ]
+    },
+    {
+      "session_id": "9b8e4ee2-a5b2-4c71-8d53-df12f16eeffc",
+      "volunteer_id": "7e4ed5d5-d884-411e-a5d2-58cf0f29b385",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Escanearon mal, solamente debia quedar marcado turno 4 | Marcar solo turno 4 como que empezo a las 4:48 y salio a las 9:54 PM",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:9b8e4ee2-a5b2-4c71-8d53-df12f16eeffc",
+      "source_resolution_ids": [
+        "6cb5ed69-2874-48f9-8aa1-fc0ebaefc1c7"
+      ],
+      "source_case_ids": [
+        "ASI-033"
+      ]
+    },
+    {
+      "session_id": "9be300bd-cf55-4101-be5f-f45e571a1e9c",
+      "volunteer_id": "da538a1c-26b7-43e9-8e0f-895fb623ddf1",
+      "day_key": "vie 11",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Escaneraon dos veces | Poner Turno 4 completo con hora oficial de entrada y salida",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:9be300bd-cf55-4101-be5f-f45e571a1e9c",
+      "source_resolution_ids": [
+        "9be300bd-cf55-4101-be5f-f45e571a1e9c"
+      ],
+      "source_case_ids": [
+        "ASI-051"
+      ]
+    },
+    {
+      "session_id": "9d8c41cb-8791-45fc-8d4c-7b455ad41136",
+      "volunteer_id": "5ca4a68d-c81d-4549-abcb-2a44df35745d",
+      "day_key": "jue 10",
+      "intended_shift_keys": [
+        "T3"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Hicieron el escaneo dos veces | Hizo el Turno 3 completo, poner hora de entrada y salida oficial",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:9d8c41cb-8791-45fc-8d4c-7b455ad41136",
+      "source_resolution_ids": [
+        "9d8c41cb-8791-45fc-8d4c-7b455ad41136"
+      ],
+      "source_case_ids": [
+        "ASI-060"
+      ]
+    },
+    {
+      "session_id": "9e7b6909-b6d9-48cb-a3dc-8f540de6e606",
+      "volunteer_id": "b712bd4e-4372-4ebb-8c36-de426a14c066",
+      "day_key": "vie 11",
+      "intended_shift_keys": [
+        "T2",
+        "T3"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Salio tarde de algunos turnos | Mantener Entrada: 07:50 a. m. · Salida: 11:54 a. m. que corresponde al Turno 1, luego hizo una pausa y empezo el Turno 2 a las 12:51 PM y de ahi hizo tambien turno 3 de corrido hasta las 5:52 PM que se fue, Turno 4 no deberia salir marcado",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:9e7b6909-b6d9-48cb-a3dc-8f540de6e606",
+      "source_resolution_ids": [
+        "9a847cf6-a9d8-4ca0-9487-a878bbfa190c"
+      ],
+      "source_case_ids": [
+        "ASI-057"
+      ]
+    },
+    {
+      "session_id": "9eb58018-d8ea-438a-9bff-03e458c7f5dd",
+      "volunteer_id": "ad110571-56e1-42d0-91fd-28fb831440d8",
+      "day_key": "jue 10",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entro tarde al T4 | Mantener su hora de Entrada: 05:09 p. m como parte del T4 y salio un poco antes pero mantener la hora oficial que tiene de salida",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:9eb58018-d8ea-438a-9bff-03e458c7f5dd",
+      "source_resolution_ids": [
+        "9eb58018-d8ea-438a-9bff-03e458c7f5dd"
+      ],
+      "source_case_ids": [
+        "ASI-062"
+      ]
+    },
+    {
+      "session_id": "a0830ad7-488a-4366-9139-d6b624631f1d",
+      "volunteer_id": "b2623e1e-f851-4432-b31f-1f6fc3d3fae2",
+      "day_key": "vie 11",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Se genero la alerta mal | Su entrada al Turno 2 de 11:00 AM a 3:00 PM, luego hizo normal turno 4 de 5:00 a 9:00  PM",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:a0830ad7-488a-4366-9139-d6b624631f1d",
+      "source_resolution_ids": [
+        "a0830ad7-488a-4366-9139-d6b624631f1d"
+      ],
+      "source_case_ids": [
+        "ASI-052"
+      ]
+    },
+    {
+      "session_id": "c0208122-27a3-45ab-8e6b-666fc45e0aad",
+      "volunteer_id": "445498d4-e083-4366-ab80-60b51936cc9a",
+      "day_key": "vie 11",
+      "intended_shift_keys": [
+        "T1"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Se tuvo que retirar temprano | Se fue temprano, mantener la misma hora de entrada y salida",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:c0208122-27a3-45ab-8e6b-666fc45e0aad",
+      "source_resolution_ids": [
+        "c0208122-27a3-45ab-8e6b-666fc45e0aad"
+      ],
+      "source_case_ids": [
+        "ASI-056"
+      ]
+    },
+    {
+      "session_id": "cb84e3d0-3228-43d5-8f7f-fb4a6a28454e",
+      "volunteer_id": "d23d2170-a23f-44e9-81fd-c2b76744c97c",
+      "day_key": "lun 14",
+      "intended_shift_keys": [
+        "T3",
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entro en el turno 3  temprano y salio hasta el turno 4 | Entro temprano al turno 3, a las 4:4 PM y salio en el turno 4 a las 9:36 PM",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:cb84e3d0-3228-43d5-8f7f-fb4a6a28454e",
+      "source_resolution_ids": [
+        "9cc7a31a-e81e-42ef-84d4-e238c0aa956b"
+      ],
+      "source_case_ids": [
+        "ASI-026"
+      ]
+    },
+    {
+      "session_id": "dcdfdb64-729b-4e69-921d-e7a76a7a1076",
+      "volunteer_id": "5153f5b8-6a17-4b54-b67c-9168dac90faa",
+      "day_key": "sáb 12",
+      "intended_shift_keys": [
+        "T3",
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Se abrio la alerta mal del T2 | Turno 3 empezo a las 4:41 osea que lo empezo temprano y termino de corrido hasta el turno 4 que salio a las 9:11 PM",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:dcdfdb64-729b-4e69-921d-e7a76a7a1076",
+      "source_resolution_ids": [
+        "49503268-72e9-43de-b92e-c664d298ce75"
+      ],
+      "source_case_ids": [
+        "ASI-041"
+      ]
+    },
+    {
+      "session_id": "e4302122-fdad-4afa-9dd0-93e7b0870e8b",
+      "volunteer_id": "d89c19c5-236a-4051-ac3f-512a6e1f3115",
+      "day_key": "vie 11",
+      "intended_shift_keys": [
+        "T1",
+        "T2"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Hizo un turno no agendado que fue el T2 y perdio el otro T3 que si tenia agendado | Entro a las 7:26, tarde al turno 1 y luego hizo como turno adicional el Turno 2, el Turno 3 lo perdio y decidio no asistir",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:e4302122-fdad-4afa-9dd0-93e7b0870e8b",
+      "source_resolution_ids": [
+        "e4302122-fdad-4afa-9dd0-93e7b0870e8b"
+      ],
+      "source_case_ids": [
+        "ASI-053"
+      ]
+    },
+    {
+      "session_id": "ef3bd754-226a-4529-be31-5cd081872406",
+      "volunteer_id": "ff6be90f-1a1c-45fa-afc4-32dee9780a4d",
+      "day_key": "sáb 12",
+      "intended_shift_keys": [
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "No hizo el Turno 3 | Marcar normal el Turno 4, entro tarde",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:ef3bd754-226a-4529-be31-5cd081872406",
+      "source_resolution_ids": [
+        "ef3bd754-226a-4529-be31-5cd081872406"
+      ],
+      "source_case_ids": [
+        "ASI-044"
+      ]
+    },
+    {
+      "session_id": "fa92248a-1261-4b78-b737-04f78ee8a6a4",
+      "volunteer_id": "744c6274-39d2-4c90-966d-54f41a58ee99",
+      "day_key": "jue 10",
+      "intended_shift_keys": [
+        "T3"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Hicieron el escaneo dos veces | Hizo el Turno 3 completo, poner hora de entrada y salida oficial",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:fa92248a-1261-4b78-b737-04f78ee8a6a4",
+      "source_resolution_ids": [
+        "fa92248a-1261-4b78-b737-04f78ee8a6a4"
+      ],
+      "source_case_ids": [
+        "ASI-059"
+      ]
+    },
+    {
+      "session_id": "fdaaf6f0-5962-4b73-9711-5519d7cd0e5e",
+      "volunteer_id": "f418fbb4-75dc-4e80-9c3d-d4046f46004a",
+      "day_key": "sáb 12",
+      "intended_shift_keys": [
+        "T3",
+        "T4"
+      ],
+      "attendance_kind": "historical_audit",
+      "exit_decision": "admin_corrected",
+      "reason_code": "reviewed_attendance_audit_2026_09",
+      "explanation": "Entro temprano al T3 que no tenia agendado, se cuenta como adicional, luego hizo turno 4 | Poner Turno 3 como adicional, entro a la 1:14 PM, luego hizo turno 4 y salio a las 9:11 PM",
+      "hide_alert": true,
+      "decided_by": "Kendyr",
+      "decided_by_name": "Kendyr",
+      "decided_by_role": "Administrador",
+      "decided_at": "2026-09-16T12:00:00-06:00",
+      "source": "historical_audit",
+      "idempotency_key": "historical-audit:fdaaf6f0-5962-4b73-9711-5519d7cd0e5e",
+      "source_resolution_ids": [
+        "fdaaf6f0-5962-4b73-9711-5519d7cd0e5e"
+      ],
+      "source_case_ids": [
+        "ASI-047"
+      ]
+    }
+  ]
+}
