@@ -47,6 +47,16 @@ const highlights = [
 
 const dateOf = (day: string) => new Date(`${day}T12:00:00`);
 
+function compareNotesByDate(a: KeepNote, b: KeepNote) {
+  // Compare calendar days in the same local timezone as the displayed dates.
+  const aDate = a.shiftDay ? dateOf(a.shiftDay) : new Date(a.createdAt);
+  const bDate = b.shiftDay ? dateOf(b.shiftDay) : new Date(b.createdAt);
+  const dayDifference = bDate.setHours(0, 0, 0, 0) - aDate.setHours(0, 0, 0, 0);
+  return dayDifference
+    || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    || a.id.localeCompare(b.id);
+}
+
 function newNoteId() {
   return globalThis.crypto?.randomUUID?.() ?? `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, '0')}`;
 }
@@ -1014,7 +1024,7 @@ export function VolunteerJournal({
     }
   };
 
-  // Filter notes
+  // Sort the filtered copy for display only; never reorder the persisted state.
   const notes = state.notes || [];
   const filteredNotes = notes.filter(note => {
     if (search.trim()) {
@@ -1032,6 +1042,8 @@ export function VolunteerJournal({
     }
     return true;
   });
+
+  filteredNotes.sort(compareNotesByDate);
 
   const pinnedNotes = filteredNotes.filter(n => n.isPinned);
   const otherNotes = filteredNotes.filter(n => !n.isPinned);
