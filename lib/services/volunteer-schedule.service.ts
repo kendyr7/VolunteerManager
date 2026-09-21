@@ -2,7 +2,7 @@ import 'server-only';
 
 import { getAdminSupabase } from '@/lib/supabase/admin';
 import type { VolunteerScheduleShift } from '@/lib/types/volunteer-schedule';
-import { findAttendanceSessionForShift, getShiftDisplayState } from '@/lib/shift-calculations';
+import { getShiftDisplayState } from '@/lib/shift-calculations';
 import { buildEventDayKeys } from '@/lib/coordinator-data';
 
 interface VolunteerScheduleRow {
@@ -52,7 +52,7 @@ export class VolunteerScheduleService {
 
   static async getScheduleSnapshot(volunteerId: string): Promise<{ shifts: VolunteerScheduleShift[]; sessions: any[] }> {
     const supabase = await getAdminSupabase();
-    const [shiftsResult, sessionsResult, resolutionsResult] = await Promise.all([
+    const [shiftsResult, sessionsResult] = await Promise.all([
       supabase
         .from('shifts')
         .select('id, volunteer_id, day_key, shift_key, checked_in, checked_in_at, checked_out, checked_out_at, area_id, committee_areas(name, description)')
@@ -64,15 +64,9 @@ export class VolunteerScheduleService {
         .select('*')
         .eq('volunteer_id', volunteerId)
         .order('started_at', { ascending: false }),
-      supabase
-        .from('attendance_review_resolutions')
-        .select('session_id, resolved_session_id')
-        .eq('volunteer_id', volunteerId)
-        .eq('hide_alert', true),
     ]);
     if (shiftsResult.error) throw new Error(`No se pudo cargar el horario del voluntario: ${shiftsResult.error.message}`);
     if (sessionsResult.error) throw new Error(`No se pudo cargar la asistencia del voluntario: ${sessionsResult.error.message}`);
-    if (resolutionsResult.error) throw new Error(`No se pudieron cargar las revisiones de asistencia: ${resolutionsResult.error.message}`);
 
     const sessionRows = (sessionsResult.data || []) as any[];
     const { data: decisionRows, error: decisionsError } = sessionRows.length > 0
@@ -100,24 +94,8 @@ export class VolunteerScheduleService {
         decision_hides_alert: decision.hide_alert,
       } : session;
     });
-    const resolvedSessionIds = new Set(
-      (resolutionsResult.data || []).flatMap((resolution) => (
-        [resolution.session_id, resolution.resolved_session_id].filter(Boolean) as string[]
-      )),
-    );
-
     return { sessions, shifts: shifts.map((shift) => {
-      const rawDisplay = getShiftDisplayState(shift.day_key, shift.shift_key, shift, sessions, shifts, volunteerId);
-      const matchingSession = rawDisplay.flag
-        ? findAttendanceSessionForShift(shift.day_key, shift.shift_key, sessions, shifts, volunteerId)
-        : null;
-      const display = matchingSession?.id && resolvedSessionIds.has(matchingSession.id)
-        ? {
-            ...rawDisplay,
-            status: matchingSession.ended_at || matchingSession.endedAt ? 'completed' as const : rawDisplay.status,
-            flag: null,
-          }
-        : rawDisplay;
+      const display = getShiftDisplayState(shift.day_key, shift.shift_key, shift, sessions, shifts, volunteerId);
       return {
         id: shift.id,
         volunteer_id: shift.volunteer_id,
@@ -125,11 +103,8 @@ export class VolunteerScheduleService {
         shift_key: shift.shift_key,
         checked_in: display.status === 'in_progress' || display.status === 'completed' || Boolean(display.endAt),
         checked_in_at: display.startAt,
-        // The exit is a recorded fact even when a brief visit needs review and
-        // does not earn completion credit. Keep the warning on that row.
         checked_out: display.status === 'completed' || Boolean(display.endAt),
         checked_out_at: display.endAt,
-        attendance_flag: display.flag,
         area_id: shift.area_id,
         area_name: relationName(shift.committee_areas),
         area_description: relationDescription(shift.committee_areas),

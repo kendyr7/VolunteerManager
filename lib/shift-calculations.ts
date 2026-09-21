@@ -182,6 +182,9 @@ export interface ShiftDisplayState {
   status: ShiftDisplayStatus;
   startAt: string | null;
   endAt: string | null;
+}
+
+interface ShiftDiagnosticState extends ShiftDisplayState {
   flag: string | null;
 }
 
@@ -194,7 +197,7 @@ function calculateShiftDisplayState(
   assignedShifts: any[] = [],
   volunteerId?: string,
   now = new Date(),
-): ShiftDisplayState {
+): ShiftDiagnosticState {
   if (sessions.length === 0 && !shift?.checked_in && !shift?.checked_in_at
     && !shift?.checked_out && !shift?.checked_out_at) {
     return { status: 'scheduled', startAt: null, endAt: null, flag: null };
@@ -295,7 +298,11 @@ export function getShiftDisplayState(
   const state = calculateShiftDisplayState(
     dayKey, shiftKey, shift, sessions, assignedShifts, volunteerId, now,
   );
-  return state.flag ? { ...state, flag: null } : state;
+  return {
+    status: state.status,
+    startAt: state.startAt,
+    endAt: state.endAt,
+  };
 }
 
 /** Returns the preserved anomaly text for the coordinator review queue. */

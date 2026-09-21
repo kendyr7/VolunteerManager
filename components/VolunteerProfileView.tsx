@@ -38,7 +38,6 @@ import { fetchVolunteerAttendanceSessionsAction } from "@/app/actions/attendance
 import { useOptionalCoordinatorData } from "@/lib/coordinator-data-context";
 import { useVolunteerStore } from "@/lib/store/use-volunteer-store";
 import {
-  findAttendanceSessionForShift,
   getUnifiedShiftTimes,
   getUnifiedShiftWorkedMinutes,
   formatUnifiedDuration,
@@ -474,22 +473,10 @@ export function VolunteerProfileView({
       checked_in: hasMapValue(externalCheckedInMap) || hasMapValue(localCheckedInMap),
       checked_out: hasMapValue(externalCheckedOutMap) || hasMapValue(localCheckedOutMap),
     };
-    const state = getShiftDisplayState(
+    return getShiftDisplayState(
       dayKey, shiftKey, fallback, volunteerSessions, assignedRecords, volunteer.id, profileNow,
     );
-    if (!state.flag) return state;
-
-    const matchingSession = findAttendanceSessionForShift(
-      dayKey, shiftKey, volunteerSessions, assignedRecords, volunteer.id, profileNow,
-    );
-    if (!matchingSession?.id || !resolvedAttendanceSessionIds.has(matchingSession.id)) return state;
-
-    return {
-      ...state,
-      status: matchingSession.ended_at || matchingSession.endedAt ? 'completed' as const : state.status,
-      flag: null,
-    };
-  }, [assignedRecords, dbShiftRecords, externalCheckedInMap, externalCheckedOutMap, localCheckedInMap, localCheckedOutMap, resolvedAttendanceSessionIds, volunteerSessions, volunteer.id, profileNow]);
+  }, [assignedRecords, dbShiftRecords, externalCheckedInMap, externalCheckedOutMap, localCheckedInMap, localCheckedOutMap, volunteerSessions, volunteer.id, profileNow]);
 
   const isShiftCheckedOut = useCallback((dayKey: string, shiftKey: string): boolean =>
     getDisplayState(dayKey, shiftKey).status === 'completed', [getDisplayState]);
@@ -972,7 +959,6 @@ export function VolunteerProfileView({
           isCheckedIn: inCheck,
           isCheckedOut: outCheck,
           isAdditional: isAdditionalCompletedShift(dayKey, t),
-          flag: display.flag,
         };
       });
 

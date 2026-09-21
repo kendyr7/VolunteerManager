@@ -9,6 +9,9 @@ const {
 } = jiti('../lib/shift-calculations.ts');
 
 const volunteerId = 'volunteer-regression';
+const assertNoAttendanceAlert = (display, message) => {
+  assert.equal(Object.hasOwn(display, 'flag'), false, message);
+};
 
 const saturdayShifts = [
   { id: 'sat-t1', volunteer_id: volunteerId, day_key: 'sáb 12', shift_key: 'T1' },
@@ -34,7 +37,7 @@ assert.deepEqual(
   getShiftDisplayState(
     'sáb 12', 'T3', null, [saturdaySession], saturdayShifts, volunteerId,
   ),
-  { status: 'scheduled', startAt: null, endAt: null, flag: null },
+  { status: 'scheduled', startAt: null, endAt: null },
   'Un turno no asignado con traslape breve debe permanecer neutral.',
 );
 
@@ -58,11 +61,10 @@ assert.equal(
   null,
   'Una sesión de T3/T4 no debe asociarse retroactivamente a T2.',
 );
-assert.equal(
+assertNoAttendanceAlert(
   getShiftDisplayState(
     'lun 14', 'T2', null, [mondaySession], mondayShifts, volunteerId,
-  ).flag,
-  null,
+  ),
   'El perfil no debe mostrar una alerta en T2 cuando el voluntario no tenía T2 asignado.',
 );
 
@@ -86,15 +88,15 @@ const sessionT2Only = {
 
 const displayT1 = getShiftDisplayState('jue 17', 'T1', consecutiveShifts[0], [sessionT2Only], consecutiveShifts, volunteerId);
 assert.equal(displayT1.status, 'scheduled', 'T1 debe permanecer scheduled sin alertar por el traslape de entrega');
-assert.equal(displayT1.flag, null, 'T1 no debe tener alerta');
+assertNoAttendanceAlert(displayT1, 'T1 no debe exponer alertas de asistencia');
 
 const displayT2 = getShiftDisplayState('jue 17', 'T2', consecutiveShifts[1], [sessionT2Only], consecutiveShifts, volunteerId);
 assert.equal(displayT2.status, 'completed', 'T2 debe completarse con éxito');
-assert.equal(displayT2.flag, null, 'T2 no debe tener alerta');
+assertNoAttendanceAlert(displayT2, 'T2 no debe exponer alertas de asistencia');
 
 const displayT3 = getShiftDisplayState('jue 17', 'T3', consecutiveShifts[2], [sessionT2Only], consecutiveShifts, volunteerId);
 assert.equal(displayT3.status, 'scheduled', 'T3 debe permanecer scheduled sin alertar por el traslape de entrega');
-assert.equal(displayT3.flag, null, 'T3 no debe tener alerta');
+assertNoAttendanceAlert(displayT3, 'T3 no debe exponer alertas de asistencia');
 
 const shortVisit = {
   id: 'short-visit',
@@ -109,7 +111,7 @@ const shortVisitDisplay = getShiftDisplayState(
   new Date('2026-09-21T18:00:00.000Z'),
 );
 assert.equal(shortVisitDisplay.status, 'completed', 'Una visita corta histórica debe mostrarse completada');
-assert.equal(shortVisitDisplay.flag, null, 'Una visita corta no debe pintar Turnos en naranja');
+assertNoAttendanceAlert(shortVisitDisplay, 'Una visita corta no debe exponer alertas visuales en Turnos');
 assert.equal(
   getShiftAttendanceReviewFlag(
     'jue 17', 'T2', consecutiveShifts[1], [shortVisit], consecutiveShifts, volunteerId,
@@ -133,7 +135,7 @@ const staleDisplay = getShiftDisplayState(
   new Date('2026-09-21T18:00:00.000Z'),
 );
 assert.equal(staleDisplay.status, 'completed', 'Una sesión histórica abierta debe verse gris, no en turno');
-assert.equal(staleDisplay.flag, null, 'Una salida pendiente histórica no debe pintar Turnos en naranja');
+assertNoAttendanceAlert(staleDisplay, 'Una salida pendiente histórica no debe exponer alertas visuales en Turnos');
 assert.equal(
   getShiftAttendanceReviewFlag(
     'sáb 19', 'T1', staleShift, [staleOpenSession], [staleShift], volunteerId,

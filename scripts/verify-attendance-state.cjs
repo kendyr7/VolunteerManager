@@ -7,7 +7,7 @@ const { inferAdditionalCompletedShifts, inferShiftsForSession, calculateSessionM
 const { processShiftsData, getShiftAttendanceState } = jiti('../lib/coordinator-data.ts');
 const { getVolunteerProfileMetrics } = jiti('../lib/services/volunteer-profile.service.ts');
 const { reconcileVolunteerAssignedShifts } = jiti('../lib/volunteer-assignments.ts');
-const { findAttendanceSessionForShift, getUnifiedShiftTimes, getUnifiedShiftWorkedMinutes, getShiftDisplayState } = jiti('../lib/shift-calculations.ts');
+const { findAttendanceSessionForShift, getUnifiedShiftTimes, getUnifiedShiftWorkedMinutes, getShiftAttendanceReviewFlag, getShiftDisplayState } = jiti('../lib/shift-calculations.ts');
 const RealDate = Date;
 const day = 'jue 10';
 const id = 'synthetic-volunteer';
@@ -257,7 +257,8 @@ check('Una salida breve en el segundo bloque se muestra completada y conserva el
   const display = getShiftDisplayState(day, 'T4', records[1], [shortLate], records, id);
   assert.equal(display.status, 'completed');
   assert.equal(display.endAt, shortLate.ended_at);
-  assert.match(display.flag, /50%/);
+  assert.equal(Object.hasOwn(display, 'flag'), false);
+  assert.match(getShiftAttendanceReviewFlag(day, 'T4', records[1], [shortLate], records, id), /50%/);
 });
 check('Una segunda asistencia breve no oculta un turno ya completado', () => {
   const first = { ...completed, id: 'first', started_at: at('07:00'), ended_at: at('11:30') };
@@ -276,19 +277,22 @@ check('Una salida breve queda completada sin acreditar el turno y conserva el di
   assert.equal(inferShiftsForSession(day, brief.started_at, brief.ended_at, ['T1']).length, 0);
   const display = getShiftDisplayState(day, 'T1', shifts[0], [brief], [shifts[0]], id, new RealDate(at('09:00')));
   assert.equal(display.status, 'completed');
-  assert.match(display.flag, /50%/);
+  assert.equal(Object.hasOwn(display, 'flag'), false);
+  assert.match(getShiftAttendanceReviewFlag(day, 'T1', shifts[0], [brief], [shifts[0]], id, new RealDate(at('09:00'))), /50%/);
   assert.equal(display.endAt, brief.ended_at);
 });
 check('Sesion abierta vencida conserva el estado verde mientras la decisión está pendiente', () => {
   const stale = getShiftDisplayState(day, 'T2', shifts[1], [session], shifts, id, new RealDate(at('16:00')));
   assert.equal(stale.status, 'in_progress');
-  assert.match(stale.flag, /Salida pendiente/);
+  assert.equal(Object.hasOwn(stale, 'flag'), false);
+  assert.match(getShiftAttendanceReviewFlag(day, 'T2', shifts[1], [session], shifts, id, new RealDate(at('16:00'))), /Salida pendiente/);
 });
 check('Flags antiguos de entrada sin sesion usan el estado en turno y conservan el diagnóstico', () => {
   const legacy = { ...shifts[0], checked_in: true, checked_in_at: at('08:00') };
   const display = getShiftDisplayState(day, 'T1', legacy, [], [legacy], id, new RealDate(at('09:00')));
   assert.equal(display.status, 'in_progress');
-  assert.match(display.flag, /verificar presencia/i);
+  assert.equal(Object.hasOwn(display, 'flag'), false);
+  assert.match(getShiftAttendanceReviewFlag(day, 'T1', legacy, [], [legacy], id, new RealDate(at('09:00'))), /verificar presencia/i);
 });
 check('Una salida breve confirmada queda completada sin volver a generar alerta', () => {
   const confirmed = {
@@ -301,7 +305,8 @@ check('Una salida breve confirmada queda completada sin volver a generar alerta'
   };
   const display = getShiftDisplayState(day, 'T1', shifts[0], [confirmed], [shifts[0]], id, new RealDate(at('09:00')));
   assert.equal(display.status, 'completed');
-  assert.equal(display.flag, null);
+  assert.equal(Object.hasOwn(display, 'flag'), false);
+  assert.equal(getShiftAttendanceReviewFlag(day, 'T1', shifts[0], [confirmed], [shifts[0]], id, new RealDate(at('09:00'))), null);
 });
 check('La decisión de turno evita que la misma sesión pinte un turno vecino', () => {
   const decided = {
@@ -320,13 +325,15 @@ check('La sesion prevalece sobre flags heredados contradictorios', () => {
   const otherBlock = { ...completed, started_at: at('07:00'), ended_at: at('10:00') };
   const display = getShiftDisplayState(day, 'T2', flagged, [otherBlock], [shifts[0], flagged], id, new RealDate(at('11:00')));
   assert.equal(display.status, 'scheduled');
-  assert.match(display.flag, /Flags/);
+  assert.equal(Object.hasOwn(display, 'flag'), false);
+  assert.match(getShiftAttendanceReviewFlag(day, 'T2', flagged, [otherBlock], [shifts[0], flagged], id, new RealDate(at('11:00'))), /Flags/);
 });
 check('Entrada heredada no genera alerta cuando la sesión ya terminó normalmente', () => {
   const flagged = { ...shifts[0], checked_in: true, checked_out: false };
   const display = getShiftDisplayState(day, 'T1', flagged, [completed], [flagged], id, new RealDate(at('16:00')));
   assert.equal(display.status, 'completed');
-  assert.equal(display.flag, null);
+  assert.equal(Object.hasOwn(display, 'flag'), false);
+  assert.equal(getShiftAttendanceReviewFlag(day, 'T1', flagged, [completed], [flagged], id, new RealDate(at('16:00'))), null);
 });
 check('Turno continuo muestra la hora de inicio propia y no la entrada del bloque anterior', () => {
   const joined = { ...completed, started_at: at('08:00'), ended_at: at('15:00') };
@@ -349,6 +356,7 @@ check('Asistencia sustancial de mas de 1 hora se completa sin generar alerta de 
   const substantial = { ...completed, started_at: at('09:40'), ended_at: at('12:00') };
   const display = getShiftDisplayState(day, 'T1', shifts[0], [substantial], shifts, id, new RealDate(at('16:00')));
   assert.equal(display.status, 'completed');
-  assert.equal(display.flag, null);
+  assert.equal(Object.hasOwn(display, 'flag'), false);
+  assert.equal(getShiftAttendanceReviewFlag(day, 'T1', shifts[0], [substantial], shifts, id, new RealDate(at('16:00'))), null);
 });
 console.log(`${count} verificaciones de dominio aprobadas. No se escribio en la base de datos.`);

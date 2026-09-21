@@ -17,7 +17,6 @@ export interface DayScheduleItem {
     isCheckedIn: boolean;
     isCheckedOut: boolean;
     isAdditional: boolean;
-    flag?: string | null;
     timeFormatted?: { startTime: string; endTime: string };
   }[];
   assignedAreas: { shiftKey: string; area: ShiftAreaDetails }[];

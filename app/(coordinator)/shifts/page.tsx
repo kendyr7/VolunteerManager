@@ -291,22 +291,6 @@ export default function ShiftsPage() {
     [attendanceReviewResolutionIds],
   );
 
-  const hideResolvedRosterWarning = useCallback((
-    state: ReturnType<typeof getShiftDisplayState>,
-    volunteerId: string,
-    dayKey: string,
-    shiftKey: string,
-  ) => {
-    if (!state.flag) return state;
-    const matching = findRosterSession(volunteerId, dayKey, shiftKey);
-    if (!matching?.id || !resolvedAttendanceSessionIds.has(matching.id)) return state;
-    return {
-      ...state,
-      status: matching.ended_at ? 'completed' as const : state.status,
-      flag: null,
-    };
-  }, [findRosterSession, resolvedAttendanceSessionIds]);
-
   // A single pass feeds the counters, filters and rendered rows. Attendance
   // inference is expensive, so do not repeat it for every consumer on each render.
   const rosterDisplayStates = useMemo(() => {
@@ -320,24 +304,21 @@ export default function ShiftsPage() {
         attendanceLookup.shifts.get(volunteerDayKey) || [],
         shift.volunteer_id, rosterNow,
       );
-      states.set(`${volunteerDayKey}|${shift.shift_key}`, hideResolvedRosterWarning(
-        state, shift.volunteer_id, shift.day_key, shift.shift_key,
-      ));
+      states.set(`${volunteerDayKey}|${shift.shift_key}`, state);
     }
     return states;
-  }, [rawShiftsData, attendanceLookup, rosterNow, hideResolvedRosterWarning]);
+  }, [rawShiftsData, attendanceLookup, rosterNow]);
 
   const getRosterDisplayState = useCallback((volunteerId: string, dayKey: string, shiftKey: string) => {
     const key = `${volunteerId}|${dayKey.toLowerCase().trim()}`;
     const cached = rosterDisplayStates.get(`${key}|${shiftKey}`);
     if (cached) return cached;
-    const state = getShiftDisplayState(
+    return getShiftDisplayState(
       dayKey, shiftKey, getShiftRecord(volunteerId, dayKey, shiftKey),
       attendanceLookup.sessions.get(key) || [], attendanceLookup.shifts.get(key) || [],
       volunteerId, rosterNow,
     );
-    return hideResolvedRosterWarning(state, volunteerId, dayKey, shiftKey);
-  }, [attendanceLookup, getShiftRecord, rosterDisplayStates, rosterNow, hideResolvedRosterWarning]);
+  }, [attendanceLookup, getShiftRecord, rosterDisplayStates, rosterNow]);
 
   const EVENT_DAYS = useMemo(() => {
     const existingKeys = new Set(EVENT_DAYS_DEFAULT.map(d => d.key.toLowerCase()));
@@ -658,7 +639,7 @@ export default function ShiftsPage() {
     const keys = new Set<string>();
     rawShiftsData.forEach(shift => {
       const attendance = getRosterDisplayState(shift.volunteer_id, shift.day_key, shift.shift_key);
-      if (attendance.status !== 'scheduled' || attendance.flag) {
+      if (attendance.status !== 'scheduled') {
         keys.add(`${shift.day_key}|${shift.shift_key}`);
       }
     });
@@ -2087,7 +2068,7 @@ export default function ShiftsPage() {
 
       {viewMode === 'active' && (
         <p className="px-4 sm:px-6 lg:px-8 mb-3 text-xs text-text-dim">
-          Pendientes primero, asistentes activos después y salidas completadas en gris hasta medianoche. El contador incluye solo asistencias verificadas dentro del turno vigente; las salidas pendientes se señalan en ámbar.
+          Pendientes primero, asistentes activos después y salidas completadas en gris hasta medianoche. El contador incluye solo asistencias verificadas dentro del turno vigente.
         </p>
       )}
 

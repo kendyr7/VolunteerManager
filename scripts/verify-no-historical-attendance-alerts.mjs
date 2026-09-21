@@ -14,7 +14,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 const jiti = createJiti(import.meta.url, { fsCache: false, alias: { '@': process.cwd() } });
-const { getShiftDisplayState, findAttendanceSessionForShift } = jiti('../lib/shift-calculations.ts');
+const { getShiftDisplayState } = jiti('../lib/shift-calculations.ts');
 const { getOperationalEventDays, formatDateShort } = jiti('../lib/dates.ts');
 const { getGuatemalaDayKey } = jiti('../lib/scan-history.ts');
 
@@ -31,16 +31,10 @@ async function fetchAll(table, select, configure = query => query, orderBy = 'id
 }
 
 const eventDayKeys = getOperationalEventDays().map(date => formatDateShort(date));
-const [volunteers, shifts, sessions, resolutions] = await Promise.all([
+const [volunteers, shifts, sessions] = await Promise.all([
   fetchAll('volunteers', 'id,first_name,last_name,status'),
   fetchAll('shifts', '*', query => query.in('day_key', eventDayKeys)),
   fetchAll('attendance_sessions', '*', query => query.in('day_key', eventDayKeys)),
-  fetchAll(
-    'attendance_review_resolutions',
-    'session_id,resolved_session_id,hide_alert',
-    query => query.eq('hide_alert', true),
-    'session_id',
-  ),
 ]);
 
 const volunteerById = new Map(volunteers.map(volunteer => [volunteer.id, volunteer]));
@@ -52,9 +46,6 @@ const sessionsByVolunteerDay = Object.groupBy(
   sessions,
   session => `${session.volunteer_id}|${session.day_key.toLowerCase().trim()}`,
 );
-const resolvedSessionIds = new Set(resolutions.flatMap(resolution => (
-  [resolution.session_id, resolution.resolved_session_id].filter(Boolean)
-)));
 const todayKey = getGuatemalaDayKey(new Date());
 const historical = [];
 const current = [];
@@ -72,25 +63,14 @@ for (const shift of shifts) {
     shift.volunteer_id,
     new Date(),
   );
-  if (!display.flag) continue;
-
-  const matching = findAttendanceSessionForShift(
-    shift.day_key,
-    shift.shift_key,
-    daySessions,
-    dayShifts,
-    shift.volunteer_id,
-    new Date(),
-  );
-  if (matching?.id && resolvedSessionIds.has(matching.id)) continue;
+  if (!Object.hasOwn(display, 'flag')) continue;
 
   const volunteer = volunteerById.get(shift.volunteer_id);
   const row = {
     volunteer: `${volunteer?.first_name || ''} ${volunteer?.last_name || ''}`.trim(),
     dayKey: shift.day_key,
     shiftKey: shift.shift_key,
-    flag: display.flag,
-    sessionId: matching?.id || null,
+    leakedProperty: 'flag',
   };
   if (shift.day_key === todayKey) current.push(row);
   else historical.push(row);

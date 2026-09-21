@@ -41,6 +41,8 @@ assert.match(sessionStore, /isMissingDecisionInfrastructure\(error\)/);
 assert.match(shiftCalculation, /matching\.intended_shift_keys/);
 assert.match(shiftCalculation, /decision_hides_alert/);
 assert.doesNotMatch(shiftCalculation, /export type ShiftDisplayStatus[^\n]*needs_review/);
+assert.doesNotMatch(shiftCalculation, /export interface ShiftDisplayState\s*\{[^}]*flag/s);
+assert.match(shiftCalculation, /interface ShiftDiagnosticState extends ShiftDisplayState/);
 
 assert.match(scanner, /const DUPLICATE_SCAN_WINDOW_MS = 5000/);
 assert.doesNotMatch(scanner, /Confirmando opción recomendada/);
@@ -53,5 +55,6 @@ assert.doesNotMatch(scheduleCapture, /bg-amber/);
 assert.doesNotMatch(shiftsPage, /displayState\.flag\s*\?/);
 assert.doesNotMatch(shiftsPage, /Revisar asistencia/);
 assert.doesNotMatch(profile, /needs_review/);
+assert.doesNotMatch(profile, /flag:\s*display\.flag/);
 
 console.log('Attendance decision flow: persistence, atomicity, permissions and three-state UI verified.');
