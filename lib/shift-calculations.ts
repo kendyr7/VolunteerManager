@@ -178,8 +178,15 @@ export function findAttendanceSessionForShift(
 
 export type ShiftDisplayStatus = 'scheduled' | 'in_progress' | 'completed';
 
-/** One attendance interpretation for roster rows and both personal schedules. */
-export function getShiftDisplayState(
+export interface ShiftDisplayState {
+  status: ShiftDisplayStatus;
+  startAt: string | null;
+  endAt: string | null;
+  flag: string | null;
+}
+
+/** Internal interpretation that retains diagnostics for the review queue. */
+function calculateShiftDisplayState(
   dayKey: string,
   shiftKey: string,
   shift: { checked_in?: boolean | null; checked_in_at?: string | null; checked_out?: boolean | null; checked_out_at?: string | null } | null | undefined,
@@ -187,7 +194,7 @@ export function getShiftDisplayState(
   assignedShifts: any[] = [],
   volunteerId?: string,
   now = new Date(),
-): { status: ShiftDisplayStatus; startAt: string | null; endAt: string | null; flag: string | null } {
+): ShiftDisplayState {
   if (sessions.length === 0 && !shift?.checked_in && !shift?.checked_in_at
     && !shift?.checked_out && !shift?.checked_out_at) {
     return { status: 'scheduled', startAt: null, endAt: null, flag: null };
@@ -238,7 +245,8 @@ export function getShiftDisplayState(
     const officialEnd = new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime()
       + getOfficialShiftTime(dayKey, shiftKey).endHour * 3600000;
     if (matching.status !== 'open' || !isToday || now.getTime() >= officialEnd) return {
-      status: 'in_progress', startAt: startedAt, endAt: null,
+      status: matching.status === 'open' && isToday ? 'in_progress' : 'completed',
+      startAt: startedAt, endAt: null,
       flag: matching.decision_hides_alert ? null : matching.status !== 'open' ? 'Sesión finalizada sin hora de salida'
         : 'Salida pendiente: sesión abierta fuera del horario del turno',
     };
@@ -259,7 +267,8 @@ export function getShiftDisplayState(
   };
   if (legacyOut) return { status: 'completed', startAt: shift?.checked_in_at || null, endAt: shift?.checked_out_at || null, flag: null };
   if (legacyIn) return {
-    status: 'in_progress', startAt: shift?.checked_in_at || null, endAt: null,
+    status: parseDayKeyToDateStr(dayKey) === getGuatemalaDate(now) ? 'in_progress' : 'completed',
+    startAt: shift?.checked_in_at || null, endAt: null,
     flag: parseDayKeyToDateStr(dayKey) === getGuatemalaDate(now)
       && now.getTime() < new Date(`${parseDayKeyToDateStr(dayKey)}T00:00:00-06:00`).getTime()
         + getOfficialShiftTime(dayKey, shiftKey).endHour * 3600000
@@ -267,6 +276,41 @@ export function getShiftDisplayState(
       : 'Entrada antigua sin salida ni sesión',
   };
   return { status: 'scheduled', startAt: null, endAt: null, flag: null };
+}
+
+/**
+ * The roster and volunteer schedule expose only the documented visual states:
+ * blue scheduled, green in progress, and gray completed. Attendance anomalies
+ * belong to the separate coordinator review queue and never alter card color.
+ */
+export function getShiftDisplayState(
+  dayKey: string,
+  shiftKey: string,
+  shift: { checked_in?: boolean | null; checked_in_at?: string | null; checked_out?: boolean | null; checked_out_at?: string | null } | null | undefined,
+  sessions: AttendanceSessionTimeRecord[] = [],
+  assignedShifts: any[] = [],
+  volunteerId?: string,
+  now = new Date(),
+): ShiftDisplayState {
+  const state = calculateShiftDisplayState(
+    dayKey, shiftKey, shift, sessions, assignedShifts, volunteerId, now,
+  );
+  return state.flag ? { ...state, flag: null } : state;
+}
+
+/** Returns the preserved anomaly text for the coordinator review queue. */
+export function getShiftAttendanceReviewFlag(
+  dayKey: string,
+  shiftKey: string,
+  shift: { checked_in?: boolean | null; checked_in_at?: string | null; checked_out?: boolean | null; checked_out_at?: string | null } | null | undefined,
+  sessions: AttendanceSessionTimeRecord[] = [],
+  assignedShifts: any[] = [],
+  volunteerId?: string,
+  now = new Date(),
+): string | null {
+  return calculateShiftDisplayState(
+    dayKey, shiftKey, shift, sessions, assignedShifts, volunteerId, now,
+  ).flag;
 }
 
 export function getAttendanceSessionTimes(

@@ -4,6 +4,7 @@ import { createJiti } from 'jiti';
 const jiti = createJiti(import.meta.url, { alias: { '@': process.cwd() } });
 const {
   findAttendanceSessionForShift,
+  getShiftAttendanceReviewFlag,
   getShiftDisplayState,
 } = jiti('../lib/shift-calculations.ts');
 
@@ -94,5 +95,52 @@ assert.equal(displayT2.flag, null, 'T2 no debe tener alerta');
 const displayT3 = getShiftDisplayState('jue 17', 'T3', consecutiveShifts[2], [sessionT2Only], consecutiveShifts, volunteerId);
 assert.equal(displayT3.status, 'scheduled', 'T3 debe permanecer scheduled sin alertar por el traslape de entrega');
 assert.equal(displayT3.flag, null, 'T3 no debe tener alerta');
+
+const shortVisit = {
+  id: 'short-visit',
+  volunteer_id: volunteerId,
+  day_key: 'jue 17',
+  started_at: '2026-09-17T17:10:00.000Z',
+  ended_at: '2026-09-17T17:40:00.000Z',
+  status: 'completed',
+};
+const shortVisitDisplay = getShiftDisplayState(
+  'jue 17', 'T2', consecutiveShifts[1], [shortVisit], consecutiveShifts, volunteerId,
+  new Date('2026-09-21T18:00:00.000Z'),
+);
+assert.equal(shortVisitDisplay.status, 'completed', 'Una visita corta histórica debe mostrarse completada');
+assert.equal(shortVisitDisplay.flag, null, 'Una visita corta no debe pintar Turnos en naranja');
+assert.equal(
+  getShiftAttendanceReviewFlag(
+    'jue 17', 'T2', consecutiveShifts[1], [shortVisit], consecutiveShifts, volunteerId,
+    new Date('2026-09-21T18:00:00.000Z'),
+  ),
+  'Asistencia registrada, pero no supera el 50% del turno',
+  'La visita corta debe conservarse en la cola de decisiones pendientes',
+);
+
+const staleOpenSession = {
+  id: 'stale-open',
+  volunteer_id: volunteerId,
+  day_key: 'sáb 19',
+  started_at: '2026-09-19T13:00:00.000Z',
+  ended_at: null,
+  status: 'open',
+};
+const staleShift = { id: 'stale-t1', volunteer_id: volunteerId, day_key: 'sáb 19', shift_key: 'T1' };
+const staleDisplay = getShiftDisplayState(
+  'sáb 19', 'T1', staleShift, [staleOpenSession], [staleShift], volunteerId,
+  new Date('2026-09-21T18:00:00.000Z'),
+);
+assert.equal(staleDisplay.status, 'completed', 'Una sesión histórica abierta debe verse gris, no en turno');
+assert.equal(staleDisplay.flag, null, 'Una salida pendiente histórica no debe pintar Turnos en naranja');
+assert.equal(
+  getShiftAttendanceReviewFlag(
+    'sáb 19', 'T1', staleShift, [staleOpenSession], [staleShift], volunteerId,
+    new Date('2026-09-21T18:00:00.000Z'),
+  ),
+  'Salida pendiente: sesión abierta fuera del horario del turno',
+  'La salida pendiente debe conservarse en la cola de decisiones pendientes',
+);
 
 console.log('Shift calculation regression tests passed.');

@@ -29,7 +29,7 @@ import { useRemoveSearchParam } from "@/lib/use-remove-search-param";
 import { getShiftCapacityStatus, getShiftCommitteeScope } from "@/lib/shift-capacity";
 import { attendanceSortPriority, isLiveShiftRoster, resolveShiftView, type ShiftViewMode } from '@/lib/shift-view';
 import { getGuatemalaDate, getGuatemalaDayKey } from '@/lib/scan-history';
-import { findAttendanceSessionForShift, getShiftDisplayState } from '@/lib/shift-calculations';
+import { findAttendanceSessionForShift, getShiftAttendanceReviewFlag, getShiftDisplayState } from '@/lib/shift-calculations';
 import { getAttendanceSessionReviewFlag } from '@/lib/attendance-review';
 import { needsShortCheckoutConfirmation } from '@/lib/session-utils';
 
@@ -695,24 +695,34 @@ export default function ShiftsPage() {
       const volunteer = volunteerMap.get(shift.volunteer_id);
       if (!volunteer || !matchesFilters(volunteer, '', selectedCommittees, [], [], currentRole)) return [];
       const display = getRosterDisplayState(shift.volunteer_id, shift.day_key, shift.shift_key);
-      const matching = display.flag
+      const lookupKey = `${shift.volunteer_id}|${shift.day_key.toLowerCase().trim()}`;
+      const reviewFlag = getShiftAttendanceReviewFlag(
+        shift.day_key,
+        shift.shift_key,
+        shift,
+        attendanceLookup.sessions.get(lookupKey) || [],
+        attendanceLookup.shifts.get(lookupKey) || [],
+        shift.volunteer_id,
+        rosterNow,
+      );
+      const matching = reviewFlag
         ? findRosterSession(shift.volunteer_id, shift.day_key, shift.shift_key)
         : undefined;
       if (matching?.id && resolvedSessionIds.has(matching.id)) return [];
-      if (display.flag?.includes('no supera el 50%')) {
+      if (reviewFlag?.includes('no supera el 50%')) {
         if (matching?.id) coveredBriefSessionIds.add(matching.id);
       }
       const isShiftToday = parseDayKeyToDateStr(shift.day_key) === getGuatemalaDate(rosterNow);
-      if (display.flag?.includes('Salida pendiente') && isShiftToday) {
+      if (reviewFlag?.includes('Salida pendiente') && isShiftToday) {
         return [];
       }
-      return display.flag ? [{
+      return reviewFlag ? [{
         id: shift.id,
         volunteer,
         dayKey: shift.day_key,
         shiftKey: shift.shift_key,
         status: display.status,
-        flag: display.flag,
+        flag: reviewFlag,
       }] : [];
     });
     const sessionItems = contextSessionsData.flatMap(session => {
