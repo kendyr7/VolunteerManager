@@ -52,6 +52,8 @@ export interface ReportCommittee {
 
 export interface DailyAttendanceTotal {
   date: string;
+  maleAttendance: number | null;
+  femaleAttendance: number | null;
   totalAttendance: number;
   updatedAt: string;
 }
@@ -125,6 +127,8 @@ export interface DailyCoverage {
   assigned: number;
   covered: number;
   checkedIn: number;
+  maleAttendance: number | null;
+  femaleAttendance: number | null;
   totalAttendance: number | null;
   missing: number;
   coverageRate: number;

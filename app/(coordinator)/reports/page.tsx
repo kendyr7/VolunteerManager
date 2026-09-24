@@ -220,7 +220,10 @@ export default function ReportsPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState('');
-  const [dailyAttendanceDrafts, setDailyAttendanceDrafts] = useState<Record<string, string>>({});
+  const [dailyAttendanceDrafts, setDailyAttendanceDrafts] = useState<Record<string, {
+    male: string;
+    female: string;
+  }>>({});
   const [savingDailyAttendanceDate, setSavingDailyAttendanceDate] = useState<string | null>(null);
   const [attendanceToast, setAttendanceToast] = useState<{
     message: string;
@@ -315,7 +318,10 @@ export default function ReportsPage() {
     } else if (res.data) {
       setData(res.data);
       setDailyAttendanceDrafts(Object.fromEntries(
-        res.data.dailyAttendanceTotals.map((total) => [total.date, String(total.totalAttendance)])
+        res.data.dailyAttendanceTotals.map((total) => [total.date, {
+          male: total.maleAttendance == null ? '' : String(total.maleAttendance),
+          female: total.femaleAttendance == null ? '' : String(total.femaleAttendance),
+        }])
       ));
     }
     setLoading(false);
@@ -327,12 +333,49 @@ export default function ReportsPage() {
     loadData(true);
   }, []);
 
+  const updateDailyAttendanceDraft = (date: string, field: 'male' | 'female', value: string) => {
+    setDailyAttendanceDrafts((current) => ({
+      ...current,
+      [date]: {
+        male: current[date]?.male ?? '',
+        female: current[date]?.female ?? '',
+        [field]: value,
+      },
+    }));
+  };
+
+  const getDailyAttendanceDraftTotal = (date: string) => {
+    const draft = dailyAttendanceDrafts[date];
+    if (!draft || draft.male.trim() === '' || draft.female.trim() === '') return null;
+    const maleAttendance = Number(draft.male);
+    const femaleAttendance = Number(draft.female);
+    if (
+      !Number.isSafeInteger(maleAttendance)
+      || !Number.isSafeInteger(femaleAttendance)
+      || maleAttendance < 0
+      || femaleAttendance < 0
+      || maleAttendance + femaleAttendance > 1000000
+    ) return null;
+    return maleAttendance + femaleAttendance;
+  };
+
   const handleSaveDailyAttendance = async (date: string) => {
-    const rawValue = (dailyAttendanceDrafts[date] || '').trim();
-    const totalAttendance = Number(rawValue);
-    if (rawValue === '' || !Number.isSafeInteger(totalAttendance) || totalAttendance < 0 || totalAttendance > 1000000) {
+    const draft = dailyAttendanceDrafts[date];
+    const maleAttendance = Number(draft?.male);
+    const femaleAttendance = Number(draft?.female);
+    const totalAttendance = maleAttendance + femaleAttendance;
+    if (
+      !draft
+      || draft.male.trim() === ''
+      || draft.female.trim() === ''
+      || !Number.isSafeInteger(maleAttendance)
+      || !Number.isSafeInteger(femaleAttendance)
+      || maleAttendance < 0
+      || femaleAttendance < 0
+      || totalAttendance > 1000000
+    ) {
       setAttendanceToast({
-        message: 'Ingresa una asistencia total válida entre 0 y 1,000,000.',
+        message: 'Ingresa cantidades válidas de hombres y mujeres; el total no puede superar 1,000,000.',
         type: 'error',
         isVisible: true,
       });
@@ -341,7 +384,7 @@ export default function ReportsPage() {
 
     setSavingDailyAttendanceDate(date);
     try {
-      const result = await saveDailyAttendanceTotal({ date, totalAttendance });
+      const result = await saveDailyAttendanceTotal({ date, maleAttendance, femaleAttendance });
       if (!result.success) {
         setAttendanceToast({ message: result.error, type: 'error', isVisible: true });
         return;
@@ -354,13 +397,25 @@ export default function ReportsPage() {
           ...current,
           dailyAttendanceTotals: [
             ...otherTotals,
-            { date, totalAttendance: result.totalAttendance, updatedAt: result.updatedAt },
+            {
+              date,
+              maleAttendance: result.maleAttendance,
+              femaleAttendance: result.femaleAttendance,
+              totalAttendance: result.totalAttendance,
+              updatedAt: result.updatedAt,
+            },
           ],
         };
       });
-      setDailyAttendanceDrafts((current) => ({ ...current, [date]: String(result.totalAttendance) }));
+      setDailyAttendanceDrafts((current) => ({
+        ...current,
+        [date]: {
+          male: String(result.maleAttendance),
+          female: String(result.femaleAttendance),
+        },
+      }));
       setAttendanceToast({
-        message: 'Asistencia total del día guardada.',
+        message: 'Asistencia de hombres, mujeres y total guardada.',
         type: 'success',
         isVisible: true,
       });
@@ -2002,7 +2057,7 @@ export default function ReportsPage() {
                       Cobertura por Día de Evento
                     </h3>
                     <p className="text-xs text-text-dim mt-0.5 font-inter">
-                      Detalle diario de turnos requeridos, asignados, check-ins y asistencia total registrada {includeSimulation ? 'del 5 al 26 de septiembre, incluyendo la simulación' : 'del 10 al 26 de septiembre'}.
+                      Detalle diario de turnos requeridos, asignados, check-ins y asistencia registrada por hombres, mujeres y total {includeSimulation ? 'del 5 al 26 de septiembre, incluyendo la simulación' : 'del 10 al 26 de septiembre'}.
                     </p>
                   </div>
 
@@ -2016,7 +2071,11 @@ export default function ReportsPage() {
                           <SortableTableHead field="assigned" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">Asignados</SortableTableHead>
                           <SortableTableHead field="checkedIn" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">Asistieron (Check-in)</SortableTableHead>
                           {data?.canViewGlobalReports && (
-                            <th className="min-w-48 px-4 py-4 text-center font-inter font-bold">Asistencia total</th>
+                            <>
+                              <th className="min-w-32 px-3 py-4 text-center font-inter font-bold">Hombres</th>
+                              <th className="min-w-32 px-3 py-4 text-center font-inter font-bold">Mujeres</th>
+                              <th className="min-w-36 px-3 py-4 text-center font-inter font-bold">Total asistencia</th>
+                            </>
                           )}
                           <SortableTableHead field="missing" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">Faltantes</SortableTableHead>
                           <SortableTableHead field="coverageRate" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">% Cobertura</SortableTableHead>
@@ -2039,37 +2098,74 @@ export default function ReportsPage() {
                               {day.checkedIn}
                             </td>
                             {data?.canViewGlobalReports && (
-                              <td className="px-4 py-3 text-center">
-                                {data.canManageDailyAttendanceTotals ? (
-                                  <div className="mx-auto flex w-44 items-center gap-2">
+                              <>
+                                <td className="px-3 py-3 text-center">
+                                  {data.canManageDailyAttendanceTotals ? (
                                     <Input
                                       type="number"
                                       inputMode="numeric"
                                       min={0}
                                       max={1000000}
                                       step={1}
-                                      value={dailyAttendanceDrafts[day.date] ?? ''}
-                                      onChange={(event) => setDailyAttendanceDrafts((current) => ({
-                                        ...current,
-                                        [day.date]: event.target.value,
-                                      }))}
+                                      value={dailyAttendanceDrafts[day.date]?.male ?? ''}
+                                      onChange={(event) => updateDailyAttendanceDraft(day.date, 'male', event.target.value)}
                                       onKeyDown={(event) => {
                                         if (event.key === 'Enter') void handleSaveDailyAttendance(day.date);
                                       }}
-                                      aria-label={`Asistencia total de ${day.dayLabel}`}
-                                      placeholder="Total"
+                                      aria-label={`Hombres asistentes el ${day.dayLabel}`}
+                                      placeholder="0"
                                       className="h-9 text-center font-inter font-bold tabular-nums"
                                       disabled={savingDailyAttendanceDate === day.date}
                                     />
+                                  ) : (
+                                    <span className="font-inter font-bold text-text tabular-nums">
+                                      {day.maleAttendance?.toLocaleString('es-GT') ?? '—'}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3 text-center">
+                                  {data.canManageDailyAttendanceTotals ? (
+                                    <Input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min={0}
+                                      max={1000000}
+                                      step={1}
+                                      value={dailyAttendanceDrafts[day.date]?.female ?? ''}
+                                      onChange={(event) => updateDailyAttendanceDraft(day.date, 'female', event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') void handleSaveDailyAttendance(day.date);
+                                      }}
+                                      aria-label={`Mujeres asistentes el ${day.dayLabel}`}
+                                      placeholder="0"
+                                      className="h-9 text-center font-inter font-bold tabular-nums"
+                                      disabled={savingDailyAttendanceDate === day.date}
+                                    />
+                                  ) : (
+                                    <span className="font-inter font-bold text-text tabular-nums">
+                                      {day.femaleAttendance?.toLocaleString('es-GT') ?? '—'}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3 text-center">
+                                  {data.canManageDailyAttendanceTotals ? (
+                                    <div className="mx-auto flex items-center justify-center gap-2">
+                                      <span className="min-w-12 font-inter font-black text-text tabular-nums">
+                                        {(getDailyAttendanceDraftTotal(day.date) ?? day.totalAttendance)?.toLocaleString('es-GT') ?? '—'}
+                                      </span>
                                     <button
                                       type="button"
                                       onClick={() => void handleSaveDailyAttendance(day.date)}
                                       disabled={
                                         savingDailyAttendanceDate === day.date
-                                        || (dailyAttendanceDrafts[day.date] ?? '') === (day.totalAttendance == null ? '' : String(day.totalAttendance))
+                                        || getDailyAttendanceDraftTotal(day.date) == null
+                                        || (
+                                          (dailyAttendanceDrafts[day.date]?.male ?? '') === (day.maleAttendance == null ? '' : String(day.maleAttendance))
+                                          && (dailyAttendanceDrafts[day.date]?.female ?? '') === (day.femaleAttendance == null ? '' : String(day.femaleAttendance))
+                                        )
                                       }
-                                      aria-label={`Guardar asistencia total de ${day.dayLabel}`}
-                                      title="Guardar asistencia total"
+                                      aria-label={`Guardar asistencia por género de ${day.dayLabel}`}
+                                      title="Guardar asistencia"
                                       className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-[#4d7cfe]/25 bg-[#4d7cfe]/10 text-[#4d7cfe] transition-colors hover:bg-[#4d7cfe]/20 disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                       <span className={`material-symbols-outlined text-[18px] ${savingDailyAttendanceDate === day.date ? 'animate-spin' : ''}`}>
@@ -2082,7 +2178,8 @@ export default function ReportsPage() {
                                     {day.totalAttendance?.toLocaleString('es-GT') ?? '—'}
                                   </span>
                                 )}
-                              </td>
+                                </td>
+                              </>
                             )}
                             <td className="px-4 py-4 text-center font-inter font-bold tabular-nums">
                               <span className={day.missing > 0 ? "text-rose-400 font-extrabold" : "text-emerald-400"}>
@@ -2157,39 +2254,70 @@ export default function ReportsPage() {
                         {data?.canViewGlobalReports && (
                           <div className="rounded-xl border border-[#4d7cfe]/15 bg-[#4d7cfe]/5 p-3">
                             <div className="mb-2 flex items-center justify-between gap-2">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Asistencia total del día</span>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Asistencia del día</span>
                               <span className="material-symbols-outlined text-[17px] text-[#4d7cfe]">groups</span>
                             </div>
                             {data.canManageDailyAttendanceTotals ? (
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  type="number"
-                                  inputMode="numeric"
-                                  min={0}
-                                  max={1000000}
-                                  step={1}
-                                  value={dailyAttendanceDrafts[day.date] ?? ''}
-                                  onChange={(event) => setDailyAttendanceDrafts((current) => ({
-                                    ...current,
-                                    [day.date]: event.target.value,
-                                  }))}
-                                  onKeyDown={(event) => {
-                                    if (event.key === 'Enter') void handleSaveDailyAttendance(day.date);
-                                  }}
-                                  aria-label={`Asistencia total de ${day.dayLabel}`}
-                                  placeholder="Ingresa el total"
-                                  className="h-10 font-inter font-bold tabular-nums"
-                                  disabled={savingDailyAttendanceDate === day.date}
-                                />
+                              <div className="space-y-2.5">
+                                <div className="grid grid-cols-3 gap-2">
+                                  <label className="space-y-1">
+                                    <span className="block text-[9px] font-bold uppercase tracking-wider text-text-dim">Hombres</span>
+                                    <Input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min={0}
+                                      max={1000000}
+                                      step={1}
+                                      value={dailyAttendanceDrafts[day.date]?.male ?? ''}
+                                      onChange={(event) => updateDailyAttendanceDraft(day.date, 'male', event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') void handleSaveDailyAttendance(day.date);
+                                      }}
+                                      aria-label={`Hombres asistentes el ${day.dayLabel}`}
+                                      placeholder="0"
+                                      className="h-10 text-center font-inter font-bold tabular-nums"
+                                      disabled={savingDailyAttendanceDate === day.date}
+                                    />
+                                  </label>
+                                  <label className="space-y-1">
+                                    <span className="block text-[9px] font-bold uppercase tracking-wider text-text-dim">Mujeres</span>
+                                    <Input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min={0}
+                                      max={1000000}
+                                      step={1}
+                                      value={dailyAttendanceDrafts[day.date]?.female ?? ''}
+                                      onChange={(event) => updateDailyAttendanceDraft(day.date, 'female', event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') void handleSaveDailyAttendance(day.date);
+                                      }}
+                                      aria-label={`Mujeres asistentes el ${day.dayLabel}`}
+                                      placeholder="0"
+                                      className="h-10 text-center font-inter font-bold tabular-nums"
+                                      disabled={savingDailyAttendanceDate === day.date}
+                                    />
+                                  </label>
+                                  <div className="space-y-1">
+                                    <span className="block text-[9px] font-bold uppercase tracking-wider text-text-dim">Total</span>
+                                    <div className="flex h-10 items-center justify-center rounded-md border border-[#4d7cfe]/20 bg-dark2/70 font-inter font-black text-text tabular-nums">
+                                      {(getDailyAttendanceDraftTotal(day.date) ?? day.totalAttendance)?.toLocaleString('es-GT') ?? '—'}
+                                    </div>
+                                  </div>
+                                </div>
                                 <Button
                                   type="button"
                                   size="sm"
                                   onClick={() => void handleSaveDailyAttendance(day.date)}
                                   disabled={
                                     savingDailyAttendanceDate === day.date
-                                    || (dailyAttendanceDrafts[day.date] ?? '') === (day.totalAttendance == null ? '' : String(day.totalAttendance))
+                                    || getDailyAttendanceDraftTotal(day.date) == null
+                                    || (
+                                      (dailyAttendanceDrafts[day.date]?.male ?? '') === (day.maleAttendance == null ? '' : String(day.maleAttendance))
+                                      && (dailyAttendanceDrafts[day.date]?.female ?? '') === (day.femaleAttendance == null ? '' : String(day.femaleAttendance))
+                                    )
                                   }
-                                  className="h-10 shrink-0 px-3"
+                                  className="h-10 w-full"
                                 >
                                   <span className={`material-symbols-outlined text-[18px] ${savingDailyAttendanceDate === day.date ? 'animate-spin' : ''}`}>
                                     {savingDailyAttendanceDate === day.date ? 'progress_activity' : 'save'}
@@ -2198,9 +2326,20 @@ export default function ReportsPage() {
                                 </Button>
                               </div>
                             ) : (
-                              <p className="text-lg font-black text-text tabular-nums">
-                                {day.totalAttendance?.toLocaleString('es-GT') ?? 'Sin registrar'}
-                              </p>
+                              <div className="grid grid-cols-3 gap-2 text-center">
+                                {([
+                                  ['Hombres', day.maleAttendance],
+                                  ['Mujeres', day.femaleAttendance],
+                                  ['Total', day.totalAttendance],
+                                ] as const).map(([label, value]) => (
+                                  <div key={label}>
+                                    <span className="block text-[9px] font-bold uppercase tracking-wider text-text-dim">{label}</span>
+                                    <span className="font-inter text-lg font-black text-text tabular-nums">
+                                      {typeof value === 'number' ? value.toLocaleString('es-GT') : '—'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
                             )}
                           </div>
                         )}

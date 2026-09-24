@@ -7,7 +7,7 @@ const source: ReportsData = {
   canViewGlobalReports: true,
   canManageDailyAttendanceTotals: true,
   dailyAttendanceTotals: [
-    { date: '2026-09-10', totalAttendance: 2750, updatedAt: '2026-09-10T23:00:00.000Z' },
+    { date: '2026-09-10', maleAttendance: 1300, femaleAttendance: 1450, totalAttendance: 2750, updatedAt: '2026-09-10T23:00:00.000Z' },
   ],
   uniqueCommittees: [
     { id: 'guides', name: 'Guías' },
@@ -50,6 +50,8 @@ assert.deepEqual(unfiltered.ageSegmentation.map(row => [row.range, row.count]), 
 ], 'Age segments use the complete eligible volunteer population');
 assert.equal(unfiltered.volunteerRanking.find(row => row.id === 'maria')?.reliability, 100, 'Pending-only volunteers keep neutral reliability');
 assert.equal(unfiltered.dailyCoverage[0].totalAttendance, 2750, 'Daily coverage includes the manually recorded event attendance total');
+assert.equal(unfiltered.dailyCoverage[0].maleAttendance, 1300, 'Daily coverage includes the recorded male attendance');
+assert.equal(unfiltered.dailyCoverage[0].femaleAttendance, 1450, 'Daily coverage includes the recorded female attendance');
 assert.equal(unfiltered.dailyCoverage[1].totalAttendance, null, 'Days without a manual total remain empty');
 
 const singleCommitteeDate = buildReportView(source, { committeeIds: ['guides'], dates: ['2026-09-10'] });

@@ -279,6 +279,8 @@ export function buildReportView(data: ReportsData, filters: ReportFilters = {}):
         assigned,
         covered,
         checkedIn,
+        maleAttendance: recordedTotal?.maleAttendance ?? null,
+        femaleAttendance: recordedTotal?.femaleAttendance ?? null,
         totalAttendance: recordedTotal?.totalAttendance ?? null,
         missing: sum(Object.values(byShift).map((value) => value.missing)),
         coverageRate: percentage(covered, required),

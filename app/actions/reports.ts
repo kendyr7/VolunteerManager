@@ -60,6 +60,8 @@ interface ReportRequirementRow {
 
 interface DailyAttendanceTotalRow {
   event_date: string;
+  male_attendance: number | null;
+  female_attendance: number | null;
   total_attendance: number;
   updated_at: string;
 }
@@ -125,7 +127,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
         ? fetchAllRowsStrict<DailyAttendanceTotalRow>(
             supabase,
             'daily_event_attendance_totals',
-            'event_date, total_attendance, updated_at',
+            'event_date, male_attendance, female_attendance, total_attendance, updated_at',
             query => query.order('event_date')
           )
         : Promise.resolve([]),
@@ -522,6 +524,8 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
         uniqueCommittees,
         dailyAttendanceTotals: (dailyTotalsData || []).map((row) => ({
           date: row.event_date,
+          maleAttendance: row.male_attendance,
+          femaleAttendance: row.female_attendance,
           totalAttendance: row.total_attendance,
           updatedAt: row.updated_at,
         })),
@@ -537,18 +541,33 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
 
 export async function saveDailyAttendanceTotal(input: {
   date: string;
+  maleAttendance: number;
+  femaleAttendance: number;
+}): Promise<{
+  success: true;
+  maleAttendance: number;
+  femaleAttendance: number;
   totalAttendance: number;
-}): Promise<{ success: true; totalAttendance: number; updatedAt: string } | { success: false; error: string }> {
+  updatedAt: string;
+} | { success: false; error: string }> {
   try {
     const actor = await requireCapability('manage_daily_attendance_totals');
     const date = String(input.date || '').trim();
-    const totalAttendance = Number(input.totalAttendance);
+    const maleAttendance = Number(input.maleAttendance);
+    const femaleAttendance = Number(input.femaleAttendance);
+    const totalAttendance = maleAttendance + femaleAttendance;
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !isOperationalEventDay(date)) {
       return { success: false, error: 'La fecha no corresponde a un día válido del evento.' };
     }
-    if (!Number.isSafeInteger(totalAttendance) || totalAttendance < 0 || totalAttendance > 1000000) {
-      return { success: false, error: 'Ingresa una asistencia total válida entre 0 y 1,000,000.' };
+    if (
+      !Number.isSafeInteger(maleAttendance)
+      || !Number.isSafeInteger(femaleAttendance)
+      || maleAttendance < 0
+      || femaleAttendance < 0
+      || totalAttendance > 1000000
+    ) {
+      return { success: false, error: 'Ingresa cantidades válidas de hombres y mujeres; el total no puede superar 1,000,000.' };
     }
 
     const supabase = await getAdminSupabase();
@@ -557,11 +576,13 @@ export async function saveDailyAttendanceTotal(input: {
       .from('daily_event_attendance_totals')
       .upsert({
         event_date: date,
+        male_attendance: maleAttendance,
+        female_attendance: femaleAttendance,
         total_attendance: totalAttendance,
         updated_by: actor.userId,
         updated_at: updatedAt,
       }, { onConflict: 'event_date' })
-      .select('total_attendance, updated_at')
+      .select('male_attendance, female_attendance, total_attendance, updated_at')
       .single();
 
     if (error) {
@@ -572,6 +593,8 @@ export async function saveDailyAttendanceTotal(input: {
     revalidatePath('/reports');
     return {
       success: true,
+      maleAttendance: data.male_attendance,
+      femaleAttendance: data.female_attendance,
       totalAttendance: data.total_attendance,
       updatedAt: data.updated_at,
     };
