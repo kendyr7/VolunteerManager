@@ -52,6 +52,9 @@ const items: ReportItem[] = [
 ];
 
 const source: ReportsData = {
+  canViewGlobalReports: true,
+  canManageDailyAttendanceTotals: true,
+  dailyAttendanceTotals: [],
   uniqueCommittees: [
     { id: 'history', name: 'Historia' },
     { id: 'security', name: 'Seguridad' },

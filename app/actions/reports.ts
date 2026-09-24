@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from "@/lib/supabase/server";
+import { getAdminSupabase } from "@/lib/supabase/admin";
 import { fetchAllRowsStrict } from "@/lib/supabase-helpers";
 import { requireCapability } from "@/lib/authorization";
 import { hasCapability } from "@/lib/role-permissions";
@@ -10,6 +11,7 @@ import { es } from "date-fns/locale";
 import { getGuatemalaHourFloat, calculateSessionMinutes, getSessionShiftCompletedAt, inferShiftsForSession } from "@/lib/session-utils";
 import { getGuatemalaDate } from "@/lib/scan-history";
 import type { ReportItem, ReportsData } from "@/lib/reports/types";
+import { revalidatePath } from "next/cache";
 
 export type { ReportItem, ReportsData } from "@/lib/reports/types";
 
@@ -56,6 +58,12 @@ interface ReportRequirementRow {
   required: number;
 }
 
+interface DailyAttendanceTotalRow {
+  event_date: string;
+  total_attendance: number;
+  updated_at: string;
+}
+
 function relationName(value: ReportShiftRow['committee_areas']): string | null {
   if (Array.isArray(value)) return value[0]?.name || null;
   return value?.name || null;
@@ -66,6 +74,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
     const includeSimulation = options.includeSimulation !== undefined ? options.includeSimulation : true;
     const authorization = await requireCapability('view_reports');
     const canSeeGlobalReports = hasCapability(authorization, 'view_global_reports');
+    const canManageDailyAttendanceTotals = hasCapability(authorization, 'manage_daily_attendance_totals');
     const userCommitteeId = authorization.committeeId;
 
     // Service Role fallback for Supabase RLS
@@ -81,7 +90,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
     }
 
     // Fetch independent report datasets concurrently and request only the fields used below.
-    const [volsData, commsData, shiftsData, sessionsData, reqsData] = await Promise.all([
+    const [volsData, commsData, shiftsData, sessionsData, reqsData, dailyTotalsData] = await Promise.all([
       fetchAllRowsStrict<ReportVolunteerRow>(
         supabase,
         'volunteers',
@@ -112,6 +121,14 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
         'committee_id, shift_key, required',
         query => query.order('id')
       ),
+      canSeeGlobalReports
+        ? fetchAllRowsStrict<DailyAttendanceTotalRow>(
+            supabase,
+            'daily_event_attendance_totals',
+            'event_date, total_attendance, updated_at',
+            query => query.order('event_date')
+          )
+        : Promise.resolve([]),
     ]);
 
     // O(1) indexes replace the previous shifts x volunteers x audit-logs scans.
@@ -503,10 +520,65 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
         uniqueNeighborhoods,
         uniqueStakes,
         uniqueCommittees,
+        dailyAttendanceTotals: (dailyTotalsData || []).map((row) => ({
+          date: row.event_date,
+          totalAttendance: row.total_attendance,
+          updatedAt: row.updated_at,
+        })),
+        canViewGlobalReports: canSeeGlobalReports,
+        canManageDailyAttendanceTotals,
       },
     };
   } catch (err: any) {
     console.error("Critical error in getReportsData action:", err);
     return { error: "Ocurrió un error inesperado al cargar reportes." };
+  }
+}
+
+export async function saveDailyAttendanceTotal(input: {
+  date: string;
+  totalAttendance: number;
+}): Promise<{ success: true; totalAttendance: number; updatedAt: string } | { success: false; error: string }> {
+  try {
+    const actor = await requireCapability('manage_daily_attendance_totals');
+    const date = String(input.date || '').trim();
+    const totalAttendance = Number(input.totalAttendance);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !isOperationalEventDay(date)) {
+      return { success: false, error: 'La fecha no corresponde a un día válido del evento.' };
+    }
+    if (!Number.isSafeInteger(totalAttendance) || totalAttendance < 0 || totalAttendance > 1000000) {
+      return { success: false, error: 'Ingresa una asistencia total válida entre 0 y 1,000,000.' };
+    }
+
+    const supabase = await getAdminSupabase();
+    const updatedAt = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('daily_event_attendance_totals')
+      .upsert({
+        event_date: date,
+        total_attendance: totalAttendance,
+        updated_by: actor.userId,
+        updated_at: updatedAt,
+      }, { onConflict: 'event_date' })
+      .select('total_attendance, updated_at')
+      .single();
+
+    if (error) {
+      console.error('[REPORTS] Could not save daily attendance total:', error.message);
+      return { success: false, error: 'No se pudo guardar la asistencia total. Inténtalo nuevamente.' };
+    }
+
+    revalidatePath('/reports');
+    return {
+      success: true,
+      totalAttendance: data.total_attendance,
+      updatedAt: data.updated_at,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'No se pudo guardar la asistencia total.',
+    };
   }
 }

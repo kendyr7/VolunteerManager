@@ -4,6 +4,11 @@ import { getSessionShiftCompletedAt, inferShiftsForSession } from '../lib/sessio
 import type { ReportsData } from '../lib/reports/types';
 
 const source: ReportsData = {
+  canViewGlobalReports: true,
+  canManageDailyAttendanceTotals: true,
+  dailyAttendanceTotals: [
+    { date: '2026-09-10', totalAttendance: 2750, updatedAt: '2026-09-10T23:00:00.000Z' },
+  ],
   uniqueCommittees: [
     { id: 'guides', name: 'Guías' },
     { id: 'security', name: 'Seguridad' },
@@ -44,6 +49,8 @@ assert.deepEqual(unfiltered.ageSegmentation.map(row => [row.range, row.count]), 
   ['< 18', 0], ['18 - 25', 1], ['26 - 35', 0], ['36 - 50', 1], ['51+', 1], ['Sin edad', 0],
 ], 'Age segments use the complete eligible volunteer population');
 assert.equal(unfiltered.volunteerRanking.find(row => row.id === 'maria')?.reliability, 100, 'Pending-only volunteers keep neutral reliability');
+assert.equal(unfiltered.dailyCoverage[0].totalAttendance, 2750, 'Daily coverage includes the manually recorded event attendance total');
+assert.equal(unfiltered.dailyCoverage[1].totalAttendance, null, 'Days without a manual total remain empty');
 
 const singleCommitteeDate = buildReportView(source, { committeeIds: ['guides'], dates: ['2026-09-10'] });
 assert.equal(singleCommitteeDate.items.length, 1, 'Committee and date filters combine with AND');
@@ -98,6 +105,9 @@ assert.equal(getSessionShiftCompletedAt('sáb 12', 'T2', openStart, null, ['T1',
 
 const assignedByShift = { 1: 4, 2: 7, 3: 7, 4: 7 };
 const slotBalanceSource: ReportsData = {
+  canViewGlobalReports: true,
+  canManageDailyAttendanceTotals: true,
+  dailyAttendanceTotals: [],
   uniqueCommittees: [{ id: 'history', name: 'Historia' }],
   uniqueNeighborhoods: [],
   uniqueStakes: [],

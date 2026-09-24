@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { getReportsData, ReportsData } from "@/app/actions/reports";
+import { getReportsData, ReportsData, saveDailyAttendanceTotal } from "@/app/actions/reports";
 import { buildReportView } from "@/lib/reports/aggregate";
 import type { ReportShiftStatus } from "@/lib/reports/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Toast } from "@/components/ui/toast";
 import { 
   Select, 
   SelectTrigger, 
@@ -218,6 +220,13 @@ export default function ReportsPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState('');
+  const [dailyAttendanceDrafts, setDailyAttendanceDrafts] = useState<Record<string, string>>({});
+  const [savingDailyAttendanceDate, setSavingDailyAttendanceDate] = useState<string | null>(null);
+  const [attendanceToast, setAttendanceToast] = useState<{
+    message: string;
+    type: 'success' | 'error';
+    isVisible: boolean;
+  }>({ message: '', type: 'success', isVisible: false });
 
   // Pagination State (30 items per page for instant 1ms DOM rendering)
   const [currentPage, setCurrentPage] = useState(1);
@@ -305,6 +314,9 @@ export default function ReportsPage() {
       setErrorMsg(res.error);
     } else if (res.data) {
       setData(res.data);
+      setDailyAttendanceDrafts(Object.fromEntries(
+        res.data.dailyAttendanceTotals.map((total) => [total.date, String(total.totalAttendance)])
+      ));
     }
     setLoading(false);
   };
@@ -314,6 +326,54 @@ export default function ReportsPage() {
     hasLoadedReportsRef.current = true;
     loadData(true);
   }, []);
+
+  const handleSaveDailyAttendance = async (date: string) => {
+    const rawValue = (dailyAttendanceDrafts[date] || '').trim();
+    const totalAttendance = Number(rawValue);
+    if (rawValue === '' || !Number.isSafeInteger(totalAttendance) || totalAttendance < 0 || totalAttendance > 1000000) {
+      setAttendanceToast({
+        message: 'Ingresa una asistencia total válida entre 0 y 1,000,000.',
+        type: 'error',
+        isVisible: true,
+      });
+      return;
+    }
+
+    setSavingDailyAttendanceDate(date);
+    try {
+      const result = await saveDailyAttendanceTotal({ date, totalAttendance });
+      if (!result.success) {
+        setAttendanceToast({ message: result.error, type: 'error', isVisible: true });
+        return;
+      }
+
+      setData((current) => {
+        if (!current) return current;
+        const otherTotals = current.dailyAttendanceTotals.filter((total) => total.date !== date);
+        return {
+          ...current,
+          dailyAttendanceTotals: [
+            ...otherTotals,
+            { date, totalAttendance: result.totalAttendance, updatedAt: result.updatedAt },
+          ],
+        };
+      });
+      setDailyAttendanceDrafts((current) => ({ ...current, [date]: String(result.totalAttendance) }));
+      setAttendanceToast({
+        message: 'Asistencia total del día guardada.',
+        type: 'success',
+        isVisible: true,
+      });
+    } catch {
+      setAttendanceToast({
+        message: 'No se pudo guardar la asistencia total. Inténtalo nuevamente.',
+        type: 'error',
+        isVisible: true,
+      });
+    } finally {
+      setSavingDailyAttendanceDate(null);
+    }
+  };
 
   const reportView = useMemo(() => data ? buildReportView(data, {
     search: appliedSearch,
@@ -1942,7 +2002,7 @@ export default function ReportsPage() {
                       Cobertura por Día de Evento
                     </h3>
                     <p className="text-xs text-text-dim mt-0.5 font-inter">
-                      Detalle diario de turnos requeridos, asignados, asistidos y faltantes {includeSimulation ? 'del 5 al 26 de septiembre, incluyendo la simulación' : 'del 10 al 26 de septiembre'}.
+                      Detalle diario de turnos requeridos, asignados, check-ins y asistencia total registrada {includeSimulation ? 'del 5 al 26 de septiembre, incluyendo la simulación' : 'del 10 al 26 de septiembre'}.
                     </p>
                   </div>
 
@@ -1955,6 +2015,9 @@ export default function ReportsPage() {
                           <SortableTableHead field="required" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">Requeridos</SortableTableHead>
                           <SortableTableHead field="assigned" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">Asignados</SortableTableHead>
                           <SortableTableHead field="checkedIn" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">Asistieron (Check-in)</SortableTableHead>
+                          {data?.canViewGlobalReports && (
+                            <th className="min-w-48 px-4 py-4 text-center font-inter font-bold">Asistencia total</th>
+                          )}
                           <SortableTableHead field="missing" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">Faltantes</SortableTableHead>
                           <SortableTableHead field="coverageRate" activeField={dailySortField} direction={dailySortDirection} onSort={handleDailySort} className="px-4 py-4 font-inter font-bold" buttonClassName="justify-center">% Cobertura</SortableTableHead>
                           <th className="px-5 py-4 text-center font-inter font-bold">Desglose por Turno</th>
@@ -1975,6 +2038,52 @@ export default function ReportsPage() {
                             <td className="px-4 py-4 text-center font-inter font-bold text-emerald-400 text-sm tabular-nums">
                               {day.checkedIn}
                             </td>
+                            {data?.canViewGlobalReports && (
+                              <td className="px-4 py-3 text-center">
+                                {data.canManageDailyAttendanceTotals ? (
+                                  <div className="mx-auto flex w-44 items-center gap-2">
+                                    <Input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min={0}
+                                      max={1000000}
+                                      step={1}
+                                      value={dailyAttendanceDrafts[day.date] ?? ''}
+                                      onChange={(event) => setDailyAttendanceDrafts((current) => ({
+                                        ...current,
+                                        [day.date]: event.target.value,
+                                      }))}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') void handleSaveDailyAttendance(day.date);
+                                      }}
+                                      aria-label={`Asistencia total de ${day.dayLabel}`}
+                                      placeholder="Total"
+                                      className="h-9 text-center font-inter font-bold tabular-nums"
+                                      disabled={savingDailyAttendanceDate === day.date}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleSaveDailyAttendance(day.date)}
+                                      disabled={
+                                        savingDailyAttendanceDate === day.date
+                                        || (dailyAttendanceDrafts[day.date] ?? '') === (day.totalAttendance == null ? '' : String(day.totalAttendance))
+                                      }
+                                      aria-label={`Guardar asistencia total de ${day.dayLabel}`}
+                                      title="Guardar asistencia total"
+                                      className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-[#4d7cfe]/25 bg-[#4d7cfe]/10 text-[#4d7cfe] transition-colors hover:bg-[#4d7cfe]/20 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                      <span className={`material-symbols-outlined text-[18px] ${savingDailyAttendanceDate === day.date ? 'animate-spin' : ''}`}>
+                                        {savingDailyAttendanceDate === day.date ? 'progress_activity' : 'save'}
+                                      </span>
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="font-inter font-bold text-text tabular-nums">
+                                    {day.totalAttendance?.toLocaleString('es-GT') ?? '—'}
+                                  </span>
+                                )}
+                              </td>
+                            )}
                             <td className="px-4 py-4 text-center font-inter font-bold tabular-nums">
                               <span className={day.missing > 0 ? "text-rose-400 font-extrabold" : "text-emerald-400"}>
                                 {day.missing}
@@ -2045,6 +2154,57 @@ export default function ReportsPage() {
                           </div>
                         </div>
 
+                        {data?.canViewGlobalReports && (
+                          <div className="rounded-xl border border-[#4d7cfe]/15 bg-[#4d7cfe]/5 p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Asistencia total del día</span>
+                              <span className="material-symbols-outlined text-[17px] text-[#4d7cfe]">groups</span>
+                            </div>
+                            {data.canManageDailyAttendanceTotals ? (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min={0}
+                                  max={1000000}
+                                  step={1}
+                                  value={dailyAttendanceDrafts[day.date] ?? ''}
+                                  onChange={(event) => setDailyAttendanceDrafts((current) => ({
+                                    ...current,
+                                    [day.date]: event.target.value,
+                                  }))}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter') void handleSaveDailyAttendance(day.date);
+                                  }}
+                                  aria-label={`Asistencia total de ${day.dayLabel}`}
+                                  placeholder="Ingresa el total"
+                                  className="h-10 font-inter font-bold tabular-nums"
+                                  disabled={savingDailyAttendanceDate === day.date}
+                                />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => void handleSaveDailyAttendance(day.date)}
+                                  disabled={
+                                    savingDailyAttendanceDate === day.date
+                                    || (dailyAttendanceDrafts[day.date] ?? '') === (day.totalAttendance == null ? '' : String(day.totalAttendance))
+                                  }
+                                  className="h-10 shrink-0 px-3"
+                                >
+                                  <span className={`material-symbols-outlined text-[18px] ${savingDailyAttendanceDate === day.date ? 'animate-spin' : ''}`}>
+                                    {savingDailyAttendanceDate === day.date ? 'progress_activity' : 'save'}
+                                  </span>
+                                  <span className="ml-1.5">Guardar</span>
+                                </Button>
+                              </div>
+                            ) : (
+                              <p className="text-lg font-black text-text tabular-nums">
+                                {day.totalAttendance?.toLocaleString('es-GT') ?? 'Sin registrar'}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
                         {/* Line 3: Shifts Grid */}
                         <div className="space-y-1.5 pt-1">
                           <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider block">Turnos del Día</span>
@@ -2078,6 +2238,12 @@ export default function ReportsPage() {
         onClose={() => setIsProfileDrawerOpen(false)}
         volunteer={drawerVolunteer}
         mode="coordinator"
+      />
+      <Toast
+        message={attendanceToast.message}
+        type={attendanceToast.type}
+        isVisible={attendanceToast.isVisible}
+        onClose={() => setAttendanceToast((current) => ({ ...current, isVisible: false }))}
       />
     </div>
   );

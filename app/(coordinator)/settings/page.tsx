@@ -213,6 +213,7 @@ export default function SettingsPage() {
     { id: 'requests', capability: 'view_requests', name: 'Ver y gestionar solicitudes', description: 'Accede al flujo de solicitudes dentro del alcance disponible.', icon: 'published_with_changes' },
     { id: 'reports', capability: 'view_reports', name: 'Ver reportes del alcance propio', description: 'Consulta reportes sin ampliar el alcance asignado al rol.', icon: 'analytics' },
     { id: 'global_reports', capability: 'view_global_reports', name: 'Ver reportes globales', description: 'Incluye métricas consolidadas de todos los comités.', icon: 'monitoring' },
+    { id: 'daily_attendance_totals', capability: 'manage_daily_attendance_totals', name: 'Registrar asistencia total por día', description: 'Permite guardar el total general del evento en Cobertura por Día; requiere acceso a reportes globales.', icon: 'group_add' },
     { id: 'qr_checkin', capability: 'scan_qr_attendance', name: 'Escanear QR y registrar entrada o salida', description: 'Usa el escáner para registrar asistencia.', icon: 'qr_code_scanner' },
     { id: 'attendance_missing', capability: 'register_missing_attendance', name: 'Registrar asistencia o entrada faltante', description: 'Agrega manualmente una asistencia que no fue registrada.', icon: 'event_available' },
     { id: 'attendance_correction', capability: 'correct_attendance_times', name: 'Corregir horarios manualmente', description: 'Ajusta entradas o salidas y deja registro de auditoría.', icon: 'more_time' },

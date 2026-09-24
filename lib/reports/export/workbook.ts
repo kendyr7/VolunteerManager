@@ -503,7 +503,9 @@ function addDailySheet(workbook: Workbook, input: StaticReportWorkbookInput, log
   const columns: TableColumn[] = [
     { header: 'Fecha', width: 17, numberFormat: 'dd mmm yyyy' }, { header: 'Cupos requeridos', width: 17, numberFormat: '#,##0', alignment: 'right' },
     { header: 'Asignaciones', width: 15, numberFormat: '#,##0', alignment: 'right' }, { header: 'Meta cubierta', width: 15, numberFormat: '#,##0', alignment: 'right' },
-    { header: 'Asistencias', width: 13, numberFormat: '#,##0', alignment: 'right' }, { header: 'Cupos faltantes', width: 16, numberFormat: '#,##0', alignment: 'right' },
+    { header: 'Check-ins', width: 13, numberFormat: '#,##0', alignment: 'right' },
+    { header: 'Asistencia total', width: 17, numberFormat: '#,##0', alignment: 'right' },
+    { header: 'Cupos faltantes', width: 16, numberFormat: '#,##0', alignment: 'right' },
     { header: 'Cobertura', width: 13, numberFormat: '0%', alignment: 'right' },
     { header: 'T1 asignados/meta', width: 18, alignment: 'center' }, { header: 'T2 asignados/meta', width: 18, alignment: 'center' },
     { header: 'T3 asignados/meta', width: 18, alignment: 'center' }, { header: 'T4 asignados/meta', width: 18, alignment: 'center' },
@@ -515,13 +517,15 @@ function addDailySheet(workbook: Workbook, input: StaticReportWorkbookInput, log
   const totalAssigned = days.reduce((total, day) => total + day.assigned, 0);
   const totalCovered = days.reduce((total, day) => total + day.covered, 0);
   const totalCheckedIn = days.reduce((total, day) => total + day.checkedIn, 0);
+  const totalAttendance = days.reduce((total, day) => total + (day.totalAttendance || 0), 0);
+  const hasRecordedAttendance = days.some((day) => day.totalAttendance != null);
   const totalMissing = days.reduce((total, day) => total + day.missing, 0);
   writeTable(sheet, columns, days.map(day => [
-    toExcelDate(day.date), day.required, day.assigned, day.covered, day.checkedIn, day.missing, day.coverageRate / 100,
+    toExcelDate(day.date), day.required, day.assigned, day.covered, day.checkedIn, day.totalAttendance, day.missing, day.coverageRate / 100,
     ...['T1', 'T2', 'T3', 'T4'].map(shift => day.byShift[shift] ? `${day.byShift[shift].assigned}/${day.byShift[shift].required}` : '—'),
   ]), {
     totalRow: [
-      'TOTAL', totalRequired, totalAssigned, totalCovered, totalCheckedIn, totalMissing,
+      'TOTAL', totalRequired, totalAssigned, totalCovered, totalCheckedIn, hasRecordedAttendance ? totalAttendance : null, totalMissing,
       totalRequired > 0 ? totalCovered / totalRequired : null, null, null, null, null,
     ],
   });

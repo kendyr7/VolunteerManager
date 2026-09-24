@@ -271,6 +271,7 @@ export function buildReportView(data: ReportsData, filters: ReportFilters = {}):
       const assigned = dayItems.length;
       const covered = sum(Object.values(byShift).map((value) => value.covered));
       const checkedIn = dayItems.filter((item) => hasCheckedIn(item.status)).length;
+      const recordedTotal = data.dailyAttendanceTotals.find((total) => total.date === day.date);
       return {
         date: day.date,
         dayLabel: day.dayLabel,
@@ -278,6 +279,7 @@ export function buildReportView(data: ReportsData, filters: ReportFilters = {}):
         assigned,
         covered,
         checkedIn,
+        totalAttendance: recordedTotal?.totalAttendance ?? null,
         missing: sum(Object.values(byShift).map((value) => value.missing)),
         coverageRate: percentage(covered, required),
         byShift,

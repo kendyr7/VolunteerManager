@@ -20,6 +20,7 @@ export type Capability =
   | 'view_requests'
   | 'view_reports'
   | 'view_global_reports'
+  | 'manage_daily_attendance_totals'
   | 'view_area_coverage'
   | 'manage_committee_areas'
   | 'assign_volunteer_areas'
@@ -49,6 +50,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   view_requests: 'Ver y gestionar solicitudes',
   view_reports: 'Ver reportes del alcance propio',
   view_global_reports: 'Ver reportes globales',
+  manage_daily_attendance_totals: 'Registrar la asistencia total por día',
   view_area_coverage: 'Ver áreas y cobertura',
   manage_committee_areas: 'Crear y editar áreas',
   assign_volunteer_areas: 'Asignar voluntarios a áreas',
@@ -95,6 +97,7 @@ const technologyEnabledByDefault = new Set<Capability>([
   'view_requests',
   'view_reports',
   'view_global_reports',
+  'manage_daily_attendance_totals',
 ]);
 
 const committeeEnabledByDefault = new Set<Capability>([
@@ -228,6 +231,7 @@ const CAPABILITY_PREREQUISITES: Partial<Record<Capability, Capability>> = {
   edit_volunteer_personal_info: 'view_volunteer_profile',
   reschedule_volunteer: 'view_volunteer_profile',
   view_global_reports: 'view_reports',
+  manage_daily_attendance_totals: 'view_global_reports',
   manage_committee_areas: 'view_area_coverage',
   assign_volunteer_areas: 'view_area_coverage',
   manage_area_requirements: 'view_area_coverage',

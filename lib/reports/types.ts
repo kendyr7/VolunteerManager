@@ -50,6 +50,12 @@ export interface ReportCommittee {
   name: string;
 }
 
+export interface DailyAttendanceTotal {
+  date: string;
+  totalAttendance: number;
+  updatedAt: string;
+}
+
 export interface ReportFilters {
   search?: string;
   committeeIds?: readonly string[];
@@ -67,6 +73,9 @@ export interface ReportsData {
   uniqueNeighborhoods: string[];
   uniqueStakes: string[];
   uniqueCommittees: ReportCommittee[];
+  dailyAttendanceTotals: DailyAttendanceTotal[];
+  canViewGlobalReports: boolean;
+  canManageDailyAttendanceTotals: boolean;
 }
 
 export interface CommitteeAttendance {
@@ -116,6 +125,7 @@ export interface DailyCoverage {
   assigned: number;
   covered: number;
   checkedIn: number;
+  totalAttendance: number | null;
   missing: number;
   coverageRate: number;
   byShift: Record<string, { required: number; assigned: number; covered: number; checkedIn: number; missing: number }>;
