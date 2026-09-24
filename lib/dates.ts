@@ -86,6 +86,15 @@ export function isOperationalEventDay(dayKey?: string | Date | null): boolean {
   return false;
 }
 
+export function isAttendanceReportDay(dayKey?: string | Date | null): boolean {
+  const parts = readEventDateParts(dayKey);
+  if (!parts || parts.year !== 2026 || parts.month !== 9 || parts.day < 5 || parts.day > 26) {
+    return false;
+  }
+
+  return new Date(2026, 8, parts.day).getDay() !== 0;
+}
+
 export function getEventDayKind(dayKey?: string | Date | null): EventDayKind {
   return isSimulationEventDay(dayKey) ? 'simulation' : 'official';
 }

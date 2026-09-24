@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { buildReportView } from '../lib/reports/aggregate';
+import { isAttendanceReportDay } from '../lib/dates';
 import { getSessionShiftCompletedAt, inferShiftsForSession } from '../lib/session-utils';
 import type { ReportsData } from '../lib/reports/types';
 
@@ -7,6 +8,7 @@ const source: ReportsData = {
   canViewGlobalReports: true,
   canManageDailyAttendanceTotals: true,
   dailyAttendanceTotals: [
+    { date: '2026-09-07', maleAttendance: null, femaleAttendance: null, totalAttendance: 198, updatedAt: '2026-09-07T23:00:00.000Z' },
     { date: '2026-09-10', maleAttendance: 1300, femaleAttendance: 1450, totalAttendance: 2750, updatedAt: '2026-09-10T23:00:00.000Z' },
   ],
   uniqueCommittees: [
@@ -16,6 +18,7 @@ const source: ReportsData = {
   uniqueNeighborhoods: ['Centro', 'Norte'],
   uniqueStakes: ['Norte'],
   eventDays: [
+    { date: '2026-09-07', dayLabel: 'Lun 7 sep', shiftKeys: [] },
     { date: '2026-09-10', dayLabel: 'Jue 10 sep', shiftKeys: ['T1'] },
     { date: '2026-09-11', dayLabel: 'Vie 11 sep', shiftKeys: ['T1'] },
   ],
@@ -42,6 +45,8 @@ function check(condition: unknown, message: string): asserts condition {
 }
 
 const unfiltered = buildReportView(source);
+assert.equal(isAttendanceReportDay('2026-09-07'), true, 'Pre-opening weekdays accept attendance totals');
+assert.equal(isAttendanceReportDay('2026-09-06'), false, 'Sundays do not accept attendance totals');
 assert.equal(unfiltered.items.length, 3, 'All matching shifts are retained');
 assert.equal(unfiltered.attendanceSummary.totalRequired, 10, 'Requirements sum exact committee/date/shift rows');
 assert.equal(unfiltered.recruitmentSummary.find(row => row.committeeId === 'guides')?.totalVolunteers, 2, 'Recruitment includes volunteers without shifts');
@@ -49,10 +54,12 @@ assert.deepEqual(unfiltered.ageSegmentation.map(row => [row.range, row.count]), 
   ['< 18', 0], ['18 - 25', 1], ['26 - 35', 0], ['36 - 50', 1], ['51+', 1], ['Sin edad', 0],
 ], 'Age segments use the complete eligible volunteer population');
 assert.equal(unfiltered.volunteerRanking.find(row => row.id === 'maria')?.reliability, 100, 'Pending-only volunteers keep neutral reliability');
-assert.equal(unfiltered.dailyCoverage[0].totalAttendance, 2750, 'Daily coverage includes the manually recorded event attendance total');
-assert.equal(unfiltered.dailyCoverage[0].maleAttendance, 1300, 'Daily coverage includes the recorded male attendance');
-assert.equal(unfiltered.dailyCoverage[0].femaleAttendance, 1450, 'Daily coverage includes the recorded female attendance');
-assert.equal(unfiltered.dailyCoverage[1].totalAttendance, null, 'Days without a manual total remain empty');
+assert.equal(unfiltered.dailyCoverage[0].totalAttendance, 198, 'Attendance-only dates retain their manually recorded total');
+assert.equal(unfiltered.dailyCoverage[0].hasScheduledShifts, false, 'Attendance-only dates do not invent volunteer shifts');
+assert.equal(unfiltered.dailyCoverage[1].totalAttendance, 2750, 'Daily coverage includes the manually recorded event attendance total');
+assert.equal(unfiltered.dailyCoverage[1].maleAttendance, 1300, 'Daily coverage includes the recorded male attendance');
+assert.equal(unfiltered.dailyCoverage[1].femaleAttendance, 1450, 'Daily coverage includes the recorded female attendance');
+assert.equal(unfiltered.dailyCoverage[2].totalAttendance, null, 'Days without a manual total remain empty');
 
 const singleCommitteeDate = buildReportView(source, { committeeIds: ['guides'], dates: ['2026-09-10'] });
 assert.equal(singleCommitteeDate.items.length, 1, 'Committee and date filters combine with AND');

@@ -275,6 +275,7 @@ export function buildReportView(data: ReportsData, filters: ReportFilters = {}):
       return {
         date: day.date,
         dayLabel: day.dayLabel,
+        hasScheduledShifts: day.shiftKeys.length > 0,
         required,
         assigned,
         covered,

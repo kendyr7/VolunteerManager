@@ -5,7 +5,7 @@ import { getAdminSupabase } from "@/lib/supabase/admin";
 import { fetchAllRowsStrict } from "@/lib/supabase-helpers";
 import { requireCapability } from "@/lib/authorization";
 import { hasCapability } from "@/lib/role-permissions";
-import { getActiveEventDays, getAvailableShiftKeys, getOfficialShiftTime, isSimulationEventDay, isOperationalEventDay, parseDayKeyToDateStr, parseGuatemalaShiftEnd } from "@/lib/dates";
+import { getActiveEventDays, getAvailableShiftKeys, getOfficialShiftTime, isAttendanceReportDay, isSimulationEventDay, isOperationalEventDay, parseDayKeyToDateStr, parseGuatemalaShiftEnd } from "@/lib/dates";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { getGuatemalaHourFloat, calculateSessionMinutes, getSessionShiftCompletedAt, inferShiftsForSession } from "@/lib/session-utils";
@@ -495,7 +495,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
     const uniqueCommittees = Array.from(committeesMap.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((left, right) => left.name.localeCompare(right.name, 'es', { sensitivity: 'base' }));
-    const eventDays = getActiveEventDays({ includeSimulation }).map((date) => {
+    const scheduledEventDays = getActiveEventDays({ includeSimulation }).map((date) => {
       const dayKey = format(date, 'EEE d', { locale: es }).toLowerCase();
       const dayLabel = format(date, 'EEE d MMM', { locale: es });
       return {
@@ -504,6 +504,24 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
         shiftKeys: getAvailableShiftKeys(dayKey),
       };
     });
+    const reportAttendanceTotals = (dailyTotalsData || []).filter((row) => (
+      isAttendanceReportDay(row.event_date)
+      && (includeSimulation || !isSimulationEventDay(row.event_date))
+    ));
+    const scheduledDates = new Set(scheduledEventDays.map((day) => day.date));
+    const attendanceOnlyDays = reportAttendanceTotals
+      .filter((row) => !scheduledDates.has(row.event_date))
+      .map((row) => {
+        const date = new Date(`${row.event_date}T12:00:00`);
+        const dayLabel = format(date, 'EEE d MMM', { locale: es });
+        return {
+          date: row.event_date,
+          dayLabel: dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1),
+          shiftKeys: [],
+        };
+      });
+    const eventDays = [...scheduledEventDays, ...attendanceOnlyDays]
+      .sort((left, right) => left.date.localeCompare(right.date));
     const requirements = eventDays.flatMap((day) => uniqueCommittees.flatMap((committee) => (
       day.shiftKeys.map((shiftKey) => ({
         committeeId: committee.id,
@@ -522,7 +540,7 @@ export async function getReportsData(options: { includeSimulation?: boolean } = 
         uniqueNeighborhoods,
         uniqueStakes,
         uniqueCommittees,
-        dailyAttendanceTotals: (dailyTotalsData || []).map((row) => ({
+        dailyAttendanceTotals: reportAttendanceTotals.map((row) => ({
           date: row.event_date,
           maleAttendance: row.male_attendance,
           femaleAttendance: row.female_attendance,
@@ -557,8 +575,8 @@ export async function saveDailyAttendanceTotal(input: {
     const femaleAttendance = Number(input.femaleAttendance);
     const totalAttendance = maleAttendance + femaleAttendance;
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !isOperationalEventDay(date)) {
-      return { success: false, error: 'La fecha no corresponde a un día válido del evento.' };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !isAttendanceReportDay(date)) {
+      return { success: false, error: 'La fecha no corresponde a un día válido para registrar asistencia.' };
     }
     if (
       !Number.isSafeInteger(maleAttendance)

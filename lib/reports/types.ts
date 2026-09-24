@@ -123,6 +123,7 @@ export interface AgeSegmentation {
 export interface DailyCoverage {
   date: string;
   dayLabel: string;
+  hasScheduledShifts: boolean;
   required: number;
   assigned: number;
   covered: number;
