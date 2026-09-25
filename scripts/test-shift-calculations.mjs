@@ -13,6 +13,24 @@ const assertNoAttendanceAlert = (display, message) => {
   assert.equal(Object.hasOwn(display, 'flag'), false, message);
 };
 
+const afternoonShift = { id: 'fri-t4', volunteer_id: volunteerId, day_key: 'vie 11', shift_key: 'T4' };
+const morningOnlySession = {
+  id: 'fri-morning-only', volunteer_id: volunteerId, day_key: 'vie 11',
+  started_at: '2026-09-11T13:15:34.352Z',
+  ended_at: '2026-09-11T17:54:39.410Z',
+  status: 'completed',
+};
+assert.equal(
+  findAttendanceSessionForShift('vie 11', 'T4', [morningOnlySession], [afternoonShift], volunteerId),
+  null,
+  'Una sesión cerrada antes del turno no puede contarse como visita al turno de la tarde.',
+);
+assert.equal(
+  getShiftAttendanceReviewFlag('vie 11', 'T4', afternoonShift, [morningOnlySession], [afternoonShift], volunteerId),
+  null,
+  'La sesión de la mañana no debe crear una decisión pendiente para T4.',
+);
+
 const saturdayShifts = [
   { id: 'sat-t1', volunteer_id: volunteerId, day_key: 'sáb 12', shift_key: 'T1' },
   { id: 'sat-t2', volunteer_id: volunteerId, day_key: 'sáb 12', shift_key: 'T2' },

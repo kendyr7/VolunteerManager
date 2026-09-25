@@ -105,7 +105,7 @@ export function findAttendanceSessionForShift(
       // actually credited must not be treated as a visit to the adjacent shift.
       const isIncidental = isSessionIncidentalHandover(dayKey, shiftKey, startedAt, endedAt, assignedShiftKeys);
       const visitedAssignedShift = Boolean(assignedShiftKeys.includes(shiftKey) && !isIncidental && (endedAt || inBlock) && (
-        (inBlock && block?.startShiftKey === shiftKey && startedMs < shiftStart)
+        (!endedAt && inBlock && block?.startShiftKey === shiftKey && startedMs < shiftStart)
         || (startedMs < shiftEnd && endedMs > shiftStart)
       ));
       const isAdditionalMatch = (session.attendance_kind === 'additional' && decisionKeys.includes(shiftKey))

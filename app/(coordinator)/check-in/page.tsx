@@ -40,7 +40,7 @@ export default async function CheckInPage({
       coordinatorName={coordinatorName}
       role={authorization.role}
       committeeName={committeeName}
-      initialView={params.view === 'scanner' ? 'scanner' : 'history'}
+      initialView={params.view === 'history' ? 'history' : 'scanner'}
       initialHistory={initialHistory}
       initialHistoryError={initialHistoryError}
     />
