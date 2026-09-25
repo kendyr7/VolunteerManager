@@ -566,6 +566,13 @@ export default function ReportsPage() {
   const filteredRecruitmentSummary = reportView?.recruitmentSummary || [];
   const filteredAgeSegmentation = reportView?.ageSegmentation || [];
   const filteredDailyCoverage = useMemo(() => reportView?.dailyCoverage || [], [reportView]);
+  const dailyAttendanceSummary = useMemo(() => {
+    const recordedDays = filteredDailyCoverage.filter((day) => day.totalAttendance != null);
+    return {
+      recordedDays: recordedDays.length,
+      totalAttendance: recordedDays.reduce((total, day) => total + (day.totalAttendance || 0), 0),
+    };
+  }, [filteredDailyCoverage]);
   const hasSchedulePopulationFilter = selectedStatuses.length > 0 || selectedDates.length > 0;
   const recruitmentPopulationLabel = hasSchedulePopulationFilter
     ? 'Voluntarios filtrados'
@@ -2054,14 +2061,29 @@ export default function ReportsPage() {
                   transition={{ duration: 0.2 }}
                   className="bg-dark2 border border-border rounded-[20px] shadow-lg overflow-hidden flex flex-col w-full p-4 sm:p-6 space-y-6"
                 >
-                  <div>
-                    <h3 className="text-base sm:text-lg font-bold text-text flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[#4d7cfe]">calendar_month</span>
-                      Cobertura por Día de Evento
-                    </h3>
-                    <p className="text-xs text-text-dim mt-0.5 font-inter">
-                      Fechas con turnos y registros adicionales de asistencia, con desglose de hombres, mujeres y total{includeSimulation ? ', incluyendo la simulación' : ''}.
-                    </p>
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-text flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[#4d7cfe]">calendar_month</span>
+                        Cobertura por Día de Evento
+                      </h3>
+                      <p className="text-xs text-text-dim mt-0.5 font-inter">
+                        Fechas con turnos y registros adicionales de asistencia, con desglose de hombres, mujeres y total{includeSimulation ? ', incluyendo la simulación' : ''}.
+                      </p>
+                    </div>
+                    {data?.canViewGlobalReports && dailyAttendanceSummary.recordedDays > 0 && (
+                      <div className="flex items-baseline justify-between gap-4 border-t border-border pt-3 sm:justify-end sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+                        <div>
+                          <span className="block text-[10px] font-bold text-text-dim">Asistencia total</span>
+                          <span className="block text-[10px] text-text-dim">
+                            {dailyAttendanceSummary.recordedDays} fecha{dailyAttendanceSummary.recordedDays === 1 ? '' : 's'} registrada{dailyAttendanceSummary.recordedDays === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                        <strong className="font-inter text-2xl font-black text-[#4d7cfe] tabular-nums">
+                          {dailyAttendanceSummary.totalAttendance.toLocaleString('es-GT')}
+                        </strong>
+                      </div>
+                    )}
                   </div>
 
                   {/* Desktop Table View (lg+) */}
@@ -2091,7 +2113,8 @@ export default function ReportsPage() {
                             <td className="px-5 py-4 font-inter font-bold text-text text-sm">
                               <span className="block">{day.dayLabel}</span>
                               {!day.hasScheduledShifts && (
-                                <span className="mt-1 inline-flex rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                                <span className="mt-1 flex items-center gap-1 text-[10px] font-medium text-text-dim">
+                                  <span className="material-symbols-outlined text-[13px] text-[#4d7cfe]">person_check</span>
                                   Solo asistencia
                                 </span>
                               )}
@@ -2209,11 +2232,14 @@ export default function ReportsPage() {
                             </td>
                             <td className="px-5 py-4 text-center">
                               {day.hasScheduledShifts ? (
-                                <div className="flex items-center justify-center gap-1.5 text-[10px] font-inter font-bold">
+                                <div className="flex items-stretch justify-center gap-1.5 font-inter">
                                   {Object.entries(day.byShift).map(([sk, info]) => (
-                                    <span key={sk} className={`px-1.5 py-0.5 rounded border ${info.missing > 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
-                                      {sk}: {info.assigned}/{info.required}
-                                    </span>
+                                    <div key={sk} className={`min-w-11 rounded-lg border px-2 py-1.5 text-center ${info.missing > 0 ? 'border-rose-500/20 bg-rose-500/10' : 'border-emerald-500/20 bg-emerald-500/10'}`}>
+                                      <span className="block text-[9px] font-bold text-text-dim">{sk}</span>
+                                      <span className={`block text-xs font-black tabular-nums ${info.missing > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                        {info.assigned}/{info.required}
+                                      </span>
+                                    </div>
                                   ))}
                                 </div>
                               ) : (
@@ -2230,7 +2256,7 @@ export default function ReportsPage() {
                   <div className="block lg:hidden space-y-3">
                     {filteredDailyCoverage.map(day => (
                       <div key={day.date} className="bg-dark3/50 border border-border rounded-xl p-4 space-y-3">
-                        {/* Line 1: Day Label + Badge */}
+                        {/* Line 1: Day Label + Status */}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 truncate">
                             <span className="material-symbols-outlined text-[#4d7cfe] text-[18px]">calendar_today</span>
@@ -2245,9 +2271,10 @@ export default function ReportsPage() {
                               {day.coverageRate}% Cobertura
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="shrink-0 border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 font-inter text-[11px] font-bold text-amber-400">
+                            <span className="flex shrink-0 items-center gap-1 font-inter text-[11px] font-medium text-text-dim">
+                              <span className="material-symbols-outlined text-[15px] text-[#4d7cfe]">person_check</span>
                               Solo asistencia
-                            </Badge>
+                            </span>
                           )}
                         </div>
 
@@ -2324,7 +2351,7 @@ export default function ReportsPage() {
                                   </label>
                                   <div className="space-y-1">
                                     <span className="block text-[9px] font-bold uppercase tracking-wider text-text-dim">Total</span>
-                                    <div className="flex h-10 items-center justify-center rounded-md border border-[#4d7cfe]/20 bg-dark2/70 font-inter font-black text-text tabular-nums">
+                                    <div className="flex h-10 items-center justify-center rounded-md bg-[#4d7cfe]/10 font-inter font-black text-[#4d7cfe] tabular-nums">
                                       {(getDailyAttendanceDraftTotal(day.date) ?? day.totalAttendance)?.toLocaleString('es-GT') ?? '—'}
                                     </div>
                                   </div>
@@ -2371,19 +2398,22 @@ export default function ReportsPage() {
                         {/* Line 3: Shifts Grid */}
                         {day.hasScheduledShifts && (
                           <div className="space-y-1.5 pt-1">
-                            <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider block">Turnos del Día</span>
-                            <div className="grid grid-cols-2 gap-1.5 text-[11px] font-inter font-bold">
-                              {Object.entries(day.byShift).map(([sk, info]) => {
-                                const shiftLabels: Record<string, string> = { T1: 'T1 (8-12)', T2: 'T2 (12-3)', T3: 'T3 (3-6)', T4: 'T4 (5-10)' };
-                                return (
-                                  <div key={sk} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border ${
-                                    info.missing > 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                  }`}>
-                                    <span className="text-text-dim">{shiftLabels[sk] || sk}:</span>
-                                    <span>{info.assigned}/{info.required}</span>
-                                  </div>
-                                );
-                              })}
+                            <span className="block text-[10px] font-bold text-text-dim">Turnos del día</span>
+                            <div className="grid grid-cols-4 gap-1.5 font-inter">
+                              {Object.entries(day.byShift).map(([sk, info]) => (
+                                <div
+                                  key={sk}
+                                  aria-label={`${sk}: ${info.assigned} asignados de ${info.required} requeridos`}
+                                  className={`rounded-lg border px-1.5 py-2 text-center ${
+                                    info.missing > 0 ? 'border-rose-500/20 bg-rose-500/10' : 'border-emerald-500/20 bg-emerald-500/10'
+                                  }`}
+                                >
+                                  <span className="block text-[10px] font-bold text-text-dim">{sk}</span>
+                                  <span className={`mt-0.5 block text-sm font-black tabular-nums ${info.missing > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                    {info.assigned}/{info.required}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         )}
